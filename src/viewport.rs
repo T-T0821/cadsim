@@ -4,6 +4,7 @@
 //! - 配置と表示/非表示は毎フレームモデルから写す。形状が変わったときだけメッシュを作り直す。
 //! - 取り込んだ部品のメッシュはインスタンス間で共有する (同じボルトが100本でも1回だけ作る)。
 //! - 選択中のノード (アセンブリなら子孫すべて) を青、クリックした面をオレンジで塗る。
+//! - 部品には干渉チェック用の `SimBody` (f64 メッシュ + 姿勢) も付け、干渉中の部品は半透明にする。
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -23,6 +24,7 @@ use crate::camera::{ViewportRect, alt_pressed, pointer_in_3d_view};
 use crate::gizmo::gizmo_not_focused;
 use crate::math::to_transform;
 use crate::model::{Model, NodeId, NodeKind, Selection};
+use crate::simulation::{self, InterferenceCheck, Pose, SimBody, TriMesh, measure::not_measuring};
 
 /// 箱のテッセレーションの許容誤差 (モデル単位)
 const BOX_TESSELLATION_TOL: f64 = 0.005;
@@ -39,7 +41,8 @@ impl Plugin for ViewportPlugin {
                 (
                     pick_part
                         .run_if(pointer_in_3d_view)
-                        .run_if(gizmo_not_focused),
+                        .run_if(gizmo_not_focused)
+                        .run_if(not_measuring),
                     rebuild_dirty_parts,
                     sync_placement_and_visibility,
                     update_materials,
@@ -90,14 +93,18 @@ struct FaceTag {
 #[derive(Resource, Default)]
 struct SharedMeshes(HashMap<usize, PartMeshes>);
 
-/// 部品1つ分の表示データ (面ごとのメッシュ, 稜線)
-type PartMeshes = (Vec<Handle<Mesh>>, Arc<Vec<Vec<Vec3>>>);
+/// 部品1つ分の表示データ (面ごとのメッシュ, 稜線, 干渉チェック用メッシュ)
+type PartMeshes = (Vec<Handle<Mesh>>, Arc<Vec<Vec<Vec3>>>, Arc<TriMesh>);
 
 #[derive(Resource)]
 struct Palette {
     selected: Handle<StandardMaterial>,
     selected_face: Handle<StandardMaterial>,
     hovered: Handle<StandardMaterial>,
+    /// 干渉している部品 (半透明にして、中の干渉部分を見せる)
+    interfering: Handle<StandardMaterial>,
+    /// 干渉している部品を選択したとき (選択色のまま半透明)
+    selected_interfering: Handle<StandardMaterial>,
     /// 部品の色ごとのマテリアル (色, 半透明か)
     by_color: HashMap<([u8; 3], bool), Handle<StandardMaterial>>,
 }
@@ -116,11 +123,20 @@ fn material(color: Color) -> StandardMaterial {
     }
 }
 
+fn translucent(color: Color) -> StandardMaterial {
+    StandardMaterial {
+        alpha_mode: AlphaMode::Blend,
+        ..material(color)
+    }
+}
+
 fn create_palette(mut commands: Commands, mut materials: ResMut<Assets<StandardMaterial>>) {
     commands.insert_resource(Palette {
         selected: materials.add(material(SELECTED_COLOR)),
         selected_face: materials.add(material(SELECTED_FACE_COLOR)),
         hovered: materials.add(material(HOVER_COLOR)),
+        interfering: materials.add(translucent(Color::srgba(0.95, 0.55, 0.55, 0.35))),
+        selected_interfering: materials.add(translucent(SELECTED_COLOR.with_alpha(0.4))),
         by_color: HashMap::new(),
     });
 }
@@ -151,7 +167,7 @@ fn rebuild_dirty_parts(
         let Some(node) = model.get(id) else {
             continue; // 削除されたノード
         };
-        let (face_meshes, edges) = match &node.kind {
+        let (face_meshes, edges, sim_mesh) = match &node.kind {
             NodeKind::Assembly { .. } => continue,
             NodeKind::Box(part) => {
                 let meshed = part.build_solid().triangulation(BOX_TESSELLATION_TOL);
@@ -160,17 +176,22 @@ fn rebuild_dirty_parts(
                     .edge_iter()
                     .map(|edge| edge.curve().iter().map(to_vec3).collect())
                     .collect();
-                let faces = shell
+                let polygons: Vec<PolygonMesh> = shell
                     .face_iter()
                     .map(|face| {
                         let mut poly = face.surface().unwrap_or_default();
                         if !face.orientation() {
                             poly.invert();
                         }
-                        meshes.add(polygon_to_bevy_mesh(&poly))
+                        poly
                     })
                     .collect();
-                (faces, Arc::new(edges))
+                let faces = polygons
+                    .iter()
+                    .map(|poly| meshes.add(polygon_to_bevy_mesh(poly)))
+                    .collect();
+                let sim_mesh = simulation::trimesh_from_polygons(&polygons);
+                (faces, Arc::new(edges), Arc::new(sim_mesh))
             }
             NodeKind::Imported { shape, .. } => shared
                 .0
@@ -186,7 +207,8 @@ fn rebuild_dirty_parts(
                         .iter()
                         .map(|line| line.iter().map(to_vec3).collect())
                         .collect();
-                    (faces, Arc::new(edges))
+                    let sim_mesh = simulation::trimesh_from_polygons(&shape.faces);
+                    (faces, Arc::new(edges), Arc::new(sim_mesh))
                 })
                 .clone(),
         };
@@ -194,6 +216,13 @@ fn rebuild_dirty_parts(
         commands
             .spawn((
                 PartView { node: id, edges },
+                // 干渉チェックの対象。姿勢は sync_placement_and_visibility が毎フレーム写す。
+                SimBody {
+                    id,
+                    mesh: sim_mesh,
+                    pose: Pose::from_matrix(model.world_matrix(id)),
+                },
+                Name::new(short_path(&model, id)),
                 to_transform(model.world_matrix(id)),
                 Visibility::default(),
             ))
@@ -207,6 +236,13 @@ fn rebuild_dirty_parts(
                 }
             });
     }
+}
+
+/// 干渉チェックの一覧で見分けられるよう、親の名前を前に付けた名前 ("Bracket_L / Upright_1")
+fn short_path(model: &Model, id: NodeId) -> String {
+    let path = model.path_label(id);
+    let parts: Vec<&str> = path.split(" / ").collect();
+    parts[parts.len().saturating_sub(2)..].join(" / ")
 }
 
 fn to_vec3(p: &Point3) -> Vec3 {
@@ -250,12 +286,18 @@ fn polygon_to_bevy_mesh(poly: &PolygonMesh) -> Mesh {
 /// 配置 (ギズモで動かしたとき) と表示/非表示をモデルから写す
 fn sync_placement_and_visibility(
     model: Res<Model>,
-    mut views: Query<(&PartView, &mut Transform, &mut Visibility)>,
+    mut views: Query<(&PartView, &mut Transform, &mut Visibility, &mut SimBody)>,
 ) {
-    for (view, mut transform, mut visibility) in &mut views {
-        let wanted = to_transform(model.world_matrix(view.node));
+    for (view, mut transform, mut visibility, mut body) in &mut views {
+        let matrix = model.world_matrix(view.node);
+        let wanted = to_transform(matrix);
         if *transform != wanted {
             *transform = wanted;
+        }
+        // 変わったときだけ書く (書くと干渉チェックが走る)
+        let pose = Pose::from_matrix(matrix);
+        if body.pose != pose {
+            body.pose = pose;
         }
         let shown = if model.is_shown(view.node) {
             Visibility::Inherited
@@ -302,6 +344,7 @@ fn update_materials(
     model: Res<Model>,
     selection: Res<Selection>,
     settings: Res<ViewSettings>,
+    check: Res<InterferenceCheck>,
     mut palette: ResMut<Palette>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut faces: Query<(&FaceTag, &mut MeshMaterial3d<StandardMaterial>)>,
@@ -313,7 +356,11 @@ fn update_materials(
             {
                 palette.selected_face.clone()
             }
+            Highlight::Selected if check.is_interfering(tag.node) => {
+                palette.selected_interfering.clone()
+            }
             Highlight::Selected => palette.selected.clone(),
+            Highlight::None if check.is_interfering(tag.node) => palette.interfering.clone(),
             Highlight::Hovered => palette.hovered.clone(),
             highlight => {
                 let ghost = highlight == Highlight::Ghost;

@@ -14,6 +14,7 @@
 //! - `ui`          メニュー・ツリー・プロパティ・ステータスバー・ビューキューブ
 //! - `japanese_font` egui に埋め込みの日本語フォントを登録する
 //! - `math`        回転や行列の変換
+//! - `simulation`  干渉チェックと距離計測 (`SimBody` を付けた部品が対象)
 
 mod camera;
 mod file_io;
@@ -23,6 +24,7 @@ mod japanese_font;
 mod math;
 mod model;
 mod shortcuts;
+mod simulation;
 mod step_import;
 mod ui;
 mod viewport;
@@ -52,6 +54,7 @@ fn main() {
             shortcuts::ShortcutsPlugin,
             history::HistoryPlugin,
             ui::UiPlugin,
+            simulation::SimulationPlugin,
         ))
         .run();
 }
