@@ -49,7 +49,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      # キャッシュは CI ワークフローと同じ設定(OS ごとに共有キー、保存は main のみ)
+      # キャッシュは OS ごとに共有し、保存は main でのビルドのときだけ行う
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: cadsim
@@ -84,7 +84,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
-      # キャッシュは CI ワークフローと同じ設定(OS ごとに共有キー、保存は main のみ)
+      # キャッシュは OS ごとに共有し、保存は main でのビルドのときだけ行う
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: cadsim
