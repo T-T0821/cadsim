@@ -57,6 +57,8 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 ```
 
+干渉判定・距離計算などの幾何計算(`src/simulation/` の geometry / mesh / interference)は Bevy から切り離してあり、`cargo test` の単体テストで確かめています。
+
 依存のビルド結果は `Swatinem/rust-cache` で OS ごとにキャッシュし(共有キー `cadsim`)、main での実行時だけ保存します。`Cargo.lock` と食い違うと `--locked` で失敗するので、依存を変えたら `Cargo.lock` もコミットしてください。
 
 ## 操作
@@ -123,14 +125,6 @@ Ctrl を押している間(またはパネルの「常にスナップ」をオ�
 7. 部品のルートエンティティには `SimBody`(f64 の三角形メッシュ + 姿勢)を付ける。`src/simulation/` がこれを拾って干渉チェックする。
 
 回転はメッシュの Transform ではなく truck 側の形状に適用しているので、寸法計算や干渉チェックは常に f64 の形状で行えます。
-
-## テスト
-
-```sh
-cargo test
-```
-
-干渉判定・距離計算などの幾何計算は Bevy から切り離してあり、単体テストで確かめています。
 
 ## 日本語フォント
 
