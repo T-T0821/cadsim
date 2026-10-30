@@ -10,6 +10,7 @@
 //! - ホイール / Alt + 右ドラッグ: ズーム
 //! - 右ドラッグ: その場で見回す。押している間 WASD で移動、Q / E で下降 / 上昇、Shift で加速
 //! - F: 選択中の箱にフォーカス / Delete: 選択中の箱を削除
+//! - W / E / R: 移動 / 回転 / 拡大縮小のギズモに切り替え (ギズモの軸を左ドラッグ)
 //! - 左パネル: 箱の追加、寸法・位置・回転の編集、削除
 
 use std::collections::HashSet;
@@ -31,6 +32,9 @@ use bevy_egui::{
 use truck_meshalgo::prelude::*;
 use truck_modeling::{Solid, builder};
 
+mod gizmo;
+use gizmo::{GizmoTool, Tool, gizmo_not_focused, transform_gizmo_system};
+
 /// テッセレーションの許容誤差 (モデル単位)
 const TESSELLATION_TOL: f64 = 0.005;
 
@@ -47,12 +51,19 @@ fn main() {
         .init_resource::<Model>()
         .init_resource::<Selection>()
         .init_resource::<OrbitCamera>()
+        .init_resource::<GizmoTool>()
         .add_systems(Startup, setup)
-        .add_systems(EguiPrimaryContextPass, ui_panel)
+        .add_systems(
+            EguiPrimaryContextPass,
+            (ui_panel, transform_gizmo_system).chain(),
+        )
         .add_systems(
             Update,
             (
-                (pick_face, mouse_camera_input).run_if(not(egui_wants_any_pointer_input)),
+                pick_face
+                    .run_if(not(egui_wants_any_pointer_input))
+                    .run_if(gizmo_not_focused),
+                mouse_camera_input.run_if(not(egui_wants_any_pointer_input)),
                 keyboard_input.run_if(not(egui_wants_any_keyboard_input)),
                 rebuild_dirty_parts,
                 apply_camera,
@@ -399,6 +410,7 @@ fn keyboard_input(
     mut orbit: ResMut<OrbitCamera>,
     mut model: ResMut<Model>,
     mut selection: ResMut<Selection>,
+    mut gizmo_tool: ResMut<GizmoTool>,
 ) {
     if buttons.pressed(MouseButton::Right) {
         // フライ移動: 右ボタンを押している間だけ WASD / QE が効く
@@ -428,16 +440,28 @@ fn keyboard_input(
         return;
     }
 
+    // ギズモの切り替え (Unity / Unreal と同じ W / E / R)
+    for (key, tool) in [
+        (KeyCode::KeyW, Tool::Translate),
+        (KeyCode::KeyE, Tool::Rotate),
+        (KeyCode::KeyR, Tool::Scale),
+    ] {
+        if keys.just_pressed(key) {
+            gizmo_tool.tool = tool;
+        }
+    }
+
     let Some(id) = selection.part else {
         return;
     };
     if keys.just_pressed(KeyCode::KeyF)
-        && let Some(part) = model.parts.iter().find(|p| p.id == id) {
-            let [x, y, z] = part.position;
-            let extent = part.size.iter().copied().fold(0.0, f64::max) as f32;
-            orbit.focus = Vec3::new(x as f32, y as f32, z as f32);
-            orbit.distance = (extent * 2.5).max(1.0);
-        }
+        && let Some(part) = model.parts.iter().find(|p| p.id == id)
+    {
+        let [x, y, z] = part.position;
+        let extent = part.size.iter().copied().fold(0.0, f64::max) as f32;
+        orbit.focus = Vec3::new(x as f32, y as f32, z as f32);
+        orbit.distance = (extent * 2.5).max(1.0);
+    }
     if keys.just_pressed(KeyCode::Delete) {
         model.parts.retain(|p| p.id != id);
         model.dirty.insert(id);
@@ -500,12 +524,24 @@ fn ui_panel(
     mut contexts: EguiContexts,
     mut model: ResMut<Model>,
     mut selection: ResMut<Selection>,
+    mut gizmo_tool: ResMut<GizmoTool>,
 ) -> Result {
     let window = egui::Window::new("Parts")
         .anchor(egui::Align2::LEFT_TOP, [8.0, 8.0])
         .resizable(false)
         .collapsible(true);
     window.show(contexts.ctx_mut()?, |ui| {
+        ui.horizontal(|ui| {
+            for tool in [Tool::Translate, Tool::Rotate, Tool::Scale] {
+                if ui
+                    .selectable_label(gizmo_tool.tool == tool, tool.label())
+                    .clicked()
+                {
+                    gizmo_tool.tool = tool;
+                }
+            }
+        });
+        ui.separator();
         ui.heading("New box");
         let mut new_size = model.new_size;
         xyz_editor(ui, "Size W/H/D", &mut new_size, 0.1, Some(0.01));
@@ -531,7 +567,7 @@ fn ui_panel(
         let Some(id) = selection.part else {
             ui.separator();
             ui.label(
-                "Click: select   Alt+Left drag: orbit\nMiddle drag: pan   Wheel: zoom\nRight drag + WASD/QE: fly   F: focus",
+                "Click: select   Alt+Left drag: orbit\nMiddle drag: pan   Wheel: zoom\nRight drag + WASD/QE: fly   F: focus\nW / E / R: move / rotate / scale",
             );
             return;
         };
