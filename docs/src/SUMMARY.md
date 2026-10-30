@@ -9,19 +9,23 @@
 
 # 基本操作
 
-- [カメラ操作](camera.md)
-- [箱の作成・選択・編集](parts.md)
+- [STEP ファイルを開く](step-import.md)
+- [アセンブリツリーと選択](tree.md)
+- [プロパティ](properties.md)
+- [カメラとビュー](camera.md)
+- [箱の作成と編集](boxes.md)
 - [ギズモとスナップ](gizmo.md)
+- [元に戻す・やり直し](undo.md)
 - [ショートカット一覧](shortcuts.md)
 
 # 開発中の機能
 
-- [STEP 取り込みとアセンブリツリー](upcoming/step-import.md)
 - [干渉チェックと距離計測](upcoming/interference.md)
 - [タイミングチャートと動作シミュレーション](upcoming/timing-chart.md)
 - [センサー・シーケンサー(PLC)](upcoming/sensors-plc.md)
 - [関節とロボットの動き](upcoming/robot.md)
 - [標準部品ライブラリ](upcoming/parts-library.md)
+- [保存 / 読み込み、CSV 出力](upcoming/save-load.md)
 
 ---
 

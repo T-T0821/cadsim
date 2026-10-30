@@ -12,7 +12,7 @@
    | macOS 11 以降 (Apple Silicon / Intel) | `cadsim-<版>-macos-universal.zip` |
 
 2. zip を展開して起動します。
-   - **Windows**: `cad_proto.exe` をダブルクリック。
+   - **Windows**: 中の `.exe` をダブルクリック。
    - **Mac**: `.app` を「アプリケーション」フォルダへ移してから開く。
 3. 初回は署名がないため警告が出ます。
    - **Windows**: 「Windows によって PC が保護されました」→「詳細情報」→「実行」。
@@ -25,9 +25,10 @@
 ```sh
 git clone https://github.com/T-T0821/cadsim.git
 cd cadsim
-cargo run --release
+cargo run --release                      # サンプルのアセンブリを開いて起動
+cargo run --release -- path/to/part.step # 指定した STEP を開いて起動
 ```
 
 初回はビルドに数分かかります。Linux では先に `libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev` を入れてください。
 
-起動すると、幅 2・高さ 1・奥行 1 の箱が 1 つ置かれた画面が開きます。
+起動すると、サンプルのアセンブリ(万力風の小さな組立品)が開いた画面になります。
