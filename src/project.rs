@@ -3,6 +3,7 @@
 //! ファイルの中身は人が読める JSON。アセンブリの木をそのまま入れ子で書く。
 //! 書くのは設計データ (名前・配置・表示/非表示・色・箱の寸法) と、取り込んだ STEP の場所だけ。
 //! STEP の形状 (B-rep やメッシュ) は書かず、開くときに STEP から読み直す。
+//! 3D 上の寸法と注記 (annotation.rs) も一緒に書く。部品は木の中の位置で指す。
 //! そのため取り込んだ部品は「どの STEP の、どの製品か」で形状を引く。
 //!
 //! ファイル形式の構造体 (`ProjectFile` など) はアプリ内部の `Model` とは別に持つ。
@@ -28,6 +29,7 @@ use bevy::{
 use bevy_egui::egui;
 use serde::{Deserialize, Serialize};
 
+use crate::annotation::{AnnotationRecord, Annotations, to_records};
 use crate::camera::CameraRequest;
 use crate::file_io::{ImportJobs, file_name, load_source, receive_imports, source_name};
 use crate::history::History;
@@ -84,6 +86,9 @@ pub struct ProjectFile {
     /// 最上位のノード (ツリーの表示順)。子は `children` に入れ子で書く。
     #[serde(default)]
     pub nodes: Vec<NodeRecord>,
+    /// 3D 上の寸法と注記
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub annotations: Vec<AnnotationRecord>,
 }
 
 fn default_unit() -> String {
@@ -162,6 +167,15 @@ impl ProjectFile {
                 .map(|s| StepFileRecord::from_source(s, base_dir))
                 .collect(),
             nodes,
+            annotations: Vec::new(),
+        }
+    }
+
+    /// 今のモデルと寸法・注記からファイルの内容を作る
+    pub fn capture(model: &Model, annotations: &Annotations, base_dir: Option<&Path>) -> Self {
+        Self {
+            annotations: to_records(annotations, model),
+            ..Self::from_model(model, base_dir)
         }
     }
 
@@ -554,8 +568,8 @@ impl ProjectState {
         self.requested = Some((action, false));
     }
 
-    pub fn has_unsaved_changes(&self, model: &Model) -> bool {
-        self.saved != ProjectFile::from_model(model, self.base_dir())
+    pub fn has_unsaved_changes(&self, model: &Model, annotations: &Annotations) -> bool {
+        self.saved != ProjectFile::capture(model, annotations, self.base_dir())
     }
 
     pub fn file_name(&self) -> String {
@@ -569,13 +583,18 @@ impl ProjectState {
         self.path.as_deref().and_then(Path::parent)
     }
 
-    fn mark_saved(&mut self, model: &Model) {
-        self.saved = ProjectFile::from_model(model, self.base_dir());
+    fn mark_saved(&mut self, model: &Model, annotations: &Annotations) {
+        self.saved = ProjectFile::capture(model, annotations, self.base_dir());
     }
 
-    fn save(&mut self, path: PathBuf, model: &Model) -> Result<(), ProjectError> {
+    fn save(
+        &mut self,
+        path: PathBuf,
+        model: &Model,
+        annotations: &Annotations,
+    ) -> Result<(), ProjectError> {
         let base_dir = path.parent().map(Path::to_path_buf);
-        let file = ProjectFile::from_model(model, base_dir.as_deref());
+        let file = ProjectFile::capture(model, annotations, base_dir.as_deref());
         std::fs::write(&path, file.to_json()).map_err(ProjectError::Io)?;
         self.path = Some(path);
         self.saved = file;
@@ -602,9 +621,11 @@ fn with_extension(path: PathBuf) -> PathBuf {
 /// 頼まれた操作を実行し、読み込みが終わっていればモデルに反映する。
 /// 新規作成・開くと元に戻す履歴は消す (前のプロジェクトに戻せてしまわないように)。
 /// 「名前を付けて保存」のダイアログは macOS ではメインスレッドで出す必要があるので NonSendMarker を付ける。
+#[allow(clippy::too_many_arguments)]
 fn run_project_actions(
     mut state: ResMut<ProjectState>,
     mut model: ResMut<Model>,
+    mut annotations: ResMut<Annotations>,
     mut selection: ResMut<Selection>,
     mut jobs: ResMut<ImportJobs>,
     mut camera: MessageWriter<CameraRequest>,
@@ -613,7 +634,7 @@ fn run_project_actions(
 ) {
     let state = &mut *state;
     if state.startup {
-        state.mark_saved(&model);
+        state.mark_saved(&model, &annotations);
         state.startup = !jobs.loading.is_empty();
     }
 
@@ -623,12 +644,20 @@ fn run_project_actions(
         jobs.loading.retain(|n| *n != name);
         match result {
             Ok(loaded) => {
-                let warnings = loaded.apply_to(&mut model);
+                let mut warnings = loaded.apply_to(&mut model);
+                let (restored, skipped) =
+                    Annotations::from_records(&loaded.file.annotations, &model);
+                *annotations = restored;
+                if skipped > 0 {
+                    warnings.push(format!(
+                        "部品が見つからない寸法・注記が {skipped} 件あったため読み飛ばしました"
+                    ));
+                }
                 *history = History::default();
                 selection.clear();
                 camera.write(CameraRequest::FitAll);
                 state.path = Some(path);
-                state.mark_saved(&model);
+                state.mark_saved(&model, &annotations);
                 let mut message = format!("{name} を開きました");
                 if !warnings.is_empty() {
                     message += &format!("。注意が {} 件あります", warnings.len());
@@ -654,17 +683,18 @@ fn run_project_actions(
         jobs.messages.push("プロジェクトを読み込み中です".into());
         return;
     }
-    if action.discards_model() && !confirmed && state.has_unsaved_changes(&model) {
+    if action.discards_model() && !confirmed && state.has_unsaved_changes(&model, &annotations) {
         state.confirm_discard = Some(action);
         return;
     }
     match action {
         ProjectAction::New => {
             model.clear();
+            *annotations = Annotations::default();
             *history = History::default();
             selection.clear();
             state.path = None;
-            state.mark_saved(&model);
+            state.mark_saved(&model, &annotations);
             jobs.messages.push("新しいプロジェクトを作りました".into());
         }
         ProjectAction::OpenPath(path) => {
@@ -688,7 +718,7 @@ fn run_project_actions(
             let Some(path) = path else {
                 return;
             };
-            match state.save(path.clone(), &model) {
+            match state.save(path.clone(), &model, &annotations) {
                 Ok(()) => jobs
                     .messages
                     .push(format!("{} を保存しました", file_name(&path))),
@@ -746,9 +776,10 @@ enum Choice {
 fn update_window_title(
     state: Res<ProjectState>,
     model: Res<Model>,
+    annotations: Res<Annotations>,
     mut window: Single<&mut Window, With<PrimaryWindow>>,
 ) {
-    let marker = if state.has_unsaved_changes(&model) {
+    let marker = if state.has_unsaved_changes(&model, &annotations) {
         " *"
     } else {
         ""
@@ -903,13 +934,43 @@ mod tests {
         let path = dir.join("line.cadsim");
         let model = sample_model();
         let mut state = ProjectState::default();
-        state.save(path.clone(), &model).unwrap();
-        assert!(!state.has_unsaved_changes(&model));
+        let none = Annotations::default();
+        state.save(path.clone(), &model, &none).unwrap();
+        assert!(!state.has_unsaved_changes(&model, &none));
         let loaded = LoadedProject::load(&path);
         std::fs::remove_dir_all(&dir).ok();
         let mut restored = Model::default();
         loaded.unwrap().apply_to(&mut restored);
-        assert!(!state.has_unsaved_changes(&restored));
+        assert!(!state.has_unsaved_changes(&restored, &none));
+    }
+
+    #[test]
+    fn annotations_are_saved_with_the_project() {
+        use crate::annotation::{Anchor, AnnotationKind};
+        let model = sample_model();
+        let part = model.roots[1];
+        let mut annotations = Annotations::default();
+        annotations.add(AnnotationKind::Note {
+            at: Anchor {
+                node: part,
+                local: [1.0, 1.0, 1.0],
+            },
+            text: "ストッパー位置\n要確認".into(),
+        });
+        let file = ProjectFile::capture(&model, &annotations, None);
+        let json = file.to_json();
+        assert!(json.contains("\"annotations\""), "{json}");
+        let restored = reload(&file);
+        let parsed = ProjectFile::from_json(&json).unwrap();
+        let (reopened, skipped) = Annotations::from_records(&parsed.annotations, &restored);
+        assert_eq!(skipped, 0);
+        assert_eq!(ProjectFile::capture(&restored, &reopened, None), file);
+        // 寸法・注記のない古いファイルもそのまま開ける
+        assert!(
+            !ProjectFile::from_model(&model, None)
+                .to_json()
+                .contains("annotations")
+        );
     }
 
     #[test]

@@ -18,8 +18,10 @@
 //! - `japanese_font` egui に埋め込みの日本語フォントを登録する
 //! - `math`        回転や行列の変換
 //! - `simulation`  干渉チェックと距離計測 (`SimBody` を付けた部品が対象)
+//! - `annotation`  3D 上の寸法 (点間距離・辺の長さ・面間距離) と注記
 
 mod animation;
+mod annotation;
 mod camera;
 mod file_io;
 mod gizmo;
@@ -63,6 +65,7 @@ fn main() {
             history::HistoryPlugin,
             ui::UiPlugin,
             simulation::SimulationPlugin,
+            annotation::AnnotationPlugin,
         ))
         .run();
 }
