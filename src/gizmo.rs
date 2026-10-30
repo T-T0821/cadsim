@@ -36,9 +36,9 @@ pub enum Tool {
 impl Tool {
     pub fn label(self) -> &'static str {
         match self {
-            Tool::Translate => "Move (W)",
-            Tool::Rotate => "Rotate (E)",
-            Tool::Scale => "Scale (R)",
+            Tool::Translate => "移動 (W)",
+            Tool::Rotate => "回転 (E)",
+            Tool::Scale => "拡大縮小 (R)",
         }
     }
 
@@ -120,8 +120,12 @@ fn snap_size(old: [f64; 3], new: [f64; 3], step: f64) -> [f64; 3] {
 
 /// パネルに出すスナップ設定の欄
 pub fn snap_settings_ui(ui: &mut egui::Ui, tool: &mut GizmoTool) {
-    let state = if tool.snapping { "on" } else { "hold Ctrl" };
-    ui.label(format!("Snap ({state})"));
+    let state = if tool.snapping {
+        "有効"
+    } else {
+        "Ctrl で有効"
+    };
+    ui.label(format!("スナップ ({state})"));
     let snap = &mut tool.snap;
     egui::Grid::new("snap_settings").show(ui, |ui| {
         let step = |ui: &mut egui::Ui, label: &str, value: &mut f64, speed: f64| {
@@ -134,11 +138,11 @@ pub fn snap_settings_ui(ui: &mut egui::Ui, tool: &mut GizmoTool) {
             );
             ui.end_row();
         };
-        step(ui, "Move step", &mut snap.translate_step, 0.01);
-        step(ui, "Rotate step (deg)", &mut snap.rotate_step_deg, 1.0);
-        step(ui, "Size step", &mut snap.size_step, 0.01);
+        step(ui, "移動の刻み", &mut snap.translate_step, 0.01);
+        step(ui, "回転の刻み (度)", &mut snap.rotate_step_deg, 1.0);
+        step(ui, "寸法の刻み", &mut snap.size_step, 0.01);
     });
-    ui.checkbox(&mut snap.always, "Always snap");
+    ui.checkbox(&mut snap.always, "常にスナップ");
 }
 
 fn to_row_matrix(m: DMat4) -> mint::RowMatrix4<f64> {
