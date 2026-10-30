@@ -1,14 +1,19 @@
 # Windows / macOS 向けの配布パッケージを作り、GitHub Release に置く。
 #
-# - main にマージ (push) されると: ビルド → タグ v<major>.<minor>.<実行番号> を付けて Release を作成
-#   (major.minor は Cargo.toml の version から取る。例: 0.1.0 なら v0.1.1, v0.1.2, ...)
-# - Actions タブから手動実行 / PR でこのファイル等を変えたとき: ビルドだけ行い、成果物を Actions の Artifacts に置く
+# - Actions タブの「Release」→「Run workflow」(main を選ぶ) で手動実行すると:
+#   ビルド → タグ v<major>.<minor>.<実行番号> を付けて Release を作成
+#   (major.minor は Cargo.toml の version から取る。例: 0.1.0 なら v0.1.12 など)
+#   「Release を作成する」のチェックを外すと、ビルドだけ行い成果物を Artifacts に置く
+# - PR でこのファイルや Cargo.toml 等を変えたとき: ビルドだけ行う (Release は作らない)
 name: Release
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "Release を作成する (外すとビルドだけ)"
+        type: boolean
+        default: true
   pull_request:
     paths:
       - ".github/workflows/release.yml"
@@ -34,8 +39,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - id: v
+        env:
+          PUBLISH: ${{ github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/main' }}
         run: |
-          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+          if [ "$PUBLISH" = "true" ]; then
             major_minor=$(grep -m1 '^version' Cargo.toml | sed -E 's/.*"([0-9]+\.[0-9]+)\..*/\1/')
             echo "version=$major_minor.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
           else
@@ -121,7 +128,7 @@ jobs:
 
   release:
     name: GitHub Release
-    if: github.event_name == 'push'
+    if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/main'
     needs: [version, windows, macos]
     runs-on: ubuntu-latest
     steps:
