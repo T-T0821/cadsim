@@ -1,0 +1,18 @@
+[package]
+name = "cad_proto"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bevy = "0.20"
+bevy_egui = "0.43"
+transform-gizmo = "0.11"
+truck-meshalgo = "0.4"
+truck-modeling = "0.6"
+
+# 開発ビルドでも Bevy などの依存は最適化して、操作を軽くする
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
