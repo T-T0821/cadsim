@@ -4,6 +4,9 @@
 //! - シーケンスはステップの並び。1つのステップには「どのアクチュエータを、どこまで、何秒で」
 //!   動かすかの動作 (Action) を複数置ける。同じステップの動作は同時に始まる。
 //! - ステップ内の動作がすべて完了し、さらにタイマー (dwell) が経過したら次のステップへ進む。
+//! - ステップには開始条件 (インターロック: 「センサー X が ON」など) を付けられる。
+//!   条件が成立するまでそのステップの動作は始まらず、[`INTERLOCK_TIMEOUT`] 秒待っても
+//!   成立しなければ異常停止としてサイクルを止める。
 //!
 //! 再生は [`TimingChart::schedule`] で「何秒から何秒まで、どの値へ動くか」の時刻表に
 //! 変換してから行う。時刻表は純粋な計算なので、Bevy に依存せずテストできる。
@@ -11,6 +14,8 @@
 use std::collections::HashMap;
 
 use bevy::prelude::Resource;
+
+pub use super::sensor::{Sensor, SensorKind};
 
 /// アクチュエータの種類
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -167,6 +172,19 @@ pub struct Action {
     pub duration: f64,
 }
 
+/// インターロックの条件が成立しないまま、この秒数待ったら異常停止とする
+pub const INTERLOCK_TIMEOUT: f64 = 5.0;
+
+/// 条件待ちのあいだ、センサーを見直す間隔 (秒)
+const INTERLOCK_POLL: f64 = 0.02;
+
+/// ステップの開始条件: 「センサー `sensor` が `on` (ON / OFF) になっていること」
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Interlock {
+    pub sensor: u32,
+    pub on: bool,
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Step {
     /// ステップの説明 ("ワーク把持" など)
@@ -174,6 +192,8 @@ pub struct Step {
     pub actions: Vec<Action>,
     /// 動作完了後に待つ時間 (秒)。タイマー待ちや確認時間に使う。
     pub dwell: f64,
+    /// 開始条件。すべて成立するまで、このステップの動作を始めない。
+    pub interlocks: Vec<Interlock>,
 }
 
 impl Step {
@@ -183,6 +203,18 @@ impl Step {
 
     pub fn action_mut(&mut self, actuator: u32) -> Option<&mut Action> {
         self.actions.iter_mut().find(|a| a.actuator == actuator)
+    }
+
+    pub fn interlock(&self, sensor: u32) -> Option<&Interlock> {
+        self.interlocks.iter().find(|i| i.sensor == sensor)
+    }
+
+    /// センサー `sensor` の条件を付け替える (`None` なら外す)
+    pub fn set_interlock(&mut self, sensor: u32, on: Option<bool>) {
+        self.interlocks.retain(|i| i.sensor != sensor);
+        if let Some(on) = on {
+            self.interlocks.push(Interlock { sensor, on });
+        }
     }
 
     /// 全動作が完了するまでの時間 + タイマー
@@ -196,12 +228,14 @@ impl Step {
     }
 }
 
-/// タイミングチャート全体 (アクチュエータ一覧 + ステップの並び)
+/// タイミングチャート全体 (アクチュエータ・センサー一覧 + ステップの並び)
 #[derive(Resource, Clone, Debug, Default, PartialEq)]
 pub struct TimingChart {
     pub actuators: Vec<Actuator>,
+    pub sensors: Vec<Sensor>,
     pub steps: Vec<Step>,
     pub next_actuator_id: u32,
+    pub next_sensor_id: u32,
 }
 
 impl TimingChart {
@@ -221,12 +255,41 @@ impl TimingChart {
         self.actuators.iter_mut().find(|a| a.id == id)
     }
 
-    /// アクチュエータを消す。そのアクチュエータへの動作と、載せていた子の親設定も外す。
+    pub fn add_sensor(&mut self, kind: SensorKind) -> u32 {
+        self.next_sensor_id = self.next_sensor_id.max(1);
+        let id = self.next_sensor_id;
+        self.next_sensor_id += 1;
+        self.sensors.push(Sensor::new(id, kind));
+        id
+    }
+
+    pub fn sensor(&self, id: u32) -> Option<&Sensor> {
+        self.sensors.iter().find(|s| s.id == id)
+    }
+
+    pub fn sensor_mut(&mut self, id: u32) -> Option<&mut Sensor> {
+        self.sensors.iter_mut().find(|s| s.id == id)
+    }
+
+    /// センサーを消す。そのセンサーを使ったインターロックも外す。
+    pub fn remove_sensor(&mut self, id: u32) {
+        self.sensors.retain(|s| s.id != id);
+        for step in &mut self.steps {
+            step.interlocks.retain(|i| i.sensor != id);
+        }
+    }
+
+    /// アクチュエータを消す。そのアクチュエータへの動作と、載せていた子・センサーの親設定も外す。
     pub fn remove_actuator(&mut self, id: u32) {
         self.actuators.retain(|a| a.id != id);
         for actuator in &mut self.actuators {
             if actuator.mounted_on == Some(id) {
                 actuator.mounted_on = None;
+            }
+        }
+        for sensor in &mut self.sensors {
+            if sensor.mounted_on == Some(id) {
+                sensor.mounted_on = None;
             }
         }
         for step in &mut self.steps {
@@ -248,29 +311,89 @@ impl TimingChart {
         false
     }
 
-    /// ステップの並びを時刻表に変換する
+    /// ステップの並びを時刻表に変換する (インターロックはすべて成立しているものとする)
+    #[cfg(test)]
     pub fn schedule(&self) -> Schedule {
+        self.schedule_with(|_, _, _| Vec::new())
+    }
+
+    /// ステップの並びを時刻表に変換する。
+    ///
+    /// `unmet(途中までの時刻表, t, ステップ)` は、時刻 t にそのステップの開始条件のうち
+    /// 成立していないものを返す。条件付きのステップでは、前のステップが終わった時刻から
+    /// 少しずつ時刻を進めて、すべて成立した時刻に動作を始める。
+    /// 途中までの時刻表には t より後の動作が入っていないが、ステップの境目では
+    /// すべての動作が終わっているので、部品の位置は正しく求まる。
+    pub fn schedule_with(
+        &self,
+        mut unmet: impl FnMut(&Schedule, f64, &Step) -> Vec<Interlock>,
+    ) -> Schedule {
         let mut schedule = Schedule::default();
         let mut time = 0.0;
-        for step in &self.steps {
+        for (index, step) in self.steps.iter().enumerate() {
+            let start = time;
+            let Some(action_start) = wait_for_interlocks(&schedule, start, step, &mut unmet) else {
+                // 時間切れ: このステップで止まる。待った時間までを時刻表に残す。
+                let end = start + INTERLOCK_TIMEOUT;
+                schedule.stop = Some(InterlockStop {
+                    step: index,
+                    time: end,
+                    unmet: unmet(&schedule, start, step),
+                });
+                schedule.steps.push(StepSpan {
+                    start,
+                    action_start: end,
+                    end,
+                });
+                // 実行されないステップは長さ 0 として並べておく (チャートの列はそのまま描く)
+                for _ in index + 1..self.steps.len() {
+                    schedule.steps.push(StepSpan {
+                        start: end,
+                        action_start: end,
+                        end,
+                    });
+                }
+                schedule.cycle_time = end;
+                return schedule;
+            };
             for action in &step.actions {
                 schedule
                     .segments
                     .entry(action.actuator)
                     .or_default()
                     .push(Segment {
-                        start: time,
+                        start: action_start,
                         duration: action.duration.max(0.0),
                         target: action.target,
                     });
             }
-            let end = time + step.duration();
-            schedule.steps.push(StepSpan { start: time, end });
+            let end = action_start + step.duration();
+            schedule.steps.push(StepSpan {
+                start,
+                action_start,
+                end,
+            });
             time = end;
         }
         schedule.cycle_time = time;
         schedule
     }
+}
+
+/// `start` から条件が成立するまで待ち、動作を始める時刻を返す。時間切れなら `None`。
+fn wait_for_interlocks(
+    schedule: &Schedule,
+    start: f64,
+    step: &Step,
+    unmet: &mut impl FnMut(&Schedule, f64, &Step) -> Vec<Interlock>,
+) -> Option<f64> {
+    if step.interlocks.is_empty() {
+        return Some(start);
+    }
+    let polls = (INTERLOCK_TIMEOUT / INTERLOCK_POLL).round() as usize;
+    (0..=polls)
+        .map(|k| start + k as f64 * INTERLOCK_POLL)
+        .find(|&t| unmet(schedule, t, step).is_empty())
 }
 
 /// 1つの動作を時刻で表したもの
@@ -283,8 +406,29 @@ pub struct Segment {
 
 #[derive(Clone, Copy, Debug)]
 pub struct StepSpan {
+    /// 前のステップが終わった時刻 (ここから開始条件を待つ)
     pub start: f64,
+    /// 開始条件が成立し、動作を始めた時刻 (条件がなければ `start` と同じ)
+    pub action_start: f64,
     pub end: f64,
+}
+
+impl StepSpan {
+    /// 開始条件を待った時間
+    pub fn wait(&self) -> f64 {
+        self.action_start - self.start
+    }
+}
+
+/// インターロックが成立せず、サイクルが止まったところ
+#[derive(Clone, Debug, PartialEq)]
+pub struct InterlockStop {
+    /// 止まったステップの番号 (0 始まり)
+    pub step: usize,
+    /// 止まった (時間切れになった) 時刻
+    pub time: f64,
+    /// 成立しなかった条件
+    pub unmet: Vec<Interlock>,
 }
 
 /// ステップを時刻に展開した結果
@@ -294,8 +438,10 @@ pub struct Schedule {
     pub segments: HashMap<u32, Vec<Segment>>,
     /// 各ステップの開始・終了時刻
     pub steps: Vec<StepSpan>,
-    /// 1サイクルの時間 (秒)
+    /// 1サイクルの時間 (秒)。異常停止したときは止まった時刻。
     pub cycle_time: f64,
+    /// インターロックで止まったときの情報
+    pub stop: Option<InterlockStop>,
 }
 
 impl Schedule {
@@ -327,14 +473,20 @@ impl Schedule {
             .map_or(0.0, |s| s.target)
     }
 
+    /// 実際に実行される最後のステップ (異常停止したら止まったステップ)
+    pub fn last_step(&self) -> Option<usize> {
+        match &self.stop {
+            Some(stop) => Some(stop.step),
+            None => self.steps.len().checked_sub(1),
+        }
+    }
+
     /// 時刻 t が含まれるステップの番号
     pub fn step_at(&self, t: f64) -> Option<usize> {
         self.steps
             .iter()
             .position(|s| t >= s.start && t < s.end)
-            .or_else(|| {
-                (!self.steps.is_empty() && t >= self.cycle_time).then(|| self.steps.len() - 1)
-            })
+            .or_else(|| self.last_step().filter(|_| t >= self.cycle_time))
     }
 }
 
@@ -404,6 +556,75 @@ mod tests {
         assert_eq!(at(1.0), 1.0);
         assert!((at(1.25) - 0.75).abs() < 1e-12);
         assert_eq!(at(5.0), 0.0);
+    }
+
+    /// S1 でシリンダを出し、S2 は「センサー 1 が ON」を待ってから戻す
+    fn chart_with_interlock() -> TimingChart {
+        let (mut chart, id) = chart_with_cylinder();
+        let act = |target| Action {
+            actuator: id,
+            target,
+            duration: 1.0,
+        };
+        chart.steps.push(Step {
+            actions: vec![act(1.0)],
+            ..Default::default()
+        });
+        chart.steps.push(Step {
+            actions: vec![act(0.0)],
+            interlocks: vec![Interlock {
+                sensor: 1,
+                on: true,
+            }],
+            ..Default::default()
+        });
+        chart
+    }
+
+    #[test]
+    fn step_waits_until_interlock_holds() {
+        let chart = chart_with_interlock();
+        // センサーは t = 1.5 で ON になる
+        let schedule = chart.schedule_with(|_, t, step| {
+            step.interlocks
+                .iter()
+                .copied()
+                .filter(|i| (t >= 1.5) != i.on)
+                .collect()
+        });
+        let span = schedule.steps[1];
+        assert_eq!(span.start, 1.0);
+        assert!((span.action_start - 1.5).abs() < 1e-9);
+        assert!((schedule.cycle_time - 2.5).abs() < 1e-9);
+        assert!(schedule.stop.is_none());
+        // 待っているあいだシリンダは出たまま
+        let actuator = &chart.actuators[0];
+        assert_eq!(schedule.value_at(actuator, 1.4), 1.0);
+    }
+
+    #[test]
+    fn unmet_interlock_stops_the_cycle() {
+        let mut chart = chart_with_interlock();
+        chart.steps.push(Step::default());
+        let schedule = chart.schedule_with(|_, _, step| step.interlocks.clone());
+        let stop = schedule.stop.as_ref().expect("止まるはず");
+        assert_eq!(stop.step, 1);
+        assert_eq!(stop.unmet, chart.steps[1].interlocks);
+        assert_eq!(schedule.cycle_time, 1.0 + INTERLOCK_TIMEOUT);
+        // 止まった後のステップも列としては残る
+        assert_eq!(schedule.steps.len(), 3);
+        assert_eq!(schedule.step_at(100.0), Some(1));
+        // 戻しの動作は行われない
+        assert_eq!(schedule.final_value(&chart.actuators[0]), 1.0);
+    }
+
+    #[test]
+    fn removing_a_sensor_removes_its_interlocks() {
+        let mut chart = chart_with_interlock();
+        let id = chart.add_sensor(SensorKind::Proximity);
+        assert_eq!(id, 1);
+        chart.remove_sensor(id);
+        assert!(chart.steps[1].interlocks.is_empty());
     }
 
     #[test]
