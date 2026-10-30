@@ -5,6 +5,8 @@ use std::collections::HashMap;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 
+use crate::camera::ViewportRect;
+
 use super::{
     InterferenceCheck, SimBody,
     interference::PairStatus,
@@ -17,6 +19,7 @@ pub fn simulation_panel(
     mut check: ResMut<InterferenceCheck>,
     mut measure: ResMut<MeasureTool>,
     bodies: Query<(&SimBody, Option<&Name>)>,
+    viewport: Res<ViewportRect>,
 ) -> Result {
     let names: HashMap<u32, String> = bodies
         .iter()
@@ -26,8 +29,12 @@ pub fn simulation_panel(
         })
         .collect();
 
+    // 3D ビューの左上に浮かべる (右上はビューキューブ)
+    let corner = viewport.rect.map_or(egui::pos2(8.0, 8.0), |r| {
+        egui::pos2(r.min.x + 8.0, r.min.y + 8.0)
+    });
     egui::Window::new("シミュレーション")
-        .anchor(egui::Align2::RIGHT_TOP, [-8.0, 8.0])
+        .fixed_pos(corner)
         .resizable(false)
         .collapsible(true)
         .show(contexts.ctx_mut()?, |ui| {
@@ -112,7 +119,15 @@ fn interference_section(
                         "干渉",
                         overlap
                             .as_ref()
-                            .map_or("-".into(), |o| format!("体積 {:.4}", o.volume)),
+                            .map(|o| format!("体積 {:.4}", o.volume))
+                            .unwrap_or_else(|| {
+                                if report.overlap_pending {
+                                    "計算中…"
+                                } else {
+                                    "-"
+                                }
+                                .into()
+                            }),
                         INTERFERENCE_COLOR,
                     ),
                     PairStatus::Contact => ("接触", "すき間 0".into(), CONTACT_COLOR),

@@ -6,7 +6,7 @@
 //! - B の表面のうち、A の内側にある部分
 //!
 //! そこで両方の表面の三角形を「相手の内側か」で振り分ける。相手の表面をまたぐ
-//! 三角形は4分割をくり返して細かくし、境界付近だけ解像度を上げる。
+//! 三角形は長い辺で2分割をくり返して細かくし、境界付近だけ解像度を上げる。
 //! 両者の面がぴったり重なる場所 (同じ床に置いた箱の底面など) は A 側だけから取る。
 //!
 //! 境界は分割の細かさ分だけギザギザになるので、輪郭は交線 (`PairResult::curves`)
@@ -15,15 +15,15 @@
 use bevy::math::DVec3;
 
 use super::geometry::{
-    Aabb, Triangle, closest_points_on_triangles, longest_edge, signed_volume, subdivide,
+    Aabb, Triangle, bisect, closest_points_on_triangles, longest_edge, signed_volume,
     triangle_aabb, triangle_centroid, triangle_normal,
 };
 use super::interference::Body;
 
 /// 共通部分の外接箱の対角線を、この数で割った長さまで細かくする
-const RESOLUTION: f64 = 48.0;
+const RESOLUTION: f64 = 32.0;
 /// 細分割で増やす三角形の上限 (重すぎる形状で止まらないように)
-const MAX_TRIANGLES: usize = 200_000;
+const MAX_TRIANGLES: usize = 50_000;
 
 /// 干渉部分の立体 (ワールド座標、外向き)
 #[derive(Clone, Debug, PartialEq)]
@@ -95,7 +95,7 @@ impl Builder {
         }
         let can_split = longest_edge(t) > self.min_edge && self.triangles.len() < MAX_TRIANGLES;
         if can_split && self.touches_surface(t, other) {
-            for child in subdivide(t) {
+            for child in bisect(t) {
                 self.classify(&child, other, side);
             }
             return;

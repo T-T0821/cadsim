@@ -6,7 +6,7 @@
 //!
 //! Bevy や truck には依存させず、単体テストできる純粋な関数だけを置く。
 
-use bevy::math::{DQuat, DVec3};
+use bevy::math::{DMat4, DQuat, DVec3};
 
 /// 3頂点の三角形。頂点の並びは反時計回りが表 (外向き法線) とする。
 pub type Triangle = [DVec3; 3];
@@ -36,6 +36,15 @@ impl Pose {
         rotation: DQuat::IDENTITY,
         translation: DVec3::ZERO,
     };
+
+    /// 配置行列から姿勢を取り出す (拡大縮小は無視する)
+    pub fn from_matrix(m: DMat4) -> Self {
+        let (_, rotation, translation) = m.to_scale_rotation_translation();
+        Self {
+            rotation,
+            translation,
+        }
+    }
 
     pub fn apply(&self, p: DVec3) -> DVec3 {
         self.rotation * p + self.translation
@@ -173,11 +182,19 @@ pub fn signed_volume(t: &Triangle) -> f64 {
     t[0].dot(t[1].cross(t[2])) / 6.0
 }
 
-/// 各辺の中点で4つに分ける (向きは元の三角形と同じ)。
-pub fn subdivide(t: &Triangle) -> [Triangle; 4] {
-    let [a, b, c] = *t;
-    let (ab, bc, ca) = ((a + b) * 0.5, (b + c) * 0.5, (c + a) * 0.5);
-    [[a, ab, ca], [ab, b, bc], [ca, bc, c], [ab, bc, ca]]
+/// いちばん長い辺の中点で2つに分ける (向きは元の三角形と同じ)。
+///
+/// 4分割と違い、円柱の側面のような細長い三角形でも形がつぶれず、
+/// 分割の数が「境界の長さ」に比例する程度で済む。
+pub fn bisect(t: &Triangle) -> [Triangle; 2] {
+    // 頂点を回して、いちばん長い辺を a-b にする (回しても向きは変わらない)
+    let edge = |i: usize| t[i].distance_squared(t[(i + 1) % 3]);
+    let first = (0..3)
+        .max_by(|&i, &j| edge(i).total_cmp(&edge(j)))
+        .unwrap_or(0);
+    let [a, b, c] = [t[first], t[(first + 1) % 3], t[(first + 2) % 3]];
+    let m = (a + b) * 0.5;
+    [[a, m, c], [m, b, c]]
 }
 
 // ---------------------------------------------------------------------------

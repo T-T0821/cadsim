@@ -83,7 +83,7 @@ pub fn pick_point(
     buttons: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
     window: Single<&Window, With<PrimaryWindow>>,
-    camera: Single<(&Camera, &GlobalTransform)>,
+    camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
     mut ray_cast: MeshRayCast,
     parents: Query<&ChildOf>,
     bodies: Query<&SimBody>,
@@ -182,7 +182,7 @@ pub fn draw(mut gizmos: Gizmos<SimulationGizmos>, tool: Res<MeasureTool>) {
 pub fn draw_labels(
     mut contexts: EguiContexts,
     tool: Res<MeasureTool>,
-    camera: Single<(&Camera, &GlobalTransform)>,
+    camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
     let painter = ctx.layer_painter(egui::LayerId::background());
