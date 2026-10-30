@@ -22,7 +22,7 @@ mod properties;
 mod status;
 mod tree;
 mod view_cube;
-mod widgets;
+pub mod widgets;
 
 use bevy::{
     camera::{CameraOutputMode, visibility::RenderLayers},

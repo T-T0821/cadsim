@@ -19,6 +19,8 @@ truck-meshalgo = "0.4"
 truck-modeling = "0.6"
 truck-stepio = "0.3"
 truck-topology = "0.6"
+# OpenUSD (.usda / .usdc / .usdz) の読み書き。純 Rust
+openusd = "0.8"
 
 # 開発ビルドでも Bevy などの依存は最適化して、操作を軽くする
 [profile.dev]
