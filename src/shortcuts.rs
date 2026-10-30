@@ -5,6 +5,7 @@ use bevy::prelude::*;
 use crate::camera::{CameraRequest, StandardView, alt_pressed, keyboard_free};
 use crate::file_io::ImportJobs;
 use crate::gizmo::{GizmoTool, Tool};
+use crate::history::{History, Request};
 use crate::model::{Model, Selection};
 
 pub struct ShortcutsPlugin;
@@ -15,6 +16,7 @@ impl Plugin for ShortcutsPlugin {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn keyboard_shortcuts(
     buttons: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
@@ -23,6 +25,7 @@ fn keyboard_shortcuts(
     mut gizmo_tool: ResMut<GizmoTool>,
     mut jobs: ResMut<ImportJobs>,
     mut camera: MessageWriter<CameraRequest>,
+    mut history: ResMut<History>,
 ) {
     // 右ボタンを押している間は WASD / QE がフライ移動になる
     if buttons.pressed(MouseButton::Right) {
@@ -33,6 +36,13 @@ fn keyboard_shortcuts(
     if ctrl {
         if keys.just_pressed(KeyCode::KeyO) {
             jobs.request_dialog();
+        }
+        let shift = keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
+        if keys.just_pressed(KeyCode::KeyZ) {
+            history.request = Some(if shift { Request::Redo } else { Request::Undo });
+        }
+        if keys.just_pressed(KeyCode::KeyY) {
+            history.request = Some(Request::Redo);
         }
     } else {
         // ギズモの切り替え (Unity / Unreal と同じ W / E / R)
@@ -98,7 +108,7 @@ fn keyboard_shortcuts(
     if keys.just_pressed(KeyCode::Delete)
         && let Some(id) = selection.node
     {
-        model.remove(id);
+        history.remove(&mut model, id);
         selection.clear();
     }
 }

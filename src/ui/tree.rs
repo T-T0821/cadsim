@@ -167,7 +167,7 @@ fn row_contents(ui: &mut egui::Ui, state: &mut UiState, id: NodeId, reveal: &[No
         }
         ui.separator();
         if ui.button("削除").clicked() {
-            state.model.remove(id);
+            state.history.remove(&mut state.model, id);
             state.selection.clear();
         }
     });

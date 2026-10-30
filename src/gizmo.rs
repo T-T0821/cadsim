@@ -21,6 +21,7 @@ use transform_gizmo::{
 };
 
 use crate::camera::{ViewportRect, alt_pressed};
+use crate::history::History;
 use crate::math::{euler_deg_to_quat, quat_to_euler_deg};
 use crate::model::{Model, NodeKind, Selection};
 
@@ -257,6 +258,7 @@ pub fn transform_gizmo_system(
     mut contexts: EguiContexts,
     mut tool: ResMut<GizmoTool>,
     mut model: ResMut<Model>,
+    mut history: ResMut<History>,
     selection: Res<Selection>,
     buttons: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
@@ -338,6 +340,8 @@ pub fn transform_gizmo_system(
         && let Some(new) = transforms.first()
     {
         let size_step = (tool.snapping && tool.tool == Tool::Scale).then_some(tool.snap.size_step);
+        // ドラッグ全体を1件の履歴にする (手を離したときに確定)
+        history.begin_edit(&model, id);
         apply_gizmo_result(&mut model, id, new, size_step);
     }
     tool.focused = tool.gizmo.is_focused();
