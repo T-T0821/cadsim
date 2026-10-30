@@ -2211,6 +2211,8 @@ dependencies = [
  "bevy_egui",
  "rfd",
  "ruststep",
+ "serde",
+ "serde_json",
  "transform-gizmo",
  "truck-meshalgo",
  "truck-modeling",

@@ -5,6 +5,7 @@
 //! Bevy のエンティティとは独立していて、表示は viewport.rs が後から追いかける。
 
 use std::collections::{BTreeMap, HashSet};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use bevy::math::{DMat4, DVec3};
@@ -45,7 +46,17 @@ pub enum NodeKind {
     Imported {
         product: String,
         shape: Arc<ImportedShape>,
+        /// 取り込んだ STEP ファイル。プロジェクトを開くときにここから形状を読み直す。
+        source: StepSource,
     },
+}
+
+/// 取り込んだ STEP がどこから来たか
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum StepSource {
+    /// アプリに埋め込みのサンプル
+    Sample,
+    File(PathBuf),
 }
 
 impl NodeKind {
@@ -165,7 +176,8 @@ impl Default for Model {
 impl Model {
     // --- 追加と削除 ---------------------------------------------------------
 
-    fn add_node(
+    /// ノードを1つ加える。`parent` が None なら最上位に置く。
+    pub fn add_node(
         &mut self,
         parent: Option<NodeId>,
         name: String,
@@ -208,9 +220,9 @@ impl Model {
     }
 
     /// 取り込んだ STEP の木をモデルに加え、そのルートの id を返す
-    pub fn add_imported(&mut self, root: ImportNode, unit: String) -> NodeId {
+    pub fn add_imported(&mut self, root: ImportNode, unit: String, source: StepSource) -> NodeId {
         self.unit = unit;
-        let id = self.add_import_node(None, root);
+        let id = self.add_import_node(None, root, &source);
         // 新しく作る箱の寸法を、取り込んだものの大きさに見合うきりのいい値にする
         if let Some(bounds) = self.world_bounds(id) {
             let step = 10f64.powf((bounds.size().max_element() / 4.0).log10().floor());
@@ -231,11 +243,17 @@ impl Model {
         }
     }
 
-    fn add_import_node(&mut self, parent: Option<NodeId>, node: ImportNode) -> NodeId {
+    fn add_import_node(
+        &mut self,
+        parent: Option<NodeId>,
+        node: ImportNode,
+        source: &StepSource,
+    ) -> NodeId {
         let kind = match node.shape {
             Some(shape) => NodeKind::Imported {
                 product: node.product,
                 shape,
+                source: source.clone(),
             },
             None => NodeKind::Assembly {
                 product: Some(node.product),
@@ -243,7 +261,7 @@ impl Model {
         };
         let id = self.add_node(parent, node.name, node.placement, kind);
         for child in node.children {
-            self.add_import_node(Some(id), child);
+            self.add_import_node(Some(id), child, source);
         }
         id
     }
@@ -519,7 +537,7 @@ mod tests {
         )
         .unwrap();
         let mut model = Model::default();
-        let root = model.add_imported(file.root, file.unit);
+        let root = model.add_imported(file.root, file.unit, StepSource::Sample);
         (model, root)
     }
 

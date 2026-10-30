@@ -263,6 +263,7 @@ fn finish_gesture_when_idle(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::StepSource;
     use crate::step_import::import_step;
 
     fn world() -> World {
@@ -379,7 +380,7 @@ mod tests {
         .unwrap();
         let mut world = world();
         let root = edit(&mut world, |m, h| {
-            let root = m.add_imported(file.root, file.unit);
+            let root = m.add_imported(file.root, file.unit, StepSource::Sample);
             h.record_added(m, root, "読み込み".into());
             root
         });

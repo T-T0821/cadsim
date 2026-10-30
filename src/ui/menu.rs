@@ -6,6 +6,7 @@ use super::UiState;
 use crate::camera::{CameraRequest, StandardView};
 use crate::gizmo::Tool;
 use crate::history::Request;
+use crate::project::ProjectAction;
 
 pub fn show(root: &mut egui::Ui, state: &mut UiState) {
     egui::Panel::top("menu_bar").show(root, |ui| {
@@ -24,14 +25,32 @@ pub fn show(root: &mut egui::Ui, state: &mut UiState) {
 
 fn file_menu(ui: &mut egui::Ui, state: &mut UiState) {
     ui.menu_button("ファイル", |ui| {
-        if ui.button("STEP を開く…  (Ctrl+O)").clicked() {
+        if ui.button("新規プロジェクト  (Ctrl+N)").clicked() {
+            state.project.request(ProjectAction::New);
+        }
+        if ui
+            .button("開く…  (Ctrl+O)")
+            .on_hover_text("プロジェクト (.cadsim) を開くか、STEP を今のプロジェクトに取り込む")
+            .clicked()
+        {
             state.jobs.request_dialog();
         }
-        if ui.button("サンプルのアセンブリを開く").clicked() {
+        if ui.button("サンプルのアセンブリを取り込む").clicked() {
             state.jobs.open_sample();
         }
         ui.separator();
-        if ui.button("すべて閉じる").clicked() {
+        if ui.button("保存  (Ctrl+S)").clicked() {
+            state.project.request(ProjectAction::Save);
+        }
+        if ui.button("名前を付けて保存…  (Ctrl+Shift+S)").clicked() {
+            state.project.request(ProjectAction::SaveAs);
+        }
+        ui.separator();
+        if ui
+            .button("すべて閉じる")
+            .on_hover_text("今のプロジェクトのまま中身を空にする (元に戻せる)")
+            .clicked()
+        {
             state.history.clear_all(&mut state.model);
             state.selection.clear();
         }
@@ -124,6 +143,8 @@ fn help_menu(ui: &mut egui::Ui) {
                 ),
                 ("5", "透視投影 / 平行投影を切り替え"),
                 ("H / Alt+H", "選択を隠す / すべて表示"),
+                ("Ctrl+N / Ctrl+O", "新規プロジェクト / 開く"),
+                ("Ctrl+S / Ctrl+Shift+S", "保存 / 名前を付けて保存"),
                 ("Esc", "選択を解除"),
                 ("Delete", "選択を削除"),
                 ("Ctrl+Z", "元に戻す"),
@@ -141,10 +162,17 @@ fn toolbar(ui: &mut egui::Ui, state: &mut UiState) {
     ui.horizontal(|ui| {
         if ui
             .button("📂 開く")
-            .on_hover_text("STEP ファイルを開く (Ctrl+O)")
+            .on_hover_text("プロジェクトか STEP ファイルを開く (Ctrl+O)")
             .clicked()
         {
             state.jobs.request_dialog();
+        }
+        if ui
+            .button("💾 保存")
+            .on_hover_text("プロジェクトを保存 (Ctrl+S)")
+            .clicked()
+        {
+            state.project.request(ProjectAction::Save);
         }
         ui.separator();
 
