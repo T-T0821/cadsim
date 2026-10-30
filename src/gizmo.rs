@@ -31,9 +31,9 @@ pub enum Tool {
 impl Tool {
     pub fn label(self) -> &'static str {
         match self {
-            Tool::Translate => "Move (W)",
-            Tool::Rotate => "Rotate (E)",
-            Tool::Scale => "Scale (R)",
+            Tool::Translate => "移動 (W)",
+            Tool::Rotate => "回転 (E)",
+            Tool::Scale => "拡大縮小 (R)",
         }
     }
 

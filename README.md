@@ -51,9 +51,17 @@ Unity / Unreal Engine のシーンビューと同じ割り当てにしていま�
 
 回転はメッシュの Transform ではなく truck 側の形状に適用しているので、寸法計算や今後の干渉チェックは常に f64 の形状で行えます。
 
+## 日本語フォント
+
+egui の標準フォントには日本語がないため、[Noto Sans JP](https://github.com/notofonts/noto-cjk)(SIL Open Font License 1.1)を埋め込んでいます。
+
+- `assets/fonts/NotoSansJP-Subset.otf` … 英数字・記号・かな・JIS 第1/第2水準漢字だけに絞ったもの(約 2.1 MB)。`include_bytes!` で実行ファイルに入るので、配布時にフォントを別に置く必要はありません。
+- `assets/fonts/OFL.txt` … フォントのライセンス。配布物にも同梱してください。
+- `src/japanese_font.rs` … 起動直後に egui の予備フォントとして登録する。英数字は egui の標準フォント、日本語だけ Noto Sans JP で描かれます。
+- `tools/subset_jp_font.py` … 元フォントから絞り込み版を作り直すスクリプト(使い方はファイル先頭)。
+
 ## 次に手を入れるところ
 
-- UI の日本語表示(egui に日本語フォントを読み込む)
 - ギズモのスナップ(Ctrl を押しながらで一定量ずつ動かす)
 - 平行投影への切り替え
 - 干渉チェック(truck のソリッド同士、または Avian のコライダー)
