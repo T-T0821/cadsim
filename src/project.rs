@@ -29,11 +29,12 @@ use bevy_egui::egui;
 use serde::{Deserialize, Serialize};
 
 use crate::camera::CameraRequest;
-use crate::file_io::{ImportJobs, file_name, read_step, receive_imports, source_name};
+use crate::file_io::{ImportJobs, file_name, load_source, receive_imports, source_name};
 use crate::history::History;
+use crate::interchange::UnitOptions;
 use crate::math::{euler_deg_to_quat, quat_to_euler_deg, split_placement};
 use crate::model::{BoxPart, Model, NodeId, NodeKind, Selection, StepSource};
-use crate::step_import::{ImportNode, ImportedShape, import_step};
+use crate::step_import::{ImportNode, ImportedShape};
 
 /// ファイル形式のバージョン。古いファイルを開けなくなる変更をしたときだけ上げる。
 pub const FORMAT_VERSION: u32 = 1;
@@ -399,7 +400,9 @@ impl LoadedProject {
             .iter()
             .map(|source| {
                 let name = source_name(source);
-                match read_step(source).and_then(|text| import_step(&text, &name)) {
+                // OBJ / STL の単位は既定 (mm・Y 上) で読み直す
+                let loaded = load_source(source, &UnitOptions::default());
+                match loaded.map(|l| l.into_imported(&name, &file.unit)) {
                     Ok(imported) => {
                         let mut products = HashMap::new();
                         collect_shapes(&imported.root, &mut products);
@@ -760,6 +763,8 @@ fn update_window_title(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::file_io::read_step;
+    use crate::step_import::import_step;
 
     /// サンプルの STEP を取り込み、箱を1つ足して、いくつか編集したモデル
     fn sample_model() -> Model {

@@ -4,8 +4,10 @@ use bevy_egui::egui;
 
 use super::UiState;
 use crate::camera::{CameraRequest, StandardView};
+use crate::file_io::ExportScope;
 use crate::gizmo::Tool;
 use crate::history::Request;
+use crate::interchange::{FORMATS, LENGTH_UNITS};
 use crate::project::ProjectAction;
 
 pub fn show(root: &mut egui::Ui, state: &mut UiState) {
@@ -30,7 +32,9 @@ fn file_menu(ui: &mut egui::Ui, state: &mut UiState) {
         }
         if ui
             .button("開く…  (Ctrl+O)")
-            .on_hover_text("プロジェクト (.cadsim) を開くか、STEP を今のプロジェクトに取り込む")
+            .on_hover_text(
+                "プロジェクト (.cadsim) を開くか、STEP / glTF / OBJ / STL を今のプロジェクトに取り込む",
+            )
             .clicked()
         {
             state.jobs.request_dialog();
@@ -46,6 +50,8 @@ fn file_menu(ui: &mut egui::Ui, state: &mut UiState) {
             state.project.request(ProjectAction::SaveAs);
         }
         ui.separator();
+        export_menu(ui, state);
+        ui.separator();
         if ui
             .button("すべて閉じる")
             .on_hover_text("今のプロジェクトのまま中身を空にする (元に戻せる)")
@@ -56,7 +62,65 @@ fn file_menu(ui: &mut egui::Ui, state: &mut UiState) {
         }
         ui.separator();
         ui.weak("ウィンドウへのドラッグ&ドロップでも開けます");
+        ui.weak(format!("取り込める形式: STEP, {}", format_list()));
     });
+}
+
+/// 書き出しと、単位を持たない形式 (OBJ / STL) の単位の設定
+fn export_menu(ui: &mut egui::Ui, state: &mut UiState) {
+    ui.menu_button("書き出し", |ui| {
+        if ui.button("すべてを書き出し…").clicked() {
+            state.jobs.request_export(ExportScope::All);
+        }
+        let has_selection = state
+            .selection
+            .node
+            .is_some_and(|id| state.model.get(id).is_some());
+        if ui
+            .add_enabled(has_selection, egui::Button::new("選択を書き出し…"))
+            .clicked()
+        {
+            state.jobs.request_export(ExportScope::Selection);
+        }
+        ui.separator();
+        ui.weak("保存ダイアログで選んだ拡張子の形式で書き出します");
+        for format in FORMATS.iter().filter(|f| f.export.is_some()) {
+            let note = if format.export_note.is_empty() {
+                "階層・色・アニメーションを保持"
+            } else {
+                format.export_note
+            };
+            ui.weak(format!("・{}: {note}", format.name));
+        }
+        let unit_formats: Vec<&str> = FORMATS
+            .iter()
+            .filter(|f| f.needs_units)
+            .flat_map(|f| f.extensions.iter().copied())
+            .collect();
+        ui.weak(format!(
+            "{} は「OBJ / STL の単位」の設定で書き出します",
+            unit_formats.join(" / ").to_ascii_uppercase()
+        ));
+    });
+    ui.menu_button("OBJ / STL の単位", |ui| {
+        ui.weak("OBJ と STL は単位を持たないので、読み書きのときにここで指定します");
+        let units = &mut state.jobs.units;
+        for &(name, meters) in LENGTH_UNITS {
+            if ui.radio(units.meters_per_unit == meters, name).clicked() {
+                units.meters_per_unit = meters;
+            }
+        }
+        ui.separator();
+        ui.checkbox(&mut units.z_up, "Z 軸が上 (オフにすると Y 軸が上)");
+    });
+}
+
+fn format_list() -> String {
+    FORMATS
+        .iter()
+        .flat_map(|f| f.extensions.iter().map(|e| e.to_ascii_uppercase()))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn edit_menu(ui: &mut egui::Ui, state: &mut UiState) {

@@ -16,6 +16,7 @@
 //! egui のパネルは「外側から順に場所を取る」ので、1つのシステムの中で
 //! 上 → 下 → 左 → 右 の順に描き、残った領域を 3D ビューにする。
 
+mod animation;
 mod menu;
 mod properties;
 mod status;
@@ -33,6 +34,7 @@ use bevy_egui::{
     EguiContexts, EguiGlobalSettings, EguiPrimaryContextPass, PrimaryEguiContext, egui,
 };
 
+use crate::animation::Animations;
 use crate::camera::{CameraRequest, OrbitCamera, ViewportRect};
 use crate::file_io::ImportJobs;
 use crate::gizmo::{GizmoTool, transform_gizmo_system};
@@ -59,6 +61,7 @@ pub struct UiState<'w> {
     pub model: ResMut<'w, Model>,
     pub selection: ResMut<'w, Selection>,
     pub jobs: ResMut<'w, ImportJobs>,
+    pub animations: ResMut<'w, Animations>,
     pub project: ResMut<'w, ProjectState>,
     pub settings: ResMut<'w, ViewSettings>,
     pub gizmo: ResMut<'w, GizmoTool>,
@@ -109,6 +112,7 @@ fn draw_ui(mut contexts: EguiContexts, mut state: UiState) -> Result {
     state.viewport.rect = Some(Rect::new(view.min.x, view.min.y, view.max.x, view.max.y));
     view_cube::show(&ctx, view, &mut state);
     status::show_notifications(&ctx, view, &mut state);
+    animation::show(&ctx, view, &mut state);
     show_confirm_dialog(&ctx, &mut state.project);
 
     // パネルの上やビューキューブの上では 3D ビューのマウス操作をしない

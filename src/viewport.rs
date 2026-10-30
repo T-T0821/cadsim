@@ -398,7 +398,9 @@ fn draw_edges_grid_and_bounds(
     model: Res<Model>,
     selection: Res<Selection>,
     settings: Res<ViewSettings>,
-    views: Query<(&PartView, &GlobalTransform, &InheritedVisibility)>,
+    // GlobalTransform は PostUpdate で更新されるので、同じフレームで書いた Transform を使う
+    // (部品のエンティティは親を持たないので Transform がそのままワールドの配置)
+    views: Query<(&PartView, &Transform, &InheritedVisibility)>,
 ) {
     if settings.show_grid {
         draw_grid(&mut gizmos, &model);

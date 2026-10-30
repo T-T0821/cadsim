@@ -39,7 +39,7 @@ pub fn show(root: &mut egui::Ui, state: &mut UiState) {
 
             if state.model.is_empty() {
                 ui.label("何も開いていません。");
-                if ui.button("STEP を開く…").clicked() {
+                if ui.button("ファイルを開く…").clicked() {
                     state.jobs.request_dialog();
                 }
                 return;
