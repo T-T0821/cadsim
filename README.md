@@ -15,6 +15,7 @@
 | 日本語 UI | 実装済み |
 | STEP 読み込みとアセンブリツリー、選択の強調表示、プロパティ・ビューキューブなど | 実装済み |
 | glTF / GLB・OBJ・STL の読み込みと書き出し(階層・色・アニメーション) | 実装済み |
+| OpenUSD(.usda / .usdc / .usdz)の読み込みと書き出し(階層・色・アニメーション) | 実装済み |
 | OpenUSD の読み込みと書き出し | 開発中 |
 | Windows / Mac 向けリリースの自動作成 | 開発中 |
 | 干渉チェック(干渉・接触・近接の判定、干渉部分の体積)と距離計測 | 実装済み |
@@ -33,6 +34,7 @@
 - **glTF / GLB・OBJ・STL の取り込みと書き出し**。「ファイル → 開く」やドラッグ&ドロップで STEP と同じように取り込め、「ファイル → 書き出し」でモデル全体か選択したアセンブリを書き出せます。詳しくは「[3D ファイルの読み書き](#3d-ファイルの読み書きinterchange)」。
   - glTF / GLB: 階層(親子と配置)、名前、色、ノードのアニメーション(移動・回転・拡大)を読み書き。取り込んだアニメーションはビュー下の「アニメーション」パネルで再生・停止・シークできます。
   - OBJ: 部品(`o` / `g`)ごとの形状と色(`.mtl`)。STL: 形状だけ(アスキー / バイナリとも読めます)。
+  - OpenUSD(.usda / .usdc / .usdz / .usd): 階層(Xform)、名前(`displayName`)、色(`UsdPreviewSurface` / `displayColor`)、動き(`xformOp` の `timeSamples`)を読み書き。単位(`metersPerUnit`)と上方向(`upAxis`)はファイルに従って換算します。書き出したファイルは Omniverse などでそのまま再生できます([詳しく](#openusd-の読み書きinterchangeusdrs))。
   - OBJ と STL は単位を持たないので、「ファイル → OBJ / STL の単位」で mm / cm / m / inch と Z 軸が上かを選びます(既定は mm・Y 軸が上)。
 - **アセンブリツリー**(左)。行をクリックで選択、ダブルクリックで拡大表示、目のボタンで表示/非表示、右クリックで「これだけ表示」「削除」など。
 - **選択の強調表示**。アセンブリを選ぶとその中の部品がすべて青くなり、黄色い外接箱が出ます。ビューで部品をクリックするとツリーがその行まで開きます。ツリーの行にカーソルを乗せるとビューで薄く光ります。
@@ -68,6 +70,7 @@
 | gltf(glTF / GLB の読み込み) | 1.4 |
 | tobj(OBJ の読み込み) | 4 |
 | stl_io(STL の読み書き) | 0.11 |
+| openusd(OpenUSD の読み書き。純 Rust) | 0.8 |
 
 ## 実行
 
@@ -118,7 +121,7 @@ cargo test
 | Ctrl + Z | 元に戻す |
 | Ctrl + Y / Ctrl + Shift + Z | やり直し |
 | Ctrl + N | 新規プロジェクト(未保存の変更があれば破棄してよいか確認する) |
-| Ctrl + O | 開く。`.cadsim` ならプロジェクトを開き直し、STEP / glTF / GLB / OBJ / STL なら今のプロジェクトに取り込む |
+| Ctrl + O | 開く。`.cadsim` ならプロジェクトを開き直し、STEP / glTF / GLB / OBJ / STL / USD なら今のプロジェクトに取り込む |
 | Ctrl + S / Ctrl + Shift + S | 保存 / 名前を付けて保存 |
 
 ビューキューブの面をクリックするとその方向から見たビューになります。拡大縮小のギズモは箱だけで使えます(取り込んだ部品の形状は変えません)。
@@ -166,6 +169,7 @@ src/
 │   ├── mod.rs        Scene・Format・対応形式の一覧 FORMATS
 │   ├── model_io.rs   Scene ⇔ Model の変換 (単位の換算、メッシュの稜線)
 │   ├── gltf.rs / obj.rs / stl.rs
+│   ├── usd.rs        OpenUSD (.usda / .usdc / .usdz)
 │   └── samples.rs    サンプルファイルを作るテスト (手で実行)
 ├── animation.rs     取り込んだアニメーションの再生
 ├── project.rs       プロジェクトファイル (.cadsim) の保存と読み込み
@@ -229,9 +233,39 @@ src/
 
 ![書き出しメニュー](docs/screenshots/12_export_menu.png)
 
-動作確認用のサンプル `assets/sample_robot.glb`(階層とアニメーション付きのロボット)は `cargo test write_samples -- --ignored` で作り直せます。同時に STEP のサンプルを glb / gltf / obj / stl に書き出したものが `target/samples/` にできます。
+動作確認用のサンプル `assets/sample_robot.glb`(階層とアニメーション付きのロボット)は `cargo test write_samples -- --ignored` で作り直せます。同時に STEP のサンプルを glb / gltf / obj / stl / usda / usdz に、ロボットを usda / usdz に書き出したものが `target/samples/` にできます。
 
 いまの制限: テクスチャ・スキン・モーフターゲットは読み飛ばします。プロジェクトに保存する配置は移動と回転だけなので、glTF ノードの拡大縮小は保存すると失われます。プロジェクトを開き直すとき OBJ / STL は既定の単位(mm・Y 軸が上)で読み直します。
+
+### OpenUSD の読み書き(`interchange/usd.rs`)
+
+純 Rust の [`openusd`](https://crates.io/crates/openusd) crate を使い、C++ の USD ライブラリには依存しません。
+
+**書き出し**は USDA のテキストを組み立て、`.usdc` / `.usd` はそれを `openusd` でバイナリ(Crate)形式に、`.usdz` はさらにパッケージにします。
+
+```text
+/World (Xform, kind = assembly)          defaultPrim。metersPerUnit = 1、upAxis = "Y"
+├── Node_0 (Xform, displayName = "ライン 1")
+│   ├── xformOp:translate / orient / scale    動く部品は同じ属性の timeSamples (60 タイムコード / 秒)
+│   ├── Geom (Mesh)                           三角形、faceVarying 法線 (30° で角を立てる)、extent
+│   └── …子のノード
+└── Looks (Scope)                         色ごとの Material + UsdPreviewSurface
+```
+
+- プリム名は ASCII の識別子にし(日本語名は `Node_番号`)、元の名前は `displayName` に入れるので Omniverse の画面には日本語名が出ます。
+- アニメーションは1本のタイムラインになるので、複数のクリップがあるときはノードごとに最初に見つかったものを書きます。
+
+**読み込み**は `openusd` の Stage で合成(サブレイヤー・リファレンス・ペイロード・バリアント・インスタンス)した結果をたどります。
+
+- `xformOpOrder` の translate / scale / orient / rotateX・Y・Z / rotateXYZ など6通り / transform(行列)/ `!invert!` を評価し、時刻サンプルのある時刻ごとの姿勢をアニメーションのキーにします(時刻は `startTimeCode` からの秒)。
+- 形状は Mesh(多角形は扇形に三角形分割、leftHanded は向きを反転)と Cube / Sphere / Cylinder / Cone / Capsule(テッセレーションして取り込み)。
+- 色はバインドされたマテリアルの `inputs:diffuseColor`(祖先へのバインドもたどる)、なければ `primvars:displayColor`。
+- 変換も子もない形状が Xform の唯一の中身なら(cadsim の `Geom` も)、その Xform の部品として1つにまとめます。形状のない枝(マテリアルの Scope など)は取り込みません。
+- 非アクティブなプリム、`purpose` が guide / proxy のもの、カメラ・ライト・マテリアルは読み飛ばします。
+
+確認: 書き出した .usda / .usdz を Pixar の USD(usd-core 26)で開き、全バリデーターでエラーがないこと、マテリアルのバインドと時刻ごとの姿勢が正しいことを確かめています。逆に Pixar の USD で作った .usdc(Z 上・mm・アニメーション・Cylinder・マテリアル付き)も読み込めることを確認しています。
+
+いまの制限(読み込み時に無視するもの): NURBS 曲面・曲線・点群・PointInstancer、スキニング・ブレンドシェイプ・頂点アニメーション(points の timeSamples)、テクスチャと UsdPreviewSurface 以外のシェーダー、GeomSubset ごとのマテリアル。シアーを含む変換は移動・回転・拡大に近似します。
 
 ### 表示と選択(`viewport.rs`)
 
