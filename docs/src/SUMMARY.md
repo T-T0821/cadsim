@@ -11,7 +11,7 @@
 
 - [STEP ファイルを開く](step-import.md)
 - [プロジェクトの保存と読み込み](project.md)
-- [glTF・OBJ・STL の読み書き](interchange.md)
+- [glTF・OBJ・STL・USD の読み書き](interchange.md)
 - [アセンブリツリーと選択](tree.md)
 - [プロパティ](properties.md)
 - [カメラとビュー](camera.md)
@@ -19,6 +19,7 @@
 - [ギズモとスナップ](gizmo.md)
 - [元に戻す・やり直し](undo.md)
 - [干渉チェックと距離計測](simulation.md)
+- [寸法と注記](annotations.md)
 - [ショートカット一覧](shortcuts.md)
 
 # 開発中の機能
@@ -28,7 +29,6 @@
 - [関節とロボットの動き](upcoming/robot.md)
 - [標準部品ライブラリ](upcoming/parts-library.md)
 - [CSV 出力](upcoming/csv.md)
-- [OpenUSD の読み書き](upcoming/usd.md)
 
 ---
 

@@ -12,7 +12,7 @@ cadsim は、工場のライン設備を 3D で組み立てて動きを確かめ
 | --- | --- | --- |
 | STEP の取り込み(AP203 / AP214 / AP242) | 使える | [STEP ファイルを開く](step-import.md) |
 | プロジェクトの保存と読み込み(.cadsim) | 使える | [プロジェクトの保存と読み込み](project.md) |
-| glTF / GLB・OBJ・STL の取り込みと書き出し、アニメーション再生 | 使える | [glTF・OBJ・STL の読み書き](interchange.md) |
+| glTF / GLB・OBJ・STL・OpenUSD の取り込みと書き出し、アニメーション再生 | 使える | [glTF・OBJ・STL・USD の読み書き](interchange.md) |
 | アセンブリツリー、選択の強調表示 | 使える | [アセンブリツリーと選択](tree.md) |
 | プロパティ(配置・寸法・体積など) | 使える | [プロパティ](properties.md) |
 | Unity / Unreal と同じカメラ操作、標準ビュー、透視 / 平行投影 | 使える | [カメラとビュー](camera.md) |
@@ -20,12 +20,12 @@ cadsim は、工場のライン設備を 3D で組み立てて動きを確かめ
 | 移動 / 回転 / 拡大縮小ギズモ、Ctrl スナップ | 使える | [ギズモとスナップ](gizmo.md) |
 | 元に戻す / やり直し | 使える | [元に戻す・やり直し](undo.md) |
 | 干渉チェック(干渉・接触・近接)と距離計測 | 使える | [干渉チェックと距離計測](simulation.md) |
+| 3D 上の寸法(点間距離・辺の長さ・面間距離)と注記 | 使える | [寸法と注記](annotations.md) |
 | Windows / Mac 向けのダウンロード版 | 準備中 | [インストールと起動](install.md) |
 | タイミングチャートと動作シミュレーション | 開発中 | [タイミングチャート](upcoming/timing-chart.md) |
 | センサー・シーケンサー(PLC) | 予定 | [センサー・PLC](upcoming/sensors-plc.md) |
 | 関節とロボットの動き | 予定 | [関節とロボット](upcoming/robot.md) |
 | 標準部品ライブラリ | 予定 | [部品ライブラリ](upcoming/parts-library.md) |
-| OpenUSD の読み書き | 開発中 | [OpenUSD](upcoming/usd.md) |
 | CSV 出力 | 予定 | [CSV 出力](upcoming/csv.md) |
 
 「開発中」「予定」の章は、機能ができしだい中身を書き足していきます。
