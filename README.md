@@ -12,7 +12,6 @@
 | 箱の作成・選択(面単位)・寸法と位置と回転の編集 | 実装済み |
 | Unity / Unreal 準拠のカメラ操作、W / E / R ギズモ、Ctrl スナップ | 実装済み |
 | 日本語 UI | 実装済み |
-| PR ごとの CI(fmt・clippy・テスト・ビルド) | 実装済み |
 | STEP 読み込みとアセンブリツリー、選択の強調表示、プロパティ・ビューキューブなど | 実装済み |
 | Windows / Mac 向けリリースの自動作成 | 開発中 |
 | 干渉チェック | 予定 |
@@ -63,17 +62,9 @@ cargo run -- path/to/part.step # 指定した STEP を開いて起動
 
 初回は Bevy のビルドに数分かかります。Linux では `libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev` が必要です。
 
-## テストとCI
+## 手元での確認
 
-PR を作ると GitHub Actions(`.github/workflows/ci.yml`)が次を自動で確認します。main への push でも同じものが走ります。
-
-| ジョブ | 内容 |
-| --- | --- |
-| rustfmt | `cargo fmt --all --check` |
-| clippy + test (Linux) | `cargo clippy --all-targets --locked -- -D warnings` と `cargo test --locked` |
-| build (Windows / macOS) | `cargo check --all-targets --locked` |
-
-どれかが失敗するとPRに赤い✕が付きます。push 前に手元で同じ確認をするときは次を実行します。
+CI は使っていません。push 前に手元で次を実行して、フォーマット・警告・テストを確認してください。
 
 ```sh
 cargo fmt --all
@@ -82,8 +73,6 @@ cargo test
 ```
 
 テストでは、サンプルの STEP を読み込んで構成・配置・寸法・体積・色が正しいかを確かめています(`src/step_import.rs` と `src/model.rs` の `tests`)。
-
-依存のビルド結果は `Swatinem/rust-cache` で OS ごとにキャッシュし(共有キー `cadsim`)、main での実行時だけ保存します。`Cargo.lock` と食い違うと `--locked` で失敗するので、依存を変えたら `Cargo.lock` もコミットしてください。
 
 ## 操作
 
