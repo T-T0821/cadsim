@@ -35,7 +35,9 @@ use truck_modeling::{Solid, builder};
 
 mod gizmo;
 mod japanese_font;
+mod motion;
 use gizmo::{GizmoTool, Tool, gizmo_not_focused, snap_settings_ui, transform_gizmo_system};
+use motion::{MotionPlugin, MotionSet, at_design_pose};
 
 /// テッセレーションの許容誤差 (モデル単位)
 const TESSELLATION_TOL: f64 = 0.005;
@@ -50,6 +52,7 @@ fn main() {
             ..default()
         }))
         .add_plugins(EguiPlugin::default())
+        .add_plugins(MotionPlugin)
         .init_resource::<Model>()
         .init_resource::<Selection>()
         .init_resource::<OrbitCamera>()
@@ -60,7 +63,8 @@ fn main() {
             (
                 japanese_font::install_japanese_font,
                 ui_panel,
-                transform_gizmo_system,
+                // 動作シミュレーションで部品が動いている間はギズモで編集しない
+                transform_gizmo_system.run_if(at_design_pose),
             )
                 .chain(),
         )
@@ -75,7 +79,8 @@ fn main() {
                 rebuild_dirty_parts,
                 apply_camera,
                 update_materials,
-                draw_edges_and_grid,
+                // 稜線は再生中の位置 (MotionSet で決まる Transform) に合わせて描く
+                draw_edges_and_grid.after(MotionSet::Pose),
             )
                 .chain(),
         )
@@ -504,7 +509,7 @@ fn update_materials(
     }
 }
 
-fn draw_edges_and_grid(mut gizmos: Gizmos, roots: Query<&PartRoot>) {
+fn draw_edges_and_grid(mut gizmos: Gizmos, roots: Query<(&PartRoot, &Transform)>) {
     let grid = Color::srgba(0.5, 0.5, 0.5, 0.35);
     for i in -10..=10 {
         let t = i as f32;
@@ -516,9 +521,10 @@ fn draw_edges_and_grid(mut gizmos: Gizmos, roots: Query<&PartRoot>) {
     gizmos.line(Vec3::ZERO, Vec3::Z * 2.0, Color::srgb(0.2, 0.4, 0.9));
 
     let edge_color = Color::srgb(0.1, 0.1, 0.12);
-    for root in &roots {
+    for (root, transform) in &roots {
         for edge in &root.edges {
-            gizmos.linestrip(edge.iter().copied(), edge_color);
+            let points = edge.iter().map(|p| transform.transform_point(*p));
+            gizmos.linestrip(points, edge_color);
         }
     }
 }
