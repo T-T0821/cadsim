@@ -28,6 +28,7 @@ pub mod widgets;
 
 use bevy::{
     camera::{CameraOutputMode, visibility::RenderLayers},
+    diagnostic::DiagnosticsStore,
     ecs::system::SystemParam,
     prelude::*,
     render::render_resource::BlendState,
@@ -79,6 +80,7 @@ pub struct UiState<'w> {
     pub camera: MessageWriter<'w, CameraRequest>,
     pub viewport: ResMut<'w, ViewportRect>,
     pub motion: MotionUi<'w>,
+    pub diagnostics: Res<'w, DiagnosticsStore>,
 }
 
 /// UI 専用のカメラ。3D カメラはパネルを除いた領域だけに描くので、

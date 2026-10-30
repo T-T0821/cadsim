@@ -42,6 +42,13 @@ fn file_menu(ui: &mut egui::Ui, state: &mut UiState) {
         if ui.button("サンプルのアセンブリを取り込む").clicked() {
             state.jobs.open_sample();
         }
+        ui.menu_button("負荷テスト用シーンを開く", |ui| {
+            for count in [1000, 5000, 10000] {
+                if ui.button(format!("部品 {count} 個")).clicked() {
+                    state.jobs.open_stress(count);
+                }
+            }
+        });
         ui.separator();
         if ui.button("保存  (Ctrl+S)").clicked() {
             state.project.request(ProjectAction::Save);

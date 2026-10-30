@@ -57,6 +57,8 @@ pub enum StepSource {
     /// アプリに埋め込みのサンプル
     Sample,
     File(PathBuf),
+    /// 負荷テスト用のシーン (部品数)
+    Stress(usize),
 }
 
 impl NodeKind {

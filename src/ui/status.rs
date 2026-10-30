@@ -1,5 +1,6 @@
 //! 下部のステータスバーと、読み込み中の表示
 
+use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
 use bevy_egui::egui;
 
 use super::UiState;
@@ -20,6 +21,14 @@ pub fn show(root: &mut egui::Ui, state: &mut UiState) {
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label(format!("単位: {}", state.model.unit));
+                ui.separator();
+                let fps = state
+                    .diagnostics
+                    .get(&FrameTimeDiagnosticsPlugin::FPS)
+                    .and_then(|d| d.smoothed());
+                if let Some(fps) = fps {
+                    ui.monospace(format!("{fps:5.1} FPS"));
+                }
                 ui.separator();
                 if let Some(message) = state.jobs.messages.last() {
                     ui.weak(message);

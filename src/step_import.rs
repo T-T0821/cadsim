@@ -748,8 +748,6 @@ fn read_length_unit(e: &Entities) -> String {
 
 /// B-rep を表示用の面メッシュと稜線に変換し、寸法・体積・表面積を求める
 fn tessellate(breps: Vec<Brep>, color: Option<[f32; 3]>) -> ImportedShape {
-    let id = next_shape_id();
-
     // 許容誤差は部品の大きさに合わせる (頂点の範囲で大きさを見積もる)
     let mut min = DVec3::splat(f64::MAX);
     let mut max = DVec3::splat(f64::MIN);
@@ -757,16 +755,7 @@ fn tessellate(breps: Vec<Brep>, color: Option<[f32; 3]>) -> ImportedShape {
         min = min.min(DVec3::new(p.x, p.y, p.z));
         max = max.max(DVec3::new(p.x, p.y, p.z));
     }
-    let (diameter, thinnest) = if min.x <= max.x {
-        ((max - min).length(), (max - min).min_element())
-    } else {
-        (1.0, 1.0)
-    };
-    // 細長い部品 (軸など) でも丸みが角張らないよう、いちばん薄い方向の寸法も見る
-    let tol = (diameter * 0.002)
-        .min(thinnest * 0.005)
-        .max(diameter * 1e-5)
-        .max(1e-6);
+    let tol = tessellation_tolerance(min, max);
 
     let mut faces = Vec::new();
     let mut edges = Vec::new();
@@ -783,15 +772,41 @@ fn tessellate(breps: Vec<Brep>, color: Option<[f32; 3]>) -> ImportedShape {
         edges.extend(meshed.edges.into_iter().map(|e| e.curve.0));
     }
 
-    let mut stats = mesh_stats(&faces);
-    stats.edge_count = edges.len();
-    ImportedShape {
-        id,
-        breps,
-        faces,
-        edges,
-        color,
-        stats,
+    ImportedShape::new(breps, faces, edges, color)
+}
+
+/// 部品の大きさ (頂点の範囲) に見合うテッセレーションの許容誤差
+pub fn tessellation_tolerance(min: DVec3, max: DVec3) -> f64 {
+    let (diameter, thinnest) = if min.x <= max.x {
+        ((max - min).length(), (max - min).min_element())
+    } else {
+        (1.0, 1.0)
+    };
+    // 細長い部品 (軸など) でも丸みが角張らないよう、いちばん薄い方向の寸法も見る
+    (diameter * 0.002)
+        .min(thinnest * 0.005)
+        .max(diameter * 1e-5)
+        .max(1e-6)
+}
+
+impl ImportedShape {
+    /// メッシュから形状を作り、計測値と共有用の番号を付ける
+    pub fn new(
+        breps: Vec<Brep>,
+        faces: Vec<PolygonMesh>,
+        edges: Vec<Vec<Point3>>,
+        color: Option<[f32; 3]>,
+    ) -> Self {
+        let mut stats = mesh_stats(&faces);
+        stats.edge_count = edges.len();
+        ImportedShape {
+            id: next_shape_id(),
+            breps,
+            faces,
+            edges,
+            color,
+            stats,
+        }
     }
 }
 

@@ -20,12 +20,15 @@
 //! - `math`        回転や行列の変換
 //! - `simulation`  干渉チェックと距離計測 (`SimBody` を付けた部品が対象)
 //! - `annotation`  3D 上の寸法 (点間距離・辺の長さ・面間距離) と注記
+//! - `stress`      負荷テスト用の数千部品のシーン
+//! - `bench`       `--bench` で FPS を測って終了する
 
 // Windows のリリースビルドでは、起動時に黒いコンソール窓を出さない
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 mod animation;
 mod annotation;
+mod bench;
 mod camera;
 mod file_io;
 mod gizmo;
@@ -39,10 +42,11 @@ mod project;
 mod shortcuts;
 mod simulation;
 mod step_import;
+mod stress;
 mod ui;
 mod viewport;
 
-use bevy::prelude::*;
+use bevy::{diagnostic::FrameTimeDiagnosticsPlugin, prelude::*};
 use bevy_egui::EguiPlugin;
 
 fn main() {
@@ -55,7 +59,7 @@ fn main() {
             }),
             ..default()
         }))
-        .add_plugins(EguiPlugin::default())
+        .add_plugins((EguiPlugin::default(), FrameTimeDiagnosticsPlugin::default()))
         .insert_resource(ClearColor(Color::srgb(0.16, 0.17, 0.19)))
         .init_resource::<model::Model>()
         .init_resource::<model::Selection>()
@@ -72,6 +76,7 @@ fn main() {
             simulation::SimulationPlugin,
             annotation::AnnotationPlugin,
             motion::MotionPlugin,
+            bench::BenchPlugin,
         ))
         .run();
 }
