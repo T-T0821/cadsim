@@ -7,6 +7,22 @@ STEP などの CAD データを読み込み、部品を動かしながら干渉�
 
 ## はじめかた
 
+### ダウンロードして使う(Windows / Mac)
+
+[Releases](https://github.com/T-T0821/cadsim/releases) の最新版から、自分の OS 用のファイルを取ってください。
+
+| OS | ファイル | 起動のしかた |
+| --- | --- | --- |
+| Windows 10 / 11 (64bit) | `cadsim-<版>-windows-x86_64.zip` | 展開して `cad_proto.exe` をダブルクリック |
+| macOS 11 以降(Apple Silicon / Intel) | `cadsim-<版>-macos-universal.zip` | 展開して `CAD Prototype.app` を「アプリケーション」に移して開く |
+
+署名をしていないため、初回は警告が出ます。
+
+- **Windows**: 「WindowsによってPCが保護されました」と出たら「詳細情報」→「実行」。
+- **Mac**: 「開発元を検証できない」と出たら、アプリを右クリック →「開く」→「開く」。それでも開けないときは、ターミナルで `xattr -dr com.apple.quarantine "/Applications/CAD Prototype.app"` を実行してから開いてください。
+
+### ソースから動かす
+
 [Rust](https://www.rust-lang.org/ja/tools/install) を入れてから、このフォルダで次を実行します。
 
 ```sh
@@ -195,7 +211,6 @@ OBJ と STL には単位がないので、「ファイル → OBJ / STL の単�
 ## 開発中・予定
 
 - タイミングチャートの開始条件(センサー入力・インターロック)、ワークの受け渡し
-- Windows / Mac 向けの配布パッケージ
 - CSV 出力
 
 ## 開発する人へ
@@ -214,3 +229,4 @@ cargo test --locked
 | [docs/internals.md](docs/internals.md) | 使っているライブラリ、各機能のしくみ、サンプルとフォントの作り方 |
 | [docs/simulation.md](docs/simulation.md) | 干渉チェック・距離計測の設計 |
 | [docs/project-file.md](docs/project-file.md) | プロジェクトファイル(.cadsim)の形式 |
+| [docs/release.md](docs/release.md) | Windows / Mac 向けの配布パッケージと Release の作り方 |
