@@ -11,6 +11,7 @@
 //! - 右ドラッグ: その場で見回す。押している間 WASD で移動、Q / E で下降 / 上昇、Shift で加速
 //! - F: 選択中の箱にフォーカス / Delete: 選択中の箱を削除
 //! - W / E / R: 移動 / 回転 / 拡大縮小のギズモに切り替え (ギズモの軸を左ドラッグ)
+//! - Ctrl + ギズモをドラッグ: 一定量ずつ動かす (刻み幅はパネルで設定)
 //! - 左パネル: 箱の追加、寸法・位置・回転の編集、削除
 
 use std::collections::HashSet;
@@ -34,7 +35,7 @@ use truck_modeling::{Solid, builder};
 
 mod gizmo;
 mod japanese_font;
-use gizmo::{GizmoTool, Tool, gizmo_not_focused, transform_gizmo_system};
+use gizmo::{GizmoTool, Tool, gizmo_not_focused, snap_settings_ui, transform_gizmo_system};
 
 /// テッセレーションの許容誤差 (モデル単位)
 const TESSELLATION_TOL: f64 = 0.005;
@@ -547,6 +548,7 @@ fn ui_panel(
                 }
             }
         });
+        snap_settings_ui(ui, &mut gizmo_tool);
         ui.separator();
         ui.heading("新しい箱");
         let mut new_size = model.new_size;
@@ -573,7 +575,11 @@ fn ui_panel(
         let Some(id) = selection.part else {
             ui.separator();
             ui.label(
-                "クリック: 選択   Alt+左ドラッグ: 回転\n中ドラッグ: 移動   ホイール: ズーム\n右ドラッグ+WASD/QE: 飛行   F: フォーカス\nW / E / R: 移動 / 回転 / 拡大縮小",
+                "クリック: 選択   Alt+左ドラッグ: 回転
+中ドラッグ: 移動   ホイール: ズーム
+右ドラッグ+WASD/QE: 飛行   F: フォーカス
+W / E / R: 移動 / 回転 / 拡大縮小
+Ctrl + ギズモをドラッグ: スナップ",
             );
             return;
         };
