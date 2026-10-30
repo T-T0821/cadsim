@@ -258,15 +258,13 @@ fn interlock_status(ui: &mut egui::Ui, chart: &TimingChart, schedule: &Schedule,
     let Some(index) = schedule.step_at(play.time) else {
         return;
     };
-    let span = schedule.steps[index];
+    let (Some(span), Some(step)) = (schedule.steps.get(index), chart.steps.get(index)) else {
+        return;
+    };
     if play.time < span.action_start {
         ui.colored_label(
             INTERLOCK_COLOR,
-            format!(
-                "S{} 条件待ち: {}",
-                index + 1,
-                describe(&chart.steps[index].interlocks)
-            ),
+            format!("S{} 条件待ち: {}", index + 1, describe(&step.interlocks)),
         );
     }
 }
@@ -531,11 +529,15 @@ fn draw_chart(
             text_color,
         );
         // 条件待ちを含めた実際の時間。異常停止したステップとその後は印を出す
-        let span = schedule.steps[i];
+        // (チャートを編集した直後は時刻表がまだ古いことがあるので get で引く)
+        let length = schedule
+            .steps
+            .get(i)
+            .map_or(0.0, |span| span.end - span.start);
         let (time_text, time_color) = match &schedule.stop {
             Some(stop) if stop.step == i => ("停止".to_string(), STOP_COLOR),
             Some(stop) if stop.step < i => ("未実行".to_string(), weak),
-            _ => (format!("{:.2}s", span.end - span.start), weak),
+            _ => (format!("{length:.2}s"), weak),
         };
         painter.text(
             egui::pos2(x + 4.0, layout.origin.y + 18.0),
@@ -599,18 +601,24 @@ fn draw_chart(
                 egui::pos2(layout.column_x(i), top),
                 egui::pos2(layout.column_x(i) + layout.column_width, top + ROW_HEIGHT),
             );
+            // 異常停止で実行されない動作は帯を描かない (目標値の文字だけ出す)
+            let executed = schedule.stop.as_ref().is_none_or(|stop| i < stop.step);
+            let span = schedule.steps.get(i).filter(|_| executed);
             if let Some(action) = step.action(actuator.id) {
-                let span = schedule.steps[i];
-                let end_x = layout.time_to_x(schedule, span.start + action.duration);
-                let end_x = end_x.clamp(cell.min.x + 3.0, cell.max.x);
-                painter.rect_filled(
-                    egui::Rect::from_min_max(
-                        cell.min + egui::vec2(1.0, 2.0),
-                        egui::pos2(end_x - 1.0, cell.max.y - 2.0),
-                    ),
-                    2.0,
-                    ACTION_FILL,
-                );
+                if let Some(span) = span {
+                    // 条件待ちがあれば、帯は動作を始めた時刻から
+                    let start_x = layout.time_to_x(schedule, span.action_start);
+                    let end_x = layout.time_to_x(schedule, span.action_start + action.duration);
+                    let end_x = end_x.clamp(start_x + 3.0, cell.max.x);
+                    painter.rect_filled(
+                        egui::Rect::from_min_max(
+                            egui::pos2(start_x + 1.0, cell.min.y + 2.0),
+                            egui::pos2(end_x - 1.0, cell.max.y - 2.0),
+                        ),
+                        2.0,
+                        ACTION_FILL,
+                    );
+                }
                 // 目標値は波形の上に重ねるので、描くのは波形の後
                 labels.push((
                     egui::pos2(cell.max.x - 3.0, cell.min.y + 2.0),
