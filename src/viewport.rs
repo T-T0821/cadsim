@@ -20,6 +20,7 @@ use truck_meshalgo::prelude::*;
 // truck の prelude にも Transform トレイトがあるため Bevy 側を明示する
 use bevy::prelude::Transform;
 
+use crate::annotation::annotate_tool_off;
 use crate::camera::{ViewportRect, alt_pressed, pointer_in_3d_view};
 use crate::gizmo::gizmo_not_focused;
 use crate::math::to_transform;
@@ -42,7 +43,8 @@ impl Plugin for ViewportPlugin {
                     pick_part
                         .run_if(pointer_in_3d_view)
                         .run_if(gizmo_not_focused)
-                        .run_if(not_measuring),
+                        .run_if(not_measuring)
+                        .run_if(annotate_tool_off),
                     rebuild_dirty_parts,
                     sync_placement_and_visibility,
                     update_materials,
@@ -84,9 +86,9 @@ struct PartView {
 
 /// 面メッシュ。クリックしたときにどの部品のどの面かを引くための札。
 #[derive(Component)]
-struct FaceTag {
-    node: NodeId,
-    face: usize,
+pub struct FaceTag {
+    pub node: NodeId,
+    pub face: usize,
 }
 
 /// 取り込んだ形状のメッシュ (形状の id ごと)
