@@ -13,12 +13,16 @@
 //! - `camera`      注視点を回るカメラ、標準ビュー、全体表示
 //! - `gizmo`       移動・回転・拡大縮小のギズモ
 //! - `history`     元に戻す・やり直し
+//! - `motion`      タイミングチャート (ステップ) の編集と動作シミュレーション
 //! - `shortcuts`   キーボードショートカット
 //! - `ui`          メニュー・ツリー・プロパティ・ステータスバー・ビューキューブ
 //! - `japanese_font` egui に埋め込みの日本語フォントを登録する
 //! - `math`        回転や行列の変換
 //! - `simulation`  干渉チェックと距離計測 (`SimBody` を付けた部品が対象)
 //! - `annotation`  3D 上の寸法 (点間距離・辺の長さ・面間距離) と注記
+
+// Windows のリリースビルドでは、起動時に黒いコンソール窓を出さない
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 mod animation;
 mod annotation;
@@ -30,6 +34,7 @@ mod interchange;
 mod japanese_font;
 mod math;
 mod model;
+mod motion;
 mod project;
 mod shortcuts;
 mod simulation;
@@ -66,6 +71,7 @@ fn main() {
             ui::UiPlugin,
             simulation::SimulationPlugin,
             annotation::AnnotationPlugin,
+            motion::MotionPlugin,
         ))
         .run();
 }

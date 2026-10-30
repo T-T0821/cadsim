@@ -20,11 +20,11 @@
 - [元に戻す・やり直し](undo.md)
 - [干渉チェックと距離計測](simulation.md)
 - [寸法と注記](annotations.md)
+- [タイミングチャートと動作シミュレーション](timing-chart.md)
 - [ショートカット一覧](shortcuts.md)
 
 # 開発中の機能
 
-- [タイミングチャートと動作シミュレーション](upcoming/timing-chart.md)
 - [センサー・シーケンサー(PLC)](upcoming/sensors-plc.md)
 - [関節とロボットの動き](upcoming/robot.md)
 - [標準部品ライブラリ](upcoming/parts-library.md)

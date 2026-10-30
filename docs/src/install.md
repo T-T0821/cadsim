@@ -2,8 +2,6 @@
 
 ## ダウンロード版(Windows / Mac)
 
-> **準備中**: ビルド済みアプリの自動配布は現在作っているところです。公開されたらこの節の手順で使えます。それまでは下の「ソースから実行」を使ってください。
-
 1. [Releases](https://github.com/T-T0821/cadsim/releases) を開き、最新版の「Assets」から自分の OS 用のファイルをダウンロードします。
 
    | OS | ファイル |
@@ -12,11 +10,11 @@
    | macOS 11 以降 (Apple Silicon / Intel) | `cadsim-<版>-macos-universal.zip` |
 
 2. zip を展開して起動します。
-   - **Windows**: 中の `.exe` をダブルクリック。
-   - **Mac**: `.app` を「アプリケーション」フォルダへ移してから開く。
+   - **Windows**: `cad_proto.exe` をダブルクリック。
+   - **Mac**: `CAD Prototype.app` を「アプリケーション」フォルダへ移してから開く。
 3. 初回は署名がないため警告が出ます。
    - **Windows**: 「Windows によって PC が保護されました」→「詳細情報」→「実行」。
-   - **Mac**: 「開発元を検証できない」→ アプリを右クリック →「開く」→「開く」。
+   - **Mac**: 「開発元を検証できない」→ アプリを右クリック →「開く」→「開く」。それでも開けないときは、ターミナルで `xattr -dr com.apple.quarantine "/Applications/CAD Prototype.app"` を実行してから開いてください。
 
 ## ソースから実行
 
