@@ -39,7 +39,7 @@ pub fn show(root: &mut egui::Ui, state: &mut UiState) {
 
             if state.model.is_empty() {
                 ui.label("何も開いていません。");
-                if ui.button("STEP を開く…").clicked() {
+                if ui.button("ファイルを開く…").clicked() {
                     state.jobs.request_dialog();
                 }
                 return;
@@ -167,7 +167,7 @@ fn row_contents(ui: &mut egui::Ui, state: &mut UiState, id: NodeId, reveal: &[No
         }
         ui.separator();
         if ui.button("削除").clicked() {
-            state.model.remove(id);
+            state.history.remove(&mut state.model, id);
             state.selection.clear();
         }
     });

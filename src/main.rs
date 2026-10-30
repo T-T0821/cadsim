@@ -5,25 +5,35 @@
 //! モジュールの分担:
 //! - `model`       設計データ (アセンブリの木, f64) と選択状態
 //! - `step_import` STEP ファイル → アセンブリの木と B-rep (Bevy に依存しない)
-//! - `file_io`     ダイアログ・ドラッグ&ドロップ・別スレッドでの読み込み
+//! - `interchange` glTF / OBJ / STL などの読み書き (形式に依存しない中間表現を経由)
+//! - `file_io`     ダイアログ・ドラッグ&ドロップ・別スレッドでの読み込み・書き出し
+//! - `project`     プロジェクトファイル (.cadsim) の保存と読み込み
+//! - `animation`   ファイルから取り込んだアニメーションの再生
 //! - `viewport`    モデルを 3D 表示し、選択を強調する。クリックで選択
 //! - `camera`      注視点を回るカメラ、標準ビュー、全体表示
 //! - `gizmo`       移動・回転・拡大縮小のギズモ
+//! - `history`     元に戻す・やり直し
 //! - `shortcuts`   キーボードショートカット
 //! - `ui`          メニュー・ツリー・プロパティ・ステータスバー・ビューキューブ
 //! - `japanese_font` egui に埋め込みの日本語フォントを登録する
 //! - `math`        回転や行列の変換
+//! - `simulation`  干渉チェックと距離計測 (`SimBody` を付けた部品が対象)
 
 // Windows のリリースビルドでは、起動時に黒いコンソール窓を出さない
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
+mod animation;
 mod camera;
 mod file_io;
 mod gizmo;
+mod history;
+mod interchange;
 mod japanese_font;
 mod math;
 mod model;
+mod project;
 mod shortcuts;
+mod simulation;
 mod step_import;
 mod ui;
 mod viewport;
@@ -48,10 +58,14 @@ fn main() {
         .init_resource::<gizmo::GizmoTool>()
         .add_plugins((
             camera::CameraPlugin,
+            animation::AnimationPlugin,
             viewport::ViewportPlugin,
             file_io::FileIoPlugin,
+            project::ProjectPlugin,
             shortcuts::ShortcutsPlugin,
+            history::HistoryPlugin,
             ui::UiPlugin,
+            simulation::SimulationPlugin,
         ))
         .run();
 }

@@ -5,16 +5,22 @@ use bevy::prelude::*;
 use crate::camera::{CameraRequest, StandardView, alt_pressed, keyboard_free};
 use crate::file_io::ImportJobs;
 use crate::gizmo::{GizmoTool, Tool};
+use crate::history::{History, Request};
 use crate::model::{Model, Selection};
+use crate::project::{ProjectAction, ProjectState};
 
 pub struct ShortcutsPlugin;
 
 impl Plugin for ShortcutsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, keyboard_shortcuts.run_if(keyboard_free));
+        app.add_systems(
+            Update,
+            (keyboard_shortcuts, project_shortcuts).run_if(keyboard_free),
+        );
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn keyboard_shortcuts(
     buttons: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
@@ -23,6 +29,7 @@ fn keyboard_shortcuts(
     mut gizmo_tool: ResMut<GizmoTool>,
     mut jobs: ResMut<ImportJobs>,
     mut camera: MessageWriter<CameraRequest>,
+    mut history: ResMut<History>,
 ) {
     // 右ボタンを押している間は WASD / QE がフライ移動になる
     if buttons.pressed(MouseButton::Right) {
@@ -33,6 +40,13 @@ fn keyboard_shortcuts(
     if ctrl {
         if keys.just_pressed(KeyCode::KeyO) {
             jobs.request_dialog();
+        }
+        let shift = keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
+        if keys.just_pressed(KeyCode::KeyZ) {
+            history.request = Some(if shift { Request::Redo } else { Request::Undo });
+        }
+        if keys.just_pressed(KeyCode::KeyY) {
+            history.request = Some(Request::Redo);
         }
     } else {
         // ギズモの切り替え (Unity / Unreal と同じ W / E / R)
@@ -74,6 +88,10 @@ fn keyboard_shortcuts(
             camera.write(CameraRequest::View(if ctrl { opposite } else { view }));
         }
     }
+    // 透視投影 / 平行投影の切り替え (Blender のテンキー 5 と同じ)
+    if keys.any_just_pressed([KeyCode::Digit5, KeyCode::Numpad5]) {
+        camera.write(CameraRequest::ToggleProjection);
+    }
     if keys.just_pressed(KeyCode::Home) {
         camera.write(CameraRequest::FitAll);
     }
@@ -94,7 +112,25 @@ fn keyboard_shortcuts(
     if keys.just_pressed(KeyCode::Delete)
         && let Some(id) = selection.node
     {
-        model.remove(id);
+        history.remove(&mut model, id);
         selection.clear();
+    }
+}
+
+/// プロジェクトの新規作成・保存 (Ctrl+O の「開く」は keyboard_shortcuts で STEP と共通)
+fn project_shortcuts(keys: Res<ButtonInput<KeyCode>>, mut project: ResMut<ProjectState>) {
+    if !keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]) {
+        return;
+    }
+    let shift = keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
+    if keys.just_pressed(KeyCode::KeyN) {
+        project.request(ProjectAction::New);
+    }
+    if keys.just_pressed(KeyCode::KeyS) {
+        project.request(if shift {
+            ProjectAction::SaveAs
+        } else {
+            ProjectAction::Save
+        });
     }
 }

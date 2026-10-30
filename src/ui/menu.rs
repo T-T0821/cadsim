@@ -4,12 +4,17 @@ use bevy_egui::egui;
 
 use super::UiState;
 use crate::camera::{CameraRequest, StandardView};
+use crate::file_io::ExportScope;
 use crate::gizmo::Tool;
+use crate::history::Request;
+use crate::interchange::{FORMATS, LENGTH_UNITS};
+use crate::project::ProjectAction;
 
 pub fn show(root: &mut egui::Ui, state: &mut UiState) {
     egui::Panel::top("menu_bar").show(root, |ui| {
         egui::MenuBar::new().ui(ui, |ui| {
             file_menu(ui, state);
+            edit_menu(ui, state);
             view_menu(ui, state);
             create_menu(ui, state);
             help_menu(ui);
@@ -22,20 +27,127 @@ pub fn show(root: &mut egui::Ui, state: &mut UiState) {
 
 fn file_menu(ui: &mut egui::Ui, state: &mut UiState) {
     ui.menu_button("ファイル", |ui| {
-        if ui.button("STEP を開く…  (Ctrl+O)").clicked() {
+        if ui.button("新規プロジェクト  (Ctrl+N)").clicked() {
+            state.project.request(ProjectAction::New);
+        }
+        if ui
+            .button("開く…  (Ctrl+O)")
+            .on_hover_text(
+                "プロジェクト (.cadsim) を開くか、STEP / glTF / OBJ / STL を今のプロジェクトに取り込む",
+            )
+            .clicked()
+        {
             state.jobs.request_dialog();
         }
-        if ui.button("サンプルのアセンブリを開く").clicked() {
+        if ui.button("サンプルのアセンブリを取り込む").clicked() {
             state.jobs.open_sample();
         }
         ui.separator();
-        if ui.button("すべて閉じる").clicked() {
-            state.model.clear();
+        if ui.button("保存  (Ctrl+S)").clicked() {
+            state.project.request(ProjectAction::Save);
+        }
+        if ui.button("名前を付けて保存…  (Ctrl+Shift+S)").clicked() {
+            state.project.request(ProjectAction::SaveAs);
+        }
+        ui.separator();
+        export_menu(ui, state);
+        ui.separator();
+        if ui
+            .button("すべて閉じる")
+            .on_hover_text("今のプロジェクトのまま中身を空にする (元に戻せる)")
+            .clicked()
+        {
+            state.history.clear_all(&mut state.model);
             state.selection.clear();
         }
         ui.separator();
         ui.weak("ウィンドウへのドラッグ&ドロップでも開けます");
+        ui.weak(format!("取り込める形式: STEP, {}", format_list()));
     });
+}
+
+/// 書き出しと、単位を持たない形式 (OBJ / STL) の単位の設定
+fn export_menu(ui: &mut egui::Ui, state: &mut UiState) {
+    ui.menu_button("書き出し", |ui| {
+        if ui.button("すべてを書き出し…").clicked() {
+            state.jobs.request_export(ExportScope::All);
+        }
+        let has_selection = state
+            .selection
+            .node
+            .is_some_and(|id| state.model.get(id).is_some());
+        if ui
+            .add_enabled(has_selection, egui::Button::new("選択を書き出し…"))
+            .clicked()
+        {
+            state.jobs.request_export(ExportScope::Selection);
+        }
+        ui.separator();
+        ui.weak("保存ダイアログで選んだ拡張子の形式で書き出します");
+        for format in FORMATS.iter().filter(|f| f.export.is_some()) {
+            let note = if format.export_note.is_empty() {
+                "階層・色・アニメーションを保持"
+            } else {
+                format.export_note
+            };
+            ui.weak(format!("・{}: {note}", format.name));
+        }
+        let unit_formats: Vec<&str> = FORMATS
+            .iter()
+            .filter(|f| f.needs_units)
+            .flat_map(|f| f.extensions.iter().copied())
+            .collect();
+        ui.weak(format!(
+            "{} は「OBJ / STL の単位」の設定で書き出します",
+            unit_formats.join(" / ").to_ascii_uppercase()
+        ));
+    });
+    ui.menu_button("OBJ / STL の単位", |ui| {
+        ui.weak("OBJ と STL は単位を持たないので、読み書きのときにここで指定します");
+        let units = &mut state.jobs.units;
+        for &(name, meters) in LENGTH_UNITS {
+            if ui.radio(units.meters_per_unit == meters, name).clicked() {
+                units.meters_per_unit = meters;
+            }
+        }
+        ui.separator();
+        ui.checkbox(&mut units.z_up, "Z 軸が上 (オフにすると Y 軸が上)");
+    });
+}
+
+fn format_list() -> String {
+    FORMATS
+        .iter()
+        .flat_map(|f| f.extensions.iter().map(|e| e.to_ascii_uppercase()))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn edit_menu(ui: &mut egui::Ui, state: &mut UiState) {
+    ui.menu_button("編集", |ui| {
+        undo_redo_buttons(ui, state);
+    });
+}
+
+/// 「元に戻す」「やり直し」のボタン。押せないときは灰色にし、何が戻るかをツールチップに出す。
+fn undo_redo_buttons(ui: &mut egui::Ui, state: &mut UiState) {
+    for (text, request, label) in [
+        (
+            "元に戻す (Ctrl+Z)",
+            Request::Undo,
+            state.history.undo_label(),
+        ),
+        (
+            "やり直し (Ctrl+Y)",
+            Request::Redo,
+            state.history.redo_label(),
+        ),
+    ] {
+        let button = ui.add_enabled(label.is_some(), egui::Button::new(text));
+        if button.on_hover_text(label.unwrap_or_default()).clicked() {
+            state.history.request = Some(request);
+        }
+    }
 }
 
 fn view_menu(ui: &mut egui::Ui, state: &mut UiState) {
@@ -46,6 +158,7 @@ fn view_menu(ui: &mut egui::Ui, state: &mut UiState) {
         if ui.button("選択を拡大  (F)").clicked() {
             state.camera.write(CameraRequest::FitSelection);
         }
+        projection_buttons(ui, state);
         ui.menu_button("標準ビュー", |ui| {
             for view in StandardView::ALL {
                 let label = format!("{}  ({})", view.label(), view.shortcut());
@@ -92,9 +205,14 @@ fn help_menu(ui: &mut egui::Ui) {
                     "1 / 3 / 7 / 0",
                     "正面 / 右側面 / 上面 / 等角 (Ctrl で反対側)",
                 ),
+                ("5", "透視投影 / 平行投影を切り替え"),
                 ("H / Alt+H", "選択を隠す / すべて表示"),
+                ("Ctrl+N / Ctrl+O", "新規プロジェクト / 開く"),
+                ("Ctrl+S / Ctrl+Shift+S", "保存 / 名前を付けて保存"),
                 ("Esc", "選択を解除"),
                 ("Delete", "選択を削除"),
+                ("Ctrl+Z", "元に戻す"),
+                ("Ctrl+Y / Ctrl+Shift+Z", "やり直し"),
             ] {
                 ui.label(key);
                 ui.label(action);
@@ -108,11 +226,21 @@ fn toolbar(ui: &mut egui::Ui, state: &mut UiState) {
     ui.horizontal(|ui| {
         if ui
             .button("📂 開く")
-            .on_hover_text("STEP ファイルを開く (Ctrl+O)")
+            .on_hover_text("プロジェクトか STEP ファイルを開く (Ctrl+O)")
             .clicked()
         {
             state.jobs.request_dialog();
         }
+        if ui
+            .button("💾 保存")
+            .on_hover_text("プロジェクトを保存 (Ctrl+S)")
+            .clicked()
+        {
+            state.project.request(ProjectAction::Save);
+        }
+        ui.separator();
+
+        undo_redo_buttons(ui, state);
         ui.separator();
 
         for tool in [Tool::Translate, Tool::Rotate, Tool::Scale] {
@@ -121,6 +249,9 @@ fn toolbar(ui: &mut egui::Ui, state: &mut UiState) {
                 state.gizmo.tool = tool;
             }
         }
+        ui.separator();
+
+        projection_buttons(ui, state);
         ui.separator();
 
         for view in StandardView::ALL {
@@ -148,10 +279,41 @@ fn toolbar(ui: &mut egui::Ui, state: &mut UiState) {
     });
 }
 
+/// 「透視」「平行」の切り替えボタン (メニューとツールバーで共通)
+fn projection_buttons(ui: &mut egui::Ui, state: &mut UiState) {
+    ui.horizontal(|ui| {
+        for (orthographic, label, hover) in [
+            (
+                false,
+                "透視",
+                "透視投影: 遠くのものほど小さく見える (5 で切り替え)",
+            ),
+            (
+                true,
+                "平行",
+                "平行投影: 距離によらず同じ大きさに見える (5 で切り替え)",
+            ),
+        ] {
+            let selected = state.orbit.orthographic == orthographic;
+            if ui
+                .selectable_label(selected, label)
+                .on_hover_text(hover)
+                .clicked()
+            {
+                state
+                    .camera
+                    .write(CameraRequest::SetOrthographic(orthographic));
+            }
+        }
+    });
+}
+
 pub fn add_box(state: &mut UiState) {
     let size = state.model.new_box_size;
     let position = state.model.free_spot(size);
     let id = state.model.add_box(size, position);
+    let label = format!("{} を追加", state.model.path_label(id));
+    state.history.record_added(&state.model, id, label);
     state.selection.select(id);
     state.selection.reveal_in_tree = true;
 }

@@ -18,6 +18,8 @@ use std::sync::{
 
 use bevy::math::{DMat4, DVec3};
 use truck_meshalgo::prelude::*;
+
+use crate::interchange::Animation;
 use truck_stepio::r#in::{
     Table,
     alias::{Curve3D, Surface},
@@ -39,6 +41,8 @@ pub struct ImportedFile {
     pub unit: String,
     /// 読めなかった形状など、ユーザーに伝えたい注意
     pub warnings: Vec<String>,
+    /// ノードの動き (glTF などから)。トラックのノード番号は木を深さ優先でたどった順 (ルートが 0)
+    pub animations: Vec<Animation>,
 }
 
 /// アセンブリの木の1ノード。子を持つならアセンブリ、shape を持つなら部品。
@@ -120,6 +124,7 @@ pub fn import_step(text: &str, file_name: &str) -> Result<ImportedFile, String> 
         root,
         unit: read_length_unit(&entities),
         warnings: builder.warnings,
+        animations: Vec::new(),
     })
 }
 
@@ -743,9 +748,7 @@ fn read_length_unit(e: &Entities) -> String {
 
 /// B-rep を表示用の面メッシュと稜線に変換し、寸法・体積・表面積を求める
 fn tessellate(breps: Vec<Brep>, color: Option<[f32; 3]>) -> ImportedShape {
-    // ファイルをまたいでも重ならない番号にする
-    static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
-    let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+    let id = next_shape_id();
 
     // 許容誤差は部品の大きさに合わせる (頂点の範囲で大きさを見積もる)
     let mut min = DVec3::splat(f64::MAX);
@@ -790,6 +793,12 @@ fn tessellate(breps: Vec<Brep>, color: Option<[f32; 3]>) -> ImportedShape {
         color,
         stats,
     }
+}
+
+/// 形状の番号を払い出す。ファイルをまたいでも重ならない
+pub fn next_shape_id() -> usize {
+    static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
+    NEXT_ID.fetch_add(1, Ordering::Relaxed)
 }
 
 /// 三角形メッシュから外接箱・体積・表面積を計算する

@@ -5,6 +5,7 @@
 //! Bevy のエンティティとは独立していて、表示は viewport.rs が後から追いかける。
 
 use std::collections::{BTreeMap, HashSet};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use bevy::math::{DMat4, DVec3};
@@ -21,6 +22,7 @@ pub type NodeId = u32;
 /// 色の指定がない部品の色
 pub const DEFAULT_PART_COLOR: [f32; 3] = [0.70, 0.74, 0.80];
 
+#[derive(Clone)]
 pub struct Node {
     pub name: String,
     pub parent: Option<NodeId>,
@@ -34,6 +36,7 @@ pub struct Node {
     pub kind: NodeKind,
 }
 
+#[derive(Clone)]
 pub enum NodeKind {
     /// 子をまとめるだけのノード。`product` は STEP の製品名。
     Assembly { product: Option<String> },
@@ -43,7 +46,17 @@ pub enum NodeKind {
     Imported {
         product: String,
         shape: Arc<ImportedShape>,
+        /// 取り込んだ STEP ファイル。プロジェクトを開くときにここから形状を読み直す。
+        source: StepSource,
     },
+}
+
+/// 取り込んだ STEP がどこから来たか
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum StepSource {
+    /// アプリに埋め込みのサンプル
+    Sample,
+    File(PathBuf),
 }
 
 impl NodeKind {
@@ -69,7 +82,7 @@ impl NodeKind {
 }
 
 /// 箱1つ分の設計パラメータ。値はすべて f64 で持つ。
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct BoxPart {
     /// 幅 (X), 高さ (Y), 奥行 (Z)
     pub size: [f64; 3],
@@ -109,6 +122,18 @@ impl BoxPart {
         }
         .transformed(m)
     }
+}
+
+/// ノードとその子孫を丸ごと写したもの。元に戻す・やり直し (history.rs) で使う。
+/// 取り込んだ形状は `Arc` で共有するので、大きなアセンブリでも写すのは軽い。
+#[derive(Clone)]
+pub struct Snapshot {
+    pub root: NodeId,
+    pub parent: Option<NodeId>,
+    /// 親の children (親がなければ roots) の中での位置
+    pub index: usize,
+    /// 先頭が root
+    pub nodes: Vec<(NodeId, Node)>,
 }
 
 /// 部品やアセンブリの計測値の合計
@@ -151,7 +176,8 @@ impl Default for Model {
 impl Model {
     // --- 追加と削除 ---------------------------------------------------------
 
-    fn add_node(
+    /// ノードを1つ加える。`parent` が None なら最上位に置く。
+    pub fn add_node(
         &mut self,
         parent: Option<NodeId>,
         name: String,
@@ -194,9 +220,9 @@ impl Model {
     }
 
     /// 取り込んだ STEP の木をモデルに加え、そのルートの id を返す
-    pub fn add_imported(&mut self, root: ImportNode, unit: String) -> NodeId {
+    pub fn add_imported(&mut self, root: ImportNode, unit: String, source: StepSource) -> NodeId {
         self.unit = unit;
-        let id = self.add_import_node(None, root);
+        let id = self.add_import_node(None, root, &source);
         // 新しく作る箱の寸法を、取り込んだものの大きさに見合うきりのいい値にする
         if let Some(bounds) = self.world_bounds(id) {
             let step = 10f64.powf((bounds.size().max_element() / 4.0).log10().floor());
@@ -217,11 +243,17 @@ impl Model {
         }
     }
 
-    fn add_import_node(&mut self, parent: Option<NodeId>, node: ImportNode) -> NodeId {
+    fn add_import_node(
+        &mut self,
+        parent: Option<NodeId>,
+        node: ImportNode,
+        source: &StepSource,
+    ) -> NodeId {
         let kind = match node.shape {
             Some(shape) => NodeKind::Imported {
                 product: node.product,
                 shape,
+                source: source.clone(),
             },
             None => NodeKind::Assembly {
                 product: Some(node.product),
@@ -229,7 +261,7 @@ impl Model {
         };
         let id = self.add_node(parent, node.name, node.placement, kind);
         for child in node.children {
-            self.add_import_node(Some(id), child);
+            self.add_import_node(Some(id), child, source);
         }
         id
     }
@@ -247,6 +279,52 @@ impl Model {
             self.nodes.remove(&removed);
             self.dirty.insert(removed);
         }
+    }
+
+    /// `id` とその子孫を写し取る
+    pub fn snapshot(&self, id: NodeId) -> Option<Snapshot> {
+        let parent = self.nodes.get(&id)?.parent;
+        let siblings = match parent.and_then(|p| self.nodes.get(&p)) {
+            Some(parent) => &parent.children,
+            None => &self.roots,
+        };
+        Some(Snapshot {
+            root: id,
+            parent,
+            index: siblings
+                .iter()
+                .position(|&c| c == id)
+                .unwrap_or(siblings.len()),
+            nodes: self
+                .subtree(id)
+                .into_iter()
+                .map(|n| (n, self.nodes[&n].clone()))
+                .collect(),
+        })
+    }
+
+    /// 写し取ったノードを元の場所に戻す。同じ id が残っていれば置き換える。
+    pub fn restore(&mut self, snapshot: &Snapshot) {
+        self.remove(snapshot.root);
+        for (id, node) in &snapshot.nodes {
+            if node.kind.is_part() {
+                self.dirty.insert(*id);
+            }
+            self.nodes.insert(*id, node.clone());
+        }
+        let siblings = match snapshot.parent.and_then(|p| self.nodes.get_mut(&p)) {
+            Some(parent) => &mut parent.children,
+            None => &mut self.roots,
+        };
+        siblings.insert(snapshot.index.min(siblings.len()), snapshot.root);
+    }
+
+    /// 最上位のノードの写しすべて
+    pub fn snapshot_all(&self) -> Vec<Snapshot> {
+        self.roots
+            .iter()
+            .filter_map(|&r| self.snapshot(r))
+            .collect()
     }
 
     /// 非表示にしたものをすべて表示に戻す
@@ -459,7 +537,7 @@ mod tests {
         )
         .unwrap();
         let mut model = Model::default();
-        let root = model.add_imported(file.root, file.unit);
+        let root = model.add_imported(file.root, file.unit, StepSource::Sample);
         (model, root)
     }
 

@@ -21,6 +21,7 @@ use transform_gizmo::{
 };
 
 use crate::camera::{ViewportRect, alt_pressed};
+use crate::history::History;
 use crate::math::{euler_deg_to_quat, quat_to_euler_deg};
 use crate::model::{Model, NodeKind, Selection};
 
@@ -257,6 +258,7 @@ pub fn transform_gizmo_system(
     mut contexts: EguiContexts,
     mut tool: ResMut<GizmoTool>,
     mut model: ResMut<Model>,
+    mut history: ResMut<History>,
     selection: Res<Selection>,
     buttons: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
@@ -278,18 +280,26 @@ pub fn transform_gizmo_system(
         return Ok(());
     };
 
-    // 標準的な透視投影行列を作り直して渡す (Bevy は reverse-Z の無限遠投影なので)
+    // 標準的な投影行列を作り直して渡す (Bevy は reverse-Z の無限遠投影なので)
     let (camera_transform, projection) = *camera;
-    let (fov, near) = match projection {
-        Projection::Perspective(p) => (p.fov, p.near),
-        _ => (std::f32::consts::FRAC_PI_4, 0.05),
-    };
     let rect = viewport
         .rect
         .unwrap_or_else(|| Rect::from_corners(Vec2::ZERO, window.size()));
     let aspect = (rect.width() / rect.height().max(1.0)) as f64;
     let view = to_gizmo_mat(Mat4::from(camera_transform.affine()).inverse().as_dmat4());
-    let proj = perspective(fov as f64, aspect, near as f64, 1e7);
+    let proj = match projection {
+        Projection::Perspective(p) => perspective(p.fov as f64, aspect, p.near as f64, 1e7),
+        // 平行投影: Bevy が計算した表示範囲 (ワールド単位) をそのまま使う
+        Projection::Orthographic(p) => DMat4::orthographic_rh(
+            p.area.min.x as f64,
+            p.area.max.x as f64,
+            p.area.min.y as f64,
+            p.area.max.y as f64,
+            p.near as f64,
+            p.far as f64,
+        ),
+        _ => perspective(std::f64::consts::FRAC_PI_4, aspect, 0.05, 1e7),
+    };
 
     let egui_viewport = egui::Rect::from_min_max(
         egui::pos2(rect.min.x, rect.min.y),
@@ -330,6 +340,8 @@ pub fn transform_gizmo_system(
         && let Some(new) = transforms.first()
     {
         let size_step = (tool.snapping && tool.tool == Tool::Scale).then_some(tool.snap.size_step);
+        // ドラッグ全体を1件の履歴にする (手を離したときに確定)
+        history.begin_edit(&model, id);
         apply_gizmo_result(&mut model, id, new, size_step);
     }
     tool.focused = tool.gizmo.is_focused();
