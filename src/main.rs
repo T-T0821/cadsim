@@ -3,9 +3,13 @@
 //! 形状の「正」は truck の B-rep (f64) が持ち、Bevy は表示用の f32 メッシュと操作だけを担う。
 //! 部品を編集するたびに truck で形状を作り直し、面ごとにテッセレーションして Bevy に渡す。
 //!
-//! 操作:
+//! 操作 (Unity / Unreal のシーンビューに合わせている):
 //! - 左クリック: 面を選択 (その面を含む箱が選択される)
-//! - 右ドラッグ: カメラを回転 / 中ドラッグ: 平行移動 / ホイール: ズーム
+//! - Alt + 左ドラッグ: 注視点のまわりを回転 (オービット)
+//! - 中ドラッグ: 平行移動 (パン)
+//! - ホイール / Alt + 右ドラッグ: ズーム
+//! - 右ドラッグ: その場で見回す。押している間 WASD で移動、Q / E で下降 / 上昇、Shift で加速
+//! - F: 選択中の箱にフォーカス / Delete: 選択中の箱を削除
 //! - 左パネル: 箱の追加、寸法・位置・回転の編集、削除
 
 use std::collections::HashSet;
@@ -21,7 +25,8 @@ use bevy::{
 // truck の prelude にも Transform トレイトがあるため Bevy 側を明示する
 use bevy::prelude::Transform;
 use bevy_egui::{
-    EguiContexts, EguiPlugin, EguiPrimaryContextPass, egui, input::egui_wants_any_pointer_input,
+    EguiContexts, EguiPlugin, EguiPrimaryContextPass, egui,
+    input::{egui_wants_any_keyboard_input, egui_wants_any_pointer_input},
 };
 use truck_meshalgo::prelude::*;
 use truck_modeling::{Solid, builder};
@@ -47,7 +52,8 @@ fn main() {
         .add_systems(
             Update,
             (
-                (pick_face, orbit_camera_input).run_if(not(egui_wants_any_pointer_input)),
+                (pick_face, mouse_camera_input).run_if(not(egui_wants_any_pointer_input)),
+                keyboard_input.run_if(not(egui_wants_any_keyboard_input)),
                 rebuild_dirty_parts,
                 apply_camera,
                 update_materials,
@@ -308,13 +314,15 @@ fn polygon_to_bevy_mesh(poly: &PolygonMesh) -> Mesh {
 
 fn pick_face(
     buttons: Res<ButtonInput<MouseButton>>,
+    keys: Res<ButtonInput<KeyCode>>,
     window: Single<&Window, With<PrimaryWindow>>,
     camera: Single<(&Camera, &GlobalTransform)>,
     mut ray_cast: MeshRayCast,
     faces: Query<&FaceTag>,
     mut selection: ResMut<Selection>,
 ) {
-    if !buttons.just_pressed(MouseButton::Left) {
+    // Alt + 左ドラッグはオービットなので選択しない
+    if !buttons.just_pressed(MouseButton::Left) || alt_pressed(&keys) {
         return;
     }
     let Some(cursor) = window.cursor_position() else {
@@ -337,21 +345,46 @@ fn pick_face(
     }
 }
 
-fn orbit_camera_input(
+fn alt_pressed(keys: &ButtonInput<KeyCode>) -> bool {
+    keys.any_pressed([KeyCode::AltLeft, KeyCode::AltRight])
+}
+
+impl OrbitCamera {
+    fn rotation(&self) -> Quat {
+        Quat::from_euler(EulerRot::YXZ, self.yaw, -self.pitch, 0.0)
+    }
+
+    fn eye(&self) -> Vec3 {
+        self.focus + self.rotation() * Vec3::new(0.0, 0.0, self.distance)
+    }
+}
+
+fn mouse_camera_input(
     buttons: Res<ButtonInput<MouseButton>>,
+    keys: Res<ButtonInput<KeyCode>>,
     motion: Res<AccumulatedMouseMotion>,
     scroll: Res<AccumulatedMouseScroll>,
     mut orbit: ResMut<OrbitCamera>,
 ) {
     let delta = motion.delta;
-    if buttons.pressed(MouseButton::Right) {
+    let alt = alt_pressed(&keys);
+    if alt && buttons.pressed(MouseButton::Left) {
+        // オービット: 注視点を中心に回る
         orbit.yaw -= delta.x * 0.005;
         orbit.pitch = (orbit.pitch + delta.y * 0.005).clamp(-1.5, 1.5);
+    } else if alt && buttons.pressed(MouseButton::Right) {
+        // ドリー: 右ドラッグの上下でズーム
+        orbit.distance = (orbit.distance * (1.0 + (delta.x - delta.y) * 0.005)).clamp(0.5, 200.0);
+    } else if buttons.pressed(MouseButton::Right) {
+        // 見回し: カメラ位置を固定したまま向きだけ変える
+        let eye = orbit.eye();
+        orbit.yaw -= delta.x * 0.004;
+        orbit.pitch = (orbit.pitch + delta.y * 0.004).clamp(-1.5, 1.5);
+        orbit.focus = eye - orbit.rotation() * Vec3::new(0.0, 0.0, orbit.distance);
     }
     if buttons.pressed(MouseButton::Middle) {
-        let rotation = Quat::from_euler(EulerRot::YXZ, orbit.yaw, -orbit.pitch, 0.0);
         let scale = orbit.distance * 0.0015;
-        let pan = rotation * Vec3::new(-delta.x * scale, delta.y * scale, 0.0);
+        let pan = orbit.rotation() * Vec3::new(-delta.x * scale, delta.y * scale, 0.0);
         orbit.focus += pan;
     }
     if scroll.delta.y != 0.0 {
@@ -359,10 +392,62 @@ fn orbit_camera_input(
     }
 }
 
+fn keyboard_input(
+    time: Res<Time>,
+    buttons: Res<ButtonInput<MouseButton>>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut orbit: ResMut<OrbitCamera>,
+    mut model: ResMut<Model>,
+    mut selection: ResMut<Selection>,
+) {
+    if buttons.pressed(MouseButton::Right) {
+        // フライ移動: 右ボタンを押している間だけ WASD / QE が効く
+        let mut dir = Vec3::ZERO;
+        for (key, d) in [
+            (KeyCode::KeyW, Vec3::NEG_Z),
+            (KeyCode::KeyS, Vec3::Z),
+            (KeyCode::KeyA, Vec3::NEG_X),
+            (KeyCode::KeyD, Vec3::X),
+        ] {
+            if keys.pressed(key) {
+                dir += orbit.rotation() * d;
+            }
+        }
+        if keys.pressed(KeyCode::KeyE) {
+            dir += Vec3::Y;
+        }
+        if keys.pressed(KeyCode::KeyQ) {
+            dir -= Vec3::Y;
+        }
+        let boost = if keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]) {
+            3.0
+        } else {
+            1.0
+        };
+        orbit.focus += dir.normalize_or_zero() * 4.0 * boost * time.delta_secs();
+        return;
+    }
+
+    let Some(id) = selection.part else {
+        return;
+    };
+    if keys.just_pressed(KeyCode::KeyF)
+        && let Some(part) = model.parts.iter().find(|p| p.id == id) {
+            let [x, y, z] = part.position;
+            let extent = part.size.iter().copied().fold(0.0, f64::max) as f32;
+            orbit.focus = Vec3::new(x as f32, y as f32, z as f32);
+            orbit.distance = (extent * 2.5).max(1.0);
+        }
+    if keys.just_pressed(KeyCode::Delete) {
+        model.parts.retain(|p| p.id != id);
+        model.dirty.insert(id);
+        *selection = Selection::default();
+    }
+}
+
 fn apply_camera(orbit: Res<OrbitCamera>, mut camera: Single<&mut Transform, With<Camera3d>>) {
-    let rotation = Quat::from_euler(EulerRot::YXZ, orbit.yaw, -orbit.pitch, 0.0);
-    camera.translation = orbit.focus + rotation * Vec3::new(0.0, 0.0, orbit.distance);
-    camera.rotation = rotation;
+    camera.translation = orbit.eye();
+    camera.rotation = orbit.rotation();
 }
 
 // ---------------------------------------------------------------------------
@@ -446,7 +531,7 @@ fn ui_panel(
         let Some(id) = selection.part else {
             ui.separator();
             ui.label(
-                "Left-click a face to select.\nRight-drag: orbit, middle-drag: pan, wheel: zoom.",
+                "Click: select   Alt+Left drag: orbit\nMiddle drag: pan   Wheel: zoom\nRight drag + WASD/QE: fly   F: focus",
             );
             return;
         };
