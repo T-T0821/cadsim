@@ -142,7 +142,7 @@ fn run_interference_check(
     }
     let started = Instant::now();
     // 非表示にした部品は調べない
-    let inputs: Vec<Body> = bodies
+    let mut inputs: Vec<Body> = bodies
         .iter()
         .filter(|(_, visibility)| **visibility != Visibility::Hidden)
         .map(|(body, _)| Body {
@@ -151,6 +151,8 @@ fn run_interference_check(
             pose: body.pose,
         })
         .collect();
+    // 毎回同じ並びにして、一覧の順番と体積の近似を安定させる
+    inputs.sort_by_key(|body| body.id);
     let settings = CheckSettings {
         compute_overlap: false,
         ..check.settings
