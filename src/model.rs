@@ -184,7 +184,7 @@ impl Model {
     }
 
     pub fn add_box(&mut self, size: [f64; 3], position: [f64; 3]) -> NodeId {
-        let name = format!("Box {}", self.next_id);
+        let name = format!("箱 {}", self.next_id);
         let part = BoxPart {
             size,
             position,

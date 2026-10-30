@@ -16,7 +16,6 @@
 //! egui のパネルは「外側から順に場所を取る」ので、1つのシステムの中で
 //! 上 → 下 → 左 → 右 の順に描き、残った領域を 3D ビューにする。
 
-mod fonts;
 mod menu;
 mod properties;
 mod status;
@@ -37,6 +36,7 @@ use bevy_egui::{
 use crate::camera::{CameraRequest, OrbitCamera, ViewportRect};
 use crate::file_io::ImportJobs;
 use crate::gizmo::{GizmoTool, transform_gizmo_system};
+use crate::japanese_font::install_japanese_font;
 use crate::model::{Model, Selection};
 use crate::viewport::ViewSettings;
 
@@ -46,14 +46,14 @@ impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, spawn_ui_camera).add_systems(
             EguiPrimaryContextPass,
-            (draw_ui, transform_gizmo_system).chain(),
+            (install_japanese_font, draw_ui, transform_gizmo_system).chain(),
         );
     }
 }
 
 /// UI の各部品が読み書きするもの一式
 #[derive(SystemParam)]
-pub struct UiState<'w, 's> {
+pub struct UiState<'w> {
     pub model: ResMut<'w, Model>,
     pub selection: ResMut<'w, Selection>,
     pub jobs: ResMut<'w, ImportJobs>,
@@ -62,7 +62,6 @@ pub struct UiState<'w, 's> {
     pub orbit: Res<'w, OrbitCamera>,
     pub camera: MessageWriter<'w, CameraRequest>,
     pub viewport: ResMut<'w, ViewportRect>,
-    pub fonts_loaded: Local<'s, bool>,
 }
 
 /// UI 専用のカメラ。3D カメラはパネルを除いた領域だけに描くので、
@@ -88,10 +87,6 @@ fn spawn_ui_camera(mut commands: Commands, mut egui_settings: ResMut<EguiGlobalS
 
 fn draw_ui(mut contexts: EguiContexts, mut state: UiState) -> Result {
     let ctx = contexts.ctx_mut()?.clone();
-    if !*state.fonts_loaded {
-        fonts::install_japanese_font(&ctx);
-        *state.fonts_loaded = true;
-    }
 
     let mut root = egui::Ui::new(
         ctx.clone(),

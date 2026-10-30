@@ -4,6 +4,11 @@
 //! ドラッグ結果は Bevy の Transform ではなくモデルの f64 の値に書き戻す。
 //! - 箱: 寸法・位置・回転のパラメータを書き換え、truck の形状を作り直す。
 //! - 取り込んだ部品やアセンブリ: 親から見た配置を書き換える (拡大縮小はしない)。
+//!
+//! Ctrl を押しながらドラッグすると一定量ずつ動く (スナップ)。刻み幅はパネルで変えられる。
+//! - 移動: ドラッグ開始位置から「移動の刻み」ずつ動く
+//! - 回転: ドラッグ開始の向きから「回転の刻み (度)」ずつ回る
+//! - 拡大縮小: 寸法そのものが「寸法の刻み」の倍数になる
 
 use bevy::{prelude::*, window::PrimaryWindow};
 use bevy_egui::{EguiContexts, egui};
@@ -47,27 +52,98 @@ impl Tool {
     }
 }
 
+/// スナップの設定。パネルから編集する。
+pub struct SnapSettings {
+    /// true なら Ctrl を押さなくても常にスナップする
+    pub always: bool,
+    /// 移動の刻み (モデル単位)
+    pub translate_step: f64,
+    /// 回転の刻み (度)
+    pub rotate_step_deg: f64,
+    /// 寸法の刻み (モデル単位)
+    pub size_step: f64,
+}
+
+impl Default for SnapSettings {
+    fn default() -> Self {
+        Self {
+            always: false,
+            translate_step: 0.1,
+            rotate_step_deg: 15.0,
+            size_step: 0.1,
+        }
+    }
+}
+
 #[derive(Resource)]
 pub struct GizmoTool {
     pub tool: Tool,
+    pub snap: SnapSettings,
     gizmo: Gizmo,
     /// 直前のフレームでカーソルがギズモに乗っていたか、ドラッグ中か。
     /// true の間は面の選択とカメラ操作を止める。
     pub focused: bool,
+    /// このフレームでスナップが効いているか (パネルの表示用)
+    pub snapping: bool,
 }
 
 impl Default for GizmoTool {
     fn default() -> Self {
         Self {
             tool: Tool::Translate,
+            snap: SnapSettings::default(),
             gizmo: Gizmo::default(),
             focused: false,
+            snapping: false,
         }
     }
 }
 
 pub fn gizmo_not_focused(tool: Res<GizmoTool>) -> bool {
     !tool.focused
+}
+
+fn ctrl_pressed(keys: &ButtonInput<KeyCode>) -> bool {
+    keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight])
+}
+
+/// 拡大縮小のスナップ: 変化した軸の寸法だけを step の倍数に丸める。
+/// 動かしていない軸まで丸めると、触っていない寸法が勝手に変わってしまうため。
+fn snap_size(old: [f64; 3], new: [f64; 3], step: f64) -> [f64; 3] {
+    std::array::from_fn(|i| {
+        if new[i] == old[i] {
+            new[i]
+        } else {
+            ((new[i] / step).round() * step).max(step)
+        }
+    })
+}
+
+/// パネルに出すスナップ設定の欄
+pub fn snap_settings_ui(ui: &mut egui::Ui, tool: &mut GizmoTool) {
+    let state = if tool.snapping {
+        "有効"
+    } else {
+        "Ctrl で有効"
+    };
+    ui.label(format!("スナップ ({state})"));
+    let snap = &mut tool.snap;
+    egui::Grid::new("snap_settings").show(ui, |ui| {
+        let step = |ui: &mut egui::Ui, label: &str, value: &mut f64, speed: f64| {
+            ui.label(label);
+            ui.add(
+                egui::DragValue::new(value)
+                    .speed(speed)
+                    .range(0.001..=1000.0)
+                    .max_decimals(3),
+            );
+            ui.end_row();
+        };
+        step(ui, "移動の刻み", &mut snap.translate_step, 0.01);
+        step(ui, "回転の刻み (度)", &mut snap.rotate_step_deg, 1.0);
+        step(ui, "寸法の刻み", &mut snap.size_step, 0.01);
+    });
+    ui.checkbox(&mut snap.always, "常にスナップ");
 }
 
 fn to_row_matrix(m: DMat4) -> mint::RowMatrix4<f64> {
@@ -143,8 +219,8 @@ fn gizmo_target(model: &Model, id: u32) -> Option<GizmoTransform> {
     })
 }
 
-/// ドラッグ結果をモデルに書き戻す
-fn apply_gizmo_result(model: &mut Model, id: u32, new: &GizmoTransform) {
+/// ドラッグ結果をモデルに書き戻す。`size_step` があれば箱の寸法をその倍数に丸める。
+fn apply_gizmo_result(model: &mut Model, id: u32, new: &GizmoTransform, size_step: Option<f64>) {
     let translation: DVec3 = new.translation.into();
     let rotation: DQuat = new.rotation.into();
     let scale: DVec3 = new.scale.into();
@@ -161,7 +237,11 @@ fn apply_gizmo_result(model: &mut Model, id: u32, new: &GizmoTransform) {
             part.position = translation.to_array();
             part.rotation_deg =
                 quat_to_euler_deg(bevy::math::DQuat::from_array(rotation.to_array()));
-            part.size = scale.to_array().map(|s| s.max(MIN_SIZE));
+            let mut size = scale.to_array();
+            if let Some(step) = size_step {
+                size = snap_size(part.size, size, step);
+            }
+            part.size = size.map(|s| s.max(MIN_SIZE));
             model.dirty.insert(id);
         }
         _ => {
@@ -215,8 +295,14 @@ pub fn transform_gizmo_system(
         egui::pos2(rect.min.x, rect.min.y),
         egui::pos2(rect.max.x, rect.max.y),
     );
-    let config = *tool.gizmo.config();
+    tool.snapping = tool.snap.always || ctrl_pressed(&keys);
     let tool_kind = tool.tool.kind();
+    // 移動と回転は transform-gizmo のスナップ (ドラッグ開始からの変化量を丸める) を使う。
+    // 拡大縮小は倍率ではなく寸法を丸めたいので、apply_gizmo_result で自前で丸める。
+    let gizmo_snapping = tool.snapping && tool.tool != Tool::Scale;
+    let snap_distance = tool.snap.translate_step as f32;
+    let snap_angle = tool.snap.rotate_step_deg.to_radians() as f32;
+    let config = *tool.gizmo.config();
     tool.gizmo.update_config(GizmoConfig {
         view_matrix: to_row_matrix(view),
         projection_matrix: to_row_matrix(proj),
@@ -224,6 +310,9 @@ pub fn transform_gizmo_system(
         modes: GizmoMode::all_from_kind(tool_kind),
         orientation: GizmoOrientation::Local,
         pixels_per_point: ctx.pixels_per_point(),
+        snapping: gizmo_snapping,
+        snap_distance,
+        snap_angle,
         ..config
     });
 
@@ -240,7 +329,8 @@ pub fn transform_gizmo_system(
     if let Some((_, transforms)) = tool.gizmo.update(interaction, &[target])
         && let Some(new) = transforms.first()
     {
-        apply_gizmo_result(&mut model, id, new);
+        let size_step = (tool.snapping && tool.tool == Tool::Scale).then_some(tool.snap.size_step);
+        apply_gizmo_result(&mut model, id, new, size_step);
     }
     tool.focused = tool.gizmo.is_focused();
 
@@ -264,4 +354,24 @@ pub fn transform_gizmo_system(
         .with_clip_rect(egui_viewport)
         .add(mesh);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn snap_size_rounds_only_changed_axes() {
+        let old = [2.0, 1.03, 1.0];
+        let new = [2.27, 1.03, 0.94];
+        let snapped = snap_size(old, new, 0.1);
+        assert!((snapped[0] - 2.3).abs() < 1e-9);
+        assert_eq!(snapped[1], 1.03, "動かしていない軸はそのまま");
+        assert!((snapped[2] - 0.9).abs() < 1e-9);
+    }
+
+    #[test]
+    fn snap_size_never_reaches_zero() {
+        assert_eq!(snap_size([1.0; 3], [0.02, 1.0, 1.0], 0.5)[0], 0.5);
+    }
 }

@@ -6,6 +6,7 @@ use bevy_egui::egui;
 use super::UiState;
 use super::widgets::{length, round_for_display, row, xyz_editor};
 use crate::camera::CameraRequest;
+use crate::gizmo::snap_settings_ui;
 use crate::math::{euler_deg_to_quat, quat_to_euler_deg, split_placement};
 use crate::model::{NodeId, NodeKind};
 
@@ -29,6 +30,10 @@ pub fn show(root: &mut egui::Ui, state: &mut UiState) {
                         Some(id) => selected_node(ui, state, id),
                         None => nothing_selected(ui, state),
                     }
+                    ui.separator();
+                    egui::CollapsingHeader::new("ギズモのスナップ")
+                        .default_open(false)
+                        .show(ui, |ui| snap_settings_ui(ui, &mut state.gizmo));
                 });
         });
 }

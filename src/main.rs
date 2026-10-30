@@ -11,11 +11,13 @@
 //! - `gizmo`       移動・回転・拡大縮小のギズモ
 //! - `shortcuts`   キーボードショートカット
 //! - `ui`          メニュー・ツリー・プロパティ・ステータスバー・ビューキューブ
+//! - `japanese_font` egui に埋め込みの日本語フォントを登録する
 //! - `math`        回転や行列の変換
 
 mod camera;
 mod file_io;
 mod gizmo;
+mod japanese_font;
 mod math;
 mod model;
 mod shortcuts;
@@ -30,7 +32,7 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
-                title: "CAD prototype".into(),
+                title: "CADプロトタイプ".into(),
                 resolution: (1440, 900).into(),
                 ..default()
             }),
