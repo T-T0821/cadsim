@@ -1,12 +1,13 @@
 # Windows / macOS 向けの配布パッケージを作り、GitHub Release に置く。
 #
-# - タグ v* を push すると: ビルド → Release を作成してパッケージを添付
+# - main にマージ (push) されると: ビルド → タグ v<major>.<minor>.<実行番号> を付けて Release を作成
+#   (major.minor は Cargo.toml の version から取る。例: 0.1.0 なら v0.1.1, v0.1.2, ...)
 # - Actions タブから手動実行 / PR でこのファイル等を変えたとき: ビルドだけ行い、成果物を Actions の Artifacts に置く
 name: Release
 
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
   workflow_dispatch:
   pull_request:
     paths:
@@ -24,8 +25,26 @@ env:
   APP_NAME: cad_proto
 
 jobs:
+  # パッケージ名と Release のタグに使うバージョンを決める
+  version:
+    name: Decide version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            major_minor=$(grep -m1 '^version' Cargo.toml | sed -E 's/.*"([0-9]+\.[0-9]+)\..*/\1/')
+            echo "version=$major_minor.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=0.0.0-dev" >> "$GITHUB_OUTPUT"
+          fi
+
   windows:
     name: Windows (x86_64)
+    needs: version
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -41,9 +60,10 @@ jobs:
 
       - name: Package (.zip)
         shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
         run: |
-          $ver = if ($env:GITHUB_REF_TYPE -eq "tag") { $env:GITHUB_REF_NAME } else { "dev" }
-          $dir = "cadsim-$ver-windows-x86_64"
+          $dir = "cadsim-v$env:VERSION-windows-x86_64"
           New-Item -ItemType Directory $dir | Out-Null
           Copy-Item "target/release/$env:APP_NAME.exe" $dir
           Copy-Item README.md $dir
@@ -57,6 +77,7 @@ jobs:
 
   macos:
     name: "macOS (Universal: Apple Silicon + Intel)"
+    needs: version
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -77,19 +98,19 @@ jobs:
           cargo build --release --locked --target x86_64-apple-darwin
 
       - name: Package (.app を .zip に固める)
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
         run: |
-          if [ "$GITHUB_REF_TYPE" = "tag" ]; then ver="$GITHUB_REF_NAME"; else ver="dev"; fi
           app="CAD Prototype.app"
           mkdir -p "$app/Contents/MacOS"
           # 2つのアーキテクチャを1つのユニバーサルバイナリにまとめる
           lipo -create -output "$app/Contents/MacOS/$APP_NAME" \
             "target/aarch64-apple-darwin/release/$APP_NAME" \
             "target/x86_64-apple-darwin/release/$APP_NAME"
-          if [ "$ver" = "dev" ]; then plist_ver="0.0.0"; else plist_ver="${ver#v}"; fi
-          sed "s/__VERSION__/$plist_ver/g" packaging/macos/Info.plist > "$app/Contents/Info.plist"
+          sed "s/__VERSION__/${VERSION%-dev}/g" packaging/macos/Info.plist > "$app/Contents/Info.plist"
           # 署名なしだと Apple Silicon で起動できないため、アドホック署名だけ付ける
           codesign --force --deep --sign - "$app"
-          pkg="cadsim-$ver-macos-universal.zip"
+          pkg="cadsim-v$VERSION-macos-universal.zip"
           ditto -c -k --keepParent "$app" "$pkg"
           echo "PKG=$pkg" >> "$GITHUB_ENV"
 
@@ -100,8 +121,8 @@ jobs:
 
   release:
     name: GitHub Release
-    if: github.ref_type == 'tag'
-    needs: [windows, macos]
+    if: github.event_name == 'push'
+    needs: [version, windows, macos]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -111,5 +132,7 @@ jobs:
 
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ needs.version.outputs.version }}
+          target_commitish: ${{ github.sha }}
           files: dist/*
           generate_release_notes: true

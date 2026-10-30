@@ -89,19 +89,15 @@ Ctrl を押している間(またはパネルの「常にスナップ」をオ�
 
 ## リリースの作り方(開発者向け)
 
-`.github/workflows/release.yml` が GitHub Actions でパッケージを作ります。
+`.github/workflows/release.yml` が GitHub Actions でパッケージを作ります。**PR が main にマージされるたびに自動でリリースされる**ので、手作業はいりません。
 
-1. `Cargo.toml` の `version` を上げて main にマージする。
-2. 同じ番号のタグを付けて push する。
+1. Actions が Windows 版(`.zip`)と macOS 版(arm64 と x86_64 をまとめたユニバーサルの `.app` を `.zip` に固めたもの)をビルドします。
+2. タグ `v<major>.<minor>.<番号>` を付けて Release を作り、2つのファイルを添付します。リリースノートはマージされたPRから自動生成されます。
+   - `<major>.<minor>` は `Cargo.toml` の `version` から取ります(`0.1.0` なら `v0.1.○`)。
+   - `<番号>` はこのワークフローの実行番号で、マージのたびに増えます。
+   - 大きな変更で `v0.2.○` に上げたいときは、`Cargo.toml` の `version` を `0.2.0` にしてマージしてください。
 
-   ```sh
-   git tag v0.1.0
-   git push origin v0.1.0
-   ```
-
-3. Actions が Windows 版(`.zip`)と macOS 版(arm64 と x86_64 をまとめたユニバーサルの `.app` を `.zip` に固めたもの)をビルドし、Release を作って添付します。リリースノートはマージされたPRから自動生成されます。
-
-タグを付けずに試したいときは、Actions タブの「Release」→「Run workflow」で実行すると、ビルド結果がその実行の Artifacts に置かれます(Release は作られません)。
+リリースせずに試したいときは、Actions タブの「Release」→「Run workflow」で実行すると、ビルド結果がその実行の Artifacts に置かれます(Release は作られません)。このワークフローや `Cargo.toml` を変える PR でも、同じようにビルドだけ行います。
 
 ## しくみ
 
