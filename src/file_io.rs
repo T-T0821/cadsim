@@ -2,6 +2,7 @@
 //!
 //! STEP の読み込みとテッセレーションは重いので別スレッドで行い、
 //! 終わったものを毎フレーム受け取ってモデルに加える。
+//! プロジェクトファイル (.cadsim) が選ばれたときは project.rs に渡す。
 
 use std::path::{Path, PathBuf};
 use std::sync::{
@@ -13,7 +14,8 @@ use bevy::{ecs::system::NonSendMarker, prelude::*};
 
 use crate::camera::CameraRequest;
 use crate::history::History;
-use crate::model::{Model, Selection};
+use crate::model::{Model, Selection, StepSource};
+use crate::project::{ProjectAction, ProjectState, is_project_file};
 use crate::step_import::{ImportedFile, import_step};
 
 /// 起動時に開くファイルを指定しなかったときに使うサンプル
@@ -37,8 +39,8 @@ impl Plugin for FileIoPlugin {
     }
 }
 
-/// 読み込みの結果 (ファイル名, 中身 or エラー文)
-type ImportResult = (String, Result<ImportedFile, String>);
+/// 読み込みの結果 (ファイル名, 読み込み元, 中身 or エラー文)
+type ImportResult = (String, StepSource, Result<ImportedFile, String>);
 
 /// 読み込み中の仕事と、ユーザーへのお知らせ
 #[derive(Resource)]
@@ -72,73 +74,106 @@ impl ImportJobs {
     }
 
     pub fn open_sample(&mut self) {
-        self.spawn(SAMPLE_NAME.into(), || Ok(SAMPLE_STEP.to_owned()));
+        self.spawn(StepSource::Sample);
     }
 
     pub fn open_path(&mut self, path: PathBuf) {
-        let name = file_name(&path);
-        self.spawn(name, move || {
-            std::fs::read(&path)
-                .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
-                .map_err(|e| format!("{} を開けませんでした: {e}", path.display()))
-        });
+        self.spawn(StepSource::File(path));
     }
 
     /// 別スレッドで読み込む
-    fn spawn(
-        &mut self,
-        name: String,
-        read: impl FnOnce() -> Result<String, String> + Send + 'static,
-    ) {
+    fn spawn(&mut self, source: StepSource) {
+        let name = source_name(&source);
         self.loading.push(name.clone());
         let sender = self.sender.clone();
         std::thread::spawn(move || {
-            let result = read().and_then(|text| import_step(&text, &name));
+            let result = read_step(&source).and_then(|text| import_step(&text, &name));
             // 受け取り側がいなくなっていたら (アプリ終了時) 何もしない
-            let _ = sender.send((name, result));
+            let _ = sender.send((name, source, result));
         });
     }
 }
 
-fn file_name(path: &Path) -> String {
+/// STEP の中身を文字列で読む (サンプルは埋め込みのものを返す)
+pub fn read_step(source: &StepSource) -> Result<String, String> {
+    match source {
+        StepSource::Sample => Ok(SAMPLE_STEP.to_owned()),
+        StepSource::File(path) => std::fs::read(path)
+            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+            .map_err(|e| format!("{} を開けませんでした: {e}", path.display())),
+    }
+}
+
+/// 読み込み元の表示名。STEP のルートノードの名前にもなる。
+pub fn source_name(source: &StepSource) -> String {
+    match source {
+        StepSource::Sample => SAMPLE_NAME.into(),
+        StepSource::File(path) => file_name(path),
+    }
+}
+
+pub fn file_name(path: &Path) -> String {
     path.file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| path.display().to_string())
 }
 
-/// `cargo run -- 部品.step` のように渡されたファイルを開く。無ければサンプルを開く。
-fn open_command_line_file(mut jobs: ResMut<ImportJobs>) {
+/// `cargo run -- 部品.step` (または `line.cadsim`) のように渡されたファイルを開く。
+/// 無ければサンプルを開く。
+fn open_command_line_file(mut jobs: ResMut<ImportJobs>, mut project: ResMut<ProjectState>) {
     match std::env::args_os().nth(1) {
-        Some(path) => jobs.open_path(path.into()),
+        Some(path) => open_any(path.into(), &mut jobs, &mut project),
         None => jobs.open_sample(),
     }
 }
 
-/// ファイル選択ダイアログ。macOS ではメインスレッドで出す必要があるので NonSendMarker を付ける。
-fn open_dialog_if_requested(mut jobs: ResMut<ImportJobs>, _main_thread: NonSendMarker) {
-    if !std::mem::take(&mut jobs.dialog_requested) {
-        return;
-    }
-    let picked = rfd::FileDialog::new()
-        .set_title("STEP ファイルを開く")
-        .add_filter("STEP", &["step", "stp", "STEP", "STP"])
-        .add_filter("すべてのファイル", &["*"])
-        .pick_file();
-    if let Some(path) = picked {
+/// 拡張子を見て、プロジェクトなら開き直し、STEP なら今のモデルに取り込む
+fn open_any(path: PathBuf, jobs: &mut ImportJobs, project: &mut ProjectState) {
+    if is_project_file(&path) {
+        project.request(ProjectAction::OpenPath(path));
+    } else {
         jobs.open_path(path);
     }
 }
 
-fn open_dropped_files(mut drops: MessageReader<FileDragAndDrop>, mut jobs: ResMut<ImportJobs>) {
+/// ファイル選択ダイアログ。macOS ではメインスレッドで出す必要があるので NonSendMarker を付ける。
+fn open_dialog_if_requested(
+    mut jobs: ResMut<ImportJobs>,
+    mut project: ResMut<ProjectState>,
+    _main_thread: NonSendMarker,
+) {
+    if !std::mem::take(&mut jobs.dialog_requested) {
+        return;
+    }
+    let picked = rfd::FileDialog::new()
+        .set_title("開く")
+        .add_filter(
+            "プロジェクト / STEP",
+            &["cadsim", "step", "stp", "STEP", "STP"],
+        )
+        .add_filter("STEP", &["step", "stp", "STEP", "STP"])
+        .add_filter("プロジェクト", &["cadsim"])
+        .add_filter("すべてのファイル", &["*"])
+        .pick_file();
+    if let Some(path) = picked {
+        open_any(path, &mut jobs, &mut project);
+    }
+}
+
+fn open_dropped_files(
+    mut drops: MessageReader<FileDragAndDrop>,
+    mut jobs: ResMut<ImportJobs>,
+    mut project: ResMut<ProjectState>,
+) {
     for drop in drops.read() {
         if let FileDragAndDrop::DroppedFile { path_buf, .. } = drop {
-            jobs.open_path(path_buf.clone());
+            open_any(path_buf.clone(), &mut jobs, &mut project);
         }
     }
 }
 
 /// 読み込みが終わったファイルをモデルに加え、選択して全体が見えるようにする
-fn receive_imports(
+pub fn receive_imports(
     mut jobs: ResMut<ImportJobs>,
     mut model: ResMut<Model>,
     mut selection: ResMut<Selection>,
@@ -149,14 +184,14 @@ fn receive_imports(
         Ok(receiver) => receiver.try_iter().collect(),
         Err(_) => return,
     };
-    for (name, result) in finished {
+    for (name, source, result) in finished {
         if let Some(i) = jobs.loading.iter().position(|n| *n == name) {
             jobs.loading.remove(i);
         }
         match result {
             Ok(file) => {
                 let warnings = file.warnings.len();
-                let root = model.add_imported(file.root, file.unit);
+                let root = model.add_imported(file.root, file.unit, source);
                 history.record_added(&model, root, format!("{name} を読み込み"));
                 let parts = model.measure(root).part_count;
                 // 部品の色が見えるよう、読み込み直後は何も選ばない

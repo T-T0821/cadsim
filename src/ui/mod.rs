@@ -39,6 +39,7 @@ use crate::gizmo::{GizmoTool, transform_gizmo_system};
 use crate::history::History;
 use crate::japanese_font::install_japanese_font;
 use crate::model::{Model, Selection};
+use crate::project::{ProjectState, show_confirm_dialog};
 use crate::viewport::ViewSettings;
 
 pub struct UiPlugin;
@@ -58,6 +59,7 @@ pub struct UiState<'w> {
     pub model: ResMut<'w, Model>,
     pub selection: ResMut<'w, Selection>,
     pub jobs: ResMut<'w, ImportJobs>,
+    pub project: ResMut<'w, ProjectState>,
     pub settings: ResMut<'w, ViewSettings>,
     pub gizmo: ResMut<'w, GizmoTool>,
     pub history: ResMut<'w, History>,
@@ -107,6 +109,7 @@ fn draw_ui(mut contexts: EguiContexts, mut state: UiState) -> Result {
     state.viewport.rect = Some(Rect::new(view.min.x, view.min.y, view.max.x, view.max.y));
     view_cube::show(&ctx, view, &mut state);
     status::show_notifications(&ctx, view, &mut state);
+    show_confirm_dialog(&ctx, &mut state.project);
 
     // パネルの上やビューキューブの上では 3D ビューのマウス操作をしない
     let pointer = ctx.input(|i| i.pointer.hover_pos());

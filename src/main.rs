@@ -6,6 +6,7 @@
 //! - `model`       設計データ (アセンブリの木, f64) と選択状態
 //! - `step_import` STEP ファイル → アセンブリの木と B-rep (Bevy に依存しない)
 //! - `file_io`     ダイアログ・ドラッグ&ドロップ・別スレッドでの読み込み
+//! - `project`     プロジェクトファイル (.cadsim) の保存と読み込み
 //! - `viewport`    モデルを 3D 表示し、選択を強調する。クリックで選択
 //! - `camera`      注視点を回るカメラ、標準ビュー、全体表示
 //! - `gizmo`       移動・回転・拡大縮小のギズモ
@@ -23,6 +24,7 @@ mod history;
 mod japanese_font;
 mod math;
 mod model;
+mod project;
 mod shortcuts;
 mod simulation;
 mod step_import;
@@ -51,6 +53,7 @@ fn main() {
             camera::CameraPlugin,
             viewport::ViewportPlugin,
             file_io::FileIoPlugin,
+            project::ProjectPlugin,
             shortcuts::ShortcutsPlugin,
             history::HistoryPlugin,
             ui::UiPlugin,

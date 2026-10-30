@@ -7,12 +7,16 @@ use crate::file_io::ImportJobs;
 use crate::gizmo::{GizmoTool, Tool};
 use crate::history::{History, Request};
 use crate::model::{Model, Selection};
+use crate::project::{ProjectAction, ProjectState};
 
 pub struct ShortcutsPlugin;
 
 impl Plugin for ShortcutsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, keyboard_shortcuts.run_if(keyboard_free));
+        app.add_systems(
+            Update,
+            (keyboard_shortcuts, project_shortcuts).run_if(keyboard_free),
+        );
     }
 }
 
@@ -110,5 +114,23 @@ fn keyboard_shortcuts(
     {
         history.remove(&mut model, id);
         selection.clear();
+    }
+}
+
+/// プロジェクトの新規作成・保存 (Ctrl+O の「開く」は keyboard_shortcuts で STEP と共通)
+fn project_shortcuts(keys: Res<ButtonInput<KeyCode>>, mut project: ResMut<ProjectState>) {
+    if !keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]) {
+        return;
+    }
+    let shift = keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
+    if keys.just_pressed(KeyCode::KeyN) {
+        project.request(ProjectAction::New);
+    }
+    if keys.just_pressed(KeyCode::KeyS) {
+        project.request(if shift {
+            ProjectAction::SaveAs
+        } else {
+            ProjectAction::Save
+        });
     }
 }
