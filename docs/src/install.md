@@ -27,6 +27,7 @@ git clone https://github.com/T-T0821/cadsim.git
 cd cadsim
 cargo run --release                      # サンプルのアセンブリを開いて起動
 cargo run --release -- path/to/part.step # 指定した STEP を開いて起動
+cargo run --release -- path/to/line.cadsim # 保存したプロジェクトを開いて起動
 ```
 
 初回はビルドに数分かかります。Linux では先に `libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev` を入れてください。
