@@ -20,6 +20,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
   APP_NAME: cad_proto
 
 jobs:
@@ -29,7 +30,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      # キャッシュは CI ワークフローと同じ設定(OS ごとに共有キー、保存は main のみ)
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: cadsim
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Build
         run: cargo build --release --locked
@@ -58,7 +63,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
+      # キャッシュは CI ワークフローと同じ設定(OS ごとに共有キー、保存は main のみ)
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: cadsim
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Build (arm64 / x86_64)
         env:

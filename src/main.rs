@@ -11,6 +11,7 @@
 //! - 右ドラッグ: その場で見回す。押している間 WASD で移動、Q / E で下降 / 上昇、Shift で加速
 //! - F: 選択中の箱にフォーカス / Delete: 選択中の箱を削除
 //! - W / E / R: 移動 / 回転 / 拡大縮小のギズモに切り替え (ギズモの軸を左ドラッグ)
+//! - Ctrl + ギズモをドラッグ: 一定量ずつ動かす (刻み幅はパネルで設定)
 //! - 左パネル: 箱の追加、寸法・位置・回転の編集、削除
 
 // Windows のリリースビルドでは、起動時に黒いコンソール窓を出さない
@@ -36,7 +37,8 @@ use truck_meshalgo::prelude::*;
 use truck_modeling::{Solid, builder};
 
 mod gizmo;
-use gizmo::{GizmoTool, Tool, gizmo_not_focused, transform_gizmo_system};
+mod japanese_font;
+use gizmo::{GizmoTool, Tool, gizmo_not_focused, snap_settings_ui, transform_gizmo_system};
 
 /// テッセレーションの許容誤差 (モデル単位)
 const TESSELLATION_TOL: f64 = 0.005;
@@ -45,7 +47,7 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
-                title: "CAD prototype".into(),
+                title: "CADプロトタイプ".into(),
                 ..default()
             }),
             ..default()
@@ -58,7 +60,12 @@ fn main() {
         .add_systems(Startup, setup)
         .add_systems(
             EguiPrimaryContextPass,
-            (ui_panel, transform_gizmo_system).chain(),
+            (
+                japanese_font::install_japanese_font,
+                ui_panel,
+                transform_gizmo_system,
+            )
+                .chain(),
         )
         .add_systems(
             Update,
@@ -142,7 +149,7 @@ impl Model {
         self.next_id += 1;
         self.parts.push(BoxPart {
             id,
-            name: format!("Box {id}"),
+            name: format!("箱 {id}"),
             size,
             position,
             rotation_deg: [0.0; 3],
@@ -529,7 +536,7 @@ fn ui_panel(
     mut selection: ResMut<Selection>,
     mut gizmo_tool: ResMut<GizmoTool>,
 ) -> Result {
-    let window = egui::Window::new("Parts")
+    let window = egui::Window::new("部品")
         .anchor(egui::Align2::LEFT_TOP, [8.0, 8.0])
         .resizable(false)
         .collapsible(true);
@@ -544,12 +551,13 @@ fn ui_panel(
                 }
             }
         });
+        snap_settings_ui(ui, &mut gizmo_tool);
         ui.separator();
-        ui.heading("New box");
+        ui.heading("新しい箱");
         let mut new_size = model.new_size;
-        xyz_editor(ui, "Size W/H/D", &mut new_size, 0.1, Some(0.01));
+        xyz_editor(ui, "寸法 幅/高さ/奥行", &mut new_size, 0.1, Some(0.01));
         model.new_size = new_size;
-        if ui.button("Add box").clicked() {
+        if ui.button("箱を追加").clicked() {
             // 既存の箱と重ならないよう X 方向に並べる
             let x = model.parts.len() as f64 * 2.5;
             let id = model.add_box(new_size, [x, new_size[1] / 2.0, 0.0]);
@@ -558,7 +566,7 @@ fn ui_panel(
         }
 
         ui.separator();
-        ui.heading("List");
+        ui.heading("一覧");
         for part in &model.parts {
             let selected = selection.part == Some(part.id);
             if ui.selectable_label(selected, &part.name).clicked() {
@@ -570,7 +578,11 @@ fn ui_panel(
         let Some(id) = selection.part else {
             ui.separator();
             ui.label(
-                "Click: select   Alt+Left drag: orbit\nMiddle drag: pan   Wheel: zoom\nRight drag + WASD/QE: fly   F: focus\nW / E / R: move / rotate / scale",
+                "クリック: 選択   Alt+左ドラッグ: 回転
+中ドラッグ: 移動   ホイール: ズーム
+右ドラッグ+WASD/QE: 飛行   F: フォーカス
+W / E / R: 移動 / 回転 / 拡大縮小
+Ctrl + ギズモをドラッグ: スナップ",
             );
             return;
         };
@@ -582,13 +594,13 @@ fn ui_panel(
         ui.separator();
         ui.heading(part.name.clone());
         if let Some(face) = face {
-            ui.label(format!("Selected face: #{face}"));
+            ui.label(format!("選択中の面: #{face}"));
         }
         let mut edited = part.clone();
         let mut changed = false;
-        changed |= xyz_editor(ui, "Size W/H/D", &mut edited.size, 0.05, Some(0.01));
-        changed |= xyz_editor(ui, "Position", &mut edited.position, 0.05, None);
-        changed |= xyz_editor(ui, "Rotation (deg)", &mut edited.rotation_deg, 1.0, None);
+        changed |= xyz_editor(ui, "寸法 幅/高さ/奥行", &mut edited.size, 0.05, Some(0.01));
+        changed |= xyz_editor(ui, "位置", &mut edited.position, 0.05, None);
+        changed |= xyz_editor(ui, "回転 (度)", &mut edited.rotation_deg, 1.0, None);
         ui.horizontal(|ui| {
             for (label, axis) in [("+15° X", 0), ("+15° Y", 1), ("+15° Z", 2)] {
                 if ui.button(label).clicked() {
@@ -597,7 +609,7 @@ fn ui_panel(
                 }
             }
         });
-        let delete = ui.button("Delete").clicked();
+        let delete = ui.button("削除").clicked();
 
         if changed {
             *part = edited;

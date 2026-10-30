@@ -36,6 +36,26 @@ cargo run
 
 初回は Bevy のビルドに数分かかります。Linux では `libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev` が必要です。
 
+## テストとCI
+
+PR を作ると GitHub Actions(`.github/workflows/ci.yml`)が次を自動で確認します。main への push でも同じものが走ります。
+
+| ジョブ | 内容 |
+| --- | --- |
+| rustfmt | `cargo fmt --all --check` |
+| clippy + test (Linux) | `cargo clippy --all-targets --locked -- -D warnings` と `cargo test --locked` |
+| build (Windows / macOS) | `cargo check --all-targets --locked` |
+
+どれかが失敗するとPRに赤い✕が付きます。push 前に手元で同じ確認をするときは次を実行します。
+
+```sh
+cargo fmt --all
+cargo clippy --all-targets -- -D warnings
+cargo test
+```
+
+依存のビルド結果は `Swatinem/rust-cache` で OS ごとにキャッシュし(共有キー `cadsim`)、main での実行時だけ保存します。`Cargo.lock` と食い違うと `--locked` で失敗するので、依存を変えたら `Cargo.lock` もコミットしてください。
+
 ## 操作
 
 Unity / Unreal Engine のシーンビューと同じ割り当てにしています。
@@ -52,7 +72,20 @@ Unity / Unreal Engine のシーンビューと同じ割り当てにしていま�
 | F | 選択中の箱にフォーカス |
 | Delete | 選択中の箱を削除 |
 | W / E / R | 移動 / 回転 / 拡大縮小のギズモに切り替え(パネル上部のボタンでも可)。ギズモの軸や輪を左ドラッグ |
+| Ctrl + ギズモを左ドラッグ | スナップ(一定量ずつ動かす)。刻み幅はパネルの「スナップ」欄で設定 |
 | 左パネル | 箱の追加、寸法・位置・回転の編集、+15°回転ボタン |
+
+### スナップ
+
+Ctrl を押している間(またはパネルの「常にスナップ」をオンにしている間)、ギズモの操作が一定量ずつになります。
+
+| ギズモ | 刻み(初期値) | 動き方 |
+| --- | --- | --- |
+| 移動 | Move step(0.1) | ドラッグを始めた位置から 0.1 ずつ動く |
+| 回転 | Rotate step(15°) | ドラッグを始めた向きから 15° ずつ回る。輪に目盛りが出る |
+| 拡大縮小 | Size step(0.1) | 動かした軸の寸法が 0.1 の倍数になる(触っていない軸の寸法はそのまま) |
+
+移動と回転は Unity と同じく「ドラッグ開始からの変化量」を丸めます。拡大縮小だけは倍率ではなく寸法を丸めるので、寸法をきりのいい値にそろえられます。
 
 ## リリースの作り方(開発者向け)
 
@@ -77,13 +110,20 @@ Unity / Unreal Engine のシーンビューと同じ割り当てにしていま�
 3. ソリッドを面ごとにテッセレーションし、面1枚につき Bevy のメッシュエンティティを1つ作る。各エンティティには `FaceTag { part, face }` を付ける。
 4. 左クリックで `MeshRayCast` を撃ち、当たったエンティティの `FaceTag` から部品と面を特定する。
 5. truck の稜線(ポリライン化済み)は Gizmos で黒い線として描く。
-6. ギズモ(`src/gizmo.rs`)は transform-gizmo で計算し、egui の背景レイヤーに描く。ドラッグ結果は箱の位置・回転・寸法(f64)に書き戻し、2. の流れで形状を作り直す。
+6. ギズモ(`src/gizmo.rs`)は transform-gizmo で計算し、egui の背景レイヤーに描く。ドラッグ結果は箱の位置・回転・寸法(f64)に書き戻し、2. の流れで形状を作り直す。スナップは移動・回転を transform-gizmo の機能に任せ、拡大縮小の寸法だけ `snap_size` で丸める。
 
 回転はメッシュの Transform ではなく truck 側の形状に適用しているので、寸法計算や今後の干渉チェックは常に f64 の形状で行えます。
 
+## 日本語フォント
+
+egui の標準フォントには日本語がないため、[Noto Sans JP](https://github.com/notofonts/noto-cjk)(SIL Open Font License 1.1)を埋め込んでいます。
+
+- `assets/fonts/NotoSansJP-Subset.otf` … 英数字・記号・かな・JIS 第1/第2水準漢字だけに絞ったもの(約 2.1 MB)。`include_bytes!` で実行ファイルに入るので、配布時にフォントを別に置く必要はありません。
+- `assets/fonts/OFL.txt` … フォントのライセンス。配布物にも同梱してください。
+- `src/japanese_font.rs` … 起動直後に egui の予備フォントとして登録する。英数字は egui の標準フォント、日本語だけ Noto Sans JP で描かれます。
+- `tools/subset_jp_font.py` … 元フォントから絞り込み版を作り直すスクリプト(使い方はファイル先頭)。
+
 ## 次に手を入れるところ
 
-- UI の日本語表示(egui に日本語フォントを読み込む)
-- ギズモのスナップ(Ctrl を押しながらで一定量ずつ動かす)
 - 平行投影への切り替え
 - 干渉チェック(truck のソリッド同士、または Avian のコライダー)
