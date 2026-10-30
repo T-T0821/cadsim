@@ -10,6 +10,8 @@
 //! - `project`     プロジェクトファイル (.cadsim) の保存と読み込み
 //! - `animation`   ファイルから取り込んだアニメーションの再生
 //! - `viewport`    モデルを 3D 表示し、選択を強調する。クリックで選択
+//! - `part_mesh`   部品1つ分の表示用メッシュ (面をまとめたもの・簡略形状)
+//! - `bvh`         クリック選択を速くする外接箱の木
 //! - `camera`      注視点を回るカメラ、標準ビュー、全体表示
 //! - `gizmo`       移動・回転・拡大縮小のギズモ
 //! - `history`     元に戻す・やり直し
@@ -29,6 +31,7 @@
 mod animation;
 mod annotation;
 mod bench;
+mod bvh;
 mod camera;
 mod file_io;
 mod gizmo;
@@ -38,6 +41,7 @@ mod japanese_font;
 mod math;
 mod model;
 mod motion;
+mod part_mesh;
 mod project;
 mod shortcuts;
 mod simulation;

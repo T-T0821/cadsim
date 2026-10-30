@@ -6,6 +6,7 @@
 //! 2. 製品構成 (PRODUCT_DEFINITION と NEXT_ASSEMBLY_USAGE_OCCURRENCE) からアセンブリの木を作る。
 //! 3. 各部品の形状 (MANIFOLD_SOLID_BREP など) を truck-stepio で B-rep (f64) に変換し、
 //!    表示用にテッセレーションする。同じ部品を何度使っていても形状は1回だけ作る。
+//!    テッセレーションは部品 (製品) ごとに CPU のコア数ぶん並列に行う。
 //! 4. 色 (STYLED_ITEM) と長さの単位も読む。
 //!
 //! STEP は Z 軸が上なので、Y 軸が上の Bevy に合わせる回転はルートの配置に入れる。
@@ -29,6 +30,8 @@ use truck_stepio::r#in::{
     },
 };
 use truck_topology::compress::CompressedShell;
+
+use crate::part_mesh::PartMesh;
 
 /// truck の B-rep (f64)。表示用メッシュの元であり、今後の計測や干渉チェックにも使う。
 pub type Brep = CompressedShell<Point3, Curve3D, Surface>;
@@ -71,6 +74,8 @@ pub struct ImportedShape {
     /// STEP に書かれていた色 (sRGB 0..1)
     pub color: Option<[f32; 3]>,
     pub stats: ShapeStats,
+    /// 表示用のまとめたメッシュ・BVH・簡略形状。重いので読み込みのスレッドで作っておく。
+    pub mesh: Arc<PartMesh>,
 }
 
 /// 部品の計測値 (メッシュから計算するので近似値)
@@ -435,6 +440,7 @@ struct TreeBuilder<'a, 'e> {
 impl TreeBuilder<'_, '_> {
     /// どの親子関係でも子になっていない製品定義をルートとして木を作る
     fn build_roots(&mut self) -> Vec<ImportNode> {
+        self.prepare_shapes();
         let children: HashSet<u64> = self.structure.occurrences.iter().map(|o| o.child).collect();
         let parents: HashSet<u64> = self
             .structure
@@ -464,16 +470,23 @@ impl TreeBuilder<'_, '_> {
             // 製品構成が書かれていないファイル: シェルをそのまま部品として並べる
             let mut shells: Vec<u64> = self.table.shell.keys().copied().collect();
             shells.sort_unstable();
-            nodes = shells
+            let jobs: Vec<(u64, ShapeJob)> = shells
                 .into_iter()
                 .filter_map(|shell| {
-                    let shape = self.make_shape(&[shell], format!("Shell #{shell}"))?;
+                    let job = self.convert_shells(&[shell], &format!("Shell #{shell}"))?;
+                    Some((shell, job))
+                })
+                .collect();
+            nodes = self
+                .tessellate_all(jobs)
+                .into_iter()
+                .filter_map(|(shell, shape)| {
                     Some(ImportNode {
                         name: format!("Shell #{shell}"),
                         product: format!("Shell #{shell}"),
                         placement: DMat4::IDENTITY,
                         children: Vec::new(),
-                        shape: Some(shape),
+                        shape: Some(shape?),
                     })
                 })
                 .collect();
@@ -545,15 +558,7 @@ impl TreeBuilder<'_, '_> {
         if let Some(shape) = self.shapes.get(&pd) {
             return shape.clone();
         }
-        let shells: Vec<u64> = self
-            .structure
-            .representations
-            .get(&pd)
-            .into_iter()
-            .flatten()
-            .flat_map(|&rep| representation_items(self.entities, rep))
-            .flat_map(|item| shells_of_item(self.entities, item))
-            .collect();
+        let shells = self.product_shells(pd);
         let name = self.structure.product_names[&pd].clone();
         let shape = if shells.is_empty() {
             None
@@ -564,8 +569,52 @@ impl TreeBuilder<'_, '_> {
         shape
     }
 
+    /// 製品定義の形状を作るシェル
+    fn product_shells(&self, pd: u64) -> Vec<u64> {
+        self.structure
+            .representations
+            .get(&pd)
+            .into_iter()
+            .flatten()
+            .flat_map(|&rep| representation_items(self.entities, rep))
+            .flat_map(|item| shells_of_item(self.entities, item))
+            .collect()
+    }
+
+    /// 形状を持つ製品をすべて先にまとめて作る。いちばん重いテッセレーションを
+    /// CPU のコア数ぶん並列に行い、木を組み立てるときはできたものを引くだけにする。
+    fn prepare_shapes(&mut self) {
+        let mut products: Vec<u64> = self.structure.representations.keys().copied().collect();
+        products.sort_unstable();
+        let mut jobs = Vec::new();
+        for pd in products {
+            let shells = self.product_shells(pd);
+            let name = self
+                .structure
+                .product_names
+                .get(&pd)
+                .cloned()
+                .unwrap_or_default();
+            match self.convert_shells(&shells, &name) {
+                Some(job) => jobs.push((pd, job)),
+                None => {
+                    self.shapes.insert(pd, None);
+                }
+            }
+        }
+        for (pd, shape) in self.tessellate_all(jobs) {
+            self.shapes.insert(pd, shape);
+        }
+    }
+
     /// シェルを B-rep に変換してテッセレーションし、1つの部品形状にまとめる
     fn make_shape(&mut self, shells: &[u64], name: String) -> Option<Arc<ImportedShape>> {
+        let job = self.convert_shells(shells, &name)?;
+        self.tessellate_all(vec![((), job)]).pop()?.1
+    }
+
+    /// シェルを B-rep に変換する (テッセレーションはまだしない)。読めたものが無ければ None。
+    fn convert_shells(&mut self, shells: &[u64], name: &str) -> Option<ShapeJob> {
         let mut breps = Vec::new();
         for &id in shells {
             let converted = self
@@ -588,15 +637,74 @@ impl TreeBuilder<'_, '_> {
         if breps.is_empty() {
             return None;
         }
-        let color = shells.iter().find_map(|s| self.colors.get(s).copied());
-        let shape = tessellate(breps, color);
-        if shape.faces.is_empty() {
-            self.warnings
-                .push(format!("{name}: 面をメッシュにできませんでした"));
-            return None;
-        }
-        Some(Arc::new(shape))
+        Some(ShapeJob {
+            name: name.to_owned(),
+            color: shells.iter().find_map(|s| self.colors.get(s).copied()),
+            breps,
+        })
     }
+
+    /// 変換した B-rep を並列にテッセレーションする。`key` は結果を見分けるための値。
+    fn tessellate_all<K: Send>(
+        &mut self,
+        jobs: Vec<(K, ShapeJob)>,
+    ) -> Vec<(K, Option<Arc<ImportedShape>>)> {
+        parallel_map(jobs, |(key, job)| {
+            let name = job.name;
+            (key, name, tessellate(job.breps, job.color))
+        })
+        .into_iter()
+        .map(|(key, name, shape)| {
+            if shape.faces.is_empty() {
+                self.warnings
+                    .push(format!("{name}: 面をメッシュにできませんでした"));
+                (key, None)
+            } else {
+                (key, Some(Arc::new(shape)))
+            }
+        })
+        .collect()
+    }
+}
+
+/// テッセレーション待ちの形状
+struct ShapeJob {
+    name: String,
+    breps: Vec<Brep>,
+    color: Option<[f32; 3]>,
+}
+
+/// `items` を CPU のコア数ぶんのスレッドで `f` にかけ、元の順に並べて返す
+fn parallel_map<T: Send, R: Send>(items: Vec<T>, f: impl Fn(T) -> R + Sync) -> Vec<R> {
+    let threads = std::thread::available_parallelism()
+        .map_or(1, |n| n.get())
+        .min(items.len());
+    if threads <= 1 {
+        return items.into_iter().map(f).collect();
+    }
+    let count = items.len();
+    // 重さが形状ごとにばらばらなので、空いたスレッドが次の1つを取りに来る形にする
+    let queue = std::sync::Mutex::new(items.into_iter().enumerate());
+    let results = std::sync::Mutex::new(Vec::with_capacity(count));
+    std::thread::scope(|scope| {
+        for _ in 0..threads {
+            scope.spawn(|| {
+                loop {
+                    let next = queue.lock().map(|mut q| q.next()).ok().flatten();
+                    let Some((index, item)) = next else {
+                        break;
+                    };
+                    let result = f(item);
+                    if let Ok(mut results) = results.lock() {
+                        results.push((index, result));
+                    }
+                }
+            });
+        }
+    });
+    let mut results = results.into_inner().unwrap_or_default();
+    results.sort_by_key(|(index, _)| *index);
+    results.into_iter().map(|(_, r)| r).collect()
 }
 
 /// 表現 (REPRESENTATION の仲間) が持つアイテムの id
@@ -799,6 +907,7 @@ impl ImportedShape {
     ) -> Self {
         let mut stats = mesh_stats(&faces);
         stats.edge_count = edges.len();
+        let mesh = Arc::new(PartMesh::new(&faces, &edges));
         ImportedShape {
             id: next_shape_id(),
             breps,
@@ -806,6 +915,7 @@ impl ImportedShape {
             edges,
             color,
             stats,
+            mesh,
         }
     }
 }
@@ -852,6 +962,12 @@ pub fn mesh_stats(faces: &[PolygonMesh]) -> ShapeStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parallel_map_keeps_order() {
+        let out = parallel_map((0..100).collect(), |i: u64| i * i);
+        assert_eq!(out, (0..100).map(|i| i * i).collect::<Vec<_>>());
+    }
 
     const SAMPLE: &str = include_str!("../assets/sample_assembly.step");
 

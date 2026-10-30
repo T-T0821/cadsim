@@ -6,15 +6,11 @@
 //!
 //! 点はクリック位置 (f32 の表示メッシュ) を f64 の形状の表面に載せ直してから使う。
 
-use bevy::{
-    math::DVec3,
-    picking::mesh_picking::ray_cast::{MeshRayCast, MeshRayCastSettings},
-    prelude::*,
-    window::PrimaryWindow,
-};
+use bevy::{math::DVec3, prelude::*, window::PrimaryWindow};
 use bevy_egui::{EguiContexts, egui};
 
 use super::{SimBody, view::SimulationGizmos};
+use crate::viewport::PartPicker;
 
 /// 頂点に吸着する範囲 (画面上のピクセル)
 const SNAP_PIXELS: f32 = 12.0;
@@ -84,22 +80,16 @@ pub fn pick_point(
     keys: Res<ButtonInput<KeyCode>>,
     window: Single<&Window, With<PrimaryWindow>>,
     camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
-    mut ray_cast: MeshRayCast,
-    parents: Query<&ChildOf>,
+    picker: PartPicker,
     bodies: Query<&SimBody>,
     mut tool: ResMut<MeasureTool>,
 ) {
     let (camera, camera_transform) = *camera;
     tool.hover = window.cursor_position().and_then(|cursor| {
         let ray = camera.viewport_to_world(camera_transform, cursor).ok()?;
-        // 当たった面メッシュの親 (部品のルート) が SimBody を持っている
-        let (body, point) = ray_cast
-            .cast_ray(ray, &MeshRayCastSettings::default())
-            .iter()
-            .find_map(|(entity, hit)| {
-                let parent = parents.get(*entity).ok()?.parent();
-                Some((bodies.get(parent).ok()?, hit.point))
-            })?;
+        // 当たった部品のエンティティが SimBody を持っている
+        let hit = picker.cast(ray)?;
+        let (body, point) = (bodies.get(hit.entity).ok()?, hit.point);
         Some(snap(body, point, cursor, camera, camera_transform))
     });
 

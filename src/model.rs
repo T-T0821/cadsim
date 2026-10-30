@@ -399,10 +399,6 @@ impl Model {
         chain
     }
 
-    pub fn is_in_subtree(&self, id: NodeId, root: NodeId) -> bool {
-        self.ancestors(id).contains(&root)
-    }
-
     /// "SampleVise / Bracket_L / Upright_1" のような道順
     pub fn path_label(&self, id: NodeId) -> String {
         self.ancestors(id)
@@ -427,7 +423,8 @@ impl Model {
             .all(|a| self.nodes.get(a).is_some_and(|n| n.visible))
     }
 
-    /// 表示に使う色 (自分か祖先に付けた色 → STEP の色 → 既定色)
+    /// 表示に使う色 (自分か祖先に付けた色 → STEP の色 → 既定色)。
+    /// 3D 表示では `visit_parts` がまとめて求める。
     pub fn display_color(&self, id: NodeId) -> [f32; 3] {
         let assigned = self
             .ancestors(id)
@@ -439,6 +436,64 @@ impl Model {
             _ => None,
         };
         assigned.or(from_file).unwrap_or(DEFAULT_PART_COLOR)
+    }
+
+    /// すべての部品を、ワールド配置・表示/非表示・色を求めながら1回の深さ優先でたどる。
+    /// 部品ごとに祖先をたどり直す `world_matrix` などより速いので、毎フレームの表示更新に使う。
+    pub fn visit_parts(&self, mut f: impl FnMut(PartVisit)) {
+        struct Frame {
+            id: NodeId,
+            depth: usize,
+            parent_world: DMat4,
+            parent_shown: bool,
+            parent_color: Option<[f32; 3]>,
+        }
+        let mut path: Vec<NodeId> = Vec::new();
+        let mut stack: Vec<Frame> = self
+            .roots
+            .iter()
+            .rev()
+            .map(|&id| Frame {
+                id,
+                depth: 0,
+                parent_world: DMat4::IDENTITY,
+                parent_shown: true,
+                parent_color: None,
+            })
+            .collect();
+        while let Some(frame) = stack.pop() {
+            let Some(node) = self.nodes.get(&frame.id) else {
+                continue;
+            };
+            path.truncate(frame.depth);
+            path.push(frame.id);
+            let world = frame.parent_world * node.placement;
+            let shown = frame.parent_shown && node.visible;
+            let assigned = node.color.or(frame.parent_color);
+            if node.kind.is_part() {
+                let from_file = match &node.kind {
+                    NodeKind::Imported { shape, .. } => shape.color,
+                    _ => None,
+                };
+                f(PartVisit {
+                    id: frame.id,
+                    path: &path,
+                    world,
+                    shown,
+                    color: assigned.or(from_file).unwrap_or(DEFAULT_PART_COLOR),
+                    local_bounds: self.local_bounds(node),
+                });
+            }
+            for &child in node.children.iter().rev() {
+                stack.push(Frame {
+                    id: child,
+                    depth: frame.depth + 1,
+                    parent_world: world,
+                    parent_shown: shown,
+                    parent_color: assigned,
+                });
+            }
+        }
     }
 
     /// 部品の座標系での外接箱
@@ -500,6 +555,20 @@ impl Model {
         }
         m
     }
+}
+
+/// `Model::visit_parts` が部品ごとに渡す情報
+pub struct PartVisit<'a> {
+    pub id: NodeId,
+    /// ルートから自分までの id (自分を含む)
+    pub path: &'a [NodeId],
+    pub world: DMat4,
+    /// 自分と祖先がすべて表示中
+    pub shown: bool,
+    /// `display_color` と同じ色
+    pub color: [f32; 3],
+    /// 部品の座標系での外接箱
+    pub local_bounds: Option<Aabb>,
 }
 
 /// いま選んでいるもの
@@ -578,6 +647,23 @@ mod tests {
         model.remove(bracket);
         assert_eq!(model.measure(root).part_count, 5);
         assert_eq!(model.dirty.len(), 3);
+    }
+
+    #[test]
+    fn visit_parts_matches_per_node_queries() {
+        let (mut model, root) = sample_model();
+        let bracket = find(&model, "Bracket_L");
+        model.get_mut(bracket).unwrap().visible = false;
+        model.get_mut(bracket).unwrap().color = Some([1.0, 0.0, 0.0]);
+        let mut count = 0;
+        model.visit_parts(|v| {
+            count += 1;
+            assert_eq!(v.path, model.ancestors(v.id).as_slice());
+            assert!(v.world.abs_diff_eq(model.world_matrix(v.id), 1e-12));
+            assert_eq!(v.shown, model.is_shown(v.id));
+            assert_eq!(v.color, model.display_color(v.id));
+        });
+        assert_eq!(count, model.measure(root).part_count);
     }
 
     #[test]

@@ -29,6 +29,19 @@ pub fn show(root: &mut egui::Ui, state: &mut UiState) {
                 if let Some(fps) = fps {
                     ui.monospace(format!("{fps:5.1} FPS"));
                 }
+                let stats = *state.render_stats;
+                if stats.parts > 0 {
+                    ui.separator();
+                    ui.weak(format!("三角形 {}", stats.triangles))
+                        .on_hover_text(format!(
+                            "部品 {} 個のうち\n詳細に表示: {}\n簡略表示: {}\n小さいので省略: {}\n画面の外: {}",
+                            stats.parts,
+                            stats.full,
+                            stats.coarse,
+                            stats.hidden_small,
+                            stats.outside_view
+                        ));
+                }
                 ui.separator();
                 if let Some(message) = state.jobs.messages.last() {
                     ui.weak(message);

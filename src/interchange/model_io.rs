@@ -11,7 +11,7 @@ use truck_meshalgo::prelude::*;
 
 use super::{Animation, NodeTransform, Scene, SceneNode, TriMesh};
 use crate::model::{Model, NodeId, NodeKind};
-use crate::step_import::{ImportNode, ImportedFile, ImportedShape, mesh_stats, next_shape_id};
+use crate::step_import::{ImportNode, ImportedFile, ImportedShape};
 
 /// 箱を書き出すときのテッセレーションの許容誤差 (モデル単位)
 const BOX_TESSELLATION_TOL: f64 = 0.005;
@@ -143,17 +143,7 @@ fn mesh_shape(mesh: &TriMesh, scale: f64, color: Option<[f32; 3]>) -> ImportedSh
         },
         faces,
     );
-    let faces = vec![poly];
-    let mut stats = mesh_stats(&faces);
-    stats.edge_count = edges.len();
-    ImportedShape {
-        id: next_shape_id(),
-        breps: Vec::new(),
-        faces,
-        edges,
-        color,
-        stats,
-    }
+    ImportedShape::new(Vec::new(), vec![poly], edges, color)
 }
 
 /// 面が折れている辺と、穴の縁の辺を線分で返す (メッシュには B-rep の稜線がないので代わりに描く)
