@@ -25,6 +25,7 @@ use crate::camera::{ViewportRect, alt_pressed, pointer_in_3d_view};
 use crate::gizmo::gizmo_not_focused;
 use crate::math::to_transform;
 use crate::model::{Model, NodeId, NodeKind, Selection};
+use crate::motion::{MotionSet, SimulationPose};
 use crate::simulation::{self, InterferenceCheck, Pose, SimBody, TriMesh, measure::not_measuring};
 
 /// 箱のテッセレーションの許容誤差 (モデル単位)
@@ -46,7 +47,8 @@ impl Plugin for ViewportPlugin {
                         .run_if(not_measuring)
                         .run_if(annotate_tool_off),
                     rebuild_dirty_parts,
-                    sync_placement_and_visibility,
+                    // 動作シミュレーションの動きが決まってから配置を写す
+                    sync_placement_and_visibility.after(MotionSet::Pose),
                     update_materials,
                     draw_edges_grid_and_bounds,
                 )
@@ -285,18 +287,23 @@ fn polygon_to_bevy_mesh(poly: &PolygonMesh) -> Mesh {
 // 毎フレームの同期
 // ---------------------------------------------------------------------------
 
-/// 配置 (ギズモで動かしたとき) と表示/非表示をモデルから写す
+/// 配置 (ギズモで動かしたとき) と表示/非表示をモデルから写す。
+/// 動作シミュレーションの再生中は、設計上の配置にアクチュエータの動きを重ねる。
 fn sync_placement_and_visibility(
     model: Res<Model>,
+    motion: Res<SimulationPose>,
     mut views: Query<(&PartView, &mut Transform, &mut Visibility, &mut SimBody)>,
 ) {
     for (view, mut transform, mut visibility, mut body) in &mut views {
-        let matrix = model.world_matrix(view.node);
+        let mut matrix = model.world_matrix(view.node);
+        if let Some(moved) = motion.pose_of(&model, view.node) {
+            matrix = moved.to_dmat4() * matrix;
+        }
         let wanted = to_transform(matrix);
         if *transform != wanted {
             *transform = wanted;
         }
-        // 変わったときだけ書く (書くと干渉チェックが走る)
+        // 変わったときだけ書く (書くと干渉チェックが走る)。再生中は動いた位置で判定される。
         let pose = Pose::from_matrix(matrix);
         if body.pose != pose {
             body.pose = pose;

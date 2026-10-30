@@ -13,6 +13,7 @@
 //! - `camera`      注視点を回るカメラ、標準ビュー、全体表示
 //! - `gizmo`       移動・回転・拡大縮小のギズモ
 //! - `history`     元に戻す・やり直し
+//! - `motion`      タイミングチャート (ステップ) の編集と動作シミュレーション
 //! - `shortcuts`   キーボードショートカット
 //! - `ui`          メニュー・ツリー・プロパティ・ステータスバー・ビューキューブ
 //! - `japanese_font` egui に埋め込みの日本語フォントを登録する
@@ -30,6 +31,7 @@ mod interchange;
 mod japanese_font;
 mod math;
 mod model;
+mod motion;
 mod project;
 mod shortcuts;
 mod simulation;
@@ -66,6 +68,7 @@ fn main() {
             ui::UiPlugin,
             simulation::SimulationPlugin,
             annotation::AnnotationPlugin,
+            motion::MotionPlugin,
         ))
         .run();
 }
