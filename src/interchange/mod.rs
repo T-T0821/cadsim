@@ -17,6 +17,7 @@ pub mod obj;
 #[cfg(test)]
 mod samples;
 pub mod stl;
+pub mod usd;
 
 /// 読み書きの結果。エラーは利用者に見せる日本語の文
 pub type ExchangeResult<T> = Result<T, String>;
@@ -297,6 +298,14 @@ pub const FORMATS: &[Format] = &[
         export: Some(stl::export),
         needs_units: true,
         export_note: "形状を1つにまとめる (色・階層なし)",
+    },
+    Format {
+        name: "OpenUSD (.usda / .usdc / .usdz / .usd)",
+        extensions: &["usda", "usdc", "usdz", "usd"],
+        import: Some(usd::import),
+        export: Some(usd::export),
+        needs_units: false,
+        export_note: "",
     },
 ];
 

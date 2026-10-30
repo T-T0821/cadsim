@@ -123,7 +123,10 @@ fn write_samples() {
     let mut model = Model::default();
     model.add_imported(file.root, file.unit, crate::model::StepSource::Sample);
     let (scene, _) = model_to_scene(&model, &[]);
-    for ext in ["glb", "gltf", "obj", "stl"] {
+    for ext in ["glb", "gltf", "obj", "stl", "usda", "usdz"] {
         export_file(&scene, &out.join(format!("vise.{ext}")), &units).unwrap();
+    }
+    for ext in ["usda", "usdz"] {
+        export_file(&robot(), &out.join(format!("robot.{ext}")), &units).unwrap();
     }
 }
