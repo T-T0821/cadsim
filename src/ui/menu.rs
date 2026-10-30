@@ -46,6 +46,7 @@ fn view_menu(ui: &mut egui::Ui, state: &mut UiState) {
         if ui.button("選択を拡大  (F)").clicked() {
             state.camera.write(CameraRequest::FitSelection);
         }
+        projection_buttons(ui, state);
         ui.menu_button("標準ビュー", |ui| {
             for view in StandardView::ALL {
                 let label = format!("{}  ({})", view.label(), view.shortcut());
@@ -92,6 +93,7 @@ fn help_menu(ui: &mut egui::Ui) {
                     "1 / 3 / 7 / 0",
                     "正面 / 右側面 / 上面 / 等角 (Ctrl で反対側)",
                 ),
+                ("5", "透視投影 / 平行投影を切り替え"),
                 ("H / Alt+H", "選択を隠す / すべて表示"),
                 ("Esc", "選択を解除"),
                 ("Delete", "選択を削除"),
@@ -123,6 +125,9 @@ fn toolbar(ui: &mut egui::Ui, state: &mut UiState) {
         }
         ui.separator();
 
+        projection_buttons(ui, state);
+        ui.separator();
+
         for view in StandardView::ALL {
             let button = ui.button(view.label()).on_hover_text(format!(
                 "{}ビュー ({})",
@@ -145,6 +150,35 @@ fn toolbar(ui: &mut egui::Ui, state: &mut UiState) {
         ui.toggle_value(&mut state.settings.show_edges, "稜線");
         ui.toggle_value(&mut state.settings.ghost_unselected, "半透明")
             .on_hover_text("選択以外を半透明にする");
+    });
+}
+
+/// 「透視」「平行」の切り替えボタン (メニューとツールバーで共通)
+fn projection_buttons(ui: &mut egui::Ui, state: &mut UiState) {
+    ui.horizontal(|ui| {
+        for (orthographic, label, hover) in [
+            (
+                false,
+                "透視",
+                "透視投影: 遠くのものほど小さく見える (5 で切り替え)",
+            ),
+            (
+                true,
+                "平行",
+                "平行投影: 距離によらず同じ大きさに見える (5 で切り替え)",
+            ),
+        ] {
+            let selected = state.orbit.orthographic == orthographic;
+            if ui
+                .selectable_label(selected, label)
+                .on_hover_text(hover)
+                .clicked()
+            {
+                state
+                    .camera
+                    .write(CameraRequest::SetOrthographic(orthographic));
+            }
+        }
     });
 }
 

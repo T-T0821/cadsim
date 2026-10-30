@@ -74,6 +74,10 @@ fn keyboard_shortcuts(
             camera.write(CameraRequest::View(if ctrl { opposite } else { view }));
         }
     }
+    // 透視投影 / 平行投影の切り替え (Blender のテンキー 5 と同じ)
+    if keys.any_just_pressed([KeyCode::Digit5, KeyCode::Numpad5]) {
+        camera.write(CameraRequest::ToggleProjection);
+    }
     if keys.just_pressed(KeyCode::Home) {
         camera.write(CameraRequest::FitAll);
     }

@@ -2,13 +2,14 @@
 //!
 //! - Alt + 左ドラッグ: オービット / 中ドラッグ: パン / ホイール, Alt + 右ドラッグ: ズーム
 //! - 右ドラッグ: その場で見回す。押している間 WASD で移動、Q / E で下降 / 上昇
+//! - 透視投影と平行投影を切り替えられる。どちらでも上の操作はそのまま使える。
 //! - 標準ビュー (正面・上面・等角など) と全体表示は `CameraRequest` で頼む。
 //!   切り替えは少しだけアニメーションさせて、どこから来たか分かるようにする。
 
 use std::f32::consts::{FRAC_PI_2, FRAC_PI_4};
 
 use bevy::{
-    camera::Viewport,
+    camera::{ScalingMode, Viewport},
     input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll},
     prelude::*,
     window::PrimaryWindow,
@@ -17,6 +18,13 @@ use bevy::{
 use crate::gizmo::gizmo_not_focused;
 use crate::math::Aabb;
 use crate::model::{Model, Selection};
+
+/// 透視投影の縦の画角 (Bevy の既定値と同じ 45°)
+const FOV_Y: f32 = FRAC_PI_4;
+
+/// 平行投影で描く奥行 (カメラの前後それぞれ、注視点までの距離の何倍まで描くか)。
+/// 広すぎると深度の精度が落ちて、面の上の稜線が面に埋もれやすくなる。
+const ORTHO_DEPTH_RATIO: f32 = 20.0;
 
 pub struct CameraPlugin;
 
@@ -114,6 +122,10 @@ pub enum CameraRequest {
     FitAll,
     /// 選択中のものが収まるようにする
     FitSelection,
+    /// true で平行投影、false で透視投影にする
+    SetOrthographic(bool),
+    /// 透視投影と平行投影を入れ替える
+    ToggleProjection,
 }
 
 #[derive(Clone, Copy)]
@@ -130,6 +142,8 @@ pub struct OrbitCamera {
     pub yaw: f32,
     pub pitch: f32,
     pub distance: f32,
+    /// true なら平行投影、false なら透視投影
+    pub orthographic: bool,
     /// アニメーションの行き先
     target: Option<Pose>,
 }
@@ -141,6 +155,7 @@ impl Default for OrbitCamera {
             yaw: 0.8,
             pitch: 0.5,
             distance: 8.0,
+            orthographic: false,
             target: None,
         }
     }
@@ -163,6 +178,13 @@ impl OrbitCamera {
             pitch: target.map_or(self.pitch, |t| t.pitch),
             distance: target.map_or(self.distance, |t| t.distance),
         }
+    }
+
+    /// 平行投影の画面の高さ (ワールド単位)。
+    /// 透視投影で注視点の位置に見える高さと同じにするので、切り替えても注視点付近の大きさは
+    /// 変わらず、距離を変えるズームがそのまま平行投影のズームになる。
+    fn ortho_height(&self) -> f32 {
+        2.0 * self.distance * (FOV_Y / 2.0).tan()
     }
 
     /// 手で操作したらアニメーションは止める
@@ -311,6 +333,18 @@ fn handle_camera_requests(
     camera: Single<&Projection, With<Camera3d>>,
 ) {
     for request in requests.read() {
+        // 投影の切り替えは見る位置を変えないので、アニメーションさせずにすぐ反映する
+        match *request {
+            CameraRequest::SetOrthographic(orthographic) => {
+                orbit.orthographic = orthographic;
+                continue;
+            }
+            CameraRequest::ToggleProjection => {
+                orbit.orthographic = !orbit.orthographic;
+                continue;
+            }
+            _ => {}
+        }
         let mut pose = orbit.pose();
         match request {
             CameraRequest::View(view) => {
@@ -332,6 +366,9 @@ fn handle_camera_requests(
                 };
                 fit_pose(&mut pose, bounds, &camera);
             }
+            CameraRequest::SetOrthographic(_) | CameraRequest::ToggleProjection => {
+                unreachable!("上で処理済み")
+            }
         }
         // ヨーは近い向きから回るようにする (359° → 1° で一周しない)
         let turn = (pose.yaw - orbit.yaw + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU)
@@ -343,9 +380,10 @@ fn handle_camera_requests(
 
 /// 外接球がちょうど画面に収まる距離にする
 fn fit_pose(pose: &mut Pose, bounds: Aabb, projection: &Projection) {
+    // 平行投影は画面の高さを透視投影の画角から決めているので、同じ画角で計算すればよい
     let fov = match projection {
         Projection::Perspective(p) => p.fov.min(p.fov * p.aspect_ratio),
-        _ => FRAC_PI_4,
+        _ => FOV_Y,
     };
     let radius = (bounds.size().length() / 2.0).max(1e-6) as f32;
     pose.focus = bounds.center().as_vec3();
@@ -380,9 +418,37 @@ fn animate_and_apply_camera(
     let (mut transform, mut projection) = camera.into_inner();
     transform.translation = orbit.eye();
     transform.rotation = orbit.rotation();
-    // mm 単位の大きな部品でも小さな部品でも欠けないよう、近クリップ面を距離に合わせる
-    if let Projection::Perspective(p) = projection.as_mut() {
-        p.near = (orbit.distance * 1e-3).max(1e-5);
+    apply_projection(&orbit, &mut projection);
+}
+
+/// OrbitCamera の投影モードと距離を Bevy の Projection に写す
+fn apply_projection(orbit: &OrbitCamera, projection: &mut Projection) {
+    match (orbit.orthographic, &mut *projection) {
+        (false, Projection::Perspective(p)) => {
+            // mm 単位の大きな部品でも小さな部品でも欠けないよう、近クリップ面を距離に合わせる
+            p.near = (orbit.distance * 1e-3).max(1e-5);
+        }
+        (true, Projection::Orthographic(p)) => {
+            p.scaling_mode = ScalingMode::FixedVertical {
+                viewport_height: orbit.ortho_height(),
+            };
+            // 平行投影ではカメラの後ろも描く。ズームやフライ移動でカメラが物体を
+            // 通り越しても、物体が消えないようにするため。
+            p.far = orbit.distance * ORTHO_DEPTH_RATIO;
+            p.near = -p.far;
+        }
+        // モードが変わったときだけ作り直す
+        (false, _) => {
+            *projection = Projection::Perspective(PerspectiveProjection {
+                fov: FOV_Y,
+                ..default()
+            });
+            apply_projection(orbit, projection);
+        }
+        (true, _) => {
+            *projection = Projection::Orthographic(OrthographicProjection::default_3d());
+            apply_projection(orbit, projection);
+        }
     }
 }
 
