@@ -9,6 +9,8 @@
 //! │ (tree.rs) │      ビューキューブ ┐    │(properties│
 //! │           │      (view_cube.rs) ┘   │   .rs)   │
 //! ├──────────┴────────────────────────┴──────────┤
+//! │ タイミングチャート          (motion/ui.rs)      │
+//! ├──────────────────────────────────────────────┤
 //! │ ステータスバー                     (status.rs) │
 //! └──────────────────────────────────────────────┘
 //! ```
@@ -41,6 +43,7 @@ use crate::gizmo::{GizmoTool, transform_gizmo_system};
 use crate::history::History;
 use crate::japanese_font::install_japanese_font;
 use crate::model::{Model, Selection};
+use crate::motion::{self, MotionUi, at_design_pose};
 use crate::project::{ProjectState, show_confirm_dialog};
 use crate::viewport::ViewSettings;
 
@@ -50,7 +53,13 @@ impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, spawn_ui_camera).add_systems(
             EguiPrimaryContextPass,
-            (install_japanese_font, draw_ui, transform_gizmo_system).chain(),
+            (
+                install_japanese_font,
+                draw_ui,
+                // 動作シミュレーションで部品が動いている間はギズモで編集しない
+                transform_gizmo_system.run_if(at_design_pose),
+            )
+                .chain(),
         );
     }
 }
@@ -69,6 +78,7 @@ pub struct UiState<'w> {
     pub orbit: Res<'w, OrbitCamera>,
     pub camera: MessageWriter<'w, CameraRequest>,
     pub viewport: ResMut<'w, ViewportRect>,
+    pub motion: MotionUi<'w>,
 }
 
 /// UI 専用のカメラ。3D カメラはパネルを除いた領域だけに描くので、
@@ -104,6 +114,13 @@ fn draw_ui(mut contexts: EguiContexts, mut state: UiState) -> Result {
     );
     menu::show(&mut root, &mut state);
     status::show(&mut root, &mut state);
+    motion::show_panel(
+        &mut root,
+        &mut state.motion,
+        &mut state.model,
+        &state.selection,
+        &mut state.camera,
+    );
     tree::show(&mut root, &mut state);
     properties::show(&mut root, &mut state);
 
