@@ -10,6 +10,7 @@
 //! - ホイール / Alt + 右ドラッグ: ズーム
 //! - 右ドラッグ: その場で見回す。押している間 WASD で移動、Q / E で下降 / 上昇、Shift で加速
 //! - F: 選択中の箱にフォーカス / Delete: 選択中の箱を削除
+//! - O: 透視投影 / 平行投影の切り替え
 //! - W / E / R: 移動 / 回転 / 拡大縮小のギズモに切り替え (ギズモの軸を左ドラッグ)
 //! - Ctrl + ギズモをドラッグ: 一定量ずつ動かす (刻み幅はパネルで設定)
 //! - 左パネル: 箱の追加、寸法・位置・回転の編集、削除
@@ -18,6 +19,7 @@ use std::collections::HashSet;
 
 use bevy::{
     asset::RenderAssetUsages,
+    camera::ScalingMode,
     input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll},
     mesh::PrimitiveTopology,
     picking::mesh_picking::ray_cast::{MeshRayCast, MeshRayCastSettings},
@@ -39,6 +41,14 @@ use gizmo::{GizmoTool, Tool, gizmo_not_focused, snap_settings_ui, transform_gizm
 
 /// テッセレーションの許容誤差 (モデル単位)
 const TESSELLATION_TOL: f64 = 0.005;
+
+/// 透視投影の縦の画角 (Bevy の既定値と同じ 45°)
+const FOV_Y: f32 = std::f32::consts::FRAC_PI_4;
+
+/// 平行投影で描く奥行の範囲。カメラの前後どちらもこの距離まで描く。
+/// 平行投影では見た目の大きさがカメラ位置に依存しないので、ズームやフライ移動で
+/// カメラが物体を通り越しても、後ろの物体が消えないようにしておく。
+const ORTHO_DEPTH: f32 = 1000.0;
 
 fn main() {
     App::new()
@@ -198,6 +208,8 @@ struct OrbitCamera {
     yaw: f32,
     pitch: f32,
     distance: f32,
+    /// true なら平行投影、false なら透視投影
+    orthographic: bool,
 }
 
 impl Default for OrbitCamera {
@@ -207,6 +219,7 @@ impl Default for OrbitCamera {
             yaw: 0.8,
             pitch: 0.5,
             distance: 8.0,
+            orthographic: false,
         }
     }
 }
@@ -375,6 +388,27 @@ impl OrbitCamera {
     fn eye(&self) -> Vec3 {
         self.focus + self.rotation() * Vec3::new(0.0, 0.0, self.distance)
     }
+
+    /// 現在のモードの投影。
+    /// 平行投影の画面の高さは、透視投影で注視点の位置に見える高さと同じにする。
+    /// こうすると切り替えても注視点付近の大きさが変わらず、ホイールのズームもそのまま効く。
+    fn projection(&self) -> Projection {
+        if self.orthographic {
+            Projection::Orthographic(OrthographicProjection {
+                scaling_mode: ScalingMode::FixedVertical {
+                    viewport_height: 2.0 * self.distance * (FOV_Y / 2.0).tan(),
+                },
+                near: -ORTHO_DEPTH,
+                far: ORTHO_DEPTH,
+                ..OrthographicProjection::default_3d()
+            })
+        } else {
+            Projection::Perspective(PerspectiveProjection {
+                fov: FOV_Y,
+                ..default()
+            })
+        }
+    }
 }
 
 fn mouse_camera_input(
@@ -447,6 +481,10 @@ fn keyboard_input(
         return;
     }
 
+    if keys.just_pressed(KeyCode::KeyO) {
+        orbit.orthographic = !orbit.orthographic;
+    }
+
     // ギズモの切り替え (Unity / Unreal と同じ W / E / R)
     for (key, tool) in [
         (KeyCode::KeyW, Tool::Translate),
@@ -476,9 +514,17 @@ fn keyboard_input(
     }
 }
 
-fn apply_camera(orbit: Res<OrbitCamera>, mut camera: Single<&mut Transform, With<Camera3d>>) {
-    camera.translation = orbit.eye();
-    camera.rotation = orbit.rotation();
+fn apply_camera(
+    orbit: Res<OrbitCamera>,
+    camera: Single<(&mut Transform, &mut Projection), With<Camera3d>>,
+) {
+    if !orbit.is_changed() {
+        return;
+    }
+    let (mut transform, mut projection) = camera.into_inner();
+    transform.translation = orbit.eye();
+    transform.rotation = orbit.rotation();
+    *projection = orbit.projection();
 }
 
 // ---------------------------------------------------------------------------
@@ -532,12 +578,26 @@ fn ui_panel(
     mut model: ResMut<Model>,
     mut selection: ResMut<Selection>,
     mut gizmo_tool: ResMut<GizmoTool>,
+    mut orbit: ResMut<OrbitCamera>,
 ) -> Result {
     let window = egui::Window::new("部品")
         .anchor(egui::Align2::LEFT_TOP, [8.0, 8.0])
         .resizable(false)
         .collapsible(true);
     window.show(contexts.ctx_mut()?, |ui| {
+        ui.horizontal(|ui| {
+            ui.label("表示:");
+            for (orthographic, label) in [(false, "透視投影"), (true, "平行投影")] {
+                // 毎フレーム書き込むとカメラが変更扱いになるので、押されたときだけ書く
+                if ui
+                    .selectable_label(orbit.orthographic == orthographic, label)
+                    .clicked()
+                {
+                    orbit.orthographic = orthographic;
+                }
+            }
+            ui.label("(O で切替)");
+        });
         ui.horizontal(|ui| {
             for tool in [Tool::Translate, Tool::Rotate, Tool::Scale] {
                 if ui

@@ -232,17 +232,25 @@ pub fn transform_gizmo_system(
         return Ok(());
     };
 
-    // 標準的な透視投影行列を作り直して渡す (Bevy は reverse-Z の無限遠投影なので)
+    // 標準的な投影行列を作り直して渡す (Bevy は reverse-Z の無限遠投影なので)
     let (camera_transform, projection) = *camera;
-    let fov = match projection {
-        Projection::Perspective(p) => p.fov,
-        _ => std::f32::consts::FRAC_PI_4,
-    };
     let size = window.size();
     let aspect = (size.x / size.y.max(1.0)) as f64;
     let view = Mat4::from(camera_transform.affine()).inverse().as_dmat4();
     let view = DMat4::from_cols_array(&view.to_cols_array());
-    let proj = perspective(fov as f64, aspect, 0.05, 1000.0);
+    let proj = match projection {
+        // 平行投影: Bevy が計算した表示範囲 (ワールド単位) をそのまま使う
+        Projection::Orthographic(p) => DMat4::orthographic_rh(
+            p.area.min.x as f64,
+            p.area.max.x as f64,
+            p.area.min.y as f64,
+            p.area.max.y as f64,
+            p.near as f64,
+            p.far as f64,
+        ),
+        Projection::Perspective(p) => perspective(p.fov as f64, aspect, 0.05, 1000.0),
+        _ => perspective(std::f64::consts::FRAC_PI_4, aspect, 0.05, 1000.0),
+    };
 
     let viewport = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(size.x, size.y));
     tool.snapping = tool.snap.always || ctrl_pressed(&keys);
