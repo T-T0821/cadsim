@@ -14,7 +14,21 @@ Bevy + bevy_egui + truck で作った最小構成のCADビューアです。
 | truck-meshalgo | 0.4 |
 | transform-gizmo | 0.11 |
 
-## 実行
+## ダウンロード(Windows / Mac)
+
+ビルド済みのアプリを [Releases](https://github.com/T-T0821/cadsim/releases) に置いています。最新版の「Assets」から自分のOS用のファイルを取ってください。
+
+| OS | ファイル | 起動方法 |
+| --- | --- | --- |
+| Windows 10 / 11 (64bit) | `cadsim-<版>-windows-x86_64.zip` | 展開して `cad_proto.exe` をダブルクリック |
+| macOS 11 以降 (Apple Silicon / Intel 両対応) | `cadsim-<版>-macos-universal.zip` | 展開して `CAD Prototype.app` を「アプリケーション」へ移し、開く |
+
+どちらもコード署名(公証)をしていないため、初回は警告が出ます。
+
+- **Windows**: 「WindowsによってPCが保護されました」と出たら「詳細情報」→「実行」。
+- **Mac**: 「開発元を検証できない」と出たら、アプリを右クリック →「開く」→「開く」。それでも開けない場合はターミナルで `xattr -dr com.apple.quarantine "/Applications/CAD Prototype.app"` を実行してから開いてください。
+
+## ソースから実行
 
 ```sh
 cargo run
@@ -39,6 +53,22 @@ Unity / Unreal Engine のシーンビューと同じ割り当てにしていま�
 | Delete | 選択中の箱を削除 |
 | W / E / R | 移動 / 回転 / 拡大縮小のギズモに切り替え(パネル上部のボタンでも可)。ギズモの軸や輪を左ドラッグ |
 | 左パネル | 箱の追加、寸法・位置・回転の編集、+15°回転ボタン |
+
+## リリースの作り方(開発者向け)
+
+`.github/workflows/release.yml` が GitHub Actions でパッケージを作ります。
+
+1. `Cargo.toml` の `version` を上げて main にマージする。
+2. 同じ番号のタグを付けて push する。
+
+   ```sh
+   git tag v0.1.0
+   git push origin v0.1.0
+   ```
+
+3. Actions が Windows 版(`.zip`)と macOS 版(arm64 と x86_64 をまとめたユニバーサルの `.app` を `.zip` に固めたもの)をビルドし、Release を作って添付します。リリースノートはマージされたPRから自動生成されます。
+
+タグを付けずに試したいときは、Actions タブの「Release」→「Run workflow」で実行すると、ビルド結果がその実行の Artifacts に置かれます(Release は作られません)。
 
 ## しくみ
 

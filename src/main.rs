@@ -13,6 +13,9 @@
 //! - W / E / R: 移動 / 回転 / 拡大縮小のギズモに切り替え (ギズモの軸を左ドラッグ)
 //! - 左パネル: 箱の追加、寸法・位置・回転の編集、削除
 
+// Windows のリリースビルドでは、起動時に黒いコンソール窓を出さない
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 use std::collections::HashSet;
 
 use bevy::{
