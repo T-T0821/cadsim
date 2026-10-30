@@ -1,4 +1,4 @@
-//! 右上の「Simulation」パネル: 干渉チェックの設定・結果一覧と、距離計測の一覧
+//! 右上の「シミュレーション」パネル: 干渉チェックの設定・結果一覧と、距離計測の一覧
 
 use std::collections::HashMap;
 
@@ -26,7 +26,7 @@ pub fn simulation_panel(
         })
         .collect();
 
-    egui::Window::new("Simulation")
+    egui::Window::new("シミュレーション")
         .anchor(egui::Align2::RIGHT_TOP, [-8.0, 8.0])
         .resizable(false)
         .collapsible(true)
@@ -44,18 +44,18 @@ fn interference_section(
     check: &mut InterferenceCheck,
     names: &HashMap<u32, String>,
 ) {
-    ui.heading("Interference check");
+    ui.heading("干渉チェック");
     let before = check.settings;
     ui.horizontal(|ui| {
-        ui.checkbox(&mut check.auto, "Auto");
-        if ui.button("Check now").clicked() {
+        ui.checkbox(&mut check.auto, "自動");
+        if ui.button("今すぐチェック").clicked() {
             check.request();
         }
     });
     egui::Grid::new("check_settings")
         .num_columns(2)
         .show(ui, |ui| {
-            ui.label("Tolerance");
+            ui.label("許容差");
             ui.add(
                 egui::DragValue::new(&mut check.settings.tolerance)
                     .speed(1e-5)
@@ -63,7 +63,7 @@ fn interference_section(
                     .max_decimals(6),
             );
             ui.end_row();
-            ui.label("Warn if clearance <");
+            ui.label("警告するすき間 <");
             ui.add(
                 egui::DragValue::new(&mut check.settings.clearance_warning)
                     .speed(0.005)
@@ -72,7 +72,7 @@ fn interference_section(
             );
             ui.end_row();
         });
-    ui.checkbox(&mut check.settings.compute_overlap, "Overlap volume & mesh");
+    ui.checkbox(&mut check.settings.compute_overlap, "干渉部分の体積と形状");
     if check.settings != before {
         check.request();
     }
@@ -83,19 +83,16 @@ fn interference_section(
     let contact = count(|s| matches!(s, PairStatus::Contact));
     let near = count(|s| matches!(s, PairStatus::Near { .. }));
     ui.label(format!(
-        "{} parts checked in {:.2} ms",
+        "{} 部品を {:.2} ms でチェック",
         report.body_count, report.elapsed_ms
     ));
     ui.horizontal(|ui| {
-        ui.colored_label(
-            color(INTERFERENCE_COLOR),
-            format!("Interference {interfering}"),
-        );
-        ui.colored_label(color(CONTACT_COLOR), format!("Contact {contact}"));
-        ui.colored_label(color(NEAR_COLOR), format!("Near {near}"));
+        ui.colored_label(color(INTERFERENCE_COLOR), format!("干渉 {interfering}"));
+        ui.colored_label(color(CONTACT_COLOR), format!("接触 {contact}"));
+        ui.colored_label(color(NEAR_COLOR), format!("近接 {near}"));
     });
     if report.pairs.is_empty() {
-        ui.label("No problems found.");
+        ui.label("問題は見つかりませんでした。");
         return;
     }
 
@@ -104,23 +101,23 @@ fn interference_section(
         .num_columns(3)
         .striped(true)
         .show(ui, |ui| {
-            ui.strong("Pair");
-            ui.strong("Status");
-            ui.strong("Value");
+            ui.strong("部品の組");
+            ui.strong("状態");
+            ui.strong("値");
             ui.end_row();
             for pair in &report.pairs {
                 ui.label(format!("{} - {}", name(pair.a), name(pair.b)));
                 let (status, value, c) = match &pair.status {
                     PairStatus::Interfering { overlap } => (
-                        "Interference",
+                        "干渉",
                         overlap
                             .as_ref()
-                            .map_or("-".into(), |o| format!("V = {:.4}", o.volume)),
+                            .map_or("-".into(), |o| format!("体積 {:.4}", o.volume)),
                         INTERFERENCE_COLOR,
                     ),
-                    PairStatus::Contact => ("Contact", "gap = 0".into(), CONTACT_COLOR),
+                    PairStatus::Contact => ("接触", "すき間 0".into(), CONTACT_COLOR),
                     PairStatus::Near { clearance } => {
-                        ("Near", format!("gap = {clearance:.4}"), NEAR_COLOR)
+                        ("近接", format!("すき間 {clearance:.4}"), NEAR_COLOR)
                     }
                 };
                 ui.colored_label(color(c), status);
@@ -131,16 +128,15 @@ fn interference_section(
 }
 
 fn measure_section(ui: &mut egui::Ui, tool: &mut MeasureTool) {
-    ui.heading("Measure");
+    ui.heading("距離計測");
     let mut active = tool.active;
-    if ui
-        .toggle_value(&mut active, "Measure distance (M)")
-        .changed()
-    {
+    if ui.toggle_value(&mut active, "距離を測る (M)").changed() {
         tool.set_active(active);
     }
     if tool.active {
-        ui.label("Click two points on parts. Snaps to vertices.\nEsc: cancel point / leave");
+        ui.label(
+            "部品の表面を2回クリック (頂点の近くは頂点に吸着)\nEsc: 1点目を取り消し / 計測をやめる",
+        );
     }
     let mut remove = None;
     for (i, m) in tool.measurements.iter().enumerate() {
@@ -154,7 +150,7 @@ fn measure_section(ui: &mut egui::Ui, tool: &mut MeasureTool) {
     if let Some(i) = remove {
         tool.measurements.remove(i);
     }
-    if !tool.measurements.is_empty() && ui.button("Clear all").clicked() {
+    if !tool.measurements.is_empty() && ui.button("すべて消す").clicked() {
         tool.measurements.clear();
     }
 }

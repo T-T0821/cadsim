@@ -197,6 +197,8 @@ struct Palette {
     selected_face: Handle<StandardMaterial>,
     /// 干渉している部品 (半透明にして、中の干渉部分を見せる)
     interfering: Handle<StandardMaterial>,
+    /// 干渉している部品を選択したとき (選択色のまま半透明)
+    selected_interfering: Handle<StandardMaterial>,
 }
 
 #[derive(Resource)]
@@ -233,6 +235,10 @@ fn setup(mut commands: Commands, mut materials: ResMut<Assets<StandardMaterial>>
         interfering: materials.add(StandardMaterial {
             alpha_mode: AlphaMode::Blend,
             ..material(Color::srgba(0.95, 0.55, 0.55, 0.35))
+        }),
+        selected_interfering: materials.add(StandardMaterial {
+            alpha_mode: AlphaMode::Blend,
+            ..material(Color::srgba(0.45, 0.65, 0.95, 0.4))
         }),
     });
 
@@ -512,16 +518,14 @@ fn update_materials(
     mut faces: Query<(&FaceTag, &mut MeshMaterial3d<StandardMaterial>)>,
 ) {
     for (tag, mut material) in &mut faces {
-        let wanted = if selection.part != Some(tag.part) {
-            if check.is_interfering(tag.part) {
-                &palette.interfering
-            } else {
-                &palette.normal
-            }
-        } else if selection.face == Some(tag.face) {
-            &palette.selected_face
-        } else {
-            &palette.selected_part
+        let selected = selection.part == Some(tag.part);
+        let interfering = check.is_interfering(tag.part);
+        let wanted = match (selected, interfering) {
+            _ if selected && selection.face == Some(tag.face) => &palette.selected_face,
+            (true, true) => &palette.selected_interfering,
+            (true, false) => &palette.selected_part,
+            (false, true) => &palette.interfering,
+            (false, false) => &palette.normal,
         };
         if material.0 != *wanted {
             material.0 = wanted.clone();
