@@ -36,4 +36,3 @@ pub fn install_japanese_font(mut contexts: EguiContexts, mut installed: Local<bo
     *installed = true;
     Ok(())
 }
-
