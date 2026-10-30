@@ -21,6 +21,7 @@ pub type NodeId = u32;
 /// 色の指定がない部品の色
 pub const DEFAULT_PART_COLOR: [f32; 3] = [0.70, 0.74, 0.80];
 
+#[derive(Clone)]
 pub struct Node {
     pub name: String,
     pub parent: Option<NodeId>,
@@ -34,6 +35,7 @@ pub struct Node {
     pub kind: NodeKind,
 }
 
+#[derive(Clone)]
 pub enum NodeKind {
     /// 子をまとめるだけのノード。`product` は STEP の製品名。
     Assembly { product: Option<String> },
@@ -69,7 +71,7 @@ impl NodeKind {
 }
 
 /// 箱1つ分の設計パラメータ。値はすべて f64 で持つ。
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct BoxPart {
     /// 幅 (X), 高さ (Y), 奥行 (Z)
     pub size: [f64; 3],
@@ -109,6 +111,18 @@ impl BoxPart {
         }
         .transformed(m)
     }
+}
+
+/// ノードとその子孫を丸ごと写したもの。元に戻す・やり直し (history.rs) で使う。
+/// 取り込んだ形状は `Arc` で共有するので、大きなアセンブリでも写すのは軽い。
+#[derive(Clone)]
+pub struct Snapshot {
+    pub root: NodeId,
+    pub parent: Option<NodeId>,
+    /// 親の children (親がなければ roots) の中での位置
+    pub index: usize,
+    /// 先頭が root
+    pub nodes: Vec<(NodeId, Node)>,
 }
 
 /// 部品やアセンブリの計測値の合計
@@ -247,6 +261,52 @@ impl Model {
             self.nodes.remove(&removed);
             self.dirty.insert(removed);
         }
+    }
+
+    /// `id` とその子孫を写し取る
+    pub fn snapshot(&self, id: NodeId) -> Option<Snapshot> {
+        let parent = self.nodes.get(&id)?.parent;
+        let siblings = match parent.and_then(|p| self.nodes.get(&p)) {
+            Some(parent) => &parent.children,
+            None => &self.roots,
+        };
+        Some(Snapshot {
+            root: id,
+            parent,
+            index: siblings
+                .iter()
+                .position(|&c| c == id)
+                .unwrap_or(siblings.len()),
+            nodes: self
+                .subtree(id)
+                .into_iter()
+                .map(|n| (n, self.nodes[&n].clone()))
+                .collect(),
+        })
+    }
+
+    /// 写し取ったノードを元の場所に戻す。同じ id が残っていれば置き換える。
+    pub fn restore(&mut self, snapshot: &Snapshot) {
+        self.remove(snapshot.root);
+        for (id, node) in &snapshot.nodes {
+            if node.kind.is_part() {
+                self.dirty.insert(*id);
+            }
+            self.nodes.insert(*id, node.clone());
+        }
+        let siblings = match snapshot.parent.and_then(|p| self.nodes.get_mut(&p)) {
+            Some(parent) => &mut parent.children,
+            None => &mut self.roots,
+        };
+        siblings.insert(snapshot.index.min(siblings.len()), snapshot.root);
+    }
+
+    /// 最上位のノードの写しすべて
+    pub fn snapshot_all(&self) -> Vec<Snapshot> {
+        self.roots
+            .iter()
+            .filter_map(|&r| self.snapshot(r))
+            .collect()
     }
 
     /// 非表示にしたものをすべて表示に戻す

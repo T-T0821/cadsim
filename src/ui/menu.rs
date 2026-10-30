@@ -5,11 +5,13 @@ use bevy_egui::egui;
 use super::UiState;
 use crate::camera::{CameraRequest, StandardView};
 use crate::gizmo::Tool;
+use crate::history::Request;
 
 pub fn show(root: &mut egui::Ui, state: &mut UiState) {
     egui::Panel::top("menu_bar").show(root, |ui| {
         egui::MenuBar::new().ui(ui, |ui| {
             file_menu(ui, state);
+            edit_menu(ui, state);
             view_menu(ui, state);
             create_menu(ui, state);
             help_menu(ui);
@@ -30,12 +32,39 @@ fn file_menu(ui: &mut egui::Ui, state: &mut UiState) {
         }
         ui.separator();
         if ui.button("すべて閉じる").clicked() {
-            state.model.clear();
+            state.history.clear_all(&mut state.model);
             state.selection.clear();
         }
         ui.separator();
         ui.weak("ウィンドウへのドラッグ&ドロップでも開けます");
     });
+}
+
+fn edit_menu(ui: &mut egui::Ui, state: &mut UiState) {
+    ui.menu_button("編集", |ui| {
+        undo_redo_buttons(ui, state);
+    });
+}
+
+/// 「元に戻す」「やり直し」のボタン。押せないときは灰色にし、何が戻るかをツールチップに出す。
+fn undo_redo_buttons(ui: &mut egui::Ui, state: &mut UiState) {
+    for (text, request, label) in [
+        (
+            "元に戻す (Ctrl+Z)",
+            Request::Undo,
+            state.history.undo_label(),
+        ),
+        (
+            "やり直し (Ctrl+Y)",
+            Request::Redo,
+            state.history.redo_label(),
+        ),
+    ] {
+        let button = ui.add_enabled(label.is_some(), egui::Button::new(text));
+        if button.on_hover_text(label.unwrap_or_default()).clicked() {
+            state.history.request = Some(request);
+        }
+    }
 }
 
 fn view_menu(ui: &mut egui::Ui, state: &mut UiState) {
@@ -97,6 +126,8 @@ fn help_menu(ui: &mut egui::Ui) {
                 ("H / Alt+H", "選択を隠す / すべて表示"),
                 ("Esc", "選択を解除"),
                 ("Delete", "選択を削除"),
+                ("Ctrl+Z", "元に戻す"),
+                ("Ctrl+Y / Ctrl+Shift+Z", "やり直し"),
             ] {
                 ui.label(key);
                 ui.label(action);
@@ -115,6 +146,9 @@ fn toolbar(ui: &mut egui::Ui, state: &mut UiState) {
         {
             state.jobs.request_dialog();
         }
+        ui.separator();
+
+        undo_redo_buttons(ui, state);
         ui.separator();
 
         for tool in [Tool::Translate, Tool::Rotate, Tool::Scale] {
@@ -186,6 +220,8 @@ pub fn add_box(state: &mut UiState) {
     let size = state.model.new_box_size;
     let position = state.model.free_spot(size);
     let id = state.model.add_box(size, position);
+    let label = format!("{} を追加", state.model.path_label(id));
+    state.history.record_added(&state.model, id, label);
     state.selection.select(id);
     state.selection.reveal_in_tree = true;
 }

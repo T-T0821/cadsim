@@ -88,6 +88,7 @@ fn general_section(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
     let Some(node) = state.model.get_mut(id) else {
         return;
     };
+    let before = (node.name.clone(), node.color);
     ui.add(egui::TextEdit::singleline(&mut node.name).desired_width(f32::INFINITY));
     ui.add_space(4.0);
     egui::Grid::new("general")
@@ -127,6 +128,15 @@ fn general_section(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
             });
             ui.end_row();
         });
+    // 名前と色は履歴に載せる。変更前の値をいったん戻して覚えさせてから書き直す。
+    let edited = (node.name.clone(), node.color);
+    if edited != before {
+        (node.name, node.color) = before;
+        state.history.begin_edit(&state.model, id);
+        if let Some(node) = state.model.get_mut(id) {
+            (node.name, node.color) = edited;
+        }
+    }
 }
 
 fn actions(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
@@ -151,7 +161,7 @@ fn actions(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
             state.selection.reveal_in_tree = true;
         }
         if ui.button("🗑 削除").clicked() {
-            state.model.remove(id);
+            state.history.remove(&mut state.model, id);
             state.selection.clear();
         }
     });
@@ -181,6 +191,9 @@ fn box_editor(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
             }
         }
     });
+    if changed {
+        state.history.begin_edit(&state.model, id);
+    }
     if changed && let Some(node) = state.model.get_mut(id) {
         node.kind = NodeKind::Box(edited);
         state.model.dirty.insert(id);
@@ -197,6 +210,9 @@ fn placement_editor(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
     let mut rotation_deg = quat_to_euler_deg(rotation);
     let mut changed = xyz_editor(ui, "位置", &mut position, 0.5, None);
     changed |= xyz_editor(ui, "回転 (度)", &mut rotation_deg, 1.0, None);
+    if changed {
+        state.history.begin_edit(&state.model, id);
+    }
     if changed && let Some(node) = state.model.get_mut(id) {
         node.placement = DMat4::from_rotation_translation(
             euler_deg_to_quat(rotation_deg),

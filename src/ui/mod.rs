@@ -36,6 +36,7 @@ use bevy_egui::{
 use crate::camera::{CameraRequest, OrbitCamera, ViewportRect};
 use crate::file_io::ImportJobs;
 use crate::gizmo::{GizmoTool, transform_gizmo_system};
+use crate::history::History;
 use crate::japanese_font::install_japanese_font;
 use crate::model::{Model, Selection};
 use crate::viewport::ViewSettings;
@@ -59,6 +60,7 @@ pub struct UiState<'w> {
     pub jobs: ResMut<'w, ImportJobs>,
     pub settings: ResMut<'w, ViewSettings>,
     pub gizmo: ResMut<'w, GizmoTool>,
+    pub history: ResMut<'w, History>,
     pub orbit: Res<'w, OrbitCamera>,
     pub camera: MessageWriter<'w, CameraRequest>,
     pub viewport: ResMut<'w, ViewportRect>,

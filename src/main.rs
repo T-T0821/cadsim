@@ -9,6 +9,7 @@
 //! - `viewport`    モデルを 3D 表示し、選択を強調する。クリックで選択
 //! - `camera`      注視点を回るカメラ、標準ビュー、全体表示
 //! - `gizmo`       移動・回転・拡大縮小のギズモ
+//! - `history`     元に戻す・やり直し
 //! - `shortcuts`   キーボードショートカット
 //! - `ui`          メニュー・ツリー・プロパティ・ステータスバー・ビューキューブ
 //! - `japanese_font` egui に埋め込みの日本語フォントを登録する
@@ -17,6 +18,7 @@
 mod camera;
 mod file_io;
 mod gizmo;
+mod history;
 mod japanese_font;
 mod math;
 mod model;
@@ -48,6 +50,7 @@ fn main() {
             viewport::ViewportPlugin,
             file_io::FileIoPlugin,
             shortcuts::ShortcutsPlugin,
+            history::HistoryPlugin,
             ui::UiPlugin,
         ))
         .run();

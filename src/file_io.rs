@@ -12,6 +12,7 @@ use std::sync::{
 use bevy::{ecs::system::NonSendMarker, prelude::*};
 
 use crate::camera::CameraRequest;
+use crate::history::History;
 use crate::model::{Model, Selection};
 use crate::step_import::{ImportedFile, import_step};
 
@@ -142,6 +143,7 @@ fn receive_imports(
     mut model: ResMut<Model>,
     mut selection: ResMut<Selection>,
     mut camera: MessageWriter<CameraRequest>,
+    mut history: ResMut<History>,
 ) {
     let finished: Vec<ImportResult> = match jobs.receiver.lock() {
         Ok(receiver) => receiver.try_iter().collect(),
@@ -155,6 +157,7 @@ fn receive_imports(
             Ok(file) => {
                 let warnings = file.warnings.len();
                 let root = model.add_imported(file.root, file.unit);
+                history.record_added(&model, root, format!("{name} を読み込み"));
                 let parts = model.measure(root).part_count;
                 // 部品の色が見えるよう、読み込み直後は何も選ばない
                 selection.clear();
