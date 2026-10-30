@@ -51,7 +51,7 @@ jobs:
           path: ${{ env.PKG }}
 
   macos:
-    name: macOS (Universal: Apple Silicon + Intel)
+    name: "macOS (Universal: Apple Silicon + Intel)"
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
