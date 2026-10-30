@@ -13,8 +13,9 @@
 //! - W / E / R: 移動 / 回転 / 拡大縮小のギズモに切り替え (ギズモの軸を左ドラッグ)
 //! - Ctrl + ギズモをドラッグ: 一定量ずつ動かす (刻み幅はパネルで設定)
 //! - 左パネル: 箱の追加、寸法・位置・回転の編集、削除
+//! - 右パネル: 干渉チェックの結果、距離計測 (M キーで計測モード)
 
-use std::collections::HashSet;
+use std::{collections::HashSet, sync::Arc};
 
 use bevy::{
     asset::RenderAssetUsages,
@@ -35,7 +36,9 @@ use truck_modeling::{Solid, builder};
 
 mod gizmo;
 mod japanese_font;
+mod simulation;
 use gizmo::{GizmoTool, Tool, gizmo_not_focused, snap_settings_ui, transform_gizmo_system};
+use simulation::{InterferenceCheck, SimBody, SimulationPlugin, measure::not_measuring};
 
 /// テッセレーションの許容誤差 (モデル単位)
 const TESSELLATION_TOL: f64 = 0.005;
@@ -50,6 +53,7 @@ fn main() {
             ..default()
         }))
         .add_plugins(EguiPlugin::default())
+        .add_plugins(SimulationPlugin)
         .init_resource::<Model>()
         .init_resource::<Selection>()
         .init_resource::<OrbitCamera>()
@@ -69,7 +73,8 @@ fn main() {
             (
                 pick_face
                     .run_if(not(egui_wants_any_pointer_input))
-                    .run_if(gizmo_not_focused),
+                    .run_if(gizmo_not_focused)
+                    .run_if(not_measuring),
                 mouse_camera_input.run_if(not(egui_wants_any_pointer_input)),
                 keyboard_input.run_if(not(egui_wants_any_keyboard_input)),
                 rebuild_dirty_parts,
@@ -190,6 +195,8 @@ struct Palette {
     normal: Handle<StandardMaterial>,
     selected_part: Handle<StandardMaterial>,
     selected_face: Handle<StandardMaterial>,
+    /// 干渉している部品 (半透明にして、中の干渉部分を見せる)
+    interfering: Handle<StandardMaterial>,
 }
 
 #[derive(Resource)]
@@ -223,6 +230,10 @@ fn setup(mut commands: Commands, mut materials: ResMut<Assets<StandardMaterial>>
         normal: materials.add(material(Color::srgb(0.70, 0.74, 0.80))),
         selected_part: materials.add(material(Color::srgb(0.45, 0.65, 0.95))),
         selected_face: materials.add(material(Color::srgb(1.0, 0.60, 0.20))),
+        interfering: materials.add(StandardMaterial {
+            alpha_mode: AlphaMode::Blend,
+            ..material(Color::srgba(0.95, 0.55, 0.55, 0.35))
+        }),
     });
 
     commands.spawn((Camera3d::default(), Transform::default()));
@@ -268,20 +279,29 @@ fn rebuild_dirty_parts(
             .map(|edge| edge.curve().iter().map(to_vec3).collect())
             .collect();
 
-        let face_meshes: Vec<Mesh> = shell
+        let polygons: Vec<PolygonMesh> = shell
             .face_iter()
             .map(|face| {
                 let mut poly = face.surface().unwrap_or_default();
                 if !face.orientation() {
                     poly.invert();
                 }
-                polygon_to_bevy_mesh(&poly)
+                poly
             })
             .collect();
+        let face_meshes: Vec<Mesh> = polygons.iter().map(polygon_to_bevy_mesh).collect();
+        // 干渉チェック用の f64 メッシュ。形状はワールド座標で作っているので姿勢は原点のまま。
+        let sim_body = SimBody {
+            id: part.id,
+            mesh: Arc::new(simulation::trimesh_from_polygons(&polygons)),
+            pose: simulation::Pose::IDENTITY,
+        };
 
         commands
             .spawn((
                 PartRoot { id: part.id, edges },
+                sim_body,
+                Name::new(part.name.clone()),
                 Transform::default(),
                 Visibility::default(),
             ))
@@ -487,12 +507,17 @@ fn apply_camera(orbit: Res<OrbitCamera>, mut camera: Single<&mut Transform, With
 
 fn update_materials(
     selection: Res<Selection>,
+    check: Res<InterferenceCheck>,
     palette: Res<Palette>,
     mut faces: Query<(&FaceTag, &mut MeshMaterial3d<StandardMaterial>)>,
 ) {
     for (tag, mut material) in &mut faces {
         let wanted = if selection.part != Some(tag.part) {
-            &palette.normal
+            if check.is_interfering(tag.part) {
+                &palette.interfering
+            } else {
+                &palette.normal
+            }
         } else if selection.face == Some(tag.face) {
             &palette.selected_face
         } else {
