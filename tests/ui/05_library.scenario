@@ -1,7 +1,11 @@
 # 部品ライブラリ: 標準部品 (エアシリンダ) を置き、I/O 一覧を出す
 wait_loaded
-wait 30
-click "部品ライブラリ"            # たたまれた窓を開く
+click "空のプロジェクトから"        # ようこそ画面を閉じて空から始める
+wait_loaded
+open assets/sample_assembly.step
+wait_loaded
+wait 60
+click "部品"                      # 左のツールレール
 expect "エアシリンダ"
 screenshot 01_library
 

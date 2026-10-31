@@ -1,5 +1,7 @@
 # 作成: 箱と円柱を追加する
 wait_loaded
+click "空のプロジェクトから"        # ようこそ画面を閉じて空から始める
+wait_loaded
 wait 30
 click "作成"
 click "箱を追加"

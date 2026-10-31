@@ -1,6 +1,8 @@
 # 動画書き出し: サンプル装置の動きを GIF にする
 # 自動確認では保存ダイアログを出さず target/ui-check/07_video/saved/ に書く
 wait_loaded
+click "空のプロジェクトから"        # ようこそ画面を閉じて空から始める
+wait_loaded
 wait 30
 click "サンプル装置"
 click "ファイル"

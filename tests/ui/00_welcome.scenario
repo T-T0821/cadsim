@@ -1,0 +1,10 @@
+# 起動: デモラインが動き、ようこそ画面が出る。チュートリアルを始める
+wait_loaded
+wait 60
+expect "ようこそ!"
+screenshot 01_welcome
+
+click "▶ チュートリアルを始める"
+wait 30
+expect_not "ようこそ!"
+screenshot 02_tutorial

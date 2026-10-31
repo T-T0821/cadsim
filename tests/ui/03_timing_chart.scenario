@@ -1,6 +1,8 @@
 # タイミングチャート: サンプル装置を読み込んで再生する
 wait_loaded
-wait 60
+click "空のプロジェクトから"        # ようこそ画面を閉じて空から始める
+wait_loaded
+wait 30
 click "サンプル装置"
 wait 30
 screenshot 01_sample_chart

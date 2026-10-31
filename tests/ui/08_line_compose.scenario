@@ -1,8 +1,9 @@
 # 言葉でラインを組む: 文から下書きを作ってモデルに置く (AI なし、キーワードから作る)
 wait_loaded
+click "空のプロジェクトから"        # ようこそ画面を閉じて空から始める
+wait_loaded
 wait 30
-click "ライン"
-click "言葉でラインを組む…"
+click "言葉で"                    # 左のツールレール
 expect "下書きを作る"
 screenshot 01_window
 
