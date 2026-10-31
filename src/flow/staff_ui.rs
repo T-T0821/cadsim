@@ -3,13 +3,16 @@
 //! - 始める時刻と歩行時間
 //! - シフト (始業・終業・休憩)
 //! - 作業者の名簿と、できる工程 (スキル表)。マスの数字は作業の速さ (100% が標準)
-//! - 人数の比較 (1〜N 人で回して並べる)
+//! - 割り当てのルールと持ち場
+//! - 人数の比較 (1〜N 人で回して並べる)、ルールの比較 (同じ人で3つのルールを並べる)
 //!
 //! 計算は `cadsim_core::staffing` にあり、ここは入力を集めて結果を表に写すだけ。
 
 use bevy_egui::egui::{self, Color32};
-use cadsim_core::staffing::compare::{HeadcountComparison, compare_headcount, move_worker};
-use cadsim_core::staffing::model::{Break, DAY, MAX_SPEED, MIN_SPEED, clock_label};
+use cadsim_core::staffing::compare::{
+    HeadcountComparison, RuleRow, compare_headcount, compare_rules, move_worker,
+};
+use cadsim_core::staffing::model::{AssignRule, Break, DAY, MAX_SPEED, MIN_SPEED, clock_label};
 
 use super::model::{ElementId, FlowModel, KindTag, apply_sample_staffing, sample_line};
 
@@ -20,6 +23,8 @@ pub struct StaffUiState {
     comparison: Option<Result<HeadcountComparison, Vec<String>>>,
     /// 比べたときのモデル。今のモデルと違えば結果は古い。
     compared_with: Option<FlowModel>,
+    rule_comparison: Option<Result<Vec<RuleRow>, Vec<String>>>,
+    rules_compared_with: Option<FlowModel>,
 }
 
 impl Default for StaffUiState {
@@ -28,6 +33,8 @@ impl Default for StaffUiState {
             target_per_hour: 0.0,
             comparison: None,
             compared_with: None,
+            rule_comparison: None,
+            rules_compared_with: None,
         }
     }
 }
@@ -53,6 +60,7 @@ pub fn staff_tab(ui: &mut egui::Ui, flow: &mut FlowModel, st: &mut StaffUiState)
                     apply_sample_staffing(&mut m);
                     *flow = m;
                     st.comparison = None;
+                    st.rule_comparison = None;
                     replaced = true;
                 }
                 ui.separator();
@@ -67,6 +75,18 @@ pub fn staff_tab(ui: &mut egui::Ui, flow: &mut FlowModel, st: &mut StaffUiState)
                         .suffix(" 秒"),
                 )
                 .on_hover_text("作業者が別の工程へ移るときにかかる時間");
+                ui.separator();
+                ui.label("割り当て");
+                egui::ComboBox::from_id_salt("flow_assign_rule")
+                    .selected_text(flow.staffing.rule.label())
+                    .show_ui(ui, |ui| {
+                        for rule in AssignRule::ALL {
+                            ui.selectable_value(&mut flow.staffing.rule, rule, rule.label())
+                                .on_hover_text(rule_help(rule));
+                        }
+                    })
+                    .response
+                    .on_hover_text(rule_help(flow.staffing.rule));
             });
             ui.add_space(6.0);
             shifts_section(ui, flow);
@@ -74,6 +94,8 @@ pub fn staff_tab(ui: &mut egui::Ui, flow: &mut FlowModel, st: &mut StaffUiState)
             workers_section(ui, flow);
             ui.add_space(8.0);
             comparison_section(ui, flow, st);
+            ui.add_space(8.0);
+            rule_comparison_section(ui, flow, st);
         });
     replaced
 }
@@ -190,7 +212,7 @@ fn workers_section(ui: &mut egui::Ui, flow: &mut FlowModel) {
                 .striped(true)
                 .spacing([10.0, 4.0])
                 .show(ui, |ui| {
-                    for title in ["", "名前", "シフト", "欠勤"] {
+                    for title in ["", "名前", "シフト", "欠勤", "持ち場"] {
                         ui.weak(title);
                     }
                     for (_, name, needs) in &processes {
@@ -229,6 +251,22 @@ fn workers_section(ui: &mut egui::Ui, flow: &mut FlowModel) {
                             });
                         ui.checkbox(&mut w.absent, "")
                             .on_hover_text("この人が休んだ場合を試す");
+                        let primary_name = w
+                            .primary
+                            .and_then(|p| processes.iter().find(|(i, _, _)| *i == p))
+                            .map_or("なし", |(_, n, _)| n.as_str());
+                        egui::ComboBox::from_id_salt(("worker_primary", id))
+                            .selected_text(primary_name)
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(&mut w.primary, None, "なし");
+                                for (pid, name, _) in &processes {
+                                    if w.skills.iter().any(|s| s.element == *pid) {
+                                        ui.selectable_value(&mut w.primary, Some(*pid), name);
+                                    }
+                                }
+                            })
+                            .response
+                            .on_hover_text("割り当てが「持ち場の人が先」のとき、この人がまず受け持つ工程。できる工程から選ぶ");
                         for (pid, _, _) in &processes {
                             ui.horizontal(|ui| {
                                 let mut can = w.speed_for(*pid).is_some();
@@ -370,6 +408,98 @@ fn comparison_section(ui: &mut egui::Ui, flow: &FlowModel, st: &mut StaffUiState
         }
         _ => {}
     }
+}
+
+// ---------------------------------------------------------------------------
+// ルールの比較
+// ---------------------------------------------------------------------------
+
+fn rule_help(rule: AssignRule) -> &'static str {
+    match rule {
+        AssignRule::Fastest => "手の空いている人のうち、その工程がいちばん速い人が行く",
+        AssignRule::LongestIdle => {
+            "手の空いている人のうち、いちばん長く手待ちしている人が行く。仕事が均等に回る"
+        }
+        AssignRule::Primary => {
+            "持ち場の人が空いていればその人が行く。手が空いたら自分の持ち場を先に見るので、歩く回数が減る"
+        }
+    }
+}
+
+fn rule_comparison_section(ui: &mut egui::Ui, flow: &FlowModel, st: &mut StaffUiState) {
+    ui.horizontal_wrapped(|ui| {
+        ui.strong("割り当てのルールの比較");
+        if ui
+            .button("▶ ルールを変えて比べる")
+            .on_hover_text("今の名簿・人数のまま、3つのルールで同じ条件で回して並べる")
+            .clicked()
+        {
+            st.rule_comparison = Some(compare_rules(flow));
+            st.rules_compared_with = Some(flow.clone());
+        }
+    });
+    let Some(result) = &st.rule_comparison else {
+        ui.weak("同じ人数で、誰がどの工程へ行くかの決め方だけを変えて比べます。");
+        return;
+    };
+    if st.rules_compared_with.as_ref().is_some_and(|m| m != flow) {
+        ui.colored_label(WARN, "設定が変わりました。結果は前の設定のものです。");
+    }
+    let rows = match result {
+        Ok(rows) => rows,
+        Err(problems) => {
+            for p in problems {
+                ui.colored_label(ERROR, format!("⚠ {p}"));
+            }
+            return;
+        }
+    };
+    let best = rows
+        .iter()
+        .max_by(|a, b| a.row.output.cmp(&b.row.output))
+        .map(|r| r.rule);
+    egui::Grid::new("flow_rule_compare")
+        .striped(true)
+        .spacing([14.0, 4.0])
+        .show(ui, |ui| {
+            for title in [
+                "ルール",
+                "排出数",
+                "スループット",
+                "稼働率 (低い人〜高い人)",
+                "工程の人待ち",
+                "歩いた回数",
+            ] {
+                ui.strong(title);
+            }
+            ui.end_row();
+            for r in rows {
+                let text = |s: String| {
+                    if best == Some(r.rule) {
+                        egui::RichText::new(s).color(GREEN).strong()
+                    } else {
+                        egui::RichText::new(s)
+                    }
+                };
+                let current = if r.rule == flow.staffing.rule {
+                    " (今の設定)"
+                } else {
+                    ""
+                };
+                ui.label(text(format!("{}{current}", r.rule.label())));
+                ui.label(text(format!("{} 個", r.row.output)));
+                ui.label(text(format!("{:.1} 個/時", r.row.throughput_per_hour)));
+                ui.label(text(format!(
+                    "{:.0}% 〜 {:.0}%",
+                    r.utilization_min * 100.0,
+                    r.utilization_max * 100.0
+                )));
+                ui.label(text(format!("{:.1}%", r.row.no_operator_ratio * 100.0)));
+                ui.label(text(format!("{} 回", r.walks)));
+                ui.end_row();
+            }
+        });
+    ui.weak("排出数がいちばん多いルールを緑にしています。上の「割り当て」で切り替えられます。");
 }
 
 // ---------------------------------------------------------------------------

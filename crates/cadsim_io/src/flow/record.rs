@@ -5,7 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use cadsim_core::staffing::model::{Break, Shift, Skill, Staffing, Worker};
+use cadsim_core::staffing::model::{AssignRule, Break, Shift, Skill, Staffing, Worker};
 
 use cadsim_core::flow::model::{
     AgvCall, Element, ElementKind, Energy, Failure, FlowModel, Labor, RunSettings,
@@ -112,6 +112,9 @@ pub struct StaffingRecord {
     pub start_clock: f64,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub walk_seconds: f64,
+    /// 割り当てのルール (`Fastest` / `LongestIdle` / `Primary`)。既定の `Fastest` なら書かない
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rule: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub shifts: Vec<ShiftRecord>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -140,12 +143,16 @@ pub struct WorkerRecord {
     /// できる工程 `[工程の ID, 速さ]` の並び (速さ 1.0 が標準)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub skills: Vec<(u32, f64)>,
+    /// 持ち場の工程の ID
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub primary: Option<u32>,
 }
 
 fn staffing_record(s: &Staffing) -> Option<StaffingRecord> {
     (!s.is_empty()).then(|| StaffingRecord {
         start_clock: s.start_clock,
         walk_seconds: s.walk_seconds,
+        rule: (s.rule != AssignRule::Fastest).then(|| s.rule.key().to_owned()),
         shifts: s
             .shifts
             .iter()
@@ -166,6 +173,7 @@ fn staffing_record(s: &Staffing) -> Option<StaffingRecord> {
                 shift: w.shift,
                 absent: w.absent,
                 skills: w.skills.iter().map(|k| (k.element, k.speed)).collect(),
+                primary: w.primary,
             })
             .collect(),
     })
@@ -175,6 +183,14 @@ fn staffing_from_record(r: &StaffingRecord, warnings: &mut Vec<String>) -> Staff
     let mut s = Staffing::default();
     s.start_clock = r.start_clock;
     s.walk_seconds = r.walk_seconds;
+    if let Some(key) = &r.rule {
+        match AssignRule::from_key(key) {
+            Some(rule) => s.rule = rule,
+            None => warnings.push(format!(
+                "割り当てのルール「{key}」が分からないため「速い人が行く」にしました"
+            )),
+        }
+    }
     for sh in &r.shifts {
         let ok = s.insert_shift_with_id(Shift {
             id: sh.id,
@@ -208,6 +224,7 @@ fn staffing_from_record(r: &StaffingRecord, warnings: &mut Vec<String>) -> Staff
                 .iter()
                 .map(|&(element, speed)| Skill { element, speed })
                 .collect(),
+            primary: w.primary,
         });
         if !ok {
             warnings.push(format!(
