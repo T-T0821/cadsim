@@ -62,6 +62,8 @@ pub struct RobotUiState {
     export_request: Option<u32>,
     /// 書き出しの結果
     export_message: Option<String>,
+    /// 実機 (UR) とのつながり
+    pub(super) ur: super::ur_ui::UrLinkState,
 }
 
 impl Default for RobotUiState {
@@ -77,6 +79,7 @@ impl Default for RobotUiState {
             hover: None,
             export_request: None,
             export_message: None,
+            ur: Default::default(),
         }
     }
 }
@@ -185,7 +188,12 @@ fn robot_panel(
     ui.horizontal(|ui| {
         ui.strong("ジョグ");
         if !jog.values.is_empty() {
-            ui.colored_label(egui::Color32::from_rgb(120, 200, 255), "(ジョグ中)");
+            let label = if state.ur.following(robot.id) {
+                "(実機の角度で表示中)"
+            } else {
+                "(ジョグ中)"
+            };
+            ui.colored_label(egui::Color32::from_rgb(120, 200, 255), label);
             if ui.button("チャートの位置に戻す").clicked() {
                 new_jog = Some(Default::default());
                 state.message = None;
@@ -321,6 +329,7 @@ fn robot_panel(
             PointAction::Delete => chart.remove_point(robot.id, point.id),
         }
     }
+    super::ur_ui::ur_section(ui, chart, &robot, &mut state.ur);
     cycle_time(ui, chart, schedule, &robot, state);
     path_check(ui, schedule, &robot, chart_state, state);
     new_jog
