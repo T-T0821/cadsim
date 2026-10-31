@@ -124,6 +124,21 @@ impl TriMesh {
         inside
     }
 
+    /// `origin` から `dir` 方向へ、`min_t` より先に面があるか (図面のかくれ線の判定に使う)
+    pub fn ray_blocked(&self, origin: DVec3, dir: DVec3, min_t: f64) -> bool {
+        // 2つのクロージャから読み書きするので Cell に入れる
+        let blocked = Cell::new(false);
+        self.walk(
+            |aabb| !blocked.get() && ray_hits_aabb(origin, dir, aabb),
+            |t| {
+                if ray_triangle(origin, dir, t).is_some_and(|hit| hit.t > min_t) {
+                    blocked.set(true);
+                }
+            },
+        );
+        blocked.get()
+    }
+
     fn for_each_ray_hit(&self, origin: DVec3, dir: DVec3, mut f: impl FnMut(RayHit)) {
         self.walk(
             |aabb| ray_hits_aabb(origin, dir, aabb),

@@ -20,6 +20,7 @@
 
 mod animation;
 mod menu;
+pub mod modeling;
 mod properties;
 mod replace;
 mod status;
@@ -41,6 +42,7 @@ use bevy_egui::{
 use crate::animation::Animations;
 use crate::camera::{CameraRequest, OrbitCamera, ViewportRect};
 use crate::file_io::ImportJobs;
+use crate::flow::{self, FlowUi};
 use crate::gizmo::{GizmoTool, transform_gizmo_system};
 use crate::history::History;
 use crate::japanese_font::install_japanese_font;
@@ -53,16 +55,18 @@ pub struct UiPlugin;
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn_ui_camera).add_systems(
-            EguiPrimaryContextPass,
-            (
-                install_japanese_font,
-                draw_ui,
-                // 動作シミュレーションで部品が動いている間はギズモで編集しない
-                transform_gizmo_system.run_if(at_design_pose),
-            )
-                .chain(),
-        );
+        app.init_resource::<modeling::ModelingUi>()
+            .add_systems(Startup, spawn_ui_camera)
+            .add_systems(
+                EguiPrimaryContextPass,
+                (
+                    install_japanese_font,
+                    draw_ui,
+                    // 動作シミュレーションで部品が動いている間はギズモで編集しない
+                    transform_gizmo_system.run_if(at_design_pose),
+                )
+                    .chain(),
+            );
     }
 }
 
@@ -81,6 +85,9 @@ pub struct UiState<'w> {
     pub camera: MessageWriter<'w, CameraRequest>,
     pub viewport: ResMut<'w, ViewportRect>,
     pub motion: MotionUi<'w>,
+    pub documents: ResMut<'w, crate::documents::DocumentExport>,
+    pub modeling: ResMut<'w, modeling::ModelingUi>,
+    pub flow: FlowUi<'w>,
     pub diagnostics: Res<'w, DiagnosticsStore>,
     pub render_stats: Res<'w, RenderStats>,
 }
@@ -140,6 +147,8 @@ fn draw_ui(mut contexts: EguiContexts, mut state: UiState) -> Result {
     status::show_notifications(&ctx, view, &mut state);
     animation::show(&ctx, view, &mut state);
     replace::show(&ctx, &mut state);
+    modeling::show(&ctx, &mut state);
+    flow::show_window(&ctx, &mut state.flow, &state.model, &state.selection);
     show_confirm_dialog(&ctx, &mut state.project);
     if *state.settings == settings_before {
         state.settings.set_last_changed(settings_tick);

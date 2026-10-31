@@ -29,13 +29,18 @@ use bevy::{
 use bevy_egui::egui;
 use serde::{Deserialize, Serialize};
 
-use crate::annotation::{AnnotationRecord, Annotations, to_records};
+use crate::annotation::{AnnotationRecord, Annotations, node_at_path, node_path, to_records};
 use crate::camera::CameraRequest;
 use crate::file_io::{ImportJobs, file_name, load_source, receive_imports, source_name};
+use crate::floor::{FloorDoc, FloorView};
+use crate::floor_record::{FloorLayout, FloorRecord};
+use crate::flow::{self, FlowRes, FlowRun, model::FlowModel, record::FlowRecord};
+use crate::formats::site_record::{CloudRecord, UnderlayRecord, load_site};
 use crate::history::History;
 use crate::interchange::UnitOptions;
 use crate::math::{euler_deg_to_quat, quat_to_euler_deg, split_placement};
 use crate::model::{BoxPart, Model, NodeId, NodeKind, Selection, StepSource};
+use crate::site::model::Site;
 use crate::step_import::{ImportNode, ImportedShape};
 
 /// ファイル形式のバージョン。古いファイルを開けなくなる変更をしたときだけ上げる。
@@ -89,6 +94,18 @@ pub struct ProjectFile {
     /// 3D 上の寸法と注記
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub annotations: Vec<AnnotationRecord>,
+    /// 床に敷いた平面図
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub underlays: Vec<UnderlayRecord>,
+    /// 読み込んだ点群
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub point_clouds: Vec<CloudRecord>,
+    /// 工程モデル (工程シミュレーション)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub flow: Option<FlowRecord>,
+    /// 安全機器・作業者・AGV の配置
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub floor: Option<FloorRecord>,
 }
 
 fn default_unit() -> String {
@@ -103,6 +120,8 @@ pub enum StepFileRecord {
     Sample,
     /// プロジェクトファイルと同じフォルダ以下なら相対パス、それ以外は絶対パス
     File { path: String },
+    /// 作成メニューで作った形状。`solid` は truck の B-rep を JSON にしたもの
+    Modeled { name: String, solid: String },
     /// 負荷テスト用のシーン (開き直すと同じものを作り直す)
     Stress { parts: usize },
 }
@@ -170,13 +189,33 @@ impl ProjectFile {
                 .collect(),
             nodes,
             annotations: Vec::new(),
+            underlays: crate::formats::site_record::to_records(&model.site, base_dir),
+            point_clouds: crate::formats::site_record::cloud_records(&model.site, base_dir),
+            flow: None,
+            floor: None,
         }
     }
 
-    /// 今のモデルと寸法・注記からファイルの内容を作る
-    pub fn capture(model: &Model, annotations: &Annotations, base_dir: Option<&Path>) -> Self {
+    /// 今のモデルと寸法・注記・工程モデルからファイルの内容を作る
+    pub fn capture(
+        model: &Model,
+        annotations: &Annotations,
+        flow: &FlowModel,
+        floor: &FloorRecord,
+        base_dir: Option<&Path>,
+    ) -> Self {
         Self {
+            floor: (!floor.is_empty()).then(|| floor.clone()),
             annotations: to_records(annotations, model),
+            flow: (!flow.is_empty()).then(|| {
+                flow::record::to_record(flow, |id| {
+                    model
+                        .get(id)
+                        .is_some()
+                        .then(|| node_path(model, id))
+                        .flatten()
+                })
+            }),
             ..Self::from_model(model, base_dir)
         }
     }
@@ -305,6 +344,10 @@ impl StepFileRecord {
                 };
                 StepFileRecord::File { path }
             }
+            StepSource::Modeled(modeled) => StepFileRecord::Modeled {
+                name: modeled.name.clone(),
+                solid: modeled.json.clone(),
+            },
         }
     }
 
@@ -313,6 +356,13 @@ impl StepFileRecord {
             StepFileRecord::Sample => StepSource::Sample,
             &StepFileRecord::Stress { parts } => StepSource::Stress(parts),
             StepFileRecord::File { path } => StepSource::File(base_dir.join(path)),
+            StepFileRecord::Modeled { name, solid } => {
+                StepSource::Modeled(Arc::new(crate::modeling::ModeledSource {
+                    id: crate::step_import::next_shape_id(),
+                    name: name.clone(),
+                    json: solid.clone(),
+                }))
+            }
         }
     }
 }
@@ -395,6 +445,8 @@ pub struct LoadedProject {
     pub sources: Vec<StepSource>,
     /// STEP ごとの「製品名 → 形状」。読めなかった STEP は空。
     pub shapes: Vec<HashMap<String, Arc<ImportedShape>>>,
+    /// 平面図など。図面は元のファイルから読み直してある。
+    pub site: Site,
     pub warnings: Vec<String>,
 }
 
@@ -433,10 +485,18 @@ impl LoadedProject {
                 }
             })
             .collect();
+        let site = load_site(
+            &file.underlays,
+            &file.point_clouds,
+            base_dir,
+            crate::site::underlay::unit_in_mm(&file.unit),
+            &mut warnings,
+        );
         Self {
             file,
             sources,
             shapes,
+            site,
             warnings,
         }
     }
@@ -445,6 +505,7 @@ impl LoadedProject {
     pub fn apply_to(&self, model: &mut Model) -> Vec<String> {
         model.clear();
         model.unit = self.file.unit.clone();
+        model.site = self.site.clone();
         let mut warnings = self.warnings.clone();
         for record in &self.file.nodes {
             self.add_record(model, None, record, &mut warnings);
@@ -572,8 +633,14 @@ impl ProjectState {
         self.requested = Some((action, false));
     }
 
-    pub fn has_unsaved_changes(&self, model: &Model, annotations: &Annotations) -> bool {
-        self.saved != ProjectFile::capture(model, annotations, self.base_dir())
+    pub fn has_unsaved_changes(
+        &self,
+        model: &Model,
+        annotations: &Annotations,
+        flow: &FlowModel,
+        floor: &FloorRecord,
+    ) -> bool {
+        self.saved != ProjectFile::capture(model, annotations, flow, floor, self.base_dir())
     }
 
     pub fn file_name(&self) -> String {
@@ -587,8 +654,14 @@ impl ProjectState {
         self.path.as_deref().and_then(Path::parent)
     }
 
-    fn mark_saved(&mut self, model: &Model, annotations: &Annotations) {
-        self.saved = ProjectFile::capture(model, annotations, self.base_dir());
+    fn mark_saved(
+        &mut self,
+        model: &Model,
+        annotations: &Annotations,
+        flow: &FlowModel,
+        floor: &FloorRecord,
+    ) {
+        self.saved = ProjectFile::capture(model, annotations, flow, floor, self.base_dir());
     }
 
     fn save(
@@ -596,9 +669,11 @@ impl ProjectState {
         path: PathBuf,
         model: &Model,
         annotations: &Annotations,
+        flow: &FlowModel,
+        floor: &FloorRecord,
     ) -> Result<(), ProjectError> {
         let base_dir = path.parent().map(Path::to_path_buf);
-        let file = ProjectFile::capture(model, annotations, base_dir.as_deref());
+        let file = ProjectFile::capture(model, annotations, flow, floor, base_dir.as_deref());
         std::fs::write(&path, file.to_json()).map_err(ProjectError::Io)?;
         self.path = Some(path);
         self.saved = file;
@@ -630,6 +705,9 @@ fn run_project_actions(
     mut state: ResMut<ProjectState>,
     mut model: ResMut<Model>,
     mut annotations: ResMut<Annotations>,
+    mut flow: ResMut<FlowRes>,
+    mut flow_run: ResMut<FlowRun>,
+    mut floor: FloorDoc,
     mut selection: ResMut<Selection>,
     mut jobs: ResMut<ImportJobs>,
     mut camera: MessageWriter<CameraRequest>,
@@ -638,7 +716,7 @@ fn run_project_actions(
 ) {
     let state = &mut *state;
     if state.startup {
-        state.mark_saved(&model, &annotations);
+        state.mark_saved(&model, &annotations, &flow, &floor.record());
         state.startup = !jobs.loading.is_empty();
     }
 
@@ -652,6 +730,23 @@ fn run_project_actions(
                 let (restored, skipped) =
                     Annotations::from_records(&loaded.file.annotations, &model);
                 *annotations = restored;
+                let (restored_flow, flow_warnings) = match &loaded.file.flow {
+                    Some(record) => flow::record::from_record(record, |path| {
+                        node_at_path(&model, path).filter(|&id| model.get(id).is_some())
+                    }),
+                    None => (FlowModel::default(), Vec::new()),
+                };
+                flow.0 = restored_flow;
+                flow_run.stop();
+                warnings.extend(flow_warnings);
+                floor.apply(
+                    loaded
+                        .file
+                        .floor
+                        .as_ref()
+                        .map(FloorRecord::restore)
+                        .unwrap_or_default(),
+                );
                 if skipped > 0 {
                     warnings.push(format!(
                         "部品が見つからない寸法・注記が {skipped} 件あったため読み飛ばしました"
@@ -661,7 +756,7 @@ fn run_project_actions(
                 selection.clear();
                 camera.write(CameraRequest::FitAll);
                 state.path = Some(path);
-                state.mark_saved(&model, &annotations);
+                state.mark_saved(&model, &annotations, &flow, &floor.record());
                 let mut message = format!("{name} を開きました");
                 if !warnings.is_empty() {
                     message += &format!("。注意が {} 件あります", warnings.len());
@@ -687,18 +782,25 @@ fn run_project_actions(
         jobs.messages.push("プロジェクトを読み込み中です".into());
         return;
     }
-    if action.discards_model() && !confirmed && state.has_unsaved_changes(&model, &annotations) {
+    if action.discards_model()
+        && !confirmed
+        && state.has_unsaved_changes(&model, &annotations, &flow, &floor.record())
+    {
         state.confirm_discard = Some(action);
         return;
     }
     match action {
         ProjectAction::New => {
             model.clear();
+            model.site = Site::default();
             *annotations = Annotations::default();
+            flow.0 = FlowModel::default();
+            flow_run.stop();
+            floor.apply(FloorLayout::default());
             *history = History::default();
             selection.clear();
             state.path = None;
-            state.mark_saved(&model, &annotations);
+            state.mark_saved(&model, &annotations, &flow, &floor.record());
             jobs.messages.push("新しいプロジェクトを作りました".into());
         }
         ProjectAction::OpenPath(path) => {
@@ -722,7 +824,7 @@ fn run_project_actions(
             let Some(path) = path else {
                 return;
             };
-            match state.save(path.clone(), &model, &annotations) {
+            match state.save(path.clone(), &model, &annotations, &flow, &floor.record()) {
                 Ok(()) => jobs
                     .messages
                     .push(format!("{} を保存しました", file_name(&path))),
@@ -781,9 +883,11 @@ fn update_window_title(
     state: Res<ProjectState>,
     model: Res<Model>,
     annotations: Res<Annotations>,
+    flow: Res<FlowRes>,
+    floor: FloorView,
     mut window: Single<&mut Window, With<PrimaryWindow>>,
 ) {
-    let marker = if state.has_unsaved_changes(&model, &annotations) {
+    let marker = if state.has_unsaved_changes(&model, &annotations, &flow, &floor.record()) {
         " *"
     } else {
         ""
@@ -939,13 +1043,64 @@ mod tests {
         let model = sample_model();
         let mut state = ProjectState::default();
         let none = Annotations::default();
-        state.save(path.clone(), &model, &none).unwrap();
-        assert!(!state.has_unsaved_changes(&model, &none));
+        state
+            .save(
+                path.clone(),
+                &model,
+                &none,
+                &FlowModel::default(),
+                &FloorRecord::default(),
+            )
+            .unwrap();
+        assert!(!state.has_unsaved_changes(
+            &model,
+            &none,
+            &FlowModel::default(),
+            &FloorRecord::default()
+        ));
         let loaded = LoadedProject::load(&path);
         std::fs::remove_dir_all(&dir).ok();
         let mut restored = Model::default();
         loaded.unwrap().apply_to(&mut restored);
-        assert!(!state.has_unsaved_changes(&restored, &none));
+        assert!(!state.has_unsaved_changes(
+            &restored,
+            &none,
+            &FlowModel::default(),
+            &FloorRecord::default()
+        ));
+    }
+
+    #[test]
+    fn flow_model_is_saved_with_the_project() {
+        let model = sample_model();
+        let part = model.roots[0];
+        let mut line = crate::flow::model::sample_line();
+        line.elements[1].part = Some(part);
+        let file = ProjectFile::capture(
+            &model,
+            &Annotations::default(),
+            &line,
+            &FloorRecord::default(),
+            None,
+        );
+        let parsed = ProjectFile::from_json(&file.to_json()).unwrap();
+        let restored = reload(&parsed);
+        let (flow, warnings) = flow::record::from_record(parsed.flow.as_ref().unwrap(), |p| {
+            node_at_path(&restored, p)
+        });
+        assert!(warnings.is_empty());
+        assert_eq!(flow.elements.len(), line.elements.len());
+        assert_eq!(flow.elements[1].part, Some(restored.roots[0]));
+        assert_eq!(flow.elements[2].kind, line.elements[2].kind);
+        // 工程モデルが空なら書かない
+        let empty = ProjectFile::capture(
+            &model,
+            &Annotations::default(),
+            &FlowModel::default(),
+            &FloorRecord::default(),
+            None,
+        );
+        assert!(!empty.to_json().contains("\"flow\""));
     }
 
     #[test]
@@ -961,14 +1116,29 @@ mod tests {
             },
             text: "ストッパー位置\n要確認".into(),
         });
-        let file = ProjectFile::capture(&model, &annotations, None);
+        let file = ProjectFile::capture(
+            &model,
+            &annotations,
+            &FlowModel::default(),
+            &FloorRecord::default(),
+            None,
+        );
         let json = file.to_json();
         assert!(json.contains("\"annotations\""), "{json}");
         let restored = reload(&file);
         let parsed = ProjectFile::from_json(&json).unwrap();
         let (reopened, skipped) = Annotations::from_records(&parsed.annotations, &restored);
         assert_eq!(skipped, 0);
-        assert_eq!(ProjectFile::capture(&restored, &reopened, None), file);
+        assert_eq!(
+            ProjectFile::capture(
+                &restored,
+                &reopened,
+                &FlowModel::default(),
+                &FloorRecord::default(),
+                None
+            ),
+            file
+        );
         // 寸法・注記のない古いファイルもそのまま開ける
         assert!(
             !ProjectFile::from_model(&model, None)

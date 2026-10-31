@@ -3,6 +3,7 @@
 use bevy_egui::egui;
 
 use super::UiState;
+use super::modeling::Tab;
 use crate::camera::{CameraRequest, StandardView};
 use crate::file_io::ExportScope;
 use crate::gizmo::Tool;
@@ -17,6 +18,7 @@ pub fn show(root: &mut egui::Ui, state: &mut UiState) {
             edit_menu(ui, state);
             view_menu(ui, state);
             create_menu(ui, state);
+            line_menu(ui, state);
             help_menu(ui);
         });
         ui.separator();
@@ -70,6 +72,8 @@ fn file_menu(ui: &mut egui::Ui, state: &mut UiState) {
         ui.separator();
         ui.weak("ウィンドウへのドラッグ&ドロップでも開けます");
         ui.weak(format!("取り込める形式: STEP, {}", format_list()));
+        ui.weak("平面図として床に敷く形式: DXF, PDF, PNG, JPG");
+        ui.weak("点群: PLY, LAS, E57 (PLY は「OBJ / STL の単位」で読みます)");
     });
 }
 
@@ -95,6 +99,23 @@ fn export_menu(ui: &mut egui::Ui, state: &mut UiState) {
             .clicked()
         {
             state.jobs.request_browser_view();
+        }
+        ui.separator();
+        if ui
+            .button("図面 (PDF / DXF)…")
+            .on_hover_text("表示中の部品の上面図・正面図を、寸法付きで A3 の図面にする")
+            .clicked()
+        {
+            state.documents.open_drawing_dialog();
+            ui.close();
+        }
+        if ui
+            .button("部品表 (Excel / CSV)…")
+            .on_hover_text("同じ部品をまとめて数えた部品表と、ツリーの構成表")
+            .clicked()
+        {
+            state.documents.request_bom();
+            ui.close();
         }
         ui.separator();
         ui.weak("保存ダイアログで選んだ拡張子の形式で書き出します");
@@ -228,6 +249,39 @@ fn create_menu(ui: &mut egui::Ui, state: &mut UiState) {
     ui.menu_button("作成", |ui| {
         if ui.button("箱を追加").clicked() {
             add_box(state);
+        }
+        ui.separator();
+        for tab in [Tab::Cylinder, Tab::Extrude, Tab::Hole, Tab::Boolean] {
+            let text = match tab {
+                Tab::Cylinder => "円柱を追加…",
+                Tab::Extrude => "押し出しで追加…",
+                Tab::Hole => "穴をあける…",
+                Tab::Boolean => "ブーリアン (和・差・積)…",
+            };
+            if ui.button(text).clicked() {
+                state.modeling.open_tab(tab);
+                ui.close();
+            }
+        }
+    });
+}
+
+fn line_menu(ui: &mut egui::Ui, state: &mut UiState) {
+    ui.menu_button("ライン", |ui| {
+        let label = if state.flow.run.open {
+            "工程シミュレーションを閉じる"
+        } else {
+            "工程シミュレーション…"
+        };
+        if ui
+            .button(label)
+            .on_hover_text("工程とバッファを並べてラインを早回しし、稼働率やスループットを集計する")
+            .clicked()
+        {
+            state.flow.toggle();
+        }
+        if ui.button("サンプル工程を読み込む").clicked() {
+            state.flow.load_sample();
         }
     });
 }

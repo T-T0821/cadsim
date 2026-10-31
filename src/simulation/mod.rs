@@ -30,7 +30,7 @@ pub use cadsim_core::simulation::{geometry, interference};
 use cadsim_core::simulation::{mesh, overlap};
 pub mod measure;
 mod panel;
-mod view;
+pub mod view;
 
 pub use geometry::Pose;
 pub use mesh::TriMesh;

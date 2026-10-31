@@ -22,8 +22,18 @@
 //! - `math`        回転や行列の変換
 //! - `simulation`  干渉チェックと距離計測 (`SimBody` を付けた部品が対象)
 //! - `annotation`  3D 上の寸法 (点間距離・辺の長さ・面間距離) と注記
+//! - `drawing`     2D 図面 (上面図・正面図、寸法付き) を作る
+//! - `modeling`    円柱・押し出し・穴あけ・ブーリアン (truck の B-rep)
+//! - `bom`         部品表を作る
+//! - `documents`   図面と部品表の書き出し (ダイアログ)
+//! - `site`        床に敷く平面図 (DXF / PDF / 画像) と縮尺合わせ
+//! - `formats`     平面図や図面などのファイル形式の読み書き (Bevy に依存しない)
+//! - `flow`        工程モデル (生成・工程・バッファ・排出) の早回しとスループット統計
 //! - `stress`      負荷テスト用の数千部品のシーン
 //! - `bench`       `--bench` で FPS を測って終了する
+//! - `floor`       作業者と AGV (床の上を動くもの)、床の上の幾何計算
+//! - `floor_record` 安全機器・作業者・AGV の .cadsim での形
+//! - `safety`      安全機器 (ライトカーテン・エリアセンサ・安全柵・非常停止) と動作範囲
 
 // Windows のリリースビルドでは、起動時に黒いコンソール窓を出さない
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
@@ -31,20 +41,30 @@
 mod animation;
 mod annotation;
 mod bench;
+mod bom;
 mod bvh;
 mod camera;
+mod documents;
+mod drawing;
 mod file_io;
+mod floor;
+mod floor_record;
+mod flow;
+mod formats;
 mod gizmo;
 mod history;
 mod interchange;
 mod japanese_font;
 mod math;
 mod model;
+mod modeling;
 mod motion;
 mod part_mesh;
 mod project;
+mod safety;
 mod shortcuts;
 mod simulation;
+mod site;
 mod step_import;
 mod stress;
 mod ui;
@@ -80,7 +100,10 @@ fn main() {
             simulation::SimulationPlugin,
             annotation::AnnotationPlugin,
             motion::MotionPlugin,
+            flow::FlowPlugin,
             bench::BenchPlugin,
+            (safety::SafetyPlugin, floor::FloorPlugin),
+            (site::SitePlugin, documents::DocumentsPlugin),
         ))
         .run();
 }
