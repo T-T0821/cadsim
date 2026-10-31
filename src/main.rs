@@ -47,6 +47,7 @@
 
 mod animation;
 mod annotation;
+mod assistant;
 mod bench;
 mod bom;
 mod bvh;
@@ -80,6 +81,7 @@ mod recording;
 mod result_export;
 mod safety;
 mod scripting;
+mod sequence_gen;
 mod shortcuts;
 mod simulation;
 mod site;
@@ -137,7 +139,11 @@ fn main() {
                 documents::DocumentsPlugin,
                 result_export::ResultExportPlugin,
             ),
-            physics::PhysicsPlugin,
+            (
+                physics::PhysicsPlugin,
+                assistant::AssistantPlugin,
+                sequence_gen::SequenceGenPlugin,
+            ),
         ))
         .run();
 }

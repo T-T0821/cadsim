@@ -21,6 +21,7 @@ pub fn show(root: &mut egui::Ui, state: &mut UiState) {
             view_menu(ui, state);
             create_menu(ui, state);
             line_menu(ui, state);
+            ai_menu(ui, state);
             help_menu(ui, state);
         });
         ui.separator();
@@ -409,6 +410,35 @@ fn line_menu(ui: &mut egui::Ui, state: &mut UiState) {
             .clicked()
         {
             state.line.toggle();
+            ui.close();
+        }
+    });
+}
+
+fn ai_menu(ui: &mut egui::Ui, state: &mut UiState) {
+    ui.menu_button("AI", |ui| {
+        let label = if state.sequence_gen.open {
+            "チャート・ラダーの自動生成を閉じる"
+        } else {
+            "チャート・ラダーの自動生成…"
+        };
+        if ui
+            .button(label)
+            .on_hover_text(
+                "説明文からタイミングチャートを下書きする、チャートからラダーと I/O 表を作る、ラダーやログを説明させる",
+            )
+            .clicked()
+        {
+            state.sequence_gen.toggle();
+            ui.close();
+        }
+        ui.separator();
+        if ui
+            .button("AI の設定…")
+            .on_hover_text("生成 AI (Claude API) のキーとモデルを設定する")
+            .clicked()
+        {
+            state.assistant.toggle_settings();
             ui.close();
         }
     });
