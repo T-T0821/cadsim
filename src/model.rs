@@ -383,21 +383,8 @@ impl Model {
                 }
                 None => {
                     let parent_id = parent.and_then(|p| id_for_new[p]).unwrap_or(root);
-                    let id = self.next_id;
-                    self.next_id += 1;
-                    self.nodes.insert(
-                        id,
-                        Node {
-                            name: item.name,
-                            parent: Some(parent_id),
-                            children: Vec::new(),
-                            placement: item.placement,
-                            visible: true,
-                            color: None,
-                            kind,
-                        },
-                    );
-                    self.dirty.insert(id);
+                    // 子の並びは後でつなぎ直す
+                    let id = self.add_node(Some(parent_id), item.name, item.placement, kind);
                     id_for_new[n] = Some(id);
                     report.added.push(id);
                 }
