@@ -32,6 +32,7 @@ cargo run                         # サンプルのアセンブリを開いて�
 cargo run -- path/to/part.step    # STEP ファイルを開いて起動
 cargo run -- path/to/line.cadsim  # 保存したプロジェクトを開いて起動
 cargo run --release -- --stress 5000  # 部品 5000 個ほどの負荷テスト用シーンを開いて起動
+cargo run --release -- --physics      # 物理演算のサンプルライン(ワーク 100 個)を開いて流し始める
 ```
 
 初回はビルドに数分かかります。Linux では先に `libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev` を入れてください。

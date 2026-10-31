@@ -39,6 +39,7 @@ use cadsim_core::physics::world::{
 use rapier::RapierEngine;
 
 use crate::camera::CameraRequest;
+use crate::file_io::CommandLine;
 use crate::math::euler_deg_to_quat;
 use crate::model::{Model, NodeId, NodeKind};
 use crate::motion::{ChartSchedule, MotionSet, Playback, SimulationPose, TimingChart};
@@ -52,7 +53,7 @@ impl Plugin for PhysicsPlugin {
             .init_resource::<PhysicsPose>()
             .init_resource::<CableSim>()
             .init_gizmo_group::<CableGizmos>()
-            .add_systems(Startup, configure_cable_gizmos)
+            .add_systems(Startup, (configure_cable_gizmos, start_from_command_line))
             .add_systems(EguiPrimaryContextPass, panel::physics_panel)
             // チャートを書き換えるので、時刻表を作り直す前に読み込む
             .add_systems(Update, load_sample.before(MotionSet::Pose))
@@ -99,6 +100,8 @@ pub struct PhysicsState {
     pub request: Option<RunRequest>,
     /// パネルで「サンプルラインを読み込む」が押された
     pub load_sample: bool,
+    /// サンプルラインを読み込んだら、そのまま物理演算を始める (`--physics`)
+    start_after_load: bool,
     pub stats: Stats,
     run: Option<World>,
     /// タイミングチャートの停止 (先頭へ戻す) を見つけるため、前のフレームの再生状態を覚える
@@ -244,6 +247,14 @@ fn build_world(
     )
 }
 
+/// `cargo run --release -- --physics --bench 20` のように、起動してすぐサンプルラインを流す
+fn start_from_command_line(mut state: ResMut<PhysicsState>) {
+    if CommandLine::parse().physics {
+        state.load_sample = true;
+        state.start_after_load = true;
+    }
+}
+
 /// サンプルラインを読み込み、物理演算を止めて全体を表示する
 fn load_sample(
     mut state: ResMut<PhysicsState>,
@@ -258,6 +269,9 @@ fn load_sample(
     }
     state.load_sample = false;
     state.state = RunState::Stopped;
+    if std::mem::take(&mut state.start_after_load) {
+        state.request = Some(RunRequest::Start);
+    }
     sample::load_sample_line(&mut model, &mut chart);
     *playback = Playback::default();
     camera.write(CameraRequest::FitAll);

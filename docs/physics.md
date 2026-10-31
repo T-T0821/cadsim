@@ -76,6 +76,14 @@ Bevy 用の物理プラグイン(avian3d / bevy_rapier)ではなく、Bevy に�
 cargo test --release --locked works_flow_into_the_bin -- --nocapture
 ```
 
+描画を含めた画面の FPS は、サンプルラインを流しながら `--bench` で測れます。
+
+```sh
+cargo run --release -- --physics --bench 20
+```
+
+物理の計算はリリースビルドでワーク 100 個あたり 1 フレーム 0.4 ms ほどです。GPU の無いクラウド環境(ソフトウェア描画)では描画が律速になり 12 fps ほどでしたが、これは物理なしの 7 部品のサンプル(5 fps 前後)より速く、描画側の制約です。
+
 ## 今後
 
 - ワークの投入口・排出口(別の機能)ができたら、投入されたワークを「物理で動く」剛体として足し、排出で取り除く(`BodyKey` にワーク用の名前を足す)。
