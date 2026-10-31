@@ -21,6 +21,9 @@
 //! - `simulation`  干渉チェックと距離計測 (`SimBody` を付けた部品が対象)
 //! - `annotation`  3D 上の寸法 (点間距離・辺の長さ・面間距離) と注記
 
+// Windows のリリースビルドでは、起動時に黒いコンソール窓を出さない
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 mod animation;
 mod annotation;
 mod camera;

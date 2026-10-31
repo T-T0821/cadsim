@@ -1,0 +1,145 @@
+# Windows / macOS 向けの配布パッケージを作り、GitHub Release に置く。
+#
+# - Actions タブの「Release」→「Run workflow」(main を選ぶ) で手動実行すると:
+#   ビルド → タグ v<major>.<minor>.<実行番号> を付けて Release を作成
+#   (major.minor は Cargo.toml の version から取る。例: 0.1.0 なら v0.1.12 など)
+#   「Release を作成する」のチェックを外すと、ビルドだけ行い成果物を Artifacts に置く
+# - PR でこのファイルや Cargo.toml 等を変えたとき: ビルドだけ行う (Release は作らない)
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Release を作成する (外すとビルドだけ)"
+        type: boolean
+        default: true
+  pull_request:
+    paths:
+      - ".github/workflows/release.yml"
+      - "packaging/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  APP_NAME: cad_proto
+
+jobs:
+  # パッケージ名と Release のタグに使うバージョンを決める
+  version:
+    name: Decide version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        env:
+          PUBLISH: ${{ github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/main' }}
+        run: |
+          if [ "$PUBLISH" = "true" ]; then
+            major_minor=$(grep -m1 '^version' Cargo.toml | sed -E 's/.*"([0-9]+\.[0-9]+)\..*/\1/')
+            echo "version=$major_minor.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=0.0.0-dev" >> "$GITHUB_OUTPUT"
+          fi
+
+  windows:
+    name: Windows (x86_64)
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      # キャッシュは OS ごとに共有し、保存は main でのビルドのときだけ行う
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: cadsim
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Package (.zip)
+        shell: pwsh
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          $dir = "cadsim-v$env:VERSION-windows-x86_64"
+          New-Item -ItemType Directory $dir | Out-Null
+          Copy-Item "target/release/$env:APP_NAME.exe" $dir
+          Copy-Item README.md $dir
+          Compress-Archive -Path $dir -DestinationPath "$dir.zip"
+          "PKG=$dir.zip" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: ${{ env.PKG }}
+
+  macos:
+    name: "macOS (Universal: Apple Silicon + Intel)"
+    needs: version
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      # キャッシュは OS ごとに共有し、保存は main でのビルドのときだけ行う
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: cadsim
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build (arm64 / x86_64)
+        env:
+          MACOSX_DEPLOYMENT_TARGET: "11.0"
+        run: |
+          cargo build --release --locked --target aarch64-apple-darwin
+          cargo build --release --locked --target x86_64-apple-darwin
+
+      - name: Package (.app を .zip に固める)
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          app="CAD Prototype.app"
+          mkdir -p "$app/Contents/MacOS"
+          # 2つのアーキテクチャを1つのユニバーサルバイナリにまとめる
+          lipo -create -output "$app/Contents/MacOS/$APP_NAME" \
+            "target/aarch64-apple-darwin/release/$APP_NAME" \
+            "target/x86_64-apple-darwin/release/$APP_NAME"
+          sed "s/__VERSION__/${VERSION%-dev}/g" packaging/macos/Info.plist > "$app/Contents/Info.plist"
+          # 署名なしだと Apple Silicon で起動できないため、アドホック署名だけ付ける
+          codesign --force --deep --sign - "$app"
+          pkg="cadsim-v$VERSION-macos-universal.zip"
+          ditto -c -k --keepParent "$app" "$pkg"
+          echo "PKG=$pkg" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: ${{ env.PKG }}
+
+  release:
+    name: GitHub Release
+    if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/main'
+    needs: [version, windows, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.version.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          files: dist/*
+          generate_release_notes: true
