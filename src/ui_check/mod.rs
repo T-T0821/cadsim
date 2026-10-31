@@ -41,9 +41,9 @@ use cadsim_io::ui_check as files;
 
 use crate::file_io::{CommandLine, ImportJobs, UiCheckRun, open_any};
 use crate::project::ProjectState;
-use crate::recording::Recorder;
 use crate::simulation::InterferenceCheck;
-use crate::viewport::Defeaturing;
+use crate::view::recording::Recorder;
+use crate::view::viewport::Defeaturing;
 
 /// 自動確認中は 1 フレーム = 1/60 秒として時計を進める。
 /// 描画の速さに関係なく、アニメーションや通知が毎回同じ場面で撮れるようにする

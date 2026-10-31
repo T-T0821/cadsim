@@ -13,12 +13,12 @@ use cadsim_core::workspace::Tool;
 use super::catalog::{Category, IoDir, Motion, PartKind, units_per_mm};
 use super::{Jog, add_standard, dir_to_world, io_capacity, io_table, local_to_world};
 use super::{rebuild_bodies, standard_nodes};
-use crate::camera::{OrbitCamera, ViewportRect};
 use crate::custom_part::{CustomDrag, CustomLibrary};
 use crate::file_io::ImportJobs;
 use crate::history::History;
 use crate::model::{Model, NodeId, NodeKind, Selection};
 use crate::ui::UiState;
+use crate::view::camera::{OrbitCamera, ViewportRect};
 
 /// ドロップ位置を丸める刻み (mm)
 const DROP_SNAP_MM: f64 = 10.0;

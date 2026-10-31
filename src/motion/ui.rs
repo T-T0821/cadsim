@@ -21,11 +21,11 @@ use super::chart::{
 use super::robot_ui::RobotUiState;
 use super::sensor::SensorKind;
 use super::{ChartSchedule, JogPose, Playback, SensorStates, SensorTimeline, SimulationPose, demo};
-use crate::camera::CameraRequest;
 use crate::conveyor::ConveyorConfigRes;
 use crate::history::History;
 use crate::model::{Model, NodeId, Selection};
-use crate::recording::Recorder;
+use crate::view::camera::CameraRequest;
+use crate::view::recording::Recorder;
 
 const NAME_WIDTH: f32 = 150.0;
 const HEADER_HEIGHT: f32 = 34.0;

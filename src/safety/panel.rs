@@ -7,9 +7,9 @@ use cadsim_core::workspace::Tool;
 
 use super::device::DeviceKind;
 use super::{SafetyLayoutRes, SafetyState};
-use crate::camera::ViewportRect;
 use crate::model::Model;
 use crate::ui::widgets;
+use crate::view::camera::ViewportRect;
 
 pub fn safety_panel(
     mut contexts: EguiContexts,

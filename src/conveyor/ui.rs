@@ -8,9 +8,9 @@ use cadsim_core::workspace::Tool;
 use cadsim_core::conveyor::{BeltAxis, ConveyorConfig, ConveyorEnd, Counts, Exit, SourceOutput};
 
 use super::{ConveyorConfigRes, WorkState};
-use crate::camera::ViewportRect;
 use crate::model::{Model, NodeId, Selection};
 use crate::motion::{ActuatorKind, TimingChart};
+use crate::view::camera::ViewportRect;
 
 /// 長さの入力の上限 (モデル単位)
 const MAX_LENGTH: f64 = 100_000.0;

@@ -15,10 +15,10 @@ use bevy::{
     window::PrimaryWindow,
 };
 
-use crate::gizmo::gizmo_not_focused;
 use crate::math::Aabb;
 use crate::model::{Model, Selection};
-use crate::recording::Recorder;
+use crate::view::gizmo::gizmo_not_focused;
+use crate::view::recording::Recorder;
 
 /// 透視投影の縦の画角 (Bevy の既定値と同じ 45°)
 const FOV_Y: f32 = FRAC_PI_4;

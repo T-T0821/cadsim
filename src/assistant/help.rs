@@ -9,12 +9,12 @@ use bevy_egui::{EguiContexts, egui};
 
 use super::AiAssistant;
 use super::job::LlmJob;
-use crate::camera::ViewportRect;
 use crate::model::{Model, Selection};
 use crate::motion::TimingChart;
 use crate::ui::dock::{self, Dock};
 use crate::ui::playful::PlayfulUi;
 use crate::ui::theme::palette;
+use crate::view::camera::ViewportRect;
 use cadsim_core::usecase::help::{self, Answer, HelpContext};
 use cadsim_core::usecase::llm::LlmMessage;
 use cadsim_core::workspace::Tool;

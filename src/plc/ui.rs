@@ -11,10 +11,10 @@ use super::domain::io::{AddressPlan, IoPoint};
 use super::domain::io_csv::CsvReport;
 use super::usecase::{LinkStatus, PlcLink, PlcMode, PlcSession};
 use super::{Plc, Protocol};
-use crate::camera::ViewportRect;
 use crate::model::{Model, Selection};
 use crate::motion::{Playback, TimingChart};
 use crate::scripting::{ScriptRun, script_controls};
+use crate::view::camera::ViewportRect;
 
 const OK_COLOR: egui::Color32 = egui::Color32::from_rgb(90, 200, 120);
 const WARN_COLOR: egui::Color32 = egui::Color32::from_rgb(240, 170, 60);

@@ -36,13 +36,13 @@ use cadsim_core::physics::world::{
 };
 use rapier::RapierEngine;
 
-use crate::camera::CameraRequest;
 use crate::file_io::CommandLine;
 use crate::history::{History, TrackDocExt, TrackedDoc};
 use crate::math::euler_deg_to_quat;
 use crate::model::{Model, NodeId, NodeKind};
 use crate::motion::{ChartSchedule, MotionSet, Playback, SimulationPose, TimingChart};
 use crate::simulation::{InterferenceCheck, SimBody, TriMesh};
+use crate::view::camera::CameraRequest;
 
 pub struct PhysicsPlugin;
 

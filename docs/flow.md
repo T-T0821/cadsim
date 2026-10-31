@@ -19,7 +19,7 @@
 | `staff_ui.rs` | UI | 人員タブ([staffing.md](staffing.md)) |
 | `scenario_ui.rs` | UI | 案の比較タブ |
 
-3D の部品とは `Element::part`(ノード ID)だけでつながります。`viewport.rs` の `sync_views` は、`FlowColors::color_on_path`(自分か一番近い祖先の色)があれば部品の色の代わりに使います。選択・干渉の強調はそれより優先します。
+3D の部品とは `Element::part`(ノード ID)だけでつながります。`view/viewport.rs` の `sync_views` は、`FlowColors::color_on_path`(自分か一番近い祖先の色)があれば部品の色の代わりに使います。選択・干渉の強調はそれより優先します。
 
 ## モデル
 

@@ -20,10 +20,10 @@ use transform_gizmo::{
     mint,
 };
 
-use crate::camera::{ViewportRect, alt_pressed};
 use crate::history::History;
 use crate::math::{euler_deg_to_quat, quat_to_euler_deg};
 use crate::model::{Model, NodeKind, Selection};
+use crate::view::camera::{ViewportRect, alt_pressed};
 
 /// 箱の寸法の下限 (スケールで潰れないようにする)
 const MIN_SIZE: f64 = 0.01;

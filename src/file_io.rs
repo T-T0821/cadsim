@@ -14,7 +14,6 @@ use std::sync::{
 use bevy::{ecs::system::NonSendMarker, prelude::*};
 
 use crate::animation::Animations;
-use crate::camera::CameraRequest;
 use crate::formats::pointcloud_read::{CLOUD_EXTENSIONS, is_cloud_file};
 use crate::formats::{PLAN_EXTENSIONS, is_plan_file};
 use crate::history::{History, ModelChange};
@@ -28,6 +27,7 @@ use crate::motion::{ChartSchedule, Schedule, TimingChart, chart_animation};
 use crate::project::{ProjectAction, ProjectState, is_project_file};
 use crate::step_import::{ImportedFile, import_step};
 use crate::stress::stress_scene;
+use crate::view::camera::CameraRequest;
 
 /// 起動時に開くファイルを指定しなかったときに使うサンプル
 const SAMPLE_STEP: &str = include_str!("../assets/sample_assembly.step");

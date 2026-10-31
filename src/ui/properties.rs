@@ -5,12 +5,12 @@ use bevy_egui::egui;
 
 use super::UiState;
 use super::widgets::{length, round_for_display, row, xyz_editor};
-use crate::camera::CameraRequest;
-use crate::gizmo::snap_settings_ui;
 use crate::math::{euler_deg_to_quat, quat_to_euler_deg, split_placement};
 use crate::model::{NodeId, NodeKind};
 use crate::motion;
 use crate::physics::{BeltDrive, BodyMode, ColliderShape, LocalAxis};
+use crate::view::camera::CameraRequest;
+use crate::view::gizmo::snap_settings_ui;
 
 pub fn show(root: &mut egui::Ui, state: &mut UiState) {
     egui::Panel::right("properties")

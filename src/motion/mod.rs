@@ -147,7 +147,7 @@ impl Plugin for MotionPlugin {
             .add_systems(
                 Update,
                 robot_ui::place_teach_point
-                    .run_if(crate::camera::pointer_in_3d_view)
+                    .run_if(crate::view::camera::pointer_in_3d_view)
                     .after(MotionSet::Pose),
             )
             .add_systems(Update, robot_ui::export_melfa);

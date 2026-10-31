@@ -53,7 +53,6 @@ mod assistant;
 mod bench;
 mod bom;
 mod bvh;
-mod camera;
 mod conveyor;
 mod custom_part;
 mod defeature;
@@ -64,8 +63,8 @@ mod floor;
 mod floor_record;
 mod flow;
 mod formats;
-mod gizmo;
 mod history;
+mod input;
 mod interchange;
 mod japanese_font;
 mod library;
@@ -80,12 +79,10 @@ mod physics;
 mod plc;
 mod preferences_file;
 mod project;
-mod recording;
 mod result_export;
 mod safety;
 mod scripting;
 mod sequence_gen;
-mod shortcuts;
 mod simulation;
 mod site;
 mod step_import;
@@ -93,10 +90,12 @@ mod stress;
 mod ui;
 mod ui_check;
 mod video;
-mod viewport;
+mod view;
 
 use bevy::{diagnostic::FrameTimeDiagnosticsPlugin, prelude::*};
 use bevy_egui::EguiPlugin;
+use input::shortcuts;
+use view::{camera, gizmo, recording, viewport};
 
 fn main() {
     // `--ui-check` なら手順書ごとにアプリを起動し直して流し、結果を返して終わる

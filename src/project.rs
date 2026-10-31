@@ -31,7 +31,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::animation::Animations;
 use crate::annotation::{AnnotationRecord, Annotations, node_at_path, node_path, to_records};
-use crate::camera::CameraRequest;
 use crate::conveyor::ConveyorConfigRes;
 use crate::custom_part::CustomInstanceRecord;
 use crate::file_io::{ImportJobs, file_name, load_source, receive_imports, source_name};
@@ -51,9 +50,10 @@ use crate::model::{BoxPart, Model, NodeId, NodeKind, Selection, StepSource};
 use crate::motion::{Playback, TimingChart};
 use crate::physics::{CableRecord, PartPhysicsRecord};
 use crate::plc::{Plc, PlcRecord};
-use crate::recording::is_recording;
 use crate::site::model::Site;
 use crate::step_import::{ImportNode, ImportedShape};
+use crate::view::camera::CameraRequest;
+use crate::view::recording::is_recording;
 use cadsim_core::conveyor::ConveyorConfig;
 
 /// ファイル形式のバージョン。古いファイルを開けなくなる変更をしたときだけ上げる。

@@ -9,9 +9,9 @@ use bevy_egui::{EguiContexts, egui};
 use cadsim_core::workspace::Tool;
 
 use super::{CableSim, PhysicsState, RunRequest, RunState};
-use crate::camera::ViewportRect;
 use crate::model::{Model, NodeId, Selection};
 use crate::ui::widgets::{length, round_for_display, xyz_editor};
+use crate::view::camera::ViewportRect;
 use cadsim_core::physics::cable::{Cable, CableAnchor, CableKind, CableReport};
 use cadsim_core::physics::settings::meters_per_unit;
 

@@ -33,10 +33,8 @@ use bevy::prelude::Transform;
 
 use crate::annotation::annotate_tool_off;
 use crate::bvh::{Bounds, Bvh};
-use crate::camera::{ViewportRect, alt_pressed, pointer_in_3d_view};
 use crate::defeature::{DefeatureOptions, DefeatureStats, defeature_shape};
 use crate::flow::FlowColors;
-use crate::gizmo::gizmo_not_focused;
 use crate::library;
 use crate::math::{Aabb, to_transform};
 use crate::model::{Model, NodeId, NodeKind, Selection};
@@ -45,6 +43,8 @@ use crate::part_mesh::{PartMesh, shell_edges};
 use crate::physics::{PhysicsPose, PhysicsSet};
 use crate::simulation::{self, InterferenceCheck, Pose, SimBody, TriMesh, measure::not_measuring};
 use crate::step_import::ImportedShape;
+use crate::view::camera::{ViewportRect, alt_pressed, pointer_in_3d_view};
+use crate::view::gizmo::gizmo_not_focused;
 
 /// 箱のテッセレーションの許容誤差 (モデル単位)
 const BOX_TESSELLATION_TOL: f64 = 0.005;

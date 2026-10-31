@@ -6,9 +6,9 @@
 
 use bevy::prelude::*;
 
-use crate::camera::OrbitCamera;
 use crate::file_io::{CommandLine, ImportJobs};
 use crate::model::Model;
+use crate::view::camera::OrbitCamera;
 
 /// 読み込み後、カメラの「全体を表示」アニメーションが落ち着くまで待つ時間 (秒)
 const WARM_UP_SECS: f32 = 2.0;

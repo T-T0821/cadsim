@@ -81,20 +81,23 @@ src/                  アプリ本体 (Bevy + egui)
 ├── animation.rs     取り込んだアニメーションの再生
 ├── project.rs       プロジェクトファイル (.cadsim) の保存と読み込み
 ├── preferences_file.rs 設定ファイルの読み書き (cadsim_io::preferences_file の再公開)
-├── viewport.rs      3D 表示: メッシュ作成、選択の強調、簡略表示 (LOD)、グリッド、クリック選択
 ├── part_mesh.rs / bvh.rs  cadsim_core の同名モジュールを再公開する
 ├── defeature.rs     小さな穴とフィレットを消した表示用メッシュを作る (Bevy に依存しない)
 ├── stress.rs        負荷テスト用の数千部品のシーン
 ├── bench.rs         `--bench` で FPS を測って終了する
-├── camera.rs        オービットカメラ、標準ビュー、全体表示、透視 / 平行投影
-├── gizmo.rs         移動・回転・拡大縮小のギズモとスナップ
 ├── motion/          タイミングチャートと動作シミュレーション
 │   ├── mod.rs        プラグイン、再生状態、SimulationPose (干渉チェックとのつなぎ口)
 │   ├── chart.rs      TimingChart を Bevy の Resource で包む型 (データと計算は cadsim_core::motion)
 │   ├── ui.rs         タイミングチャートのパネル
 │   ├── export.rs     1サイクルの動きを書き出し用のアニメーションにする
 │   └── demo.rs       サンプル装置 (ピック & プレース)
-├── shortcuts.rs     キーボードショートカット
+├── view/            3D 表示 (UI 層)
+│   ├── viewport.rs   メッシュ作成、選択の強調、簡略表示 (LOD)、グリッド、クリック選択
+│   ├── camera.rs     オービットカメラ、標準ビュー、全体表示、透視 / 平行投影
+│   ├── gizmo.rs      移動・回転・拡大縮小のギズモとスナップ
+│   └── recording.rs  動画の書き出し: 画面のキャプチャと設定ウィンドウ
+├── input/
+│   └── shortcuts.rs  キーボードショートカット
 ├── history.rs       元に戻す・やり直しの Bevy 側 (履歴の山とモデルの変更は cadsim_core::history)
 ├── math.rs          f64 の配置を Bevy の Transform にする (計算は cadsim_core::math)
 ├── japanese_font.rs egui に日本語フォントを登録
@@ -208,7 +211,7 @@ src/                  アプリ本体 (Bevy + egui)
 
 いまの制限(読み込み時に無視するもの): NURBS 曲面・曲線・点群・PointInstancer、スキニング・ブレンドシェイプ・頂点アニメーション(points の timeSamples)、テクスチャと UsdPreviewSurface 以外のシェーダー、GeomSubset ごとのマテリアル。シアーを含む変換は移動・回転・拡大に近似します。
 
-### 表示と選択(`viewport.rs`)
+### 表示と選択(`view/viewport.rs`)
 
 1. 部品1つにつき Bevy のエンティティを2つだけ作る。面をすべてまとめた1つのメッシュ(`PartView`)と、子の稜線のメッシュ(`EdgeLines`)。どの三角形がどの面かは `PartMesh::triangle_face` が持つ。
 2. 配置・表示/非表示・色・強調は、`Model`・選択・表示設定・干渉の結果・動作シミュレーションのどれかが変わったフレームだけ、木を1回たどって(`Model::visit_parts`)写す。形状が変わったとき(`dirty`)だけメッシュを作り直す。
@@ -223,7 +226,7 @@ src/                  アプリ本体 (Bevy + egui)
 
 egui のパネルを上・下・左・右の順に置き、残った領域を 3D ビューにします。3D カメラはその領域だけに描き(`Camera::viewport`)、egui はウィンドウ全体を覆う別のカメラに描きます。カーソルがパネルやビューキューブの上にあるときは、3D ビューのクリックやカメラ操作を止めます。
 
-### カメラと投影(`camera.rs`)
+### カメラと投影(`view/camera.rs`)
 
 1. カメラの状態は `OrbitCamera`(注視点・向き・距離・平行投影かどうか)だけ。毎フレーム Bevy の `Transform` と `Projection` に写す。
 2. 平行投影の画面の高さは `2 × 距離 × tan(画角/2)`、つまり透視投影で注視点の位置に見える高さと同じにしている。切り替えても注視点付近の大きさが変わらず、距離を変えるズーム(ホイール・Alt + 右ドラッグ)や全体表示がそのまま平行投影でも効く。
@@ -233,14 +236,14 @@ egui のパネルを上・下・左・右の順に置き、残った領域を 3D
 ### 箱とギズモ
 
 1. 箱(`BoxPart`)は寸法・位置・回転を f64 で持ち、編集されると truck で B-rep ソリッドを作り直す(`tsweep` を3回 → `rotated` → `translated`)。
-2. ギズモ(`src/gizmo.rs`)は transform-gizmo で計算し、egui の背景レイヤーに描く。箱ならパラメータに、取り込んだ部品やアセンブリなら親から見た配置(f64 の行列)に書き戻す。スナップは移動・回転を transform-gizmo の機能に任せ、拡大縮小の寸法だけ `snap_size` で丸める。
+2. ギズモ(`src/view/gizmo.rs`)は transform-gizmo で計算し、egui の背景レイヤーに描く。箱ならパラメータに、取り込んだ部品やアセンブリなら親から見た配置(f64 の行列)に書き戻す。スナップは移動・回転を transform-gizmo の機能に任せ、拡大縮小の寸法だけ `snap_size` で丸める。
 
 ### タイミングチャートと干渉チェックのつながり(`motion/`)
 
 - チャートは「ステップ × アクチュエータ」の表。ステップの動作は同時に始まり、すべて完了 + タイマーで次へ進む。サイクル開始時はすべてのアクチュエータが原点(設計位置)にある。
 - 再生中の動きは `motion::SimulationPose` に入る(アクチュエータに割り当てたノード id → 設計位置からのワールド座標での剛体変換, f64)。
 - `SimulationPose::pose_of(&model, node)` は、部品自身か、いちばん近い祖先のアセンブリの動きを返す。
-- `viewport.rs` の `sync_views` が `.after(MotionSet::Pose)` で動きを部品の配置に重ね、表示用の `Transform` と干渉チェック用の `SimBody.pose` の両方に写すので、再生・スクラブ中も各時刻の位置で干渉チェックが走る。設計データ(`Model`)は書き換えない。
+- `view/viewport.rs` の `sync_views` が `.after(MotionSet::Pose)` で動きを部品の配置に重ね、表示用の `Transform` と干渉チェック用の `SimBody.pose` の両方に写すので、再生・スクラブ中も各時刻の位置で干渉チェックが走る。設計データ(`Model`)は書き換えない。
 - 書き出し(`motion/export.rs`)では、1サイクルを 1/30 秒ごとに標本化し、親と違う動きをするノードだけに「親から見た配置」のキーを作る(`(動き × 設計のワールド配置)` を親の同じ時刻のワールド配置で割る)。アセンブリに割り当てた動きは、シーンの親子関係で子孫に伝わる。
 
 ### 加減速と電子カム(`cadsim_core/src/motion/profile.rs`)
