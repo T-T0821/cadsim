@@ -815,6 +815,8 @@ pub struct ProjectState {
     /// 未保存の変更を捨ててよいか確認している操作
     confirm_discard: Option<ProjectAction>,
     loading: Option<LoadTask>,
+    /// プロジェクトを開いた・新規にした回数。ミッションの判定が、開いた中身を「操作した」と数えないように使う
+    opened: u64,
     /// 直前のフレームで未保存の変更があったか (`update_window_title` が毎フレーム更新する)
     unsaved: bool,
 }
@@ -828,6 +830,7 @@ impl Default for ProjectState {
             requested: None,
             confirm_discard: None,
             loading: None,
+            opened: 0,
             unsaved: false,
         }
     }
@@ -861,6 +864,16 @@ impl ProjectState {
 
     fn base_dir(&self) -> Option<&Path> {
         self.path.as_deref().and_then(Path::parent)
+    }
+
+    /// 読み込み中か
+    pub fn is_loading(&self) -> bool {
+        self.loading.is_some()
+    }
+
+    /// プロジェクトを開いた・新規にした回数
+    pub fn opened_count(&self) -> u64 {
+        self.opened
     }
 
     fn mark_saved(&mut self, docs: &ProjectDocs) {
@@ -1016,6 +1029,7 @@ fn run_project_actions(
                 history.clear();
                 selection.clear();
                 camera.write(CameraRequest::FitAll);
+                state.opened += 1;
                 let mut message = format!("{name} を開きました");
                 match origin {
                     LoadOrigin::File(path) => state.path = Some(path),
@@ -1074,6 +1088,7 @@ fn run_project_actions(
             history.clear();
             selection.clear();
             state.path = None;
+            state.opened += 1;
             state.mark_saved(&docs!());
             jobs.messages.push("新しいプロジェクトを作りました".into());
         }

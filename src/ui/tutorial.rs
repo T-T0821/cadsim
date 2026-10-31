@@ -20,6 +20,8 @@ use cadsim_core::gamify::{Chapter, MISSIONS, Mission, Place};
 
 /// 手順を出しているときのミッションカードの幅
 pub const CARD_WIDTH_WITH_STEPS: f32 = 310.0;
+/// ようこそ画面の幅 (後ろのデモラインを隠しすぎない)
+const WELCOME_WIDTH: f32 = 360.0;
 /// 新しいミッションになってから矢印を出しておく時間 (秒)
 const POINTER_SECONDS: f64 = 8.0;
 
@@ -78,20 +80,11 @@ fn welcome(
     project: &mut ProjectState,
 ) {
     let mut choice = None;
-    // 後ろのデモラインは見えるまま、少し暗くしてようこそ画面に目が行くようにする
-    // (パネルの上にも重ね、ようこそ画面を閉じるまで後ろはクリックできないようにする)
-    egui::Area::new("welcome_backdrop".into())
-        .order(egui::Order::Foreground)
-        .fixed_pos(view.min)
-        .show(ctx, |ui| {
-            let (rect, _) = ui.allocate_exact_size(view.size(), egui::Sense::click());
-            ui.painter()
-                .rect_filled(rect, CornerRadius::ZERO, Color32::from_black_alpha(120));
-        });
+    // 後ろで動いているデモラインが見えるよう、3D ビューの左に寄せて出す
     egui::Area::new("welcome".into())
-        .order(egui::Order::Tooltip)
-        .pivot(Align2::CENTER_CENTER)
-        .fixed_pos(view.center())
+        .order(egui::Order::Foreground)
+        .pivot(Align2::LEFT_CENTER)
+        .fixed_pos(pos2(view.min.x + 16.0, view.center().y))
         .show(ctx, |ui| {
             egui::Frame::window(ui.style())
                 .fill(palette::NAVY_LIGHT)
@@ -99,7 +92,7 @@ fn welcome(
                 .corner_radius(CornerRadius::same(18))
                 .inner_margin(egui::Margin::symmetric(24, 18))
                 .show(ui, |ui| {
-                    ui.set_width(440.0);
+                    ui.set_width(WELCOME_WIDTH);
                     ui.horizontal(|ui| {
                         mascot(ui, 64.0, now, true);
                         ui.vertical(|ui| {
@@ -331,6 +324,8 @@ pub fn mission_body(
         {
             tutorial.point();
         }
+    });
+    ui.horizontal(|ui| {
         if ui
             .small_button("💬 AI に聞く")
             .on_hover_text(
@@ -479,8 +474,12 @@ fn pointer(
             );
         }
         Place::Rail => {
-            // ツールレールは画面の左端 (アセンブリツリーのさらに左)
-            let tip = pos2(RAIL_WIDTH + 4.0, view.center().y);
+            // ツールレールは画面の左端 (アセンブリツリーのさらに左)。そのボタンの横を指す
+            let y = next
+                .tool
+                .and_then(|tool| dock::rail_button_rect(ctx, tool))
+                .map_or(view.center().y, |r| r.center().y);
+            let tip = pos2(RAIL_WIDTH + 4.0, y);
             painter.arrow(tip + vec2(80.0 + nudge, 0.0), vec2(-70.0, 0.0), stroke);
             let text = match next.tool {
                 Some(tool) => format!("左端の {} {}", dock::icon(tool), tool.short_label()),
@@ -500,8 +499,8 @@ fn pointer(
                 format!("⌨ {}", next.keys.join(" + "))
             };
             label(
-                view.center() + vec2(0.0, -nudge),
-                Align2::CENTER_CENTER,
+                view.center_top() + vec2(0.0, 28.0 + nudge * 0.5),
+                Align2::CENTER_TOP,
                 &keys,
             );
         }

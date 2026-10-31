@@ -156,8 +156,16 @@ fn track_missions(
     viewport: Res<ViewportRect>,
     mouse: Res<ButtonInput<MouseButton>>,
     flow: Res<FlowRun>,
+    tutorial: Res<TutorialUi>,
+    mut opened: Local<Option<u64>>,
 ) {
     if ui.prefs.progress.all_complete() {
+        return;
+    }
+    // ようこそ画面の間と、プロジェクトを開いている途中・開いた直後は数えない (次の観測を基準にする)
+    let reopened = opened.replace(project.opened_count()) != Some(project.opened_count());
+    if !ui.prefs.welcomed || tutorial.welcome_requested || project.is_loading() || reopened {
+        ui.prefs.progress.rebase();
         return;
     }
     let interfering_pairs = check

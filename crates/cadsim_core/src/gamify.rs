@@ -501,6 +501,14 @@ impl Progress {
         self.skipped.retain(|&s| s != id);
     }
 
+    /// 次の観測を基準にし直す。プロジェクトを開いたときなど、操作によらず画面が変わるときに呼ぶ
+    /// (開いたファイルに寸法や標準部品があっても、ミッション達成にしない)。
+    pub fn rebase(&mut self) {
+        self.last = None;
+        self.orbit_travel = 0.0;
+        self.edited = false;
+    }
+
     /// 最初からやり直す
     pub fn reset(&mut self) {
         *self = Self::default();
@@ -790,6 +798,25 @@ mod tests {
         assert!(restored.is_done(MissionId::Undo));
         assert_eq!(restored.done_count(), 2);
         assert_eq!(restored.next().unwrap().id, MissionId::SelectPart);
+    }
+
+    #[test]
+    fn rebase_ignores_what_a_loaded_project_brings() {
+        let mut progress = Progress::default();
+        observe(&mut progress, |_| {});
+        progress.rebase();
+        // 開いたプロジェクトに寸法・標準部品があり、再生も始まった
+        let loaded = Observation {
+            annotation_count: 3,
+            library_part_count: 5,
+            playing: true,
+            ..Default::default()
+        };
+        assert!(progress.observe(&loaded).is_empty());
+        assert_eq!(
+            observe(&mut progress, |o| o.annotation_count = 4),
+            [MissionId::Annotate]
+        );
     }
 
     #[test]
