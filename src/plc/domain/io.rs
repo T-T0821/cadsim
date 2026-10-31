@@ -7,10 +7,15 @@
 //! | シリンダ | 出 (ON で出、OFF で戻) | 出端、戻端 |
 //! | 直動軸・回転テーブル | 指令位置 (ワード) | 現在位置 (ワード)、位置決め完了 |
 //!
+//! ライン連携 (`cadsim_core::line::signals`) の信号 (工程・AGV・安全の状態、運転・投入許可) も
+//! 同じ表の後ろに並べる。番号はライン連携の信号表の番号 (200 番台・300 番台) をそのまま使う。
+//!
 //! ビットはコイル、ワードは保持レジスタに割り付ける。番号は「出力ビット」「出力ワード」
 //! 「入力ビット」「入力ワード」それぞれの先頭番号から、アクチュエータの並び順に詰めて振る。
 
 use std::collections::HashMap;
+
+use cadsim_core::line::{Direction, Signal, Value};
 
 use crate::motion::{ActuatorKind, TimingChart};
 
@@ -29,17 +34,29 @@ pub enum Point {
     AxisPosition(u32),
     /// 現在位置が指令位置に着いている
     AxisInPosition(u32),
+    /// ライン連携の 設備 → PLC のビット。数値はライン連携の信号表の番号。
+    LineInput(u16),
+    /// ライン連携の 設備 → PLC のワード
+    LineInputWord(u16),
+    /// ライン連携の PLC → 設備 のビット (運転・投入許可)
+    LineOutput(u16),
 }
 
 impl Point {
     /// PLC の出力 (PLC → 設備) なら true
     pub fn is_output(self) -> bool {
-        matches!(self, Point::CylinderExtend(_) | Point::AxisTarget(_))
+        matches!(
+            self,
+            Point::CylinderExtend(_) | Point::AxisTarget(_) | Point::LineOutput(_)
+        )
     }
 
     /// ワード (数値) の信号なら true。それ以外は ON/OFF のビット。
     pub fn is_word(self) -> bool {
-        matches!(self, Point::AxisTarget(_) | Point::AxisPosition(_))
+        matches!(
+            self,
+            Point::AxisTarget(_) | Point::AxisPosition(_) | Point::LineInputWord(_)
+        )
     }
 
     /// 信号名の後ろに付ける言葉
@@ -51,6 +68,8 @@ impl Point {
             Point::AxisTarget(_) => "指令位置",
             Point::AxisPosition(_) => "現在位置",
             Point::AxisInPosition(_) => "位置決め完了",
+            // ライン連携の信号は信号名をそのまま使う
+            Point::LineInput(_) | Point::LineInputWord(_) | Point::LineOutput(_) => "",
         }
     }
 }
@@ -188,6 +207,26 @@ impl IoTable {
         Self { points }
     }
 
+    /// ライン連携の信号を後ろに足す。番号は信号表の番号か、CSV で決めた個別の番号。
+    pub fn with_line_signals(mut self, signals: &[LineSignal], plan: &AddressPlan) -> Self {
+        for (name, point) in signals {
+            let custom = plan.custom.get(point).cloned().unwrap_or_default();
+            let auto_address = match *point {
+                Point::LineInput(a) | Point::LineInputWord(a) | Point::LineOutput(a) => a,
+                _ => continue,
+            };
+            self.points.push(IoPoint {
+                point: *point,
+                name: name.clone(),
+                address: custom.address.unwrap_or(auto_address),
+                scale: custom.scale.unwrap_or(1.0),
+                node: custom.node,
+                log_column: custom.log_column,
+            });
+        }
+        self
+    }
+
     #[cfg(test)]
     pub fn get(&self, point: Point) -> Option<&IoPoint> {
         self.points.iter().find(|p| p.point == point)
@@ -205,6 +244,24 @@ impl IoTable {
         }
         conflicts
     }
+}
+
+/// ライン連携の信号1つ: 信号名と、I/O 表での意味
+pub type LineSignal = (String, Point);
+
+/// ライン連携の信号表を I/O 表の行にする
+pub fn line_points(signals: &[Signal]) -> Vec<LineSignal> {
+    signals
+        .iter()
+        .map(|s| {
+            let point = match (s.direction, s.value) {
+                (Direction::ToPlc, Value::Bit(_)) => Point::LineInput(s.address),
+                (Direction::ToPlc, Value::Word(_)) => Point::LineInputWord(s.address),
+                (Direction::FromPlc, _) => Point::LineOutput(s.address),
+            };
+            (s.name.clone(), point)
+        })
+        .collect()
 }
 
 fn axis_points(id: u32) -> Vec<Point> {

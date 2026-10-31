@@ -54,6 +54,10 @@ pub enum SignalRecord {
     AxisTarget,
     AxisPosition,
     AxisInPosition,
+    /// ライン連携の信号。`actuator` の欄にライン連携の信号表の番号を入れる。
+    LineInput,
+    LineInputWord,
+    LineOutput,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -88,6 +92,9 @@ fn split(point: Point) -> (u32, SignalRecord) {
         Point::AxisTarget(id) => (id, SignalRecord::AxisTarget),
         Point::AxisPosition(id) => (id, SignalRecord::AxisPosition),
         Point::AxisInPosition(id) => (id, SignalRecord::AxisInPosition),
+        Point::LineInput(a) => (a.into(), SignalRecord::LineInput),
+        Point::LineInputWord(a) => (a.into(), SignalRecord::LineInputWord),
+        Point::LineOutput(a) => (a.into(), SignalRecord::LineOutput),
     }
 }
 
@@ -99,7 +106,14 @@ fn join(id: u32, signal: SignalRecord) -> Point {
         SignalRecord::AxisTarget => Point::AxisTarget(id),
         SignalRecord::AxisPosition => Point::AxisPosition(id),
         SignalRecord::AxisInPosition => Point::AxisInPosition(id),
+        SignalRecord::LineInput => Point::LineInput(line_address(id)),
+        SignalRecord::LineInputWord => Point::LineInputWord(line_address(id)),
+        SignalRecord::LineOutput => Point::LineOutput(line_address(id)),
     }
+}
+
+fn line_address(id: u32) -> u16 {
+    u16::try_from(id).unwrap_or(u16::MAX)
 }
 
 /// 保存する形にする。どちらも初期値のままなら None (項目ごと省く)。
