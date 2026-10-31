@@ -1,14 +1,17 @@
-//! コンベアとグリッパの編集画面 (3D ビュー右上、ビューキューブの下の「ワーク搬送」ウィンドウ)
+//! ワーク搬送の編集画面 (3D ビュー右上、ビューキューブの下の「ワーク搬送」ウィンドウ)
 
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 
-use cadsim_core::conveyor::{BeltAxis, ConveyorConfig, ConveyorEnd};
+use cadsim_core::conveyor::{BeltAxis, ConveyorConfig, ConveyorEnd, Counts, Exit, SourceOutput};
 
 use super::{ConveyorConfigRes, WorkState};
 use crate::camera::ViewportRect;
 use crate::model::{Model, NodeId, Selection};
 use crate::motion::{ActuatorKind, TimingChart};
+
+/// 長さの入力の上限 (モデル単位)
+const MAX_LENGTH: f64 = 100_000.0;
 
 pub fn conveyor_window(
     mut contexts: EguiContexts,
@@ -24,19 +27,26 @@ pub fn conveyor_window(
     };
     // 編集はコピーに対して行い、変わったときだけ書き戻す (毎フレーム計算し直さないため)
     let mut edited = config.0.clone();
+    let parts = PartPicker::new(&model, selection.node);
     egui::Window::new("ワーク搬送")
         // 3D ビューの右上、ビューキューブの下に浮かべる (左上は干渉チェックのパネル)
         .pivot(egui::Align2::RIGHT_TOP)
         .default_pos([view.max.x - 8.0, view.min.y + 170.0])
-        .default_width(300.0)
+        .default_width(290.0)
         .collapsible(true)
         .show(contexts.ctx_mut()?, |ui| {
-            let held = state.works().iter().filter(|w| w.is_held()).count();
-            ui.label(format!("ワーク {} 個 (把持中 {held})", state.works().len()));
+            counts_ui(ui, &edited, &state);
+            ui.separator();
             egui::ScrollArea::vertical()
-                .max_height(500.0)
+                .max_height(480.0)
                 .show(ui, |ui| {
-                    conveyors_ui(ui, &mut edited, &model, selection.node);
+                    kinds_ui(ui, &mut edited);
+                    ui.separator();
+                    sources_ui(ui, &mut edited, &parts);
+                    ui.separator();
+                    sinks_ui(ui, &mut edited, &parts);
+                    ui.separator();
+                    conveyors_ui(ui, &mut edited, &parts);
                     ui.separator();
                     grippers_ui(ui, &mut edited, &chart);
                 });
@@ -47,30 +57,284 @@ pub fn conveyor_window(
     Ok(())
 }
 
-fn node_name(model: &Model, id: Option<NodeId>) -> String {
-    id.and_then(|id| model.get(id))
-        .map_or("(未設定)".to_string(), |node| node.name.clone())
+/// 投入数・排出数・仕掛数
+fn counts_ui(ui: &mut egui::Ui, config: &ConveyorConfig, state: &WorkState) {
+    let counts: &Counts = state.counts();
+    let held = state.works().iter().filter(|w| w.is_held()).count();
+    ui.label(format!(
+        "投入 {} / 排出 {} / 仕掛 {} (把持中 {held})",
+        counts.total_fed(),
+        counts.total_discharged(),
+        state.in_process(),
+    ));
+    if counts.total_fed() == 0 {
+        return;
+    }
+    egui::CollapsingHeader::new("内訳")
+        .id_salt("work_counts")
+        .show(ui, |ui| {
+            egui::Grid::new("work_counts_grid")
+                .num_columns(3)
+                .striped(true)
+                .show(ui, |ui| {
+                    ui.strong("");
+                    ui.strong("投入");
+                    ui.strong("排出");
+                    ui.end_row();
+                    for kind in &config.kinds {
+                        let (fed, out) = counts.by_kind.get(&kind.id).copied().unwrap_or((0, 0));
+                        ui.label(format!("種類: {}", kind.name));
+                        ui.label(fed.to_string());
+                        ui.label(out.to_string());
+                        ui.end_row();
+                    }
+                    for source in &config.sources {
+                        let fed = counts.fed.get(&source.id).copied().unwrap_or(0);
+                        ui.label(&source.name);
+                        ui.label(fed.to_string());
+                        ui.label("");
+                        ui.end_row();
+                    }
+                    for sink in &config.sinks {
+                        let out = counts.discharged.get(&Exit::Sink(sink.id)).copied();
+                        ui.label(&sink.name);
+                        ui.label("");
+                        ui.label(out.unwrap_or(0).to_string());
+                        ui.end_row();
+                    }
+                    for conveyor in &config.conveyors {
+                        if conveyor.end != ConveyorEnd::Discharge {
+                            continue;
+                        }
+                        let out = counts.discharged.get(&Exit::Conveyor(conveyor.id)).copied();
+                        ui.label(format!("{} の終端", conveyor.name));
+                        ui.label("");
+                        ui.label(out.unwrap_or(0).to_string());
+                        ui.end_row();
+                    }
+                });
+        });
 }
 
-fn conveyors_ui(
-    ui: &mut egui::Ui,
-    config: &mut ConveyorConfig,
-    model: &Model,
+/// 部品を選ぶ欄 (一覧から選ぶか、ツリーで選んでいる部品を使う)
+struct PartPicker {
+    candidates: Vec<(NodeId, String)>,
+    names: std::collections::HashMap<NodeId, String>,
     selected: Option<NodeId>,
-) {
-    // ベルトの候補: ツリーにあるすべての部品とアセンブリ
-    let candidates: Vec<(NodeId, String)> = model
-        .roots
-        .iter()
-        .flat_map(|&root| model.subtree(root))
-        .map(|id| (id, model.path_label(id)))
-        .collect();
-    ui.horizontal(|ui| {
-        ui.heading("コンベア");
-        if ui.button("+ 追加").clicked() {
-            config.add_conveyor();
+}
+
+impl PartPicker {
+    fn new(model: &Model, selected: Option<NodeId>) -> Self {
+        // 候補: ツリーにあるすべての部品とアセンブリ
+        let candidates: Vec<(NodeId, String)> = model
+            .roots
+            .iter()
+            .flat_map(|&root| model.subtree(root))
+            .map(|id| (id, model.path_label(id)))
+            .collect();
+        let names = candidates
+            .iter()
+            .filter_map(|(id, _)| model.get(*id).map(|n| (*id, n.name.clone())))
+            .collect();
+        Self {
+            candidates,
+            names,
+            selected,
         }
-    });
+    }
+
+    fn show(&self, ui: &mut egui::Ui, salt: (&str, u32), part: &mut Option<NodeId>) {
+        ui.horizontal(|ui| {
+            let text = part
+                .and_then(|id| self.names.get(&id).cloned())
+                .unwrap_or_else(|| "(未設定)".to_string());
+            egui::ComboBox::from_id_salt(salt)
+                .selected_text(text)
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(part, None, "(未設定)");
+                    for (id, label) in &self.candidates {
+                        ui.selectable_value(part, Some(*id), label);
+                    }
+                });
+            if ui
+                .add_enabled(self.selected.is_some(), egui::Button::new("選択中"))
+                .on_hover_text("ツリーで選んでいる部品を使う")
+                .clicked()
+            {
+                *part = self.selected;
+            }
+        });
+    }
+}
+
+fn header(ui: &mut egui::Ui, title: &str) -> bool {
+    ui.horizontal(|ui| {
+        ui.heading(title);
+        ui.button("+ 追加").clicked()
+    })
+    .inner
+}
+
+fn length(value: &mut f64) -> egui::DragValue<'_> {
+    egui::DragValue::new(value)
+        .speed(1.0)
+        .range(0.0..=MAX_LENGTH)
+}
+
+fn kinds_ui(ui: &mut egui::Ui, config: &mut ConveyorConfig) {
+    if header(ui, "ワーク種類") {
+        config.add_kind();
+    }
+    let mut remove = None;
+    for kind in &mut config.kinds {
+        ui.horizontal(|ui| {
+            ui.color_edit_button_rgb(&mut kind.color);
+            ui.add(egui::TextEdit::singleline(&mut kind.name).desired_width(80.0));
+            for v in &mut kind.size {
+                ui.add(egui::DragValue::new(v).speed(1.0).range(0.1..=MAX_LENGTH));
+            }
+            if ui.small_button("削除").clicked() {
+                remove = Some(kind.id);
+            }
+        });
+    }
+    if !config.kinds.is_empty() {
+        ui.weak("寸法は 幅 / 高さ / 奥行");
+    }
+    if let Some(id) = remove {
+        config.remove_kind(id);
+    }
+}
+
+fn sources_ui(ui: &mut egui::Ui, config: &mut ConveyorConfig, parts: &PartPicker) {
+    if header(ui, "投入口") {
+        config.add_source();
+    }
+    let kinds: Vec<(u32, String)> = config
+        .kinds
+        .iter()
+        .map(|k| (k.id, k.name.clone()))
+        .collect();
+    let conveyors: Vec<(u32, String)> = config
+        .conveyors
+        .iter()
+        .map(|c| (c.id, c.name.clone()))
+        .collect();
+    let mut remove = None;
+    for source in &mut config.sources {
+        egui::CollapsingHeader::new(&source.name)
+            .id_salt(("source", source.id))
+            .show(ui, |ui| {
+                egui::Grid::new(("source_grid", source.id))
+                    .num_columns(2)
+                    .show(ui, |ui| {
+                        ui.label("名前");
+                        ui.text_edit_singleline(&mut source.name);
+                        ui.end_row();
+
+                        ui.label("部品");
+                        parts.show(ui, ("source_part", source.id), &mut source.part);
+                        ui.end_row();
+
+                        ui.label("出す先");
+                        let current = match source.output {
+                            SourceOutput::OnPart => "部品の上".to_string(),
+                            SourceOutput::Conveyor(id) => conveyors
+                                .iter()
+                                .find(|(c, _)| *c == id)
+                                .map_or("(なし)".to_string(), |(_, n)| format!("{n} の始端")),
+                        };
+                        egui::ComboBox::from_id_salt(("source_output", source.id))
+                            .selected_text(current)
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(
+                                    &mut source.output,
+                                    SourceOutput::OnPart,
+                                    "部品の上",
+                                );
+                                for (id, name) in &conveyors {
+                                    ui.selectable_value(
+                                        &mut source.output,
+                                        SourceOutput::Conveyor(*id),
+                                        format!("{name} の始端"),
+                                    );
+                                }
+                            });
+                        ui.end_row();
+
+                        ui.label("間隔");
+                        ui.add(
+                            egui::DragValue::new(&mut source.interval)
+                                .speed(0.05)
+                                .range(0.1..=3600.0)
+                                .suffix(" s"),
+                        );
+                        ui.end_row();
+
+                        ui.label("種類");
+                        ui.vertical(|ui| {
+                            for (id, name) in &kinds {
+                                let mut on = source.kinds.contains(id);
+                                if ui.checkbox(&mut on, name).changed() {
+                                    if on {
+                                        source.kinds.push(*id);
+                                    } else {
+                                        source.kinds.retain(|k| k != id);
+                                    }
+                                }
+                            }
+                            ui.weak("複数選ぶと順番に出す");
+                        });
+                        ui.end_row();
+
+                        ui.label("個数");
+                        ui.horizontal(|ui| {
+                            let mut limited = source.limit.is_some();
+                            if ui.checkbox(&mut limited, "上限あり").changed() {
+                                source.limit = limited.then_some(10);
+                            }
+                            if let Some(limit) = &mut source.limit {
+                                ui.add(
+                                    egui::DragValue::new(limit).range(1..=100_000).suffix(" 個"),
+                                );
+                            }
+                        });
+                        ui.end_row();
+                    });
+                if ui.button("投入口を削除").clicked() {
+                    remove = Some(source.id);
+                }
+            });
+    }
+    if let Some(id) = remove {
+        config.sources.retain(|s| s.id != id);
+    }
+}
+
+fn sinks_ui(ui: &mut egui::Ui, config: &mut ConveyorConfig, parts: &PartPicker) {
+    if header(ui, "排出口") {
+        config.add_sink();
+    }
+    ui.weak("部品に触れたワークを消して数える");
+    let mut remove = None;
+    for sink in &mut config.sinks {
+        ui.horizontal(|ui| {
+            ui.add(egui::TextEdit::singleline(&mut sink.name).desired_width(80.0));
+            parts.show(ui, ("sink_part", sink.id), &mut sink.part);
+            if ui.small_button("削除").clicked() {
+                remove = Some(sink.id);
+            }
+        });
+    }
+    if let Some(id) = remove {
+        config.sinks.retain(|s| s.id != id);
+    }
+}
+
+fn conveyors_ui(ui: &mut egui::Ui, config: &mut ConveyorConfig, parts: &PartPicker) {
+    if header(ui, "コンベア") {
+        config.add_conveyor();
+    }
     let mut remove = None;
     for conveyor in &mut config.conveyors {
         egui::CollapsingHeader::new(&conveyor.name)
@@ -84,23 +348,7 @@ fn conveyors_ui(
                         ui.end_row();
 
                         ui.label("ベルト部品");
-                        ui.horizontal(|ui| {
-                            egui::ComboBox::from_id_salt(("belt", conveyor.id))
-                                .selected_text(node_name(model, conveyor.part))
-                                .show_ui(ui, |ui| {
-                                    ui.selectable_value(&mut conveyor.part, None, "(未設定)");
-                                    for (id, label) in &candidates {
-                                        ui.selectable_value(&mut conveyor.part, Some(*id), label);
-                                    }
-                                });
-                            if ui
-                                .add_enabled(selected.is_some(), egui::Button::new("選択中"))
-                                .on_hover_text("ツリーで選んでいる部品をベルトにする")
-                                .clicked()
-                            {
-                                conveyor.part = selected;
-                            }
-                        });
+                        parts.show(ui, ("belt", conveyor.id), &mut conveyor.part);
                         ui.end_row();
 
                         ui.label("流れる向き");
@@ -113,12 +361,7 @@ fn conveyors_ui(
                         ui.end_row();
 
                         ui.label("速度");
-                        ui.add(
-                            egui::DragValue::new(&mut conveyor.speed)
-                                .speed(0.01)
-                                .range(0.0..=20.0)
-                                .suffix(" /s"),
-                        );
+                        ui.add(length(&mut conveyor.speed).suffix(" /s"));
                         ui.end_row();
 
                         ui.label("終端");
@@ -128,34 +371,6 @@ fn conveyors_ui(
                             }
                         });
                         ui.end_row();
-
-                        ui.label("ワーク供給");
-                        ui.horizontal(|ui| {
-                            let mut feeds = conveyor.feed_interval.is_some();
-                            if ui.checkbox(&mut feeds, "あり").changed() {
-                                conveyor.feed_interval = feeds.then_some(3.0);
-                            }
-                            if let Some(interval) = &mut conveyor.feed_interval {
-                                ui.add(
-                                    egui::DragValue::new(interval)
-                                        .speed(0.05)
-                                        .range(0.1..=600.0)
-                                        .prefix("間隔 ")
-                                        .suffix(" s"),
-                                );
-                            }
-                        });
-                        ui.end_row();
-
-                        if conveyor.feed_interval.is_some() {
-                            ui.label("ワーク寸法");
-                            ui.horizontal(|ui| {
-                                for v in &mut conveyor.work_size {
-                                    ui.add(egui::DragValue::new(v).speed(0.01).range(0.01..=100.0));
-                                }
-                            });
-                            ui.end_row();
-                        }
                     });
                 if ui.button("コンベアを削除").clicked() {
                     remove = Some(conveyor.id);
@@ -163,17 +378,14 @@ fn conveyors_ui(
             });
     }
     if let Some(id) = remove {
-        config.conveyors.retain(|c| c.id != id);
+        config.remove_conveyor(id);
     }
 }
 
 fn grippers_ui(ui: &mut egui::Ui, config: &mut ConveyorConfig, chart: &TimingChart) {
-    ui.horizontal(|ui| {
-        ui.heading("グリッパ");
-        if ui.button("+ 追加").clicked() {
-            config.add_gripper();
-        }
-    });
+    if header(ui, "グリッパ") {
+        config.add_gripper();
+    }
     ui.weak("チャックはシリンダ。出 = 閉で掴み、戻り始めで離す");
     let cylinders: Vec<_> = chart
         .actuators
@@ -225,17 +437,13 @@ fn grippers_ui(ui: &mut egui::Ui, config: &mut ConveyorConfig, chart: &TimingCha
                         ui.label("掴む位置 X/Y/Z");
                         ui.horizontal(|ui| {
                             for v in &mut gripper.tcp {
-                                ui.add(egui::DragValue::new(v).speed(0.01));
+                                ui.add(egui::DragValue::new(v).speed(1.0));
                             }
                         });
                         ui.end_row();
 
                         ui.label("掴める距離");
-                        ui.add(
-                            egui::DragValue::new(&mut gripper.reach)
-                                .speed(0.01)
-                                .range(0.01..=10.0),
-                        );
+                        ui.add(length(&mut gripper.reach));
                         ui.end_row();
                     });
                 if ui.button("グリッパを削除").clicked() {
