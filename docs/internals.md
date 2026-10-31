@@ -38,6 +38,10 @@
 
 ```text
 crates/cadsim_core/   Bevy に依存しないドメイン (cargo test -p cadsim_core で単体テスト)
+├── animation.rs     ノードの配置と、取り込んだアニメーションのキー (Animation / Track)
+├── bvh.rs           外接箱の木 (BVH) とレイの当たり判定
+├── part_mesh.rs     部品1つ分の表示用メッシュ (面をまとめたもの・面番号の表・簡略形状)
+├── shape.rs         取り込んだ形状 (B-rep・面メッシュ・計測値) とアセンブリの木 (ImportNode)
 ├── gamify.rs        ゲーム風 UI の中身: ミッションの判定・経験値とレベル・紙吹雪 (docs/playful-ui.md)
 ├── math.rs          回転・行列・外接箱の計算 (f64)
 ├── remap.rs         形状の差し替え: 古い木と新しい木のノードの対応づけ
@@ -47,6 +51,7 @@ crates/cadsim_core/   Bevy に依存しないドメイン (cargo test -p cadsim_
 ├── flow/            工程モデル (model)、離散事象シミュレーションと集計 (sim)、状態・稼働率の色 (palette)
 └── physics/         物理演算の設定・ケーブルの紐モデル・剛体の進め方 (settings / cable / world)
 crates/cadsim_io/     Bevy に依存しないアダプター (cargo test -p cadsim_io で単体テスト)
+├── step.rs          STEP → アセンブリの木と B-rep (形状の型は cadsim_core::shape)
 └── interchange/     glTF / OBJ / STL などの読み書き (形式に依存しない中間表現 Scene を経由)
     ├── mod.rs        Scene・Format・対応形式の一覧 FORMATS
     ├── gltf.rs / obj.rs / stl.rs
@@ -56,7 +61,7 @@ crates/cadsim_io/     Bevy に依存しないアダプター (cargo test -p cads
 src/                  アプリ本体 (Bevy + egui)
 ├── main.rs          アプリの組み立て (プラグインを並べるだけ)
 ├── model.rs         設計データ: アセンブリの木 (f64) と選択状態
-├── step_import.rs   STEP → アセンブリの木と B-rep (Bevy に依存しない)
+├── step_import.rs   cadsim_io::step を再公開する
 ├── file_io.rs       ダイアログ・ドラッグ&ドロップ・別スレッドでの読み込み・書き出し
 ├── interchange/     cadsim_io::interchange を再公開し、モデルとの変換だけを持つ
 │   ├── model_io.rs   Scene ⇔ Model の変換 (単位の換算、メッシュの稜線)
@@ -65,8 +70,7 @@ src/                  アプリ本体 (Bevy + egui)
 ├── project.rs       プロジェクトファイル (.cadsim) の保存と読み込み
 ├── preferences_file.rs 見た目とミッションの設定 (preferences.json) の読み書き (Bevy に依存しない)
 ├── viewport.rs      3D 表示: メッシュ作成、選択の強調、簡略表示 (LOD)、グリッド、クリック選択
-├── part_mesh.rs     部品1つ分の表示用メッシュ (面をまとめたもの・面番号の表・簡略形状。Bevy に依存しない)
-├── bvh.rs           外接箱の木 (BVH) とレイの当たり判定 (Bevy に依存しない)
+├── part_mesh.rs / bvh.rs  cadsim_core の同名モジュールを再公開する
 ├── defeature.rs     小さな穴とフィレットを消した表示用メッシュを作る (Bevy に依存しない)
 ├── stress.rs        負荷テスト用の数千部品のシーン
 ├── bench.rs         `--bench` で FPS を測って終了する
@@ -126,7 +130,7 @@ src/                  アプリ本体 (Bevy + egui)
 
 ## 各機能のしくみ
 
-### STEP の読み込み(`step_import.rs`)
+### STEP の読み込み(`cadsim_io/src/step.rs`)
 
 1. `ruststep` で STEP をパースし、`#id` からレコードを引ける表を作る。
 2. `PRODUCT_DEFINITION` を製品、`NEXT_ASSEMBLY_USAGE_OCCURRENCE` を親子関係として木を組む。配置は `CONTEXT_DEPENDENT_SHAPE_REPRESENTATION` → `ITEM_DEFINED_TRANSFORMATION` の2つの `AXIS2_PLACEMENT_3D` から「子 → 親」の行列を求める。
@@ -200,7 +204,7 @@ src/                  アプリ本体 (Bevy + egui)
 
 1. 部品1つにつき Bevy のエンティティを2つだけ作る。面をすべてまとめた1つのメッシュ(`PartView`)と、子の稜線のメッシュ(`EdgeLines`)。どの三角形がどの面かは `PartMesh::triangle_face` が持つ。
 2. 配置・表示/非表示・色・強調は、`Model`・選択・表示設定・干渉の結果・動作シミュレーションのどれかが変わったフレームだけ、木を1回たどって(`Model::visit_parts`)写す。形状が変わったとき(`dirty`)だけメッシュを作り直す。
-3. クリックした部品と面は `PartPicker` で求める。部品の外接箱の BVH → 部品内の三角形の BVH の順に調べる(`bvh.rs`)。計測ツールと寸法ツールも同じものを使う。
+3. クリックした部品と面は `PartPicker` で求める。部品の外接箱の BVH → 部品内の三角形の BVH の順に調べる(`cadsim_core::bvh`)。計測ツールと寸法ツールも同じものを使う。
 4. マテリアルは「選択(アセンブリなら子孫すべて)→ 青」「ツリーでホバー → 水色」「それ以外 → 部品の色」で決める。クリックした面は、その面だけのメッシュを重ねてオレンジにする。
 5. 稜線は線のメッシュで GPU に描かせる。グリッドと選択の外接箱は Gizmos で描く。グリッドの間隔はモデルの大きさに合わせて 1, 10, 100… と変わる。
 6. 部品のエンティティには干渉チェック用の `SimBody`(部品座標の f64 三角形メッシュ + 姿勢 + モデル上で表示中か)も付ける。姿勢と表示/非表示は 2. と一緒に写し、`src/simulation/` がこれを拾って判定する。干渉中の部品は半透明の赤にする。

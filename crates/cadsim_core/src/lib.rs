@@ -3,14 +3,18 @@
 //! Bevy・egui・ファイル形式のライブラリには依存しない (docs/architecture.md)。
 //! ここに置いたコードは Bevy をビルドせずに `cargo test -p cadsim_core` で確かめられる。
 
+pub mod animation;
+pub mod bvh;
 pub mod conveyor;
 pub mod drawing;
 pub mod flow;
 pub mod gamify;
 pub mod line;
 pub mod math;
+pub mod part_mesh;
 pub mod physics;
 pub mod remap;
+pub mod shape;
 pub mod simulation;
 pub mod site;
 pub mod staffing;
