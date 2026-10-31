@@ -73,6 +73,9 @@ impl Plugin for UiPlugin {
                     install_japanese_font,
                     playful::apply_theme,
                     draw_ui,
+                    crate::library::palette_window,
+                    crate::library::io_list_window,
+                    crate::library::drop_on_viewport,
                     playful::draw_overlay,
                     // 動作シミュレーション・物理演算・PLC 連携で部品が動いている間はギズモで編集しない
                     transform_gizmo_system
@@ -110,6 +113,8 @@ pub struct UiState<'w> {
     pub results: ResMut<'w, ResultExport>,
     pub defeaturing: Res<'w, Defeaturing>,
     pub recording: ResMut<'w, RecordSettings>,
+    /// 標準部品の動作テストの値
+    pub jog: ResMut<'w, crate::library::Jog>,
 }
 
 /// UI 専用のカメラ。3D カメラはパネルを除いた領域だけに描くので、

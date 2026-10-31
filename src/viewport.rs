@@ -37,6 +37,7 @@ use crate::camera::{ViewportRect, alt_pressed, pointer_in_3d_view};
 use crate::defeature::{DefeatureOptions, DefeatureStats, defeature_shape};
 use crate::flow::FlowColors;
 use crate::gizmo::gizmo_not_focused;
+use crate::library;
 use crate::math::{Aabb, to_transform};
 use crate::model::{Model, NodeId, NodeKind, Selection};
 use crate::motion::{MotionSet, SimulationPose};
@@ -309,7 +310,7 @@ fn rebuild_dirty_parts(
             continue; // 削除されたノード
         };
         let assets = match &node.kind {
-            NodeKind::Assembly { .. } => continue,
+            NodeKind::Assembly { .. } | NodeKind::Standard(_) => continue,
             NodeKind::Box(part) => {
                 let meshed = part.build_solid().triangulation(BOX_TESSELLATION_TOL);
                 let shell = &meshed.boundaries()[0];
@@ -330,7 +331,7 @@ fn rebuild_dirty_parts(
                     shape: None,
                 }
             }
-            NodeKind::Imported { shape, .. } => shared
+            NodeKind::Imported { shape, .. } | NodeKind::StandardBody { shape, .. } => shared
                 .0
                 .entry(shape.id)
                 .or_insert_with(|| PartAssets {
@@ -356,6 +357,7 @@ fn rebuild_dirty_parts(
                 // 干渉チェックの対象。姿勢と表示/非表示は sync_views がモデルから写す。
                 SimBody {
                     id,
+                    group: model.pick_target(id),
                     mesh: assets.sim,
                     pose: Pose::from_matrix(model.world_matrix(id)),
                     shown: true,
@@ -574,6 +576,7 @@ fn sync_views(
     check: Res<InterferenceCheck>,
     motion: Res<SimulationPose>,
     physics: Res<PhysicsPose>,
+    jog: Res<library::Jog>,
     rebuilt: Res<ViewsRebuilt>,
     flow_colors: Res<FlowColors>,
     mut palette: ResMut<Palette>,
@@ -593,7 +596,8 @@ fn sync_views(
         || check.is_changed()
         || motion.is_changed()
         || flow_colors.is_changed()
-        || physics.is_changed();
+        || physics.is_changed()
+        || jog.is_changed();
     if !changed && !rebuilt.0 {
         return;
     }
@@ -612,6 +616,12 @@ fn sync_views(
         } else {
             Highlight::None
         };
+        // 標準部品の動作テスト (library::Jog) の動きを重ねる
+        let base = if jog.0.is_empty() {
+            part.world
+        } else {
+            library::display_matrix(&model, &jog, part.id)
+        };
         // 物理演算で動いている部品は物理の位置に置く。動作シミュレーションの再生中は、
         // 設計上の配置にアクチュエータの動きを重ねる (自分に割り当てがなければ、いちばん近い祖先の動き)
         let moved = physics.parts.get(&part.id).copied().unwrap_or_else(|| {
@@ -619,7 +629,7 @@ fn sync_views(
                 .iter()
                 .rev()
                 .find_map(|id| motion.parts.get(id))
-                .map_or(part.world, |pose| pose.to_dmat4() * part.world)
+                .map_or(base, |pose| pose.to_dmat4() * base)
         });
         if let Some(bounds) = part.local_bounds.map(|b| b.transformed(part.world)) {
             if part.shown {
@@ -937,6 +947,7 @@ fn pick_part(
     viewport: Res<ViewportRect>,
     camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
     picker: PartPicker,
+    model: Res<Model>,
     mut selection: ResMut<Selection>,
 ) {
     // Alt + 左ドラッグはオービットなので選択しない
@@ -953,8 +964,10 @@ fn pick_part(
     };
     match picker.cast(ray) {
         Some(hit) => {
-            selection.node = Some(hit.node);
-            selection.face = Some(hit.face);
+            // 標準部品は本体ではなく部品全体を選ぶ (面の強調もしない)
+            let target = model.pick_target(hit.node);
+            selection.node = Some(target);
+            selection.face = (target == hit.node).then_some(hit.face);
             selection.reveal_in_tree = true;
         }
         None => selection.clear(),

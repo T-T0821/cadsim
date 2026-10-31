@@ -14,6 +14,7 @@ use truck_modeling::{Solid, builder};
 // truck の prelude の型名 (Point3 など) を使うが、Bevy と名前がぶつかるものは明示する
 use truck_meshalgo::prelude::{EuclideanSpace, Point3, Rad, Vector3};
 
+use crate::library::Spec;
 use crate::math::{Aabb, euler_deg_to_quat};
 use crate::physics::{Cable, PartPhysics};
 use crate::site::model::Site;
@@ -56,6 +57,15 @@ pub enum NodeKind {
         /// 取り込んだ STEP ファイル。プロジェクトを開くときにここから形状を読み直す。
         source: StepSource,
     },
+    /// 標準部品 (シリンダ・コンベア・シーケンサーなど)。子に本体 (`StandardBody`) を持ち、
+    /// パラメータを変えると library が子を作り直す。
+    Standard(Spec),
+    /// 標準部品の本体 (チューブ・ロッドなど)。形状は親のパラメータから作ったもの。
+    StandardBody {
+        /// `library::geometry::bodies` の並びでの番号
+        body: usize,
+        shape: Arc<ImportedShape>,
+    },
 }
 
 /// 取り込んだ STEP がどこから来たか
@@ -76,18 +86,21 @@ impl NodeKind {
             NodeKind::Assembly { .. } => "アセンブリ",
             NodeKind::Box(_) => "部品 (箱)",
             NodeKind::Imported { .. } => "部品",
+            NodeKind::Standard(_) => "標準部品",
+            NodeKind::StandardBody { .. } => "標準部品の本体",
         }
     }
 
     pub fn is_part(&self) -> bool {
-        !matches!(self, NodeKind::Assembly { .. })
+        !matches!(self, NodeKind::Assembly { .. } | NodeKind::Standard(_))
     }
 
     pub fn product(&self) -> Option<&str> {
         match self {
             NodeKind::Assembly { product } => product.as_deref(),
             NodeKind::Imported { product, .. } => Some(product),
-            NodeKind::Box(_) => None,
+            NodeKind::Standard(spec) => Some(spec.kind.label()),
+            NodeKind::Box(_) | NodeKind::StandardBody { .. } => None,
         }
     }
 }
@@ -567,6 +580,23 @@ impl Model {
             .join(" / ")
     }
 
+    /// ビューでクリックしたときに選ぶノード。標準部品の本体なら部品全体を選ぶ。
+    pub fn pick_target(&self, id: NodeId) -> NodeId {
+        match self.nodes.get(&id) {
+            Some(Node {
+                kind: NodeKind::StandardBody { .. },
+                parent: Some(parent),
+                ..
+            }) => *parent,
+            _ => id,
+        }
+    }
+
+    /// すべてのノードの id (ツリーの表示順)
+    pub fn all_nodes(&self) -> Vec<NodeId> {
+        self.roots.iter().flat_map(|&r| self.subtree(r)).collect()
+    }
+
     /// ワールド座標系での配置 (祖先の配置を順に掛ける)
     pub fn world_matrix(&self, id: NodeId) -> DMat4 {
         self.ancestors(id)
@@ -591,7 +621,9 @@ impl Model {
             .rev()
             .find_map(|a| self.nodes.get(a)?.color);
         let from_file = match self.nodes.get(&id).map(|n| &n.kind) {
-            Some(NodeKind::Imported { shape, .. }) => shape.color,
+            Some(NodeKind::Imported { shape, .. } | NodeKind::StandardBody { shape, .. }) => {
+                shape.color
+            }
             _ => None,
         };
         assigned.or(from_file).unwrap_or(DEFAULT_PART_COLOR)
@@ -631,7 +663,9 @@ impl Model {
             let assigned = node.color.or(frame.parent_color);
             if node.kind.is_part() {
                 let from_file = match &node.kind {
-                    NodeKind::Imported { shape, .. } => shape.color,
+                    NodeKind::Imported { shape, .. } | NodeKind::StandardBody { shape, .. } => {
+                        shape.color
+                    }
                     _ => None,
                 };
                 f(PartVisit {
@@ -658,9 +692,9 @@ impl Model {
     /// 部品の座標系での外接箱
     fn local_bounds(&self, node: &Node) -> Option<Aabb> {
         match &node.kind {
-            NodeKind::Assembly { .. } => None,
+            NodeKind::Assembly { .. } | NodeKind::Standard(_) => None,
             NodeKind::Box(part) => Some(part.bounds()),
-            NodeKind::Imported { shape, .. } => Some(Aabb {
+            NodeKind::Imported { shape, .. } | NodeKind::StandardBody { shape, .. } => Some(Aabb {
                 min: shape.stats.min,
                 max: shape.stats.max,
             }),
@@ -695,7 +729,7 @@ impl Model {
                 continue;
             };
             match &node.kind {
-                NodeKind::Assembly { .. } => continue,
+                NodeKind::Assembly { .. } | NodeKind::Standard(_) => continue,
                 NodeKind::Box(part) => {
                     let [w, h, d] = part.size;
                     m.face_count += 6;
@@ -703,7 +737,7 @@ impl Model {
                     m.volume += w * h * d;
                     m.area += 2.0 * (w * h + h * d + d * w);
                 }
-                NodeKind::Imported { shape, .. } => {
+                NodeKind::Imported { shape, .. } | NodeKind::StandardBody { shape, .. } => {
                     m.face_count += shape.stats.face_count;
                     m.edge_count += shape.stats.edge_count;
                     m.volume += shape.stats.volume;

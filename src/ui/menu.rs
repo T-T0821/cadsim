@@ -372,6 +372,9 @@ fn create_menu(ui: &mut egui::Ui, state: &mut UiState) {
                 ui.close();
             }
         }
+        ui.separator();
+        // 標準部品は「部品ライブラリ」パネルからビューへドラッグしても置ける
+        crate::library::add_menu(ui, state);
     });
 }
 

@@ -159,7 +159,8 @@ fn row_contents(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
     let icon = match &node.kind {
         NodeKind::Assembly { .. } => "📁",
         NodeKind::Box(_) => "⬛",
-        NodeKind::Imported { .. } => "⚙",
+        NodeKind::Imported { .. } | NodeKind::StandardBody { .. } => "⚙",
+        NodeKind::Standard(_) => "🔧",
     };
     // 親が非表示のときは薄く表示する
     let mut text = egui::RichText::new(format!("{icon} {}", node.name));
