@@ -1,0 +1,4 @@
+# Windows (MSVC) では C ランタイムを実行ファイルに静的リンクする。
+# これで VCRUNTIME140.dll などが入っていない PC でも、exe 1つだけで起動できる。
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

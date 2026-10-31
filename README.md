@@ -13,15 +13,20 @@ STEP などの CAD データを読み込み、部品を動かしながら干渉�
 
 [Releases](https://github.com/T-T0821/cadsim/releases) の最新版から、自分の OS 用のファイルを取ってください。
 
+インストールは要りません。ダウンロードしたものを開くだけで起動し、フォントやサンプルも中に入っています。
+
 | OS | ファイル | 起動のしかた |
 | --- | --- | --- |
-| Windows 10 / 11 (64bit) | `cadsim-<版>-windows-x86_64.zip` | 展開して `cad_proto.exe` をダブルクリック |
-| macOS 11 以降(Apple Silicon / Intel) | `cadsim-<版>-macos-universal.zip` | 展開して `CAD Prototype.app` を「アプリケーション」に移して開く |
+| Windows 10 / 11 (64bit) | `cadsim-<版>-windows-x86_64.exe` | ダウンロードした exe をそのままダブルクリック(好きな場所に置いて使えます) |
+| 〃(zip 版) | `cadsim-<版>-windows-x86_64.zip` | 展開して `cad_proto.exe` をダブルクリック。中身は上の exe と README |
+| macOS 11 以降(Apple Silicon / Intel) | `cadsim-<版>-macos-universal.zip` | ダブルクリックで展開して `CAD Prototype.app` を開く(「アプリケーション」に移すとほかのアプリと同じように使えます) |
+
+やめるときは、ダウンロードしたファイル(Mac は `.app`)を削除するだけです(見た目などの設定は小さなファイルとして残ります。場所は「開発する人へ」の資料を見てください)。
 
 署名をしていないため、初回は警告が出ます。
 
 - **Windows**: 「WindowsによってPCが保護されました」と出たら「詳細情報」→「実行」。
-- **Mac**: 「開発元を検証できない」と出たら、アプリを右クリック →「開く」→「開く」。それでも開けないときは、ターミナルで `xattr -dr com.apple.quarantine "/Applications/CAD Prototype.app"` を実行してから開いてください。
+- **Mac**: 「開発元を検証できない」「開けません」と出たら、アプリを右クリック →「開く」→「開く」。macOS 15 以降でこの方法が出ないときは、一度開こうとしたあと「システム設定」→「プライバシーとセキュリティ」の下のほうにある「このまま開く」を押します。それでも開けないときは、ターミナルで `xattr -dr com.apple.quarantine "/Applications/CAD Prototype.app"`(置いた場所に合わせて変えてください)を実行してから開いてください。
 
 ### ソースから動かす
 

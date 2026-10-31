@@ -9,14 +9,23 @@ Release は**人が手動で実行したときだけ**作られます。PR を m
 
 1. GitHub の **Actions** タブ →「Release」→「Run workflow」を押し、ブランチに `main` を選んで実行します。
 2. Windows 版と macOS 版がビルドされます(10〜20分ほど)。
-3. タグ `v<major>.<minor>.<番号>` を付けた Release が作られ、2つのファイルが添付されます。リリースノートは前回のリリース以降にマージされた PR から自動で作られます。
+3. タグ `v<major>.<minor>.<番号>` を付けた Release が作られ、3つのファイルが添付されます。リリースノートは前回のリリース以降にマージされた PR から自動で作られます。
 
 ## できるファイル
 
 | OS | ファイル | 中身 |
 | --- | --- | --- |
-| Windows (x86_64) | `cadsim-v<版>-windows-x86_64.zip` | `cad_proto.exe` と README |
+| Windows (x86_64) | `cadsim-v<版>-windows-x86_64.exe` | 単体の実行ファイル。これだけで起動する |
+| Windows (x86_64) | `cadsim-v<版>-windows-x86_64.zip` | 上と同じ exe(`cad_proto.exe`)と README |
 | macOS (Apple Silicon + Intel) | `cadsim-v<版>-macos-universal.zip` | `CAD Prototype.app`。arm64 と x86_64 を `lipo` で1つにまとめ、アドホック署名だけ付けている |
+
+## インストール不要にするための工夫
+
+- フォント・サンプルの STEP・Web ビューアのひな形などの素材は `include_bytes!` / `include_str!` で実行ファイルに埋め込んでいるので、別ファイルを同梱しなくてよい。素材を増やすときも実行時にファイルを読まず、同じように埋め込むこと。
+- Windows では C ランタイムを静的リンクしている([`.cargo/config.toml`](../.cargo/config.toml) の `+crt-static`)。VC++ 再頒布可能パッケージ(`VCRUNTIME140.dll` など)が入っていない PC でも exe だけで動く。
+- ワークフローで依存ライブラリを確かめている。Windows は `dumpbin /dependents` で C ランタイムの DLL に依存していないこと、Mac は `otool -L` で `/System/Library/` と `/usr/lib/` 以外の dylib に依存していないことを見て、違えば失敗させる。
+- Mac は `.app` 1つにまとまっているので、どこに置いても動く。
+- 見た目などの設定だけは OS の設定フォルダ(`src/preferences_file.rs`)に保存する。なくても標準の設定で起動する。
 
 Windows のリリースビルドでは、起動時に黒いコンソール窓を出さないようにしています(`src/main.rs` の `windows_subsystem`)。
 Mac の `.app` に入れる `Info.plist` のひな形は [`packaging/macos/Info.plist`](../packaging/macos/Info.plist) です。
@@ -30,4 +39,4 @@ Mac の `.app` に入れる `Info.plist` のひな形は [`packaging/macos/Info.
 ## Release を作らずにビルドだけ試す
 
 - 「Run workflow」で「Release を作成する」のチェックを外すか、`main` 以外のブランチで実行すると、ビルドだけ行います。結果はその実行の **Artifacts** からダウンロードできます。
-- このワークフロー・`Cargo.toml`・`Cargo.lock`・`packaging/` を変える PR でも、同じようにビルドだけ行います。
+- このワークフロー・`Cargo.toml`・`Cargo.lock`・`packaging/`・`.cargo/` を変える PR でも、同じようにビルドだけ行います。
