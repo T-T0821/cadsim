@@ -2,9 +2,11 @@
 //!
 //! 部品ごとの物理の設定は右のプロパティパネル (ui/properties.rs) で編集する。
 
+use crate::ui::dock::{self, Dock};
 use bevy::math::DVec3;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
+use cadsim_core::workspace::Tool;
 
 use super::{CableSim, PhysicsState, RunRequest, RunState};
 use crate::camera::ViewportRect;
@@ -20,21 +22,14 @@ pub fn physics_panel(
     selection: Res<Selection>,
     cables: Res<CableSim>,
     viewport: Res<ViewportRect>,
+    mut dock: ResMut<Dock>,
 ) -> Result {
+    let Some(window) = dock::panel(Tool::Physics, &dock, viewport.rect) else {
+        return Ok(());
+    };
     let ctx = contexts.ctx_mut()?;
-    // 3D ビューの左下、「安全」パネルの右に並べる (開いて幅が変わっても重ならないよう、前のフレームの幅を使う)
-    let corner = viewport.rect.map_or(egui::pos2(8.0, 600.0), |r| {
-        // egui の Window は題名を Option に包んだまま Id にする
-        let safety = ctx.memory(|m| m.area_rect(egui::Id::new(Some("安全"))));
-        let left = safety.map_or(r.min.x + 8.0, |s| s.max.x + 8.0);
-        egui::pos2(left, r.max.y - 8.0)
-    });
-    egui::Window::new("物理演算")
-        .pivot(egui::Align2::LEFT_BOTTOM)
-        .fixed_pos(corner)
-        .default_open(false)
-        .resizable(false)
-        .show(ctx, |ui| {
+    let mut open = true;
+    window.open(&mut open).show(ctx, |ui| {
             ui.set_max_width(320.0);
             run_section(ui, state.bypass_change_detection());
             ui.separator();
@@ -48,6 +43,9 @@ pub fn physics_panel(
             ui.separator();
             cable_section(ui, &mut model, &selection, &cables.reports);
         });
+    if !open {
+        dock.set_open(Tool::Physics, false);
+    }
     Ok(())
 }
 

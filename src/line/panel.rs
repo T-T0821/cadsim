@@ -1,7 +1,9 @@
 //! 「ライン連携」ウィンドウ: まとめて再生、つなぎ方 (AGV 搬送・チャートの起動)、PLC の信号表
 
+use crate::ui::dock::{self, Dock};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
+use cadsim_core::workspace::Tool;
 
 use cadsim_core::flow::model::{AgvCall, ElementKind, KindTag, sample_line};
 use cadsim_core::line::{Direction, Value};
@@ -28,10 +30,11 @@ pub fn line_window(
     mut clock: ResMut<FloorClock>,
     mut operators: ResMut<OperatorsRes>,
     safety: Res<SafetyState>,
+    mut dock: ResMut<Dock>,
 ) -> Result {
-    if !line.open {
+    let Some(window) = dock::workspace_window(Tool::LineLink, &dock, [520.0, 480.0]) else {
         return Ok(());
-    }
+    };
     let ctx = contexts.ctx_mut()?;
     let mut open = true;
     let mut action = None;
@@ -39,11 +42,8 @@ pub fn line_window(
     let mut sample_clicked = false;
     // 表示のための読み書きは変更を知らせない (毎フレームの変更検知を避ける)
     let line = line.bypass_change_detection();
-    egui::Window::new("ライン連携")
+    window
         .open(&mut open)
-        .default_size([520.0, 480.0])
-        .default_pos([320.0, 140.0])
-        .resizable(true)
         .show(ctx, |ui| {
             action = controls(ui, line, &run, &safety);
             ui.separator();
@@ -66,7 +66,7 @@ pub fn line_window(
             });
         });
     if !open {
-        line.open = false;
+        dock.set_open(Tool::LineLink, false);
     }
 
     match action {
@@ -212,7 +212,7 @@ fn links(
     floor: &FloorState,
 ) -> Vec<(u32, Option<AgvCall>, bool)> {
     if flow.is_empty() {
-        ui.label("工程モデルがありません。「ライン」→「工程シミュレーション…」で並べると、ここでつなげます。");
+        ui.label("工程モデルがありません。ツールレールの「工程」(工程シミュレーション) で並べると、ここでつなげます。");
         return Vec::new();
     }
     ui.label("変えると、次に再生したときに最初から回します。");

@@ -108,7 +108,7 @@ impl fmt::Display for LlmError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             LlmError::MissingApiKey => {
-                write!(f, "API キーが設定されていません (AI → AI の設定)")
+                write!(f, "API キーが設定されていません (ツール → AI の設定)")
             }
             LlmError::Network(e) => write!(f, "接続できませんでした: {e}"),
             LlmError::Api { status: 401, .. } => {

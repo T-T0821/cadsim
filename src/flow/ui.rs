@@ -7,9 +7,11 @@
 //! - 結果: ラインの集計と設備ごとの表、作業者ごとの表
 //! - グラフ: 状態の割合の積み上げ横棒、排出数と仕掛数の推移、状態の時系列
 
+use crate::ui::dock::{self, Dock};
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_egui::egui::{self, Color32, Pos2, Rect as ERect, Stroke, Vec2};
+use cadsim_core::workspace::Tool;
 
 use super::model::{ElementId, ElementKind, Failure, FlowModel, KindTag, Labor, sample_line};
 use super::palette::{busy_rgb, state_rgb};
@@ -48,17 +50,13 @@ pub struct FlowUi<'w> {
 }
 
 impl FlowUi<'_> {
-    pub fn toggle(&mut self) {
-        self.run.open = !self.run.open;
-    }
-
+    /// サンプルの工程を読み込む (ウィンドウを開くのは呼ぶ側が `Dock` で行う)
     pub fn load_sample(&mut self) {
         let scenarios = std::mem::take(&mut self.flow.0.scenarios);
         self.flow.0 = sample_line();
         self.flow.0.scenarios = scenarios;
         self.run.stop();
         self.ui.selected = None;
-        self.run.open = true;
     }
 }
 
@@ -71,48 +69,49 @@ const SPEEDS: [(f64, &str); 6] = [
     (36000.0, "x36000"),
 ];
 
-pub fn show_window(ctx: &egui::Context, state: &mut FlowUi, model: &Model, selection: &Selection) {
-    if !state.run.open {
+pub fn show_window(
+    ctx: &egui::Context,
+    state: &mut FlowUi,
+    model: &Model,
+    selection: &Selection,
+    dock: &mut Dock,
+) {
+    let Some(window) = dock::workspace_window(Tool::Flow, dock, [780.0, 520.0]) else {
         return;
-    }
+    };
     let mut open = true;
-    egui::Window::new("工程シミュレーション")
-        .open(&mut open)
-        .default_size([780.0, 520.0])
-        .default_pos([280.0, 120.0])
-        .resizable(true)
-        .show(ctx, |ui| {
-            run_controls(ui, state);
-            ui.separator();
-            ui.horizontal(|ui| {
-                let tab = &mut state.ui.tab;
-                ui.selectable_value(tab, Tab::Line, "工程");
-                ui.selectable_value(tab, Tab::Staff, "人員");
-                ui.selectable_value(tab, Tab::Scenarios, "案の比較");
-                ui.selectable_value(tab, Tab::Results, "結果");
-                ui.selectable_value(tab, Tab::Charts, "グラフ");
-            });
-            ui.separator();
-            match state.ui.tab {
-                Tab::Line => line_tab(ui, state, model, selection),
-                Tab::Staff => {
-                    if staff_tab(ui, &mut state.flow, &mut state.ui.staff) {
-                        state.run.stop();
-                        state.ui.selected = None;
-                    }
-                }
-                Tab::Scenarios => {
-                    if scenario_tab(ui, &mut state.flow, &mut state.ui.scenarios) {
-                        state.run.stop();
-                        state.ui.selected = None;
-                    }
-                }
-                Tab::Results => results_tab(ui, state),
-                Tab::Charts => charts_tab(ui, state),
-            }
+    window.open(&mut open).show(ctx, |ui| {
+        run_controls(ui, state);
+        ui.separator();
+        ui.horizontal(|ui| {
+            let tab = &mut state.ui.tab;
+            ui.selectable_value(tab, Tab::Line, "工程");
+            ui.selectable_value(tab, Tab::Staff, "人員");
+            ui.selectable_value(tab, Tab::Scenarios, "案の比較");
+            ui.selectable_value(tab, Tab::Results, "結果");
+            ui.selectable_value(tab, Tab::Charts, "グラフ");
         });
+        ui.separator();
+        match state.ui.tab {
+            Tab::Line => line_tab(ui, state, model, selection),
+            Tab::Staff => {
+                if staff_tab(ui, &mut state.flow, &mut state.ui.staff) {
+                    state.run.stop();
+                    state.ui.selected = None;
+                }
+            }
+            Tab::Scenarios => {
+                if scenario_tab(ui, &mut state.flow, &mut state.ui.scenarios) {
+                    state.run.stop();
+                    state.ui.selected = None;
+                }
+            }
+            Tab::Results => results_tab(ui, state),
+            Tab::Charts => charts_tab(ui, state),
+        }
+    });
     if !open {
-        state.run.open = false;
+        dock.set_open(Tool::Flow, false);
     }
 }
 

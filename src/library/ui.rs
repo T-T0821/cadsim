@@ -1,5 +1,6 @@
 //! 部品パレット (ドラッグで配置)、標準部品のプロパティ、I/O 一覧、光軸と搬送方向の表示
 
+use crate::ui::dock::{self, Dock};
 use bevy::{
     math::DVec3,
     picking::mesh_picking::ray_cast::{MeshRayCast, MeshRayCastSettings},
@@ -7,6 +8,7 @@ use bevy::{
     window::PrimaryWindow,
 };
 use bevy_egui::{EguiContexts, egui};
+use cadsim_core::workspace::Tool;
 
 use super::catalog::{Category, IoDir, Motion, PartKind, units_per_mm};
 use super::{Jog, add_standard, dir_to_world, io_capacity, io_table, local_to_world};
@@ -37,8 +39,7 @@ impl Default for LibraryUiState {
     }
 }
 
-/// 3D ビューの左端に出す部品パレット
-/// (左上はシミュレーション、右上はビューキューブ、右下は寸法・注記のパネル)
+/// 部品パレット (ツールレールの「部品」で開く)
 #[allow(clippy::too_many_arguments)]
 pub fn palette_window(
     mut contexts: EguiContexts,
@@ -50,52 +51,50 @@ pub fn palette_window(
     viewport: Res<ViewportRect>,
     mut custom: ResMut<CustomLibrary>,
     mut jobs: ResMut<ImportJobs>,
+    mut dock: ResMut<Dock>,
 ) -> Result {
+    let Some(window) = dock::panel(Tool::Library, &dock, viewport.rect) else {
+        return Ok(());
+    };
     let ctx = contexts.ctx_mut()?;
-    let anchor = viewport
-        .rect
-        .map_or(Vec2::new(0.0, 300.0), |r| Vec2::new(r.min.x, r.center().y));
-    // 3D ビューの左端の中ほど (左上はシミュレーション、左下は安全パネル)。ほかのパネルと重ならないよう畳んでおく。
-    egui::Window::new("部品ライブラリ")
-        .pivot(egui::Align2::LEFT_CENTER)
-        .default_pos([anchor.x + 8.0, anchor.y])
-        .default_open(false)
-        .resizable(false)
-        .collapsible(true)
-        .show(ctx, |ui| {
-            ui.weak("ビューへドラッグして配置 (+ は注視点に配置)");
-            for category in Category::ALL {
-                // 縦に長くならないよう、分類は畳んでおく
-                egui::CollapsingHeader::new(category.label())
-                    .default_open(category == Category::Actuator)
-                    .show(ui, |ui| {
-                        let kinds = PartKind::ALL
-                            .into_iter()
-                            .filter(|k| k.category() == category);
-                        for kind in kinds {
-                            ui.horizontal(|ui| {
-                                if ui.small_button("+").clicked() {
-                                    let f = orbit.focus.as_dvec3();
-                                    let at = DVec3::new(f.x, 0.0, f.z);
-                                    place(&mut model, &mut selection, &mut history, kind, at);
-                                }
-                                let id = egui::Id::new(("library_palette", kind.key()));
-                                ui.dnd_drag_source(id, kind, |ui| {
-                                    ui.add(
-                                        egui::Button::new(kind.label())
-                                            .min_size(egui::vec2(150.0, 0.0))
-                                            .sense(egui::Sense::hover()),
-                                    );
-                                });
+    let mut open = true;
+    window.open(&mut open).show(ctx, |ui| {
+        ui.weak("ビューへドラッグして配置 (+ は注視点に配置)");
+        for category in Category::ALL {
+            // 縦に長くならないよう、分類は畳んでおく
+            egui::CollapsingHeader::new(category.label())
+                .default_open(category == Category::Actuator)
+                .show(ui, |ui| {
+                    let kinds = PartKind::ALL
+                        .into_iter()
+                        .filter(|k| k.category() == category);
+                    for kind in kinds {
+                        ui.horizontal(|ui| {
+                            if ui.small_button("+").clicked() {
+                                let f = orbit.focus.as_dvec3();
+                                let at = DVec3::new(f.x, 0.0, f.z);
+                                place(&mut model, &mut selection, &mut history, kind, at);
+                            }
+                            let id = egui::Id::new(("library_palette", kind.key()));
+                            ui.dnd_drag_source(id, kind, |ui| {
+                                ui.add(
+                                    egui::Button::new(kind.label())
+                                        .min_size(egui::vec2(150.0, 0.0))
+                                        .sense(egui::Sense::hover()),
+                                );
                             });
-                        }
-                    });
-            }
-            crate::custom_part::palette_section(ui, &mut custom, &mut jobs, orbit.focus.as_dvec3());
-            ui.separator();
-            ui.checkbox(&mut state.show_io, "I/O 一覧を表示");
-            ui.checkbox(&mut state.show_overlays, "光軸・搬送方向を表示");
-        });
+                        });
+                    }
+                });
+        }
+        crate::custom_part::palette_section(ui, &mut custom, &mut jobs, orbit.focus.as_dvec3());
+        ui.separator();
+        ui.checkbox(&mut state.show_io, "I/O 一覧を表示");
+        ui.checkbox(&mut state.show_overlays, "光軸・搬送方向を表示");
+    });
+    if !open {
+        dock.set_open(Tool::Library, false);
+    }
     Ok(())
 }
 

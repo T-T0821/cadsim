@@ -54,8 +54,6 @@ impl Plugin for LinePlugin {
 /// ライン連携の再生の状態
 #[derive(Resource)]
 pub struct LineState {
-    /// ウィンドウを出しているか (メニューの「ライン」から開く)
-    pub open: bool,
     /// 最初から回し始めたか (一時停止中も true)
     started: bool,
     playing: bool,
@@ -83,7 +81,6 @@ pub struct LineState {
 impl Default for LineState {
     fn default() -> Self {
         Self {
-            open: false,
             started: false,
             playing: false,
             speed: 10.0,
@@ -101,10 +98,6 @@ impl Default for LineState {
 }
 
 impl LineState {
-    pub fn toggle(&mut self) {
-        self.open = !self.open;
-    }
-
     /// 最初から回し始める。工程モデルが回せなければ理由を返す。
     fn start(
         &mut self,

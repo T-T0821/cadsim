@@ -1,5 +1,7 @@
 //! 右上の「シミュレーション」パネル: 干渉チェックの設定・結果一覧と、距離計測の一覧
 
+use crate::ui::dock::{self, Dock};
+use cadsim_core::workspace::Tool;
 use std::collections::HashMap;
 
 use bevy::prelude::*;
@@ -20,7 +22,11 @@ pub fn simulation_panel(
     mut measure: ResMut<MeasureTool>,
     bodies: Query<(&SimBody, Option<&Name>)>,
     viewport: Res<ViewportRect>,
+    mut dock: ResMut<Dock>,
 ) -> Result {
+    let Some(window) = dock::panel(Tool::Interference, &dock, viewport.rect) else {
+        return Ok(());
+    };
     let names: HashMap<u32, String> = bodies
         .iter()
         .map(|(body, name)| {
@@ -29,20 +35,16 @@ pub fn simulation_panel(
         })
         .collect();
 
-    // 3D ビューの左上に浮かべる (右上はビューキューブ)
-    let corner = viewport.rect.map_or(egui::pos2(8.0, 8.0), |r| {
-        egui::pos2(r.min.x + 8.0, r.min.y + 8.0)
+    let mut open = true;
+    window.open(&mut open).show(contexts.ctx_mut()?, |ui| {
+        // 毎フレームの変更検知を避けるため、編集は一度コピーしてから書き戻す
+        interference_section(ui, check.bypass_change_detection(), &names);
+        ui.separator();
+        measure_section(ui, measure.bypass_change_detection());
     });
-    egui::Window::new("シミュレーション")
-        .fixed_pos(corner)
-        .resizable(false)
-        .collapsible(true)
-        .show(contexts.ctx_mut()?, |ui| {
-            // 毎フレームの変更検知を避けるため、編集は一度コピーしてから書き戻す
-            interference_section(ui, check.bypass_change_detection(), &names);
-            ui.separator();
-            measure_section(ui, measure.bypass_change_detection());
-        });
+    if !open {
+        dock.set_open(Tool::Interference, false);
+    }
     Ok(())
 }
 

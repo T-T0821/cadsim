@@ -1,7 +1,9 @@
 //! 「PLC 連携」ウィンドウ: モードの切り替え、模擬 PLC の運転、外部 PLC (Modbus TCP / OPC UA) の接続、I/O モニタ
 
+use crate::ui::dock::{self, Dock};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
+use cadsim_core::workspace::Tool;
 
 use super::adapter::modbus::{ModbusClient, ModbusSettings};
 use super::adapter::opcua::{OpcUaClient, OpcUaSettings};
@@ -28,74 +30,72 @@ pub fn plc_window(
     model: Res<Model>,
     mut selection: ResMut<Selection>,
     mut scripts: ResMut<ScriptRun>,
+    mut dock: ResMut<Dock>,
 ) -> Result {
-    // 3D ビューの右上 (ビューキューブの下) に出す。ビューの場所が決まるまでは出さない。
-    let Some(view) = viewport.rect else {
+    let Some(window) = dock::panel(Tool::Plc, &dock, viewport.rect) else {
         return Ok(());
     };
-    let top_right = egui::pos2(view.max.x, view.min.y);
     let ctx = contexts.ctx_mut()?;
     let mut mode = plc.session.mode;
 
-    egui::Window::new("PLC連携")
-        .pivot(egui::Align2::RIGHT_TOP)
-        .default_pos(top_right + egui::vec2(-12.0, 170.0))
-        .default_width(380.0)
-        .default_open(false)
-        .show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                for m in [
-                    PlcMode::Off,
-                    PlcMode::Simulated,
-                    PlcMode::External,
-                    PlcMode::LogReplay,
-                    PlcMode::Script,
-                ] {
-                    ui.radio_value(&mut mode, m, mode_label(m));
-                }
-            });
-            ui.separator();
-            let Plc {
-                session,
-                protocol,
-                modbus,
-                opcua,
-                notice,
-            } = &mut *plc;
-            match session.mode {
-                PlcMode::Off => {
-                    ui.label("タイミングチャートの時刻表どおりに再生します。");
-                    ui.label("PLC の出力で動かすときは、上でモードを選んでください。");
-                }
-                PlcMode::Simulated => simulated_controls(ui, &chart, session),
-                PlcMode::LogReplay => log_controls(ui, &chart, session, notice),
-                PlcMode::Script => {
-                    if script_controls(ui, &model, &mut selection, &mut scripts) {
-                        session.reset_plant();
-                    }
-                }
-                PlcMode::External => {
-                    ui.horizontal(|ui| {
-                        ui.label("通信方式");
-                        // つないでいる間は切り替えない
-                        ui.add_enabled_ui(!session.is_connected(), |ui| {
-                            ui.radio_value(protocol, Protocol::ModbusTcp, "Modbus TCP");
-                            ui.radio_value(protocol, Protocol::OpcUa, "OPC UA");
-                        });
-                    });
-                    match protocol {
-                        Protocol::ModbusTcp => modbus_controls(ui, session, modbus),
-                        Protocol::OpcUa => opcua_controls(ui, session, opcua),
-                    }
-                }
-            }
-            if session.is_active() {
-                ui.separator();
-                address_plan_editor(ui, &mut session.plan);
-                io_csv_buttons(ui, &chart, session, notice);
-                io_monitor(ui, session);
+    let mut open = true;
+    window.open(&mut open).default_width(380.0).show(ctx, |ui| {
+        ui.horizontal(|ui| {
+            for m in [
+                PlcMode::Off,
+                PlcMode::Simulated,
+                PlcMode::External,
+                PlcMode::LogReplay,
+                PlcMode::Script,
+            ] {
+                ui.radio_value(&mut mode, m, mode_label(m));
             }
         });
+        ui.separator();
+        let Plc {
+            session,
+            protocol,
+            modbus,
+            opcua,
+            notice,
+        } = &mut *plc;
+        match session.mode {
+            PlcMode::Off => {
+                ui.label("タイミングチャートの時刻表どおりに再生します。");
+                ui.label("PLC の出力で動かすときは、上でモードを選んでください。");
+            }
+            PlcMode::Simulated => simulated_controls(ui, &chart, session),
+            PlcMode::LogReplay => log_controls(ui, &chart, session, notice),
+            PlcMode::Script => {
+                if script_controls(ui, &model, &mut selection, &mut scripts) {
+                    session.reset_plant();
+                }
+            }
+            PlcMode::External => {
+                ui.horizontal(|ui| {
+                    ui.label("通信方式");
+                    // つないでいる間は切り替えない
+                    ui.add_enabled_ui(!session.is_connected(), |ui| {
+                        ui.radio_value(protocol, Protocol::ModbusTcp, "Modbus TCP");
+                        ui.radio_value(protocol, Protocol::OpcUa, "OPC UA");
+                    });
+                });
+                match protocol {
+                    Protocol::ModbusTcp => modbus_controls(ui, session, modbus),
+                    Protocol::OpcUa => opcua_controls(ui, session, opcua),
+                }
+            }
+        }
+        if session.is_active() {
+            ui.separator();
+            address_plan_editor(ui, &mut session.plan);
+            io_csv_buttons(ui, &chart, session, notice);
+            io_monitor(ui, session);
+        }
+    });
+    if !open {
+        dock.set_open(Tool::Plc, false);
+    }
 
     if mode != plc.session.mode {
         plc.session.set_mode(mode);

@@ -1,4 +1,4 @@
-//! ゲーム風の UI: テーマの切り替え、ミッションカードとマスコット、達成時のお祝い (紙吹雪)
+//! ゲーム風の UI: 見た目の反映、ミッションカードとマスコット、達成時のお祝い (紙吹雪)
 //!
 //! ミッションの判定や経験値の計算は `gamify` にあり、ここは
 //! 「画面の状態を集めて渡す → 達成を受け取って演出する」だけをする。
@@ -24,8 +24,7 @@ use crate::simulation::InterferenceCheck;
 use crate::simulation::interference::PairStatus;
 use crate::simulation::measure::MeasureTool;
 use cadsim_core::gamify::{
-    Achievement, ConfettiPiece, MISSIONS, Observation, Preferences, ThemeKind, confetti,
-    level_title, mission,
+    Achievement, ConfettiPiece, MISSIONS, Observation, Preferences, confetti, level_title, mission,
 };
 
 /// お祝いの表示時間 (秒)
@@ -41,8 +40,8 @@ pub struct PlayfulUi {
     path: Option<PathBuf>,
     /// 設定ファイルに書き出していない変更がある
     dirty: bool,
-    /// egui に反映済みのテーマ
-    applied: Option<ThemeKind>,
+    /// egui に見た目を反映済みか
+    applied: bool,
     toasts: VecDeque<Achievement>,
     /// 先頭のお祝いを出し始めた時刻 (egui の時刻)
     toast_started: Option<f64>,
@@ -63,20 +62,13 @@ impl PlayfulUi {
             prefs,
             path,
             dirty: false,
-            applied: None,
+            applied: false,
             toasts: VecDeque::new(),
             toast_started: None,
             confetti: Vec::new(),
             confetti_started: None,
             bursts: 0,
             show_list: false,
-        }
-    }
-
-    pub fn set_theme(&mut self, theme: ThemeKind) {
-        if self.prefs.theme != theme {
-            self.prefs.theme = theme;
-            self.dirty = true;
         }
     }
 
@@ -96,16 +88,14 @@ impl PlayfulUi {
     }
 
     fn celebrate(&mut self, achievement: Achievement) {
-        if self.prefs.effects() {
-            self.bursts += 1;
-            let count = if achievement.level_up.is_some() || achievement.all_complete {
-                CONFETTI_PIECES * 2
-            } else {
-                CONFETTI_PIECES
-            };
-            self.confetti = confetti(self.bursts, count, palette::CONFETTI.len());
-            self.confetti_started = None;
-        }
+        self.bursts += 1;
+        let count = if achievement.level_up.is_some() || achievement.all_complete {
+            CONFETTI_PIECES * 2
+        } else {
+            CONFETTI_PIECES
+        };
+        self.confetti = confetti(self.bursts, count, palette::CONFETTI.len());
+        self.confetti_started = None;
         self.toasts.push_back(achievement);
     }
 }
@@ -180,19 +170,18 @@ fn save_preferences(mut ui: ResMut<PlayfulUi>) {
     }
 }
 
-/// テーマが変わったら egui と 3D ビューの背景に反映する
+/// 最初のフレームで見た目を egui と 3D ビューの背景に反映する
 pub fn apply_theme(
     mut contexts: EguiContexts,
     mut ui: ResMut<PlayfulUi>,
     mut clear: ResMut<ClearColor>,
 ) -> Result {
-    let theme = ui.prefs.theme;
-    if ui.applied == Some(theme) {
+    if ui.applied {
         return Ok(());
     }
-    theme::apply(contexts.ctx_mut()?, theme);
-    clear.0 = theme::clear_color(theme);
-    ui.applied = Some(theme);
+    theme::apply(contexts.ctx_mut()?);
+    clear.0 = theme::CLEAR_COLOR;
+    ui.applied = true;
     Ok(())
 }
 
@@ -218,113 +207,114 @@ pub fn draw_overlay(
 }
 
 fn mission_card(ctx: &egui::Context, view: egui::Rect, now: f64, state: &mut PlayfulUi) {
-    let playful = state.prefs.effects();
     let celebrating = !state.toasts.is_empty();
     egui::Area::new("mission_card".into())
-        // 左下 (ツリーの下の空き) に置く。背景をドラッグすると動かせる
+        // 3D ビューの左下、座標軸の右に置く。背景をドラッグすると動かせる
         .pivot(Align2::LEFT_BOTTOM)
-        .default_pos(pos2(8.0, view.max.y - 8.0))
+        .default_pos(pos2(view.min.x + 96.0, view.max.y - 10.0))
+        .constrain_to(view)
         .show(ctx, |ui| {
-            let mut frame = egui::Frame::window(ui.style());
-            if playful {
-                frame = frame.stroke(Stroke::new(2.0, palette::PURPLE));
-            }
-            frame.show(ui, |ui| {
-                ui.set_width(CARD_WIDTH);
-                ui.horizontal(|ui| {
-                    if playful {
-                        mascot(ui, 46.0, now, celebrating);
-                    }
-                    level_header(ui, state, playful);
-                });
-                ui.separator();
-                current_mission(ui, state, playful);
-                ui.horizontal(|ui| {
-                    let arrow = if state.show_list { "▼" } else { "▶" };
-                    if ui.small_button(format!("{arrow} ミッション一覧")).clicked() {
-                        state.show_list = !state.show_list;
-                    }
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui
-                            .small_button("隠す")
-                            .on_hover_text("「表示」メニューの「ミッションを表示」でまた出せます")
-                            .clicked()
-                        {
-                            state.set_show_missions(false);
-                        }
+            egui::Frame::window(ui.style())
+                .stroke(Stroke::new(1.5, palette::PURPLE.gamma_multiply(0.7)))
+                .inner_margin(egui::Margin::same(12))
+                .show(ui, |ui| {
+                    ui.set_width(CARD_WIDTH);
+                    ui.horizontal(|ui| {
+                        mascot(ui, 42.0, now, celebrating);
+                        level_header(ui, state);
                     });
+                    ui.add_space(2.0);
+                    current_mission(ui, state);
+                    ui.add_space(2.0);
+                    ui.horizontal(|ui| {
+                        let arrow = if state.show_list { "▼" } else { "▶" };
+                        if ui.small_button(format!("{arrow} 一覧")).clicked() {
+                            state.show_list = !state.show_list;
+                        }
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui
+                                .small_button("隠す")
+                                .on_hover_text("ツールバー右のレベル表示を押すとまた出せます")
+                                .clicked()
+                            {
+                                state.set_show_missions(false);
+                            }
+                        });
+                    });
+                    if state.show_list {
+                        mission_list(ui, state);
+                    }
                 });
-                if state.show_list {
-                    mission_list(ui, state);
-                }
-            });
         });
 }
 
-fn level_header(ui: &mut egui::Ui, state: &PlayfulUi, playful: bool) {
+fn level_header(ui: &mut egui::Ui, state: &PlayfulUi) {
     let level = state.prefs.progress.level();
     ui.vertical(|ui| {
         ui.horizontal(|ui| {
-            let badge = egui::RichText::new(format!("Lv.{}", level.level)).strong();
-            let badge = if playful {
-                badge.color(palette::YELLOW).size(18.0)
-            } else {
-                badge
-            };
-            ui.label(badge);
-            ui.label(level.title());
+            ui.label(
+                egui::RichText::new(format!("Lv.{}", level.level))
+                    .strong()
+                    .color(palette::YELLOW)
+                    .size(18.0),
+            );
+            ui.label(egui::RichText::new(level.title()).color(palette::TEXT_STRONG));
         });
-        let bar = egui::ProgressBar::new(level.fraction())
-            .desired_width(if playful {
-                CARD_WIDTH - 60.0
-            } else {
-                CARD_WIDTH
-            })
-            .text(format!("{} / {} XP", level.into_level, level.needed));
-        let bar = if playful {
-            bar.fill(palette::TEAL).corner_radius(CornerRadius::same(6))
-        } else {
-            bar
-        };
-        ui.add(bar);
+        ui.add(
+            egui::ProgressBar::new(level.fraction())
+                .desired_width(CARD_WIDTH - 56.0)
+                .desired_height(14.0)
+                .fill(palette::TEAL)
+                .corner_radius(CornerRadius::same(7))
+                .text(
+                    egui::RichText::new(format!("{} / {} XP", level.into_level, level.needed))
+                        .size(10.5)
+                        .color(palette::TEXT_STRONG),
+                ),
+        );
     });
 }
 
-fn current_mission(ui: &mut egui::Ui, state: &mut PlayfulUi, playful: bool) {
+fn current_mission(ui: &mut egui::Ui, state: &mut PlayfulUi) {
     let progress = &state.prefs.progress;
     match progress.next() {
         Some(next) => {
             ui.horizontal(|ui| {
-                ui.weak(format!(
-                    "ミッション {}/{}",
-                    progress.done_count() + 1,
-                    MISSIONS.len()
-                ));
+                ui.label(
+                    egui::RichText::new(format!(
+                        "ミッション {}/{}",
+                        progress.done_count() + 1,
+                        MISSIONS.len()
+                    ))
+                    .small()
+                    .color(palette::TEXT_FAINT),
+                );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let xp = egui::RichText::new(format!("+{} XP", next.xp)).strong();
-                    ui.label(if playful {
-                        xp.color(palette::ORANGE)
-                    } else {
-                        xp
-                    });
+                    ui.label(
+                        egui::RichText::new(format!("+{} XP", next.xp))
+                            .strong()
+                            .color(palette::ORANGE),
+                    );
                 });
             });
-            let title = egui::RichText::new(next.title).strong().size(17.0);
-            ui.label(if playful {
-                title.color(Color32::WHITE)
-            } else {
-                title
-            });
-            ui.label(egui::RichText::new(format!("ヒント: {}", next.hint)).small());
+            ui.label(
+                egui::RichText::new(next.title)
+                    .strong()
+                    .size(16.0)
+                    .color(Color32::WHITE),
+            );
+            ui.label(
+                egui::RichText::new(format!("💡 {}", next.hint))
+                    .small()
+                    .color(palette::TEXT),
+            );
         }
         None => {
-            let text =
-                egui::RichText::new("🏆 全ミッション達成! もう立派なマイスターです").strong();
-            ui.label(if playful {
-                text.color(palette::YELLOW)
-            } else {
-                text
-            });
+            ui.label(
+                egui::RichText::new("🏆 全ミッション達成! もう立派なマイスターです")
+                    .strong()
+                    .color(palette::YELLOW),
+            );
             if ui.small_button("最初から遊ぶ").clicked() {
                 state.reset_missions();
             }
@@ -446,13 +436,8 @@ fn draw_toast(ctx: &egui::Context, view: egui::Rect, now: f64, state: &mut Playf
         state.toast_started = None;
         return;
     }
-    let playful = state.prefs.effects();
     // 出るときは少し大きくなってから戻り、最後はふわっと消える
-    let pop = if playful {
-        ease_out_back((age / 0.35).min(1.0) as f32)
-    } else {
-        1.0
-    };
+    let pop = ease_out_back((age / 0.35).min(1.0) as f32);
     let fade = (((TOAST_SECONDS - age) / 0.5).min(1.0)) as f32;
     let rise = (1.0 - fade) * -16.0;
 
@@ -465,14 +450,11 @@ fn draw_toast(ctx: &egui::Context, view: egui::Rect, now: f64, state: &mut Playf
             ui.multiply_opacity(fade);
             // 大きくなる途中で折り返さないようにする
             ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
-            let mut frame =
-                egui::Frame::popup(ui.style()).inner_margin(egui::Margin::symmetric(22, 12));
-            if playful {
-                frame = frame
-                    .fill(palette::NAVY_LIGHT)
-                    .stroke(Stroke::new(2.5, palette::YELLOW))
-                    .corner_radius(CornerRadius::same(18));
-            }
+            let frame = egui::Frame::popup(ui.style())
+                .inner_margin(egui::Margin::symmetric(22, 12))
+                .fill(palette::NAVY_LIGHT)
+                .stroke(Stroke::new(2.5, palette::YELLOW))
+                .corner_radius(CornerRadius::same(18));
             frame.show(ui, |ui| {
                 ui.vertical_centered(|ui| {
                     let size = |base: f32| base * pop.max(0.2);
@@ -481,29 +463,26 @@ fn draw_toast(ctx: &egui::Context, view: egui::Rect, now: f64, state: &mut Playf
                     } else {
                         "🎉 ミッション達成!"
                     };
-                    let mut text = egui::RichText::new(headline).strong().size(size(24.0));
-                    if playful {
-                        text = text.color(palette::YELLOW);
-                    }
-                    ui.label(text);
+                    ui.label(
+                        egui::RichText::new(headline)
+                            .strong()
+                            .size(size(24.0))
+                            .color(palette::YELLOW),
+                    );
                     ui.label(
                         egui::RichText::new(mission(achievement.mission).title).size(size(16.0)),
                     );
                     let xp = egui::RichText::new(format!("+{} XP", achievement.xp))
                         .strong()
                         .size(size(18.0));
-                    ui.label(if playful { xp.color(palette::TEAL) } else { xp });
+                    ui.label(xp.color(palette::TEAL));
                     if let Some(level) = achievement.level_up {
                         let title = level_title(level);
                         let text =
                             egui::RichText::new(format!("⬆ レベルアップ! Lv.{level} {title}"))
                                 .strong()
                                 .size(size(17.0));
-                        ui.label(if playful {
-                            text.color(palette::PINK)
-                        } else {
-                            text
-                        });
+                        ui.label(text.color(palette::PINK));
                     }
                 });
             });

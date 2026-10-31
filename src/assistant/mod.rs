@@ -3,11 +3,13 @@
 //! - `settings_file`: API キーとモデルの保存 (Bevy なし)
 //! - `job`: 問い合わせを別スレッドで走らせて結果を待つ (Bevy なし)
 //! - このファイルと `ui`: 設定を持つ Resource と「AI の設定」ウィンドウ
+//! - `help`: 「AI に聞く」ウィンドウ (使い方を会話で質問する。中身は `cadsim_core::usecase::help`)
 //!
 //! 問い合わせ口のポート (`LlmClient`) は `cadsim_core::usecase::llm`、
 //! Claude API での実装は `cadsim_io::claude`。各機能は [`AiAssistant::client`] で呼び出し口を受け取り、
 //! [`job::LlmJob`] で別スレッドに投げる。
 
+pub mod help;
 pub mod job;
 pub mod settings_file;
 mod ui;
@@ -27,7 +29,11 @@ pub struct AssistantPlugin;
 impl Plugin for AssistantPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(AiAssistant::load())
-            .add_systems(EguiPrimaryContextPass, ui::settings_window);
+            .init_resource::<help::HelpChat>()
+            .add_systems(
+                EguiPrimaryContextPass,
+                (ui::settings_window, help::help_window),
+            );
     }
 }
 

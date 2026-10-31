@@ -1,26 +1,7 @@
-//! ゲーム風の UI の中身: チュートリアルのミッション、経験値とレベル、達成時の紙吹雪、見た目の設定
+//! ゲーム風の UI の中身: チュートリアルのミッション、経験値とレベル、達成時の紙吹雪、ミッションの表示の設定
 //!
 //! Bevy・egui・ファイル形式に依存しない。UI 層は毎フレーム [`Observation`] を作って
 //! [`Progress::observe`] に渡し、返ってきた達成を画面に出すだけにする。
-
-/// 画面の見た目
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
-pub enum ThemeKind {
-    /// 明るい色・丸い角・ミッションと演出つき
-    #[default]
-    Playful,
-    /// egui 標準の落ち着いた見た目。演出なし
-    Plain,
-}
-
-impl ThemeKind {
-    pub fn label(self) -> &'static str {
-        match self {
-            ThemeKind::Playful => "ゲーム風",
-            ThemeKind::Plain => "シンプル",
-        }
-    }
-}
 
 /// チュートリアルのミッション。並び順がおすすめの進め方。
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -338,10 +319,9 @@ fn is_edit_label(label: &str) -> bool {
     label.ends_with("を編集") || label.ends_with("を追加")
 }
 
-/// 画面の見た目とミッションの設定。アプリを閉じても覚えておく。
+/// ミッションの表示と進み具合。アプリを閉じても覚えておく。
 #[derive(Clone, Debug)]
 pub struct Preferences {
-    pub theme: ThemeKind,
     pub show_missions: bool,
     pub progress: Progress,
 }
@@ -349,17 +329,9 @@ pub struct Preferences {
 impl Default for Preferences {
     fn default() -> Self {
         Self {
-            theme: ThemeKind::Playful,
             show_missions: true,
             progress: Progress::default(),
         }
-    }
-}
-
-impl Preferences {
-    /// 紙吹雪やマスコットを出すか
-    pub fn effects(&self) -> bool {
-        self.theme == ThemeKind::Playful
     }
 }
 

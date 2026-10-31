@@ -1,7 +1,9 @@
 //! 「安全」パネル: 安全機器の追加・編集、停止信号とリセット、動作範囲と距離の確認
 
+use crate::ui::dock::{self, Dock};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
+use cadsim_core::workspace::Tool;
 
 use super::device::DeviceKind;
 use super::{SafetyLayoutRes, SafetyState};
@@ -15,30 +17,28 @@ pub fn safety_panel(
     mut state: ResMut<SafetyState>,
     model: Res<Model>,
     viewport: Res<ViewportRect>,
+    mut dock: ResMut<Dock>,
 ) -> Result {
-    // 3D ビューの左下に浮かべる (左上はシミュレーション、右上はビューキューブ)
-    let corner = viewport.rect.map_or(egui::pos2(8.0, 600.0), |r| {
-        egui::pos2(r.min.x + 8.0, r.max.y - 8.0)
+    let Some(window) = dock::panel(Tool::Safety, &dock, viewport.rect) else {
+        return Ok(());
+    };
+    let mut open = true;
+    window.open(&mut open).show(contexts.ctx_mut()?, |ui| {
+        // 毎フレームの変更検知を避けるため、編集したときだけ変更を知らせる
+        let state = state.bypass_change_detection();
+        let mut layout_changed = false;
+        status_section(ui, state);
+        ui.separator();
+        layout_changed |= device_list(ui, layout.bypass_change_detection(), state, &model);
+        ui.separator();
+        clearance_section(ui, &layout, state);
+        if layout_changed {
+            layout.set_changed();
+        }
     });
-    egui::Window::new("安全")
-        .pivot(egui::Align2::LEFT_BOTTOM)
-        .fixed_pos(corner)
-        .resizable(false)
-        .collapsible(true)
-        .default_open(false)
-        .show(contexts.ctx_mut()?, |ui| {
-            // 毎フレームの変更検知を避けるため、編集したときだけ変更を知らせる
-            let state = state.bypass_change_detection();
-            let mut layout_changed = false;
-            status_section(ui, state);
-            ui.separator();
-            layout_changed |= device_list(ui, layout.bypass_change_detection(), state, &model);
-            ui.separator();
-            clearance_section(ui, &layout, state);
-            if layout_changed {
-                layout.set_changed();
-            }
-        });
+    if !open {
+        dock.set_open(Tool::Safety, false);
+    }
     Ok(())
 }
 

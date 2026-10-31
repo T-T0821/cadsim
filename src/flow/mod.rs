@@ -110,8 +110,6 @@ pub struct FlowRun {
     /// 実時間 1 秒あたりに進めるシミュレーションの秒数。∞ なら最後まで。
     pub speed: f64,
     pub color_mode: ColorMode,
-    /// ウィンドウを出しているか
-    pub open: bool,
     /// Excel 書き出しを頼まれた
     pub export_requested: bool,
 }
@@ -125,7 +123,6 @@ impl Default for FlowRun {
             playing: false,
             speed: 600.0,
             color_mode: ColorMode::default(),
-            open: false,
             export_requested: false,
         }
     }

@@ -1,8 +1,10 @@
 //! 3D ビュー左下の「平面図・点群」パネル: 下敷きの一覧・配置・縮尺合わせと、
 //! 点群の一覧・配置・表示の細かさ・設備との干渉の結果
 
+use crate::ui::dock::{self, Dock};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
+use cadsim_core::workspace::Tool;
 
 use super::cloud_view::{CloudCheck, CloudDisplay};
 use super::{PlanTool, format_count};
@@ -20,119 +22,118 @@ pub fn site_panel(
     mut check: ResMut<CloudCheck>,
     bodies: Query<(&SimBody, Option<&Name>)>,
     viewport: Res<ViewportRect>,
+    mut dock: ResMut<Dock>,
 ) -> Result {
     if model.site.is_empty() {
-        tool.open = false;
+        dock.set_open(Tool::Site, false);
         if tool.calibrating.is_some() {
             tool.stop();
         }
         return Ok(());
     }
-    // 3D ビューの下の真ん中に浮かべる (四隅は他のパネルとビューキューブが使う)
-    let corner = viewport.rect.map_or(egui::pos2(400.0, 400.0), |r| {
-        egui::pos2(r.center().x, r.max.y - 8.0)
-    });
+    let Some(window) = dock::panel(Tool::Site, &dock, viewport.rect) else {
+        if tool.calibrating.is_some() {
+            tool.stop();
+        }
+        return Ok(());
+    };
     let unit = model.unit.clone();
     let model = model.bypass_change_detection();
     let tool = tool.bypass_change_detection();
-    egui::Window::new("平面図・点群")
-        .pivot(egui::Align2::CENTER_BOTTOM)
-        .default_pos(corner)
-        .resizable(false)
-        .collapsible(true)
-        .default_open(true)
-        .show(contexts.ctx_mut()?, |ui| {
-            let mut remove = None;
-            let count = model.site.underlays.len();
-            for index in 0..count {
-                let underlay = &mut model.site.underlays[index];
-                ui.push_id(index, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.checkbox(&mut underlay.visible, "")
-                            .on_hover_text("表示 / 非表示");
-                        ui.strong(&underlay.name);
-                        if ui.small_button("削除").clicked() {
-                            remove = Some(index);
-                        }
-                    });
-                    egui::Grid::new("underlay").num_columns(2).show(ui, |ui| {
-                        ui.label("縮尺");
-                        ui.horizontal(|ui| {
-                            ui.label("図面の 1 =");
-                            let speed = underlay.scale * 0.005;
-                            ui.add(
-                                egui::DragValue::new(&mut underlay.scale)
-                                    .speed(speed)
-                                    .range(1e-9..=1e9)
-                                    .max_decimals(6),
-                            );
-                            ui.label(&unit);
-                        });
-                        ui.end_row();
-                        ui.label("原点 X / Z");
-                        ui.horizontal(|ui| {
-                            ui.add(egui::DragValue::new(&mut underlay.origin[0]).speed(10.0));
-                            ui.add(egui::DragValue::new(&mut underlay.origin[1]).speed(10.0));
-                        });
-                        ui.end_row();
-                        ui.label("回転");
-                        ui.add(
-                            egui::DragValue::new(&mut underlay.rotation_deg)
-                                .speed(0.5)
-                                .suffix("°"),
-                        );
-                        ui.end_row();
-                        ui.label("高さ (Y)");
-                        ui.add(egui::DragValue::new(&mut underlay.elevation).speed(1.0));
-                        ui.end_row();
-                        ui.label("不透明度");
-                        ui.add(egui::Slider::new(&mut underlay.opacity, 0.05..=1.0));
-                        ui.end_row();
-                    });
-
-                    if tool.calibrating == Some(index) {
-                        calibration_ui(ui, tool, underlay, &unit);
-                    } else if ui
-                        .button("📏 縮尺合わせ")
-                        .on_hover_text(
-                            "図面上の2点をクリックし、その実際の距離を入れて縮尺を合わせる",
-                        )
-                        .clicked()
-                    {
-                        tool.start(index);
+    let mut open = true;
+    window.open(&mut open).show(contexts.ctx_mut()?, |ui| {
+        let mut remove = None;
+        let count = model.site.underlays.len();
+        for index in 0..count {
+            let underlay = &mut model.site.underlays[index];
+            ui.push_id(index, |ui| {
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut underlay.visible, "")
+                        .on_hover_text("表示 / 非表示");
+                    ui.strong(&underlay.name);
+                    if ui.small_button("削除").clicked() {
+                        remove = Some(index);
                     }
                 });
-                if index + 1 < count {
-                    ui.separator();
+                egui::Grid::new("underlay").num_columns(2).show(ui, |ui| {
+                    ui.label("縮尺");
+                    ui.horizontal(|ui| {
+                        ui.label("図面の 1 =");
+                        let speed = underlay.scale * 0.005;
+                        ui.add(
+                            egui::DragValue::new(&mut underlay.scale)
+                                .speed(speed)
+                                .range(1e-9..=1e9)
+                                .max_decimals(6),
+                        );
+                        ui.label(&unit);
+                    });
+                    ui.end_row();
+                    ui.label("原点 X / Z");
+                    ui.horizontal(|ui| {
+                        ui.add(egui::DragValue::new(&mut underlay.origin[0]).speed(10.0));
+                        ui.add(egui::DragValue::new(&mut underlay.origin[1]).speed(10.0));
+                    });
+                    ui.end_row();
+                    ui.label("回転");
+                    ui.add(
+                        egui::DragValue::new(&mut underlay.rotation_deg)
+                            .speed(0.5)
+                            .suffix("°"),
+                    );
+                    ui.end_row();
+                    ui.label("高さ (Y)");
+                    ui.add(egui::DragValue::new(&mut underlay.elevation).speed(1.0));
+                    ui.end_row();
+                    ui.label("不透明度");
+                    ui.add(egui::Slider::new(&mut underlay.opacity, 0.05..=1.0));
+                    ui.end_row();
+                });
+
+                if tool.calibrating == Some(index) {
+                    calibration_ui(ui, tool, underlay, &unit);
+                } else if ui
+                    .button("📏 縮尺合わせ")
+                    .on_hover_text("図面上の2点をクリックし、その実際の距離を入れて縮尺を合わせる")
+                    .clicked()
+                {
+                    tool.start(index);
                 }
+            });
+            if index + 1 < count {
+                ui.separator();
             }
-            if let Some(index) = remove {
-                if tool.calibrating.is_some() {
-                    tool.stop();
-                }
-                model.site.remove_underlay(index);
+        }
+        if let Some(index) = remove {
+            if tool.calibrating.is_some() {
+                tool.stop();
             }
-            if !model.site.clouds.is_empty() {
-                if count > 0 {
-                    ui.separator();
-                }
-                let names = |id: u32| {
-                    bodies
-                        .iter()
-                        .find(|(b, _)| b.id == id)
-                        .and_then(|(_, n)| n.map(|n| n.to_string()))
-                        .unwrap_or_else(|| format!("#{id}"))
-                };
-                clouds_ui(
-                    ui,
-                    model,
-                    display.bypass_change_detection(),
-                    check.bypass_change_detection(),
-                    &unit,
-                    &names,
-                );
+            model.site.remove_underlay(index);
+        }
+        if !model.site.clouds.is_empty() {
+            if count > 0 {
+                ui.separator();
             }
-        });
+            let names = |id: u32| {
+                bodies
+                    .iter()
+                    .find(|(b, _)| b.id == id)
+                    .and_then(|(_, n)| n.map(|n| n.to_string()))
+                    .unwrap_or_else(|| format!("#{id}"))
+            };
+            clouds_ui(
+                ui,
+                model,
+                display.bypass_change_detection(),
+                check.bypass_change_detection(),
+                &unit,
+                &names,
+            );
+        }
+    });
+    if !open {
+        dock.set_open(Tool::Site, false);
+    }
     Ok(())
 }
 

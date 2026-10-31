@@ -34,6 +34,7 @@
 | Ctrl + N | 新規プロジェクト |
 | Ctrl + O | 開く(`.cadsim` は開き直し、STEP / glTF / OBJ / STL / USD は取り込み) |
 | Ctrl + S / Ctrl + Shift + S | 保存 / 名前を付けて保存 |
+| F1 | AI に聞く(使い方の質問)を開く / 閉じる |
 | 右ボタン + W / A / S / D | 前後左右に移動 |
 | 右ボタン + Q / E | 下降 / 上昇 |
 | 右ボタン + Shift | 速く移動 |

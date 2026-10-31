@@ -36,14 +36,6 @@ pub enum Tool {
 }
 
 impl Tool {
-    pub fn label(self) -> &'static str {
-        match self {
-            Tool::Translate => "移動 (W)",
-            Tool::Rotate => "回転 (E)",
-            Tool::Scale => "拡大縮小 (R)",
-        }
-    }
-
     fn kind(self) -> GizmoModeKind {
         match self {
             Tool::Translate => GizmoModeKind::Translate,

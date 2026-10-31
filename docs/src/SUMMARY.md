@@ -6,7 +6,7 @@
 
 - [インストールと起動](install.md)
 - [画面の見かた](screen.md)
-- [ミッションとテーマ](missions.md)
+- [ミッション](missions.md)
 
 # 基本操作
 

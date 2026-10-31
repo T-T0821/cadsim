@@ -30,3 +30,4 @@ pub mod site;
 pub mod staffing;
 pub mod usecase;
 pub mod video;
+pub mod workspace;

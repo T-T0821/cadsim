@@ -148,7 +148,7 @@ fn receive_loaded(
     mut jobs: ResMut<ImportJobs>,
     site_jobs: Res<SiteJobs>,
     mut model: ResMut<Model>,
-    mut panel: ResMut<PlanTool>,
+    mut dock: ResMut<crate::ui::dock::Dock>,
     mut camera: MessageWriter<CameraRequest>,
 ) {
     let finished: Vec<SiteResult> = match site_jobs.receiver.lock() {
@@ -180,7 +180,7 @@ fn receive_loaded(
                 continue;
             }
         };
-        panel.open = true;
+        dock.set_open(cadsim_core::workspace::Tool::Site, true);
         camera.write(CameraRequest::FitAll);
         jobs.messages.push(message);
     }
@@ -227,8 +227,6 @@ fn add_plan(model: &mut Model, name: String, path: PathBuf, content: PlanContent
 /// 「平面図」パネルの状態と、縮尺合わせの道具
 #[derive(Resource)]
 pub struct PlanTool {
-    /// パネルを出すか
-    pub open: bool,
     /// 縮尺合わせ中の下敷きの番号
     pub calibrating: Option<usize>,
     /// クリックした点 (ワールド)。2点そろったら距離を入れてもらう
@@ -246,7 +244,6 @@ pub struct PlanTool {
 impl Default for PlanTool {
     fn default() -> Self {
         Self {
-            open: false,
             calibrating: None,
             points: Vec::new(),
             hover: None,

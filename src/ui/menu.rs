@@ -3,67 +3,115 @@
 use bevy_egui::egui;
 
 use super::UiState;
+use super::dock;
 use super::modeling::Tab;
+use super::theme::palette;
 use crate::camera::{CameraRequest, StandardView};
 use crate::file_io::ExportScope;
-use crate::gizmo::Tool;
+use crate::gizmo::Tool as Tool3d;
 use crate::history::Request;
 use crate::interchange::{FORMATS, LENGTH_UNITS};
 use crate::project::ProjectAction;
 use crate::result_export::ResultKind;
-use cadsim_core::gamify::ThemeKind;
+use cadsim_core::usecase::help::SHORTCUTS;
+use cadsim_core::workspace::{Tool, ToolGroup};
 
 pub fn show(root: &mut egui::Ui, state: &mut UiState) {
-    egui::Panel::top("menu_bar").show(root, |ui| {
-        egui::MenuBar::new().ui(ui, |ui| {
-            file_menu(ui, state);
-            edit_menu(ui, state);
-            view_menu(ui, state);
-            create_menu(ui, state);
-            line_menu(ui, state);
-            ai_menu(ui, state);
-            help_menu(ui, state);
+    egui::Panel::top("menu_bar")
+        .frame(
+            egui::Frame::new()
+                .fill(palette::INK)
+                .inner_margin(egui::Margin::symmetric(8, 4)),
+        )
+        .show(root, |ui| {
+            egui::MenuBar::new().ui(ui, |ui| {
+                file_menu(ui, state);
+                edit_menu(ui, state);
+                view_menu(ui, state);
+                create_menu(ui, state);
+                tools_menu(ui, state);
+                help_menu(ui, state);
+            });
         });
-        ui.separator();
-        toolbar(ui, state);
-        ui.add_space(2.0);
-    });
+    egui::Panel::top("toolbar")
+        .frame(
+            egui::Frame::new()
+                .fill(palette::NAVY)
+                .inner_margin(egui::Margin::symmetric(8, 6))
+                .stroke(egui::Stroke::new(1.0, palette::LINE)),
+        )
+        .show(root, |ui| toolbar(ui, state));
 }
 
 fn file_menu(ui: &mut egui::Ui, state: &mut UiState) {
     ui.menu_button("ファイル", |ui| {
-        if ui.button("新規プロジェクト  (Ctrl+N)").clicked() {
+        if ui
+            .add(egui::Button::new("新規プロジェクト").shortcut_text("Ctrl+N"))
+            .clicked()
+        {
             state.project.request(ProjectAction::New);
         }
         if ui
-            .button("開く…  (Ctrl+O)")
-            .on_hover_text(
-                "プロジェクト (.cadsim) を開くか、STEP / glTF / OBJ / STL を今のプロジェクトに取り込む",
-            )
+            .add(egui::Button::new("開く…").shortcut_text("Ctrl+O"))
+            .on_hover_text(format!(
+                "プロジェクト (.cadsim) を開くか、ファイルを今のプロジェクトに取り込む。\n\
+                 ウィンドウへのドラッグ&ドロップでも開けます。\n\n\
+                 取り込める形式: STEP, {}\n\
+                 平面図として床に敷く形式: DXF, PDF, PNG, JPG\n\
+                 点群: PLY, LAS, E57 (PLY は「OBJ / STL の単位」で読みます)",
+                format_list()
+            ))
             .clicked()
         {
             state.jobs.request_dialog();
         }
-        if ui.button("サンプルのアセンブリを取り込む").clicked() {
-            state.jobs.open_sample();
-        }
-        ui.menu_button("負荷テスト用シーンを開く", |ui| {
-            for count in [1000, 5000, 10000] {
-                if ui.button(format!("部品 {count} 個")).clicked() {
-                    state.jobs.open_stress(count);
-                }
+        ui.menu_button("サンプルを開く", |ui| {
+            if ui
+                .button("組立品 (万力)")
+                .on_hover_text("7 部品の小さなアセンブリを取り込む")
+                .clicked()
+            {
+                state.jobs.open_sample();
+                ui.close();
             }
+            if ui
+                .button("工程シミュレーションのサンプル")
+                .on_hover_text(
+                    "投入・加工・組立・検査の工程を読み込んで、工程シミュレーションを開く",
+                )
+                .clicked()
+            {
+                state.flow.load_sample();
+                state.dock.set_open(Tool::Flow, true);
+                ui.close();
+            }
+            ui.separator();
+            ui.menu_button("負荷テスト用シーン", |ui| {
+                for count in [1000, 5000, 10000] {
+                    if ui.button(format!("部品 {count} 個")).clicked() {
+                        state.jobs.open_stress(count);
+                        ui.close();
+                    }
+                }
+            });
         });
         ui.separator();
-        if ui.button("保存  (Ctrl+S)").clicked() {
+        if ui
+            .add(egui::Button::new("保存").shortcut_text("Ctrl+S"))
+            .clicked()
+        {
             state.project.request(ProjectAction::Save);
         }
-        if ui.button("名前を付けて保存…  (Ctrl+Shift+S)").clicked() {
+        if ui
+            .add(egui::Button::new("名前を付けて保存…").shortcut_text("Ctrl+Shift+S"))
+            .clicked()
+        {
             state.project.request(ProjectAction::SaveAs);
         }
         ui.separator();
         export_menu(ui, state);
         results_menu(ui, state);
+        units_menu(ui, state);
         ui.separator();
         if ui
             .button("すべて閉じる")
@@ -73,11 +121,6 @@ fn file_menu(ui: &mut egui::Ui, state: &mut UiState) {
             state.history.clear_all(&mut state.model);
             state.selection.clear();
         }
-        ui.separator();
-        ui.weak("ウィンドウへのドラッグ&ドロップでも開けます");
-        ui.weak(format!("取り込める形式: STEP, {}", format_list()));
-        ui.weak("平面図として床に敷く形式: DXF, PDF, PNG, JPG");
-        ui.weak("点群: PLY, LAS, E57 (PLY は「OBJ / STL の単位」で読みます)");
     });
 }
 
@@ -149,6 +192,10 @@ fn export_menu(ui: &mut egui::Ui, state: &mut UiState) {
             unit_formats.join(" / ").to_ascii_uppercase()
         ));
     });
+}
+
+/// 単位を持たない形式 (OBJ / STL) の単位
+fn units_menu(ui: &mut egui::Ui, state: &mut UiState) {
     ui.menu_button("OBJ / STL の単位", |ui| {
         ui.weak("OBJ と STL は単位を持たないので、読み書きのときにここで指定します");
         let units = &mut state.jobs.units;
@@ -210,9 +257,70 @@ fn format_list() -> String {
 
 fn edit_menu(ui: &mut egui::Ui, state: &mut UiState) {
     ui.menu_button("編集", |ui| {
-        undo_redo_buttons(ui, state);
+        for (text, shortcut, request, label) in [
+            (
+                "元に戻す",
+                "Ctrl+Z",
+                Request::Undo,
+                state.history.undo_label(),
+            ),
+            (
+                "やり直し",
+                "Ctrl+Y",
+                Request::Redo,
+                state.history.redo_label(),
+            ),
+        ] {
+            let button = ui.add_enabled(
+                label.is_some(),
+                egui::Button::new(text).shortcut_text(shortcut),
+            );
+            if button.on_hover_text(label.unwrap_or_default()).clicked() {
+                state.history.request = Some(request);
+            }
+        }
         ui.separator();
-        let target = state.selection.node;
+        let target = state
+            .selection
+            .node
+            .filter(|&id| state.model.get(id).is_some());
+        if ui
+            .add_enabled(
+                target.is_some(),
+                egui::Button::new("選択を削除").shortcut_text("Delete"),
+            )
+            .clicked()
+            && let Some(id) = target
+        {
+            state.history.remove(&mut state.model, id);
+            state.selection.clear();
+        }
+        if ui
+            .add_enabled(
+                target.is_some(),
+                egui::Button::new("選択を隠す").shortcut_text("H"),
+            )
+            .clicked()
+            && let Some(node) = target.and_then(|id| state.model.get_mut(id))
+        {
+            node.visible = false;
+        }
+        if ui
+            .add(egui::Button::new("すべて表示").shortcut_text("Alt+H"))
+            .clicked()
+        {
+            state.model.show_all();
+        }
+        if ui
+            .add_enabled(
+                target.is_some(),
+                egui::Button::new("選択を解除").shortcut_text("Esc"),
+            )
+            .clicked()
+        {
+            state.selection.clear();
+        }
+        ui.separator();
         if ui
             .add_enabled(target.is_some(), egui::Button::new("形状を差し替え…"))
             .on_hover_text(
@@ -227,22 +335,32 @@ fn edit_menu(ui: &mut egui::Ui, state: &mut UiState) {
     });
 }
 
-/// 「元に戻す」「やり直し」のボタン。押せないときは灰色にし、何が戻るかをツールチップに出す。
+/// ツールバーの「元に戻す」「やり直し」。押せないときは灰色にし、何が戻るかをツールチップに出す。
 fn undo_redo_buttons(ui: &mut egui::Ui, state: &mut UiState) {
-    for (text, request, label) in [
+    for (text, key, request, label) in [
         (
-            "元に戻す (Ctrl+Z)",
+            "⟲ 戻す",
+            "Ctrl+Z",
             Request::Undo,
             state.history.undo_label(),
         ),
         (
-            "やり直し (Ctrl+Y)",
+            "⟳ やり直し",
+            "Ctrl+Y",
             Request::Redo,
             state.history.redo_label(),
         ),
     ] {
+        let hover = match &label {
+            Some(label) => format!("{label} ({key})"),
+            None => format!("戻せる操作はありません ({key})"),
+        };
         let button = ui.add_enabled(label.is_some(), egui::Button::new(text));
-        if button.on_hover_text(label.unwrap_or_default()).clicked() {
+        if button
+            .on_hover_text(hover.clone())
+            .on_disabled_hover_text(hover)
+            .clicked()
+        {
             state.history.request = Some(request);
         }
     }
@@ -250,21 +368,29 @@ fn undo_redo_buttons(ui: &mut egui::Ui, state: &mut UiState) {
 
 fn view_menu(ui: &mut egui::Ui, state: &mut UiState) {
     ui.menu_button("表示", |ui| {
-        if ui.button("全体を表示  (Home)").clicked() {
+        if ui
+            .add(egui::Button::new("全体を表示").shortcut_text("Home"))
+            .clicked()
+        {
             state.camera.write(CameraRequest::FitAll);
         }
-        if ui.button("選択を拡大  (F)").clicked() {
+        if ui
+            .add(egui::Button::new("選択を拡大").shortcut_text("F"))
+            .clicked()
+        {
             state.camera.write(CameraRequest::FitSelection);
         }
-        projection_buttons(ui, state);
         ui.menu_button("標準ビュー", |ui| {
             for view in StandardView::ALL {
-                let label = format!("{}  ({})", view.label(), view.shortcut());
-                if ui.button(label).clicked() {
+                if ui
+                    .add(egui::Button::new(view.label()).shortcut_text(view.shortcut()))
+                    .clicked()
+                {
                     state.camera.write(CameraRequest::View(view));
                 }
             }
         });
+        projection_buttons(ui, state);
         ui.separator();
         ui.checkbox(&mut state.settings.show_edges, "稜線を表示");
         ui.checkbox(&mut state.settings.show_grid, "グリッドを表示");
@@ -273,91 +399,78 @@ fn view_menu(ui: &mut egui::Ui, state: &mut UiState) {
             &mut state.settings.ghost_unselected,
             "選択以外を半透明にする",
         );
-        ui.checkbox(
-            &mut state.settings.simplify_small_parts,
-            "画面上で小さい部品を簡略表示",
-        )
-        .on_hover_text("遠くの部品を粗い形にし、ごく小さい部品は描かずに軽くする");
-        ui.add_enabled_ui(state.settings.simplify_small_parts, |ui| {
-            ui.add(
-                egui::Slider::new(&mut state.settings.coarse_below_px, 0.0..=300.0)
-                    .text("簡略表示 (px 未満)"),
-            );
-            ui.add(
-                egui::Slider::new(&mut state.settings.hide_below_px, 0.0..=20.0)
-                    .text("省略 (px 未満)"),
-            );
-        });
-        ui.checkbox(&mut state.settings.defeature, "小さな穴とフィレットを省略")
-            .on_hover_text(
-                "取り込んだ部品の小さな穴を埋め、角の丸みを尖らせて三角形を減らす。\n\
-                 干渉チェックは元の形で行う",
-            );
-        ui.add_enabled_ui(state.settings.defeature, |ui| {
-            let unit = &state.model.unit;
-            ui.add(
-                egui::Slider::new(&mut state.settings.defeature_hole, 0.0..=100.0)
-                    .text(format!("穴の直径 ({unit} 以下)")),
-            );
-            ui.add(
-                egui::Slider::new(&mut state.settings.defeature_fillet, 0.0..=50.0)
-                    .text(format!("フィレットの半径 ({unit} 以下)")),
-            );
-            if state.settings.defeature {
-                let pending = state.defeaturing.pending();
-                let removed = state.defeaturing.removed();
-                ui.label(if pending > 0 {
-                    format!("計算中… (残り {pending} 形状)")
-                } else {
-                    format!(
-                        "穴 {} 個・フィレット {} 個を省略 (形状ごとに数える)",
-                        removed.holes, removed.fillets
-                    )
-                });
-            }
+        ui.menu_button("大きなモデルを軽く表示", |ui| {
+            lightweight_menu(ui, state)
         });
         ui.separator();
-        if ui.button("すべて表示").clicked() {
-            state.model.show_all();
+        let mut show = state.playful.prefs.show_missions;
+        if ui
+            .checkbox(&mut show, "ミッションカードを表示")
+            .on_hover_text("3D ビューの左下に、操作を覚えるためのミッションを出す")
+            .changed()
+        {
+            state.playful.set_show_missions(show);
         }
-        ui.separator();
-        theme_menu(ui, state);
+        if ui
+            .button("開いている道具をすべて閉じる")
+            .on_hover_text("3D ビューに浮かべたパネルとウィンドウを閉じる")
+            .clicked()
+        {
+            state.dock.close_all();
+        }
     });
 }
 
-/// 見た目 (ゲーム風 / シンプル) とミッションカードの表示
-fn theme_menu(ui: &mut egui::Ui, state: &mut UiState) {
-    ui.menu_button("テーマ", |ui| {
-        for (theme, hover) in [
-            (
-                ThemeKind::Playful,
-                "明るい色と丸いボタン。ミッション達成で紙吹雪が舞います",
-            ),
-            (ThemeKind::Plain, "落ち着いた標準の見た目。演出なし"),
-        ] {
-            let selected = state.playful.prefs.theme == theme;
-            if ui
-                .radio(selected, theme.label())
-                .on_hover_text(hover)
-                .clicked()
-            {
-                state.playful.set_theme(theme);
-            }
+/// 遠くの部品の簡略表示と、小さな穴・フィレットの省略
+fn lightweight_menu(ui: &mut egui::Ui, state: &mut UiState) {
+    ui.checkbox(
+        &mut state.settings.simplify_small_parts,
+        "画面上で小さい部品を簡略表示",
+    )
+    .on_hover_text("遠くの部品を粗い形にし、ごく小さい部品は描かずに軽くする");
+    ui.add_enabled_ui(state.settings.simplify_small_parts, |ui| {
+        ui.add(
+            egui::Slider::new(&mut state.settings.coarse_below_px, 0.0..=300.0)
+                .text("簡略表示 (px 未満)"),
+        );
+        ui.add(
+            egui::Slider::new(&mut state.settings.hide_below_px, 0.0..=20.0).text("省略 (px 未満)"),
+        );
+    });
+    ui.separator();
+    ui.checkbox(&mut state.settings.defeature, "小さな穴とフィレットを省略")
+        .on_hover_text(
+            "取り込んだ部品の小さな穴を埋め、角の丸みを尖らせて三角形を減らす。\n\
+             干渉チェックは元の形で行う",
+        );
+    ui.add_enabled_ui(state.settings.defeature, |ui| {
+        let unit = &state.model.unit;
+        ui.add(
+            egui::Slider::new(&mut state.settings.defeature_hole, 0.0..=100.0)
+                .text(format!("穴の直径 ({unit} 以下)")),
+        );
+        ui.add(
+            egui::Slider::new(&mut state.settings.defeature_fillet, 0.0..=50.0)
+                .text(format!("フィレットの半径 ({unit} 以下)")),
+        );
+        if state.settings.defeature {
+            let pending = state.defeaturing.pending();
+            let removed = state.defeaturing.removed();
+            ui.label(if pending > 0 {
+                format!("計算中… (残り {pending} 形状)")
+            } else {
+                format!(
+                    "穴 {} 個・フィレット {} 個を省略 (形状ごとに数える)",
+                    removed.holes, removed.fillets
+                )
+            });
         }
     });
-    let mut show = state.playful.prefs.show_missions;
-    if ui
-        .checkbox(&mut show, "ミッションを表示")
-        .on_hover_text("3D ビューの左下に、操作を覚えるためのミッションを出す")
-        .changed()
-    {
-        state.playful.set_show_missions(show);
-    }
 }
 
 fn create_menu(ui: &mut egui::Ui, state: &mut UiState) {
     ui.menu_button("作成", |ui| {
-        if ui.button("箱を追加").clicked() {
+        if ui.button("📦  箱を追加").clicked() {
             add_box(state);
         }
         ui.separator();
@@ -370,90 +483,57 @@ fn create_menu(ui: &mut egui::Ui, state: &mut UiState) {
             };
             if ui.button(text).clicked() {
                 state.modeling.open_tab(tab);
+                state.dock.set_open(Tool::Modeling, true);
                 ui.close();
             }
         }
         ui.separator();
         // 標準部品は「部品ライブラリ」パネルからビューへドラッグしても置ける
         crate::library::add_menu(ui, state);
-    });
-}
-
-fn line_menu(ui: &mut egui::Ui, state: &mut UiState) {
-    ui.menu_button("ライン", |ui| {
-        let label = if state.flow.run.open {
-            "工程シミュレーションを閉じる"
-        } else {
-            "工程シミュレーション…"
-        };
         if ui
-            .button(label)
-            .on_hover_text("工程とバッファを並べてラインを早回しし、稼働率やスループットを集計する")
+            .button("部品ライブラリを開く")
+            .on_hover_text("標準部品をビューへドラッグして置ける")
             .clicked()
         {
-            state.flow.toggle();
-        }
-        if ui.button("サンプル工程を読み込む").clicked() {
-            state.flow.load_sample();
-        }
-        ui.separator();
-        let label = if state.line.open {
-            "ライン連携を閉じる"
-        } else {
-            "ライン連携…"
-        };
-        if ui
-            .button(label)
-            .on_hover_text(
-                "工程シミュレーション・AGV・作業者・タイミングチャートを同じ時計で動かし、安全停止で全体を止める",
-            )
-            .clicked()
-        {
-            state.line.toggle();
-            ui.close();
-        }
-        ui.separator();
-        if ui
-            .button("言葉でラインを組む…")
-            .on_hover_text(
-                "「コンベア2本とロボット1台で箱詰め」のような文から、設備の配置とタイミングチャートの下書きを作る",
-            )
-            .clicked()
-        {
-            state.compose.open = true;
+            state.dock.set_open(Tool::Library, true);
             ui.close();
         }
     });
 }
 
-fn ai_menu(ui: &mut egui::Ui, state: &mut UiState) {
-    ui.menu_button("AI", |ui| {
-        if ui
-            .button("言葉でラインを組む…")
-            .on_hover_text(
-                "「コンベア2本とロボット1台で箱詰め」のような文から、設備の配置とタイミングチャートの下書きを作る",
-            )
-            .clicked()
-        {
-            state.compose.open = true;
-            ui.close();
-        }
-        let label = if state.sequence_gen.open {
-            "チャート・ラダーの自動生成を閉じる"
-        } else {
-            "チャート・ラダーの自動生成…"
-        };
-        if ui
-            .button(label)
-            .on_hover_text(
-                "説明文からタイミングチャートを下書きする、チャートからラダーと I/O 表を作る、ラダーやログを説明させる",
-            )
-            .clicked()
-        {
-            state.sequence_gen.toggle();
-            ui.close();
+/// 道具の一覧 (ツールレールと同じもの)。分類ごとに区切って、開いているものに印を付ける。
+fn tools_menu(ui: &mut egui::Ui, state: &mut UiState) {
+    ui.menu_button("ツール", |ui| {
+        for (i, group) in ToolGroup::ALL.into_iter().enumerate() {
+            if i > 0 {
+                ui.separator();
+            }
+            ui.label(
+                egui::RichText::new(group.label())
+                    .small()
+                    .color(palette::TEXT_FAINT),
+            );
+            for tool in Tool::ALL.into_iter().filter(|t| t.group() == group) {
+                let enabled = tool != Tool::Site || !state.model.site.is_empty();
+                let mut open = state.dock.is_open(tool);
+                let response = ui
+                    .add_enabled(enabled, egui::Checkbox::new(&mut open, dock::title(tool)))
+                    .on_hover_text(tool.hint())
+                    .on_disabled_hover_text("平面図か点群を開くと使えます");
+                if response.changed() {
+                    state.dock.set_open(tool, open);
+                }
+            }
         }
         ui.separator();
+        if ui
+            .add(egui::Button::new("💬  AI に聞く…").shortcut_text("F1"))
+            .on_hover_text("使い方を文で質問する")
+            .clicked()
+        {
+            state.help.open();
+            ui.close();
+        }
         if ui
             .button("AI の設定…")
             .on_hover_text("生成 AI (Claude API) のキーとモデルを設定する")
@@ -468,98 +548,170 @@ fn ai_menu(ui: &mut egui::Ui, state: &mut UiState) {
 fn help_menu(ui: &mut egui::Ui, state: &mut UiState) {
     ui.menu_button("ヘルプ", |ui| {
         if ui
+            .add(egui::Button::new("💬  AI に聞く…").shortcut_text("F1"))
+            .on_hover_text("したいことを文で聞くと、手順と使う道具を答えます")
+            .clicked()
+        {
+            state.help.open();
+            ui.close();
+        }
+        ui.menu_button("キー操作の一覧", |ui| {
+            egui::Grid::new("shortcuts").striped(true).show(ui, |ui| {
+                for (key, action) in SHORTCUTS {
+                    ui.label(egui::RichText::new(*key).color(palette::TEAL));
+                    ui.label(*action);
+                    ui.end_row();
+                }
+            });
+        });
+        ui.separator();
+        if ui
             .button("ミッションを最初からやり直す")
             .on_hover_text("チュートリアルのミッションと経験値を最初に戻す")
             .clicked()
         {
             state.playful.reset_missions();
         }
-        ui.separator();
-        egui::Grid::new("shortcuts").striped(true).show(ui, |ui| {
-            for (key, action) in [
-                ("左クリック", "部品を選択"),
-                ("Alt + 左ドラッグ", "回転 (オービット)"),
-                ("中ドラッグ", "平行移動 (パン)"),
-                ("ホイール", "ズーム"),
-                ("右ドラッグ + WASD/QE", "フライ移動"),
-                ("W / E / R", "移動 / 回転 / 拡大縮小ギズモ"),
-                ("F / Home", "選択を拡大 / 全体を表示"),
-                (
-                    "1 / 3 / 7 / 0",
-                    "正面 / 右側面 / 上面 / 等角 (Ctrl で反対側)",
-                ),
-                ("5", "透視投影 / 平行投影を切り替え"),
-                ("H / Alt+H", "選択を隠す / すべて表示"),
-                ("Ctrl+N / Ctrl+O", "新規プロジェクト / 開く"),
-                ("Ctrl+S / Ctrl+Shift+S", "保存 / 名前を付けて保存"),
-                ("Esc", "選択を解除"),
-                ("Delete", "選択を削除"),
-                ("Ctrl+Z", "元に戻す"),
-                ("Ctrl+Y / Ctrl+Shift+Z", "やり直し"),
-            ] {
-                ui.label(key);
-                ui.label(action);
-                ui.end_row();
+    });
+}
+
+/// ツールバーの1グループ (薄い地の上にボタンを並べる)
+fn group(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui)) {
+    egui::Frame::new()
+        .fill(palette::NAVY_DEEP)
+        .corner_radius(egui::CornerRadius::same(10))
+        .inner_margin(egui::Margin::symmetric(4, 3))
+        .show(ui, |ui| {
+            ui.spacing_mut().item_spacing.x = 3.0;
+            ui.horizontal(add);
+        });
+}
+
+fn toolbar(ui: &mut egui::Ui, state: &mut UiState) {
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 8.0;
+        group(ui, |ui| {
+            if ui
+                .button("📂 開く")
+                .on_hover_text("プロジェクトやファイルを開く (Ctrl+O)")
+                .clicked()
+            {
+                state.jobs.request_dialog();
+            }
+            let label = if state.project.unsaved() {
+                "💾 保存 •"
+            } else {
+                "💾 保存"
+            };
+            if ui
+                .button(label)
+                .on_hover_text("プロジェクトを保存 (Ctrl+S)。• は保存していない変更がある印")
+                .clicked()
+            {
+                state.project.request(ProjectAction::Save);
+            }
+        });
+        group(ui, |ui| undo_redo_buttons(ui, state));
+        group(ui, |ui| {
+            for tool in [Tool3d::Translate, Tool3d::Rotate, Tool3d::Scale] {
+                let (icon, name, key) = match tool {
+                    Tool3d::Translate => ("✚", "移動", "W"),
+                    Tool3d::Rotate => ("🔃", "回転", "E"),
+                    Tool3d::Scale => ("↔", "拡大縮小", "R"),
+                };
+                let selected = state.gizmo.tool == tool;
+                if ui
+                    .selectable_label(selected, format!("{icon} {name}"))
+                    .on_hover_text(format!("{name}のギズモ ({key})"))
+                    .clicked()
+                {
+                    state.gizmo.tool = tool;
+                }
+            }
+        });
+        group(ui, |ui| projection_buttons(ui, state));
+        group(ui, |ui| {
+            ui.menu_button("🎥 ビュー", |ui| {
+                for view in StandardView::ALL {
+                    if ui
+                        .add(egui::Button::new(view.label()).shortcut_text(view.shortcut()))
+                        .clicked()
+                    {
+                        state.camera.write(CameraRequest::View(view));
+                    }
+                }
+            })
+            .response
+            .on_hover_text("正面・上面・等角などの標準ビュー (右上のビューキューブでも選べます)");
+            if ui
+                .button("⛶ 全体")
+                .on_hover_text("全体を表示 (Home)")
+                .clicked()
+            {
+                state.camera.write(CameraRequest::FitAll);
+            }
+            if ui
+                .button("🔍 選択")
+                .on_hover_text("選んだ部品を拡大 (F)")
+                .clicked()
+            {
+                state.camera.write(CameraRequest::FitSelection);
+            }
+        });
+        group(ui, |ui| {
+            ui.toggle_value(&mut state.settings.show_edges, "稜線")
+                .on_hover_text("部品の稜線を表示する");
+            ui.toggle_value(&mut state.settings.ghost_unselected, "半透明")
+                .on_hover_text("選択以外を半透明にする");
+        });
+
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            level_pill(ui, state);
+            if ui
+                .add(
+                    egui::Button::new(
+                        egui::RichText::new("💬 AI に聞く").color(egui::Color32::WHITE),
+                    )
+                    .fill(palette::PURPLE),
+                )
+                .on_hover_text("使い方を文で質問する (F1)")
+                .clicked()
+            {
+                state.help.toggle();
             }
         });
     });
 }
 
-fn toolbar(ui: &mut egui::Ui, state: &mut UiState) {
-    ui.horizontal(|ui| {
-        if ui
-            .button("📂 開く")
-            .on_hover_text("プロジェクトか STEP ファイルを開く (Ctrl+O)")
-            .clicked()
-        {
-            state.jobs.request_dialog();
-        }
-        if ui
-            .button("💾 保存")
-            .on_hover_text("プロジェクトを保存 (Ctrl+S)")
-            .clicked()
-        {
-            state.project.request(ProjectAction::Save);
-        }
-        ui.separator();
-
-        undo_redo_buttons(ui, state);
-        ui.separator();
-
-        for tool in [Tool::Translate, Tool::Rotate, Tool::Scale] {
-            let selected = state.gizmo.tool == tool;
-            if ui.selectable_label(selected, tool.label()).clicked() {
-                state.gizmo.tool = tool;
-            }
-        }
-        ui.separator();
-
-        projection_buttons(ui, state);
-        ui.separator();
-
-        for view in StandardView::ALL {
-            let button = ui.button(view.label()).on_hover_text(format!(
-                "{}ビュー ({})",
-                view.label(),
-                view.shortcut()
-            ));
-            if button.clicked() {
-                state.camera.write(CameraRequest::View(view));
-            }
-        }
-        if ui
-            .button("⛶ 全体")
-            .on_hover_text("全体を表示 (Home)")
-            .clicked()
-        {
-            state.camera.write(CameraRequest::FitAll);
-        }
-        ui.separator();
-
-        ui.toggle_value(&mut state.settings.show_edges, "稜線");
-        ui.toggle_value(&mut state.settings.ghost_unselected, "半透明")
-            .on_hover_text("選択以外を半透明にする");
-    });
+/// 右端のレベル表示。押すとミッションカードを出し入れする。
+fn level_pill(ui: &mut egui::Ui, state: &mut UiState) {
+    let progress = &state.playful.prefs.progress;
+    let level = progress.level();
+    let text = egui::RichText::new(format!(
+        "★ Lv.{}  {}/{}",
+        level.level,
+        progress.done_count(),
+        cadsim_core::gamify::MISSIONS.len()
+    ))
+    .color(palette::YELLOW);
+    let shown = state.playful.prefs.show_missions;
+    if ui
+        .add(
+            egui::Button::new(text)
+                .fill(palette::NAVY_DEEP)
+                .selected(shown),
+        )
+        .on_hover_text(format!(
+            "{} ({} / {} XP)\nクリックでミッションカードを{}",
+            level.title(),
+            level.into_level,
+            level.needed,
+            if shown { "隠す" } else { "出す" }
+        ))
+        .clicked()
+    {
+        state.playful.set_show_missions(!shown);
+    }
 }
 
 /// 「透視」「平行」の切り替えボタン (メニューとツールバーで共通)
