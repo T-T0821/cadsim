@@ -10,6 +10,7 @@ use crate::gizmo::Tool;
 use crate::history::Request;
 use crate::interchange::{FORMATS, LENGTH_UNITS};
 use crate::project::ProjectAction;
+use cadsim_core::gamify::ThemeKind;
 
 pub fn show(root: &mut egui::Ui, state: &mut UiState) {
     egui::Panel::top("menu_bar").show(root, |ui| {
@@ -19,7 +20,7 @@ pub fn show(root: &mut egui::Ui, state: &mut UiState) {
             view_menu(ui, state);
             create_menu(ui, state);
             line_menu(ui, state);
-            help_menu(ui);
+            help_menu(ui, state);
         });
         ui.separator();
         toolbar(ui, state);
@@ -229,7 +230,39 @@ fn view_menu(ui: &mut egui::Ui, state: &mut UiState) {
         if ui.button("すべて表示").clicked() {
             state.model.show_all();
         }
+        ui.separator();
+        theme_menu(ui, state);
     });
+}
+
+/// 見た目 (ゲーム風 / シンプル) とミッションカードの表示
+fn theme_menu(ui: &mut egui::Ui, state: &mut UiState) {
+    ui.menu_button("テーマ", |ui| {
+        for (theme, hover) in [
+            (
+                ThemeKind::Playful,
+                "明るい色と丸いボタン。ミッション達成で紙吹雪が舞います",
+            ),
+            (ThemeKind::Plain, "落ち着いた標準の見た目。演出なし"),
+        ] {
+            let selected = state.playful.prefs.theme == theme;
+            if ui
+                .radio(selected, theme.label())
+                .on_hover_text(hover)
+                .clicked()
+            {
+                state.playful.set_theme(theme);
+            }
+        }
+    });
+    let mut show = state.playful.prefs.show_missions;
+    if ui
+        .checkbox(&mut show, "ミッションを表示")
+        .on_hover_text("3D ビューの左下に、操作を覚えるためのミッションを出す")
+        .changed()
+    {
+        state.playful.set_show_missions(show);
+    }
 }
 
 fn create_menu(ui: &mut egui::Ui, state: &mut UiState) {
@@ -273,8 +306,16 @@ fn line_menu(ui: &mut egui::Ui, state: &mut UiState) {
     });
 }
 
-fn help_menu(ui: &mut egui::Ui) {
+fn help_menu(ui: &mut egui::Ui, state: &mut UiState) {
     ui.menu_button("ヘルプ", |ui| {
+        if ui
+            .button("ミッションを最初からやり直す")
+            .on_hover_text("チュートリアルのミッションと経験値を最初に戻す")
+            .clicked()
+        {
+            state.playful.reset_missions();
+        }
+        ui.separator();
         egui::Grid::new("shortcuts").striped(true).show(ui, |ui| {
             for (key, action) in [
                 ("左クリック", "部品を選択"),
