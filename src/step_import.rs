@@ -64,8 +64,7 @@ pub struct ImportNode {
 pub struct ImportedShape {
     /// 共有されている形状を見分けるための番号 (メッシュのキャッシュに使う)
     pub id: usize,
-    /// 元の B-rep。いまは表示に使っていないが、今後の計測や干渉チェックのために持っておく。
-    #[allow(dead_code)]
+    /// 元の B-rep。表示の簡略化 (穴・フィレットを消す) で使う。
     pub breps: Vec<Brep>,
     /// 面ごとの三角形メッシュ (部品の座標系, f64)
     pub faces: Vec<PolygonMesh>,
@@ -856,14 +855,7 @@ fn read_length_unit(e: &Entities) -> String {
 
 /// B-rep を表示用の面メッシュと稜線に変換し、寸法・体積・表面積を求める
 fn tessellate(breps: Vec<Brep>, color: Option<[f32; 3]>) -> ImportedShape {
-    // 許容誤差は部品の大きさに合わせる (頂点の範囲で大きさを見積もる)
-    let mut min = DVec3::splat(f64::MAX);
-    let mut max = DVec3::splat(f64::MIN);
-    for p in breps.iter().flat_map(|b| &b.vertices) {
-        min = min.min(DVec3::new(p.x, p.y, p.z));
-        max = max.max(DVec3::new(p.x, p.y, p.z));
-    }
-    let tol = tessellation_tolerance(min, max);
+    let tol = brep_tolerance(&breps);
 
     let mut faces = Vec::new();
     let mut edges = Vec::new();
@@ -881,6 +873,17 @@ fn tessellate(breps: Vec<Brep>, color: Option<[f32; 3]>) -> ImportedShape {
     }
 
     ImportedShape::new(breps, faces, edges, color)
+}
+
+/// B-rep のテッセレーションの許容誤差。部品の大きさ (頂点の範囲) に合わせる。
+pub fn brep_tolerance(breps: &[Brep]) -> f64 {
+    let mut min = DVec3::splat(f64::MAX);
+    let mut max = DVec3::splat(f64::MIN);
+    for p in breps.iter().flat_map(|b| &b.vertices) {
+        min = min.min(DVec3::new(p.x, p.y, p.z));
+        max = max.max(DVec3::new(p.x, p.y, p.z));
+    }
+    tessellation_tolerance(min, max)
 }
 
 /// 部品の大きさ (頂点の範囲) に見合うテッセレーションの許容誤差

@@ -4,7 +4,7 @@
 //! 「取り込んだ部品」のどれか。各ノードは親から見た配置 (f64 の行列) を持つ。
 //! Bevy のエンティティとは独立していて、表示は viewport.rs が後から追いかける。
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -15,8 +15,10 @@ use truck_modeling::{Solid, builder};
 use truck_meshalgo::prelude::{EuclideanSpace, Point3, Rad, Vector3};
 
 use crate::math::{Aabb, euler_deg_to_quat};
+use crate::physics::{Cable, PartPhysics};
 use crate::site::model::Site;
 use crate::step_import::{ImportNode, ImportedShape};
+use cadsim_core::remap::{OutlineNode, plan_remap};
 
 pub type NodeId = u32;
 
@@ -35,6 +37,8 @@ pub struct Node {
     /// ユーザーが付けた色。子孫の部品にも効く。
     pub color: Option<[f32; 3]>,
     pub kind: NodeKind,
+    /// 物理演算での振る舞い (部品だけが使う)
+    pub physics: PartPhysics,
 }
 
 #[derive(Clone)]
@@ -151,6 +155,31 @@ pub struct Measurements {
     pub area: f64,
 }
 
+/// 形状の差し替えの結果
+#[derive(Clone, Debug, Default)]
+pub struct ReplaceReport {
+    /// 対応がついたノードの数 (一番上を含む)
+    pub matched: usize,
+    /// 新しい形状に見つからず、古い形状のまま残したノード
+    pub unmatched: Vec<NodeId>,
+    /// 新しい形状にだけあり、加えたノード
+    pub added: Vec<NodeId>,
+}
+
+/// 取り込んだ木を深さ優先で並べる (子は持たない)。親は並びの中の番号。
+fn flatten_import(
+    mut node: ImportNode,
+    parent: Option<usize>,
+    out: &mut Vec<(ImportNode, Option<usize>)>,
+) {
+    let children = std::mem::take(&mut node.children);
+    let index = out.len();
+    out.push((node, parent));
+    for child in children {
+        flatten_import(child, Some(index), out);
+    }
+}
+
 #[derive(Resource)]
 pub struct Model {
     nodes: BTreeMap<NodeId, Node>,
@@ -165,6 +194,8 @@ pub struct Model {
     pub new_box_size: [f64; 3],
     /// 床に敷いた平面図など、部品のツリーの外にある現場のデータ
     pub site: Site,
+    /// 部品の間に渡したケーブル・ホース
+    pub cables: Vec<Cable>,
 }
 
 impl Default for Model {
@@ -177,6 +208,7 @@ impl Default for Model {
             unit: "mm".into(),
             new_box_size: [1.0, 1.0, 1.0],
             site: Site::default(),
+            cables: Vec::new(),
         }
     }
 }
@@ -205,6 +237,7 @@ impl Model {
                 visible: true,
                 color: None,
                 kind,
+                physics: PartPhysics::default(),
             },
         );
         match parent.and_then(|p| self.nodes.get_mut(&p)) {
@@ -272,6 +305,122 @@ impl Model {
             self.add_import_node(Some(id), child, source);
         }
         id
+    }
+
+    /// `root` 以下の形状を、取り込み直した `new` の形状に差し替える。
+    ///
+    /// ノードは名前と構造で対応づけ ([`plan_remap`])、対応したノードは ID を残したまま
+    /// 名前・配置・形状だけを入れ替える。ID に結び付いた設定 (アクチュエータ、関節、
+    /// センサー、スクリプトなど) はそのまま引き継がれる。
+    /// 一番上のノードの配置は、ユーザーが置いた位置なので変えない。
+    /// 新しい側にだけあるノードは対応する親の下に加え、古い側にだけあるノードは古い形状のまま残す。
+    pub fn replace_geometry(
+        &mut self,
+        root: NodeId,
+        new: ImportNode,
+        source: StepSource,
+    ) -> Option<ReplaceReport> {
+        self.nodes.get(&root)?;
+        let old_ids = self.subtree(root);
+        let old_index: HashMap<NodeId, usize> =
+            old_ids.iter().enumerate().map(|(i, &id)| (id, i)).collect();
+        let old_outline: Vec<OutlineNode> = old_ids
+            .iter()
+            .map(|id| {
+                let node = &self.nodes[id];
+                OutlineNode {
+                    name: node.name.clone(),
+                    product: node.kind.product().map(str::to_owned),
+                    parent: node.parent.and_then(|p| old_index.get(&p).copied()),
+                    is_part: node.kind.is_part(),
+                }
+            })
+            .collect();
+
+        let mut flat = Vec::new();
+        flatten_import(new, None, &mut flat);
+        let new_outline: Vec<OutlineNode> = flat
+            .iter()
+            .map(|(node, parent)| OutlineNode {
+                name: node.name.clone(),
+                product: Some(node.product.clone()),
+                parent: *parent,
+                is_part: node.shape.is_some(),
+            })
+            .collect();
+
+        let plan = plan_remap(&old_outline, &new_outline);
+        let mut report = ReplaceReport {
+            matched: plan.matched.len(),
+            ..Default::default()
+        };
+
+        // 新しい番号 → モデルの ID (対応したもの、または新しく加えたもの)
+        let mut id_for_new: Vec<Option<NodeId>> = vec![None; flat.len()];
+        for &(o, n, _) in &plan.matched {
+            id_for_new[n] = Some(old_ids[o]);
+        }
+        for (n, (item, parent)) in flat.into_iter().enumerate() {
+            let kind = match item.shape {
+                Some(shape) => NodeKind::Imported {
+                    product: item.product,
+                    shape,
+                    source: source.clone(),
+                },
+                None => NodeKind::Assembly {
+                    product: Some(item.product),
+                },
+            };
+            match id_for_new[n] {
+                Some(id) => {
+                    let node = self.nodes.get_mut(&id).expect("対応したノードはある");
+                    node.name = item.name;
+                    if id != root {
+                        node.placement = item.placement;
+                    }
+                    node.kind = kind;
+                    self.dirty.insert(id);
+                }
+                None => {
+                    let parent_id = parent.and_then(|p| id_for_new[p]).unwrap_or(root);
+                    // 子の並びは後でつなぎ直す
+                    let id = self.add_node(Some(parent_id), item.name, item.placement, kind);
+                    id_for_new[n] = Some(id);
+                    report.added.push(id);
+                }
+            }
+        }
+
+        // 親子をつなぎ直す。新しいファイルの並び順を先に、残った古いノードを後ろに置く。
+        let mut new_parent: HashMap<NodeId, NodeId> = HashMap::new();
+        for (n, outline) in new_outline.iter().enumerate() {
+            if let (Some(id), Some(p)) = (id_for_new[n], outline.parent) {
+                new_parent.insert(id, id_for_new[p].unwrap_or(root));
+            }
+        }
+        for &o in &plan.unmatched_old {
+            let id = old_ids[o];
+            if let Some(parent) = self.nodes[&id].parent {
+                new_parent.insert(id, parent);
+            }
+            report.unmatched.push(id);
+        }
+        let mut order: Vec<NodeId> = id_for_new.iter().flatten().copied().collect();
+        order.extend(plan.unmatched_old.iter().map(|&o| old_ids[o]));
+        for &id in old_ids.iter().chain(&report.added) {
+            if let Some(node) = self.nodes.get_mut(&id) {
+                node.children.clear();
+            }
+        }
+        for id in order {
+            if let Some(&parent) = new_parent.get(&id) {
+                self.nodes.get_mut(&id).expect("ある").parent = Some(parent);
+                if let Some(p) = self.nodes.get_mut(&parent) {
+                    p.children.push(id);
+                }
+            }
+        }
+        Some(report)
     }
 
     /// ノードとその子孫を消す
@@ -361,6 +510,7 @@ impl Model {
         for root in self.roots.clone() {
             self.remove(root);
         }
+        self.cables.clear();
     }
 
     // --- 参照 ---------------------------------------------------------------
@@ -620,6 +770,94 @@ mod tests {
 
     fn find(model: &Model, name: &str) -> NodeId {
         *model.nodes.iter().find(|(_, n)| n.name == name).unwrap().0
+    }
+
+    #[test]
+    fn replace_geometry_keeps_ids_and_lists_unmatched() {
+        let (mut model, root) = sample_model();
+        let moved = DMat4::from_translation(DVec3::new(500.0, 0.0, 0.0));
+        model.get_mut(root).unwrap().placement = moved;
+        let knob = find(&model, "Knob_1");
+        let shaft = find(&model, "Shaft_1");
+        let left = find(&model, "Bracket_L");
+        let upright_l = model.get(left).unwrap().children[0];
+
+        // 取り込み直した版: Knob の名前が変わり、Shaft がなくなり、Bracket_L が少し動いた
+        let mut new = import_step(
+            include_str!("../assets/sample_assembly.step"),
+            "sample_v2.step",
+        )
+        .unwrap()
+        .root;
+        new.children.retain(|c| c.name != "Shaft_1");
+        for child in &mut new.children {
+            match child.name.as_str() {
+                "Knob_1" => child.name = "Knob_rev2".into(),
+                "Bracket_L" => {
+                    child.placement = DMat4::from_translation(DVec3::Y) * child.placement
+                }
+                _ => {}
+            }
+        }
+        let left_placement = new
+            .children
+            .iter()
+            .find(|c| c.name == "Bracket_L")
+            .unwrap()
+            .placement;
+
+        let report = model
+            .replace_geometry(root, new, StepSource::File("v2.step".into()))
+            .unwrap();
+        assert_eq!(report.unmatched, vec![shaft]);
+        assert!(report.added.is_empty());
+        // ID はそのまま、名前と配置は新しい版になる
+        assert_eq!(model.get(knob).unwrap().name, "Knob_rev2");
+        assert_eq!(model.get(left).unwrap().placement, left_placement);
+        assert_eq!(model.get(left).unwrap().children[0], upright_l);
+        // 一番上の配置はユーザーが置いた位置のまま
+        assert_eq!(model.get(root).unwrap().placement, moved);
+        // 古い Shaft は後ろに残る
+        assert_eq!(model.get(root).unwrap().children.last(), Some(&shaft));
+        assert_eq!(model.measure(root).part_count, 7);
+        assert!(matches!(
+            &model.get(knob).unwrap().kind,
+            NodeKind::Imported { source: StepSource::File(p), .. } if p.ends_with("v2.step")
+        ));
+    }
+
+    #[test]
+    fn replace_geometry_adds_new_parts_under_matching_parent() {
+        let (mut model, root) = sample_model();
+        let before = model.subtree(root).len();
+        let mut new = import_step(
+            include_str!("../assets/sample_assembly.step"),
+            "sample_v2.step",
+        )
+        .unwrap()
+        .root;
+        let extra = ImportNode {
+            name: "Sensor_1".into(),
+            product: "Sensor".into(),
+            placement: DMat4::IDENTITY,
+            children: Vec::new(),
+            shape: new.children[0].shape.clone(),
+        };
+        let bracket = new
+            .children
+            .iter_mut()
+            .find(|c| c.name == "Bracket_R")
+            .unwrap();
+        bracket.children.push(extra);
+        let report = model
+            .replace_geometry(root, new, StepSource::Sample)
+            .unwrap();
+        assert_eq!(report.added.len(), 1);
+        assert!(report.unmatched.is_empty());
+        assert_eq!(model.subtree(root).len(), before + 1);
+        let added = model.get(report.added[0]).unwrap();
+        assert_eq!(added.name, "Sensor_1");
+        assert_eq!(added.parent, Some(find(&model, "Bracket_R")));
     }
 
     #[test]

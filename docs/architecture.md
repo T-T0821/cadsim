@@ -56,10 +56,11 @@ src/                      アプリ本体。assets/ の場所を変えないよ�
 crates/
 ├── cadsim_core/          1. ドメイン + 2. ユースケース (Bevy なし)
 │   └── src/
-│       ├── domain/       model, math, selection, simulation (幾何・干渉・計測),
+│       ├── domain/       model, math, selection, remap (形状の差し替えの対応づけ), simulation (幾何・干渉・計測),
 │       │                 motion (チャート・姿勢・運動学), plc (シーケンス・I/O 表), flow,
 │       │                 safety (安全機器・検知・安全距離), floor (作業者・AGV・床の幾何)
 │       └── usecase/      document (開く・保存・取り込み・書き出し), edit, history,
+│                         report (シミュレーション結果の CSV),
 │                         ports (SceneReader / SceneWriter / ProjectStore などのトレイト)
 └── cadsim_io/            3. アダプター (Bevy なし)
     └── src/              step, interchange (gltf / obj / stl / usd), project_file (JSON),
@@ -74,6 +75,7 @@ crates/
 1つの PR は1段だけにし、毎回 `cargo fmt` / `clippy` / `test` が通る状態でマージします。
 
 1. **ワークスペース化と純粋な計算を core へ。** ✅ ルートをワークスペースにして `cadsim_core` を作り、`math` と `simulation` の幾何・干渉の計算を移した。`bevy::math` は同じ版の `glam` に置き換え、アプリ側の `math` / `simulation` から再公開しているので呼び出し側は変わらない。
+   - ゲーム風 UI の判定(`gamify`)は最初から `cadsim_core` に置いた。設定ファイルの読み書き(`src/preferences_file.rs`)はアダプター層の候補で、`cadsim_io` ができたら移す。
 2. **残りの純粋な計算を core へ。** `motion` のチャート・姿勢・運動学、PLC のシーケンスなど。進行中の機能ブランチが触っているので、それらが入ってから移す。
 3. **ファイル形式を io へ。** `cadsim_io` を作り、`step_import`、`interchange`、`.cadsim` の JSON の構造体を移す。
 4. **設計データを core へ。** `Model`・`Selection` などから `#[derive(Resource)]` を外し、UI 層の包み型に置き換える。
@@ -81,6 +83,11 @@ crates/
 6. **UI 層を整理する。** 残った Bevy / egui のコードを `view` / `input` / `ui` に分ける。
 
 いまの `src/safety/` と `src/floor/` は、`device.rs`・`check.rs`・`geom.rs`・`operator_plan.rs`・`agv_sim.rs` が Bevy に依存しない層 (2. で core へ移すもの)、`mod.rs`・`view.rs`・`panel.rs` が UI 層です。
+
+新しく足した機能のうち、すでに層を分けてあるもの:
+
+- `src/result_export/report/` … ユースケース層 (CSV の作成)。Bevy の ECS・egui・ファイルシステムに依存しない。移行時は `usecase/report` へ移す。`src/result_export/plugin.rs` は UI 層。
+- PLC 連携(`src/plc/`)は先に `domain` / `usecase` / `adapter` / UI に分けてあるので、移行時はディレクトリごと core / io へ移せます。
 
 各段の終わりに、この文書の「目標のディレクトリ構成」と実際の構成の差を更新します。
 
@@ -96,5 +103,6 @@ crates/
 | 2D 図面 | `drawing` | `formats::drawing_out` | `documents.rs` |
 | 部品表 | —(`Model` を読むので `bom.rs` はアプリ側。手順 4 で core へ) | `formats::bom_out` | `documents.rs` |
 | モデリング | —(`Model` と履歴を書き換えるので `modeling.rs` はアプリ側。手順 4 で core へ) | — | `ui/modeling.rs` |
+| 物理演算 | `physics::{settings, cable}`(ドメイン)、`physics::world`(ユースケース。物理エンジンのポート `PhysicsEngine`) | `physics::{rapier, records}`(Rapier と .cadsim の形) | `physics/{mod, panel, sample}` |
 
 `formats/` と `bom.rs`・`modeling.rs`・`drawing/collect.rs` は Bevy に依存しない書き方にしてあり、`Model` が core に移ればそのまま移せます。

@@ -27,6 +27,8 @@
 | e57(E57 の点群の読み込み) | 0.11 |
 | krilla(図面の PDF 書き出し) | 0.8 |
 | rust_xlsxwriter(部品表・工程シミュレーションの Excel 書き出し) | 0.102 |
+| rapier3d(物理演算。Bevy に依存しない) | 0.36 |
+| glam(Bevy に依存しない層のベクトル・行列。Bevy と同じ版) | 0.33 |
 
 ## コードの構成
 
@@ -34,11 +36,14 @@
 
 ```text
 crates/cadsim_core/   Bevy に依存しないドメイン (cargo test -p cadsim_core で単体テスト)
+├── gamify.rs        ゲーム風 UI の中身: ミッションの判定・経験値とレベル・紙吹雪 (docs/playful-ui.md)
 ├── math.rs          回転・行列・外接箱の計算 (f64)
+├── remap.rs         形状の差し替え: 古い木と新しい木のノードの対応づけ
 ├── simulation/      干渉チェックの幾何計算 (geometry / mesh / interference / overlap)
 ├── drawing.rs       2D 図面: 投影・かくれ線・シルエット・寸法・図枠 (docs/drawing.md)
 ├── site/            平面図の下敷きの配置と縮尺合わせ、点群の間引き・LOD・干渉 (docs/site.md)
 └── flow/            工程モデル (model)、離散事象シミュレーションと集計 (sim)、状態・稼働率の色 (palette)
+└── physics/         物理演算の設定・ケーブルの紐モデル・剛体の進め方 (settings / cable / world)
 src/                  アプリ本体 (Bevy + egui)
 ├── main.rs          アプリの組み立て (プラグインを並べるだけ)
 ├── model.rs         設計データ: アセンブリの木 (f64) と選択状態
@@ -53,9 +58,11 @@ src/                  アプリ本体 (Bevy + egui)
 │   └── samples.rs    サンプルファイルを作るテスト (手で実行)
 ├── animation.rs     取り込んだアニメーションの再生
 ├── project.rs       プロジェクトファイル (.cadsim) の保存と読み込み
+├── preferences_file.rs 見た目とミッションの設定 (preferences.json) の読み書き (Bevy に依存しない)
 ├── viewport.rs      3D 表示: メッシュ作成、選択の強調、簡略表示 (LOD)、グリッド、クリック選択
 ├── part_mesh.rs     部品1つ分の表示用メッシュ (面をまとめたもの・面番号の表・簡略形状。Bevy に依存しない)
 ├── bvh.rs           外接箱の木 (BVH) とレイの当たり判定 (Bevy に依存しない)
+├── defeature.rs     小さな穴とフィレットを消した表示用メッシュを作る (Bevy に依存しない)
 ├── stress.rs        負荷テスト用の数千部品のシーン
 ├── bench.rs         `--bench` で FPS を測って終了する
 ├── camera.rs        オービットカメラ、標準ビュー、全体表示、透視 / 平行投影
@@ -72,6 +79,7 @@ src/                  アプリ本体 (Bevy + egui)
 ├── math.rs          f64 の配置を Bevy の Transform にする (計算は cadsim_core::math)
 ├── japanese_font.rs egui に日本語フォントを登録
 ├── simulation/      干渉チェックの配線・表示・パネルと距離計測 (詳しくは docs/simulation.md)
+├── plc/             PLC 連携: domain / usecase / adapter (Modbus TCP) / UI (詳しくは docs/plc.md)
 ├── annotation.rs    3D 上の寸法と注記 (置く操作・描画・パネル・保存形式)
 ├── modeling.rs      円柱・押し出し・穴あけ・ブーリアン (truck の B-rep。docs/modeling.md)
 ├── drawing/         図面の材料をモデルから集める (計算は cadsim_core::drawing)
@@ -92,6 +100,7 @@ src/                  アプリ本体 (Bevy + egui)
 │   └── ui.rs         工程シミュレーションのウィンドウ
 ├── safety/          安全機器・動作範囲・距離の確認 (詳しくは docs/safety-and-floor.md)
 ├── floor/           作業者と AGV、床の上の幾何計算 (詳しくは docs/safety-and-floor.md)
+├── physics/         物理演算の配線・パネル・サンプルライン、Rapier のアダプター、保存形式 (詳しくは docs/physics.md)
 └── ui/
     ├── mod.rs        画面の割り付け (上 → 下 → 左 → 右 → 残りが 3D ビュー)
     ├── menu.rs       メニューバーとツールバー
@@ -100,12 +109,14 @@ src/                  アプリ本体 (Bevy + egui)
     ├── status.rs     ステータスバーと読み込み中の表示
     ├── animation.rs  アニメーションの再生パネル
     ├── modeling.rs   「モデリング」ウィンドウ (円柱・押し出し・穴あけ・ブーリアン)
+    ├── theme.rs      見た目 (ゲーム風 / シンプル) の配色と角丸
+    ├── playful.rs    ミッションカード・マスコット・お祝いと紙吹雪
     ├── view_cube.rs  ビューキューブと座標軸
     └── widgets.rs    数値入力などの小さな部品
 ```
 
 データは一方向に流れます: **UI・ギズモ・読み込み → `Model`(f64)→ `viewport` が Bevy のエンティティに写す**。
-動作シミュレーションは `Model` を書き換えず、`viewport` が配置を写すときに `SimulationPose` の動きを重ねます。
+動作シミュレーションは `Model` を書き換えず、`viewport` が配置を写すときに `SimulationPose` の動きを重ねます。物理演算で動いている部品は `PhysicsPose` の位置に置きます(`physics::displayed_matrix`)。
 `Model` は Bevy のエンティティを知らないので、表示を変えても設計データには影響しません。
 
 ## 各機能のしくみ
@@ -189,6 +200,7 @@ src/                  アプリ本体 (Bevy + egui)
 5. 稜線は線のメッシュで GPU に描かせる。グリッドと選択の外接箱は Gizmos で描く。グリッドの間隔はモデルの大きさに合わせて 1, 10, 100… と変わる。
 6. 部品のエンティティには干渉チェック用の `SimBody`(部品座標の f64 三角形メッシュ + 姿勢 + モデル上で表示中か)も付ける。姿勢と表示/非表示は 2. と一緒に写し、`src/simulation/` がこれを拾って判定する。干渉中の部品は半透明の赤にする。
 7. 画面上で小さい部品は粗いメッシュに替え、ごく小さい部品は描かない(`update_level_of_detail`)。大規模アセンブリ向けの工夫は [performance.md](performance.md) にまとめている。
+8. 「小さな穴とフィレットを省略」がオンなら、取り込んだ形状ごとに裏のスレッドで簡略化した形を作り、できたものから表示を差し替える(`defeature_shapes`)。しくみは [defeature.md](defeature.md)。
 
 ### 画面の割り付け(`ui/mod.rs`)
 
@@ -228,6 +240,23 @@ egui のパネルを上・下・左・右の順に置き、残った領域を 3D
 - 寸法線は部品に隠れないよう手前に描く。部品を隠すとその寸法も隠れる。
 - 追加・削除・すべて削除・注記の文字の編集は元に戻せる。部品を削除すると寸法は隠れ、部品の削除を元に戻すと寸法も戻る。
 - 距離計測(シミュレーション)と寸法の道具は、片方を始めるともう片方は止まる。
+
+### 形状の差し替え(`cadsim_core::remap`、`Model::replace_geometry`)
+
+設計変更後のファイルを読み、選んだノード以下の木と新しい木のノードを対応づけてから入れ替えます。
+対応づけ(`remap::plan_remap`)は Bevy にもファイル形式にも依存しない純粋な関数で、次の順に試します。
+
+1. 一番上のノード同士は必ず対応させる(ファイル名が変わっても差し替えられるように)
+2. 一番上からの名前の並び(パス)が同じもの。同じパスが複数あれば出てきた順に組にする
+3. まだ決まっていないノードの中で、インスタンス名が1つずつしかないもの(階層を移った部品)
+4. 同じく、製品名が1つずつしかないもの(インスタンス名を付け直した部品)
+
+2〜4 はアセンブリと部品を別々に数えます。どれにも当てはまらないものは対応させません(取り違えるよりは一覧に出して人が確かめる方がよいため)。
+
+`Model::replace_geometry` は対応したノードの ID を残したまま名前・配置・形状を書き換えるので、
+ID で部品を指している設定(アクチュエータなど)はそのまま引き継がれます。一番上のノードの配置はユーザーが置いた位置なので変えません。
+新しい側にだけあるノードは対応した親の下に新しい ID で加え、古い側にだけあるノードは古い形状のまま、親の子の並びの最後に残します。
+元に戻すために、差し替え前後の写し(`Snapshot`)を `ModelChange` として履歴に積みます。
 
 ### 工程シミュレーション(`flow/`)
 
