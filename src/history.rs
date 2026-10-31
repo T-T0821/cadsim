@@ -219,6 +219,7 @@ fn same_snapshot(a: &Snapshot, b: &Snapshot) -> bool {
             && x.children == y.children
             && match (&x.kind, &y.kind) {
                 (NodeKind::Box(p), NodeKind::Box(q)) => p == q,
+                (NodeKind::Standard(p), NodeKind::Standard(q)) => p == q,
                 _ => true,
             }
     };

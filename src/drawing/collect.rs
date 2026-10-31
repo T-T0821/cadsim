@@ -31,7 +31,7 @@ type PartGeometry = (Vec<Vec<[DVec3; 3]>>, Vec<Vec<DVec3>>);
 /// 部品の形状 (部品の座標系)
 fn part_geometry(kind: &NodeKind) -> Option<PartGeometry> {
     match kind {
-        NodeKind::Assembly { .. } => None,
+        NodeKind::Assembly { .. } | NodeKind::Standard(_) => None,
         NodeKind::Box(part) => {
             let meshed = part.build_solid().triangulation(BOX_TOL);
             let shell = meshed.boundaries().first()?.clone();
@@ -45,7 +45,7 @@ fn part_geometry(kind: &NodeKind) -> Option<PartGeometry> {
                 .collect();
             Some((faces, edges))
         }
-        NodeKind::Imported { shape, .. } => Some((
+        NodeKind::Imported { shape, .. } | NodeKind::StandardBody { shape, .. } => Some((
             shape.faces.iter().map(polygon_triangles).collect(),
             shape
                 .edges

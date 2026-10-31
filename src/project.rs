@@ -14,7 +14,7 @@
 //! - Ctrl+N / Ctrl+O / Ctrl+S / Ctrl+Shift+S
 //! - `cargo run -- line.cadsim`、またはウィンドウへのドラッグ&ドロップでも開ける
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -44,6 +44,7 @@ use crate::formats::conveyor_record::{self, ConveyorsRecord};
 use crate::formats::site_record::{CloudRecord, UnderlayRecord, load_site};
 use crate::history::History;
 use crate::interchange::UnitOptions;
+use crate::library::{self, PartKind, Spec};
 use crate::math::{euler_deg_to_quat, quat_to_euler_deg, split_placement};
 use crate::model::{BoxPart, Model, NodeId, NodeKind, Selection, StepSource};
 use crate::motion::{Playback, TimingChart};
@@ -214,6 +215,13 @@ pub enum NodeKindRecord {
     },
     /// STEP から取り込んだ部品。`step_files[step_file]` の中の製品 `product` の形状を使う。
     Imported { step_file: usize, product: String },
+    /// 標準部品。本体 (子) は書かず、開くときにパラメータから作り直す。
+    /// `part` は部品の種類 (`air_cylinder` など)、`params` は寸法パラメータ (mm)。
+    Standard {
+        part: String,
+        #[serde(default)]
+        params: BTreeMap<String, f64>,
+    },
 }
 
 impl ProjectFile {
@@ -332,6 +340,14 @@ impl ProjectFile {
                         return invalid("STEP ファイルの番号");
                     }
                 }
+                NodeKindRecord::Standard { part, params } => {
+                    if PartKind::from_key(part).is_none() {
+                        return invalid("標準部品の種類");
+                    }
+                    if !params.values().all(|v| v.is_finite()) {
+                        return invalid("標準部品のパラメータ");
+                    }
+                }
             }
             stack.extend(&node.children);
         }
@@ -372,6 +388,17 @@ fn node_record(model: &Model, id: NodeId, sources: &mut Vec<StepSource>) -> Opti
                 product: product.clone(),
             }
         }
+        NodeKind::Standard(spec) => NodeKindRecord::Standard {
+            part: spec.kind.key().into(),
+            params: spec
+                .kind
+                .param_specs()
+                .iter()
+                .map(|p| (p.key.to_string(), spec.get(p.key)))
+                .collect(),
+        },
+        // 本体は親の標準部品のパラメータから作り直すので書かない
+        NodeKind::StandardBody { .. } => return None,
     };
     Some(NodeRecord {
         name: node.name.clone(),
@@ -607,6 +634,17 @@ impl LoadedProject {
                 position: *position,
                 rotation_deg: *rotation_deg,
             }),
+            NodeKindRecord::Standard { part, params } => {
+                let kind = PartKind::from_key(part).expect("validate で確かめ済み");
+                let mut spec = Spec::new(kind);
+                for (value, p) in spec.params.0.iter_mut().zip(kind.param_specs()) {
+                    if let Some(v) = params.get(p.key) {
+                        *value = *v;
+                    }
+                }
+                spec.clamp_params();
+                NodeKind::Standard(spec)
+            }
             NodeKindRecord::Imported { step_file, product } => {
                 match self.shapes.get(*step_file).and_then(|s| s.get(product)) {
                     Some(shape) => NodeKind::Imported {
@@ -641,6 +679,9 @@ impl LoadedProject {
                 .map(PartPhysicsRecord::to_settings)
                 .unwrap_or_default();
             node.script = record.script.clone();
+        }
+        if matches!(record.kind, NodeKindRecord::Standard { .. }) {
+            library::rebuild_bodies(model, id);
         }
         for child in &record.children {
             self.add_record(model, Some(id), child, warnings);
@@ -1134,6 +1175,48 @@ mod tests {
             restored.get(root).unwrap().script.as_deref(),
             Some("wait(1.0);")
         );
+    }
+
+    #[test]
+    fn standard_parts_are_saved_as_parameters_and_rebuilt() {
+        let mut model = Model::default();
+        let id = library::add_standard(
+            &mut model,
+            PartKind::AirCylinder,
+            DVec3::new(100.0, 0.0, 0.0),
+        );
+        if let Some(NodeKind::Standard(spec)) = model.get_mut(id).map(|n| &mut n.kind) {
+            spec.params.0[1] = 250.0;
+        }
+        library::rebuild_bodies(&mut model, id);
+        let body_count = model.get(id).unwrap().children.len();
+        let file = ProjectFile::from_model(&model, None);
+        let json = file.to_json();
+        assert!(json.contains("\"part\": \"air_cylinder\""));
+        assert!(json.contains("\"stroke\": 250.0"));
+        // 本体は書かない
+        assert!(file.nodes[0].children.is_empty());
+
+        let restored = reload(&file);
+        let root = restored.roots[0];
+        assert_eq!(restored.get(root).unwrap().children.len(), body_count);
+        let Some(NodeKind::Standard(spec)) = restored.get(root).map(|n| &n.kind) else {
+            panic!("標準部品として読めていない");
+        };
+        assert_eq!(spec.get("stroke"), 250.0);
+        assert_eq!(ProjectFile::from_model(&restored, None), file);
+    }
+
+    #[test]
+    fn unknown_standard_part_is_rejected() {
+        let json = r#"{
+            "format_version": 1,
+            "nodes": [ { "name": "?", "kind": { "type": "Standard", "part": "warp_drive" } } ]
+        }"#;
+        assert!(matches!(
+            ProjectFile::from_json(json),
+            Err(ProjectError::Invalid(_))
+        ));
     }
 
     #[test]

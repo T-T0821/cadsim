@@ -272,6 +272,10 @@ pub fn node_solid(model: &Model, id: NodeId) -> Result<Solid, String> {
             node.name
         )),
         NodeKind::Assembly { .. } => Err("アセンブリではなく部品を選んでください".into()),
+        NodeKind::Standard(_) | NodeKind::StandardBody { .. } => Err(format!(
+            "「{}」は標準部品なので演算できません。寸法はプロパティの「標準部品」欄で変えてください",
+            node.name
+        )),
     }
 }
 

@@ -38,13 +38,13 @@ pub fn design_targets(model: &Model, chart: &TimingChart) -> Vec<DesignTarget> {
 /// 部品をワールド座標の直方体にする。箱はそのまま、取り込んだ部品は部品座標系での外接箱。
 fn part_box(model: &Model, id: NodeId) -> Option<TargetBox> {
     let (center, rotation, half_size) = match &model.get(id)?.kind {
-        NodeKind::Assembly { .. } => return None,
+        NodeKind::Assembly { .. } | NodeKind::Standard(_) => return None,
         NodeKind::Box(part) => (
             DVec3::from(part.position),
             euler_deg_to_quat(part.rotation_deg),
             DVec3::from(part.size) / 2.0,
         ),
-        NodeKind::Imported { shape, .. } => (
+        NodeKind::Imported { shape, .. } | NodeKind::StandardBody { shape, .. } => (
             (shape.stats.min + shape.stats.max) / 2.0,
             DQuat::IDENTITY,
             (shape.stats.max - shape.stats.min) / 2.0,

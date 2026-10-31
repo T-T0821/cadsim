@@ -64,6 +64,14 @@ fn selected_node(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
     actions(ui, state, id);
     ui.separator();
 
+    if matches!(
+        state.model.get(id).map(|n| &n.kind),
+        Some(NodeKind::Standard(_))
+    ) {
+        egui::CollapsingHeader::new("標準部品")
+            .default_open(true)
+            .show(ui, |ui| crate::library::properties_section(ui, state, id));
+    }
     let is_box = matches!(state.model.get(id).map(|n| &n.kind), Some(NodeKind::Box(_)));
     egui::CollapsingHeader::new(if is_box {
         "形状と配置"
@@ -133,7 +141,7 @@ fn general_section(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
             ui.weak("色");
             ui.horizontal(|ui| {
                 let mut rgb = color.unwrap_or(match &node.kind {
-                    NodeKind::Imported { shape, .. } => {
+                    NodeKind::Imported { shape, .. } | NodeKind::StandardBody { shape, .. } => {
                         shape.color.unwrap_or(crate::model::DEFAULT_PART_COLOR)
                     }
                     _ => crate::model::DEFAULT_PART_COLOR,
