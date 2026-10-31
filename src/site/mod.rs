@@ -2,10 +2,10 @@
 //!
 //! | ファイル | 役割 |
 //! | --- | --- |
-//! | `underlay.rs` | 下敷きの配置と縮尺合わせの計算 (ドメイン) |
-//! | `pointcloud.rs` | 点群の間引き・LOD・設備との干渉と距離 (ドメイン) |
+//! | `cadsim_core::site::underlay` | 下敷きの配置と縮尺合わせの計算 (ドメイン) |
+//! | `cadsim_core::site::pointcloud` | 点群の間引き・LOD・設備との干渉と距離 (ドメイン) |
+//! | `cadsim_core::site::model` | プロジェクトに属する現場データの入れ物 (ドメイン) |
 //! | `cloud_view.rs` | 点群の 3D 表示 (LOD) と、干渉チェックの実行・表示 |
-//! | `model.rs` | プロジェクトに属する現場データの入れ物 (ドメイン) |
 //! | `view.rs` | 下敷きの 3D 表示 |
 //! | `panel.rs` | 「平面図」パネル |
 //!
@@ -13,11 +13,10 @@
 //! ここは Bevy のシステムで「入力を集める → ドメインを呼ぶ → 表示に写す」だけをする。
 
 mod cloud_view;
-pub mod model;
 mod panel;
-pub mod pointcloud;
-pub mod underlay;
 mod view;
+
+pub use cadsim_core::site::{model, pointcloud, underlay};
 
 use std::path::PathBuf;
 use std::sync::{

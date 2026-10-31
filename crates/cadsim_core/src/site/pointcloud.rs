@@ -15,7 +15,8 @@ use std::collections::HashMap;
 
 use glam::{DMat4, DVec3, Vec3};
 
-use crate::simulation::{Pose, TriMesh, geometry::Aabb};
+use crate::simulation::geometry::{Aabb, Pose};
+use crate::simulation::mesh::TriMesh;
 
 /// 間引きの途中の状態 (読み込みながら1点ずつ渡す)
 pub struct Decimator {
