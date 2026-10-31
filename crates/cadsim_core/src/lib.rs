@@ -5,6 +5,7 @@
 
 pub mod drawing;
 pub mod flow;
+pub mod gamify;
 pub mod math;
 pub mod simulation;
 pub mod site;

@@ -643,6 +643,11 @@ impl ProjectState {
         self.saved != ProjectFile::capture(model, annotations, flow, floor, self.base_dir())
     }
 
+    /// ファイルに結びついているか (保存したか、ファイルから開いたか)
+    pub fn has_file(&self) -> bool {
+        self.path.is_some()
+    }
+
     pub fn file_name(&self) -> String {
         match &self.path {
             Some(path) => file_name(path),
