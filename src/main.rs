@@ -28,8 +28,11 @@
 //! - `documents`   図面と部品表の書き出し (ダイアログ)
 //! - `site`        床に敷く平面図 (DXF / PDF / 画像) と縮尺合わせ
 //! - `formats`     平面図や図面などのファイル形式の読み書き (Bevy に依存しない)
+//! - `flow`        工程モデル (生成・工程・バッファ・排出) の早回しとスループット統計
 //! - `stress`      負荷テスト用の数千部品のシーン
 //! - `bench`       `--bench` で FPS を測って終了する
+//! - `floor`       作業者と AGV (床の上を動くもの)、床の上の幾何計算
+//! - `safety`      安全機器 (ライトカーテン・エリアセンサ・安全柵・非常停止) と動作範囲
 
 // Windows のリリースビルドでは、起動時に黒いコンソール窓を出さない
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
@@ -43,6 +46,8 @@ mod camera;
 mod documents;
 mod drawing;
 mod file_io;
+mod floor;
+mod flow;
 mod formats;
 mod gizmo;
 mod history;
@@ -54,6 +59,7 @@ mod modeling;
 mod motion;
 mod part_mesh;
 mod project;
+mod safety;
 mod shortcuts;
 mod simulation;
 mod site;
@@ -92,9 +98,10 @@ fn main() {
             simulation::SimulationPlugin,
             annotation::AnnotationPlugin,
             motion::MotionPlugin,
-            site::SitePlugin,
-            documents::DocumentsPlugin,
+            flow::FlowPlugin,
             bench::BenchPlugin,
+            (safety::SafetyPlugin, floor::FloorPlugin),
+            (site::SitePlugin, documents::DocumentsPlugin),
         ))
         .run();
 }

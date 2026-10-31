@@ -28,6 +28,7 @@ use bevy::prelude::Transform;
 use crate::annotation::annotate_tool_off;
 use crate::bvh::{Bounds, Bvh};
 use crate::camera::{ViewportRect, alt_pressed, pointer_in_3d_view};
+use crate::flow::FlowColors;
 use crate::gizmo::gizmo_not_focused;
 use crate::math::{Aabb, to_transform};
 use crate::model::{Model, NodeId, NodeKind, Selection};
@@ -405,6 +406,7 @@ fn sync_views(
     check: Res<InterferenceCheck>,
     motion: Res<SimulationPose>,
     rebuilt: Res<ViewsRebuilt>,
+    flow_colors: Res<FlowColors>,
     mut palette: ResMut<Palette>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut cache: ResMut<SceneCache>,
@@ -420,7 +422,8 @@ fn sync_views(
         || selection.is_changed()
         || settings.is_changed()
         || check.is_changed()
-        || motion.is_changed();
+        || motion.is_changed()
+        || flow_colors.is_changed();
     if !changed && !rebuilt.0 {
         return;
     }
@@ -462,7 +465,8 @@ fn sync_views(
                 transform: to_transform(moved),
                 shown: part.shown,
                 highlight,
-                color: part.color,
+                // 工程シミュレーションの色分けがあれば、部品の色の代わりに使う
+                color: flow_colors.color_on_path(part.path).unwrap_or(part.color),
             },
         );
     });

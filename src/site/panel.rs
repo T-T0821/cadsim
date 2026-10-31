@@ -28,14 +28,15 @@ pub fn site_panel(
         }
         return Ok(());
     }
-    let corner = viewport.rect.map_or(egui::pos2(8.0, 400.0), |r| {
-        egui::pos2(r.min.x + 8.0, r.max.y - 8.0)
+    // 3D ビューの下の真ん中に浮かべる (四隅は他のパネルとビューキューブが使う)
+    let corner = viewport.rect.map_or(egui::pos2(400.0, 400.0), |r| {
+        egui::pos2(r.center().x, r.max.y - 8.0)
     });
     let unit = model.unit.clone();
     let model = model.bypass_change_detection();
     let tool = tool.bypass_change_detection();
     egui::Window::new("平面図・点群")
-        .pivot(egui::Align2::LEFT_BOTTOM)
+        .pivot(egui::Align2::CENTER_BOTTOM)
         .default_pos(corner)
         .resizable(false)
         .collapsible(true)

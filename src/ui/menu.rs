@@ -18,6 +18,7 @@ pub fn show(root: &mut egui::Ui, state: &mut UiState) {
             edit_menu(ui, state);
             view_menu(ui, state);
             create_menu(ui, state);
+            line_menu(ui, state);
             help_menu(ui);
         });
         ui.separator();
@@ -248,6 +249,26 @@ fn create_menu(ui: &mut egui::Ui, state: &mut UiState) {
                 state.modeling.open_tab(tab);
                 ui.close();
             }
+        }
+    });
+}
+
+fn line_menu(ui: &mut egui::Ui, state: &mut UiState) {
+    ui.menu_button("ライン", |ui| {
+        let label = if state.flow.run.open {
+            "工程シミュレーションを閉じる"
+        } else {
+            "工程シミュレーション…"
+        };
+        if ui
+            .button(label)
+            .on_hover_text("工程とバッファを並べてラインを早回しし、稼働率やスループットを集計する")
+            .clicked()
+        {
+            state.flow.toggle();
+        }
+        if ui.button("サンプル工程を読み込む").clicked() {
+            state.flow.load_sample();
         }
     });
 }

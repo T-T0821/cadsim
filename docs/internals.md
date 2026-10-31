@@ -26,7 +26,7 @@
 | image(PNG / JPEG の平面図) | 0.25 |
 | e57(E57 の点群の読み込み) | 0.11 |
 | krilla(図面の PDF 書き出し) | 0.8 |
-| rust_xlsxwriter(部品表の Excel 書き出し) | 0.102 |
+| rust_xlsxwriter(部品表・工程シミュレーションの Excel 書き出し) | 0.102 |
 
 ## コードの構成
 
@@ -37,7 +37,8 @@ crates/cadsim_core/   Bevy に依存しないドメイン (cargo test -p cadsim_
 ├── math.rs          回転・行列・外接箱の計算 (f64)
 ├── simulation/      干渉チェックの幾何計算 (geometry / mesh / interference / overlap)
 ├── drawing.rs       2D 図面: 投影・かくれ線・シルエット・寸法・図枠 (docs/drawing.md)
-└── site/            平面図の下敷きの配置と縮尺合わせ、点群の間引き・LOD・干渉 (docs/site.md)
+├── site/            平面図の下敷きの配置と縮尺合わせ、点群の間引き・LOD・干渉 (docs/site.md)
+└── flow/            工程モデル (model)、離散事象シミュレーションと集計 (sim)、状態・稼働率の色 (palette)
 src/                  アプリ本体 (Bevy + egui)
 ├── main.rs          アプリの組み立て (プラグインを並べるだけ)
 ├── model.rs         設計データ: アセンブリの木 (f64) と選択状態
@@ -84,6 +85,13 @@ src/                  アプリ本体 (Bevy + egui)
 │   ├── drawing_out.rs 図面の PDF / DXF
 │   ├── bom_out.rs    部品表の CSV / Excel
 │   └── site_record.rs .cadsim に書く平面図・点群の記録
+├── flow/            工程シミュレーションの配線と画面 (計算は cadsim_core::flow。詳しくは docs/flow.md)
+│   ├── record.rs     .cadsim に書く形
+│   ├── xlsx.rs       Excel 書き出し
+│   ├── mod.rs        プラグイン、早送りの再生、3D の色分け (FlowColors)
+│   └── ui.rs         工程シミュレーションのウィンドウ
+├── safety/          安全機器・動作範囲・距離の確認 (詳しくは docs/safety-and-floor.md)
+├── floor/           作業者と AGV、床の上の幾何計算 (詳しくは docs/safety-and-floor.md)
 └── ui/
     ├── mod.rs        画面の割り付け (上 → 下 → 左 → 右 → 残りが 3D ビュー)
     ├── menu.rs       メニューバーとツールバー
@@ -206,6 +214,12 @@ egui のパネルを上・下・左・右の順に置き、残った領域を 3D
 - `viewport.rs` の `sync_views` が `.after(MotionSet::Pose)` で動きを部品の配置に重ね、表示用の `Transform` と干渉チェック用の `SimBody.pose` の両方に写すので、再生・スクラブ中も各時刻の位置で干渉チェックが走る。設計データ(`Model`)は書き換えない。
 - 書き出し(`motion/export.rs`)では、1サイクルを 1/30 秒ごとに標本化し、親と違う動きをするノードだけに「親から見た配置」のキーを作る(`(動き × 設計のワールド配置)` を親の同じ時刻のワールド配置で割る)。アセンブリに割り当てた動きは、シーンの親子関係で子孫に伝わる。
 
+### 安全機器・作業者・AGV(`safety/`, `floor/`)
+
+- 検知・ラッチ・安全距離・動作範囲・作業者の計画・AGV の配車はすべて Bevy に依存しない関数で、単体テストを付けている。
+- 侵入物は `safety::SafetyIntruders` に毎フレーム集める (可動部・作業者・AGV)。停止信号が出ると、タイミングチャートの再生と AGV が止まる。
+- 作業者と AGV はチャートとは別の時計 `floor::FloorClock` で動く。詳しくは [safety-and-floor.md](safety-and-floor.md)。
+
 ### 寸法と注記(`annotation.rs`)
 
 - 値は f64 の形状から計算し、単位はモデルの単位(mm など)で出す。吸着は頂点・辺の中点・面の中心の 12 px 以内。
@@ -214,6 +228,10 @@ egui のパネルを上・下・左・右の順に置き、残った領域を 3D
 - 寸法線は部品に隠れないよう手前に描く。部品を隠すとその寸法も隠れる。
 - 追加・削除・すべて削除・注記の文字の編集は元に戻せる。部品を削除すると寸法は隠れ、部品の削除を元に戻すと寸法も戻る。
 - 距離計測(シミュレーション)と寸法の道具は、片方を始めるともう片方は止まる。
+
+### 工程シミュレーション(`flow/`)
+
+工程モデルの離散事象シミュレーションと集計、3D の色分け、Excel 書き出しのしくみは [flow.md](flow.md) にまとめています。工程モデルの編集は元に戻す履歴に入りません。
 
 ### 元に戻す・やり直し(`history.rs`)
 

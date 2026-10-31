@@ -41,6 +41,7 @@ use bevy_egui::{
 use crate::animation::Animations;
 use crate::camera::{CameraRequest, OrbitCamera, ViewportRect};
 use crate::file_io::ImportJobs;
+use crate::flow::{self, FlowUi};
 use crate::gizmo::{GizmoTool, transform_gizmo_system};
 use crate::history::History;
 use crate::japanese_font::install_japanese_font;
@@ -85,6 +86,7 @@ pub struct UiState<'w> {
     pub motion: MotionUi<'w>,
     pub documents: ResMut<'w, crate::documents::DocumentExport>,
     pub modeling: ResMut<'w, modeling::ModelingUi>,
+    pub flow: FlowUi<'w>,
     pub diagnostics: Res<'w, DiagnosticsStore>,
     pub render_stats: Res<'w, RenderStats>,
 }
@@ -144,6 +146,7 @@ fn draw_ui(mut contexts: EguiContexts, mut state: UiState) -> Result {
     status::show_notifications(&ctx, view, &mut state);
     animation::show(&ctx, view, &mut state);
     modeling::show(&ctx, &mut state);
+    flow::show_window(&ctx, &mut state.flow, &state.model, &state.selection);
     show_confirm_dialog(&ctx, &mut state.project);
     if *state.settings == settings_before {
         state.settings.set_last_changed(settings_tick);
