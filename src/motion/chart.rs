@@ -17,7 +17,7 @@ use bevy::prelude::Resource;
 
 pub use super::sensor::{Sensor, SensorKind};
 
-use super::kinematics;
+use super::robot_path::{self, PathSample};
 
 /// アクチュエータの種類
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -311,12 +311,32 @@ impl Robot {
     }
 }
 
-/// 1つのステップでロボットに出す「教示点へ移動 (MoveJ: 各関節を同時に補間)」の指令
+/// ロボットの移動の補間のしかた
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum MoveKind {
+    /// 関節補間 (MoveJ): 各関節を同時に動かす。TCP の通り道は曲線になる。
+    #[default]
+    Joint,
+    /// 直線補間 (MoveL): TCP を教示点まで直線で動かす
+    Linear,
+}
+
+impl MoveKind {
+    pub fn label(self) -> &'static str {
+        match self {
+            MoveKind::Joint => "関節補間 (MoveJ)",
+            MoveKind::Linear => "直線補間 (MoveL)",
+        }
+    }
+}
+
+/// 1つのステップでロボットに出す「教示点へ移動」の指令
 #[derive(Clone, Debug, PartialEq)]
 pub struct RobotMove {
     pub robot: u32,
     pub point: u32,
     pub duration: f64,
+    pub kind: MoveKind,
 }
 
 /// タイミングチャート全体 (アクチュエータ・センサー一覧 + ステップの並び)
@@ -444,6 +464,22 @@ impl TimingChart {
         }
     }
 
+    /// ロボットに載って動くアクチュエータ (関節の根元と、そこに載ったすべて。グリッパなども含む)
+    pub fn robot_actuators(&self, robot: &Robot) -> Vec<u32> {
+        let mut root = robot.tip;
+        for _ in 0..self.actuators.len() {
+            match self.actuator(root).and_then(|a| a.mounted_on) {
+                Some(parent) => root = parent,
+                None => break,
+            }
+        }
+        self.actuators
+            .iter()
+            .map(|a| a.id)
+            .filter(|&id| id == root || self.is_mounted_under(id, root))
+            .collect()
+    }
+
     /// `id` の親をたどった先に `ancestor` があるか (載せ替えで循環しないための確認)
     pub fn is_mounted_under(&self, id: u32, ancestor: u32) -> bool {
         let mut current = self.actuator(id).and_then(|a| a.mounted_on);
@@ -505,12 +541,20 @@ impl TimingChart {
                 schedule.cycle_time = end;
                 return schedule;
             };
-            let mut targets: Vec<(u32, f64, f64)> = step
+            // アクチュエータごとの、このステップでの動き (区切りごとの動作) と、動いた後の値
+            let mut motions: Vec<(u32, Vec<Segment>, f64)> = step
                 .actions
                 .iter()
                 .filter_map(|a| {
                     let actuator = self.actuator(a.actuator)?;
-                    Some((a.actuator, actuator.clamp(a.target), a.duration))
+                    let target = actuator.clamp(a.target);
+                    let segment = Segment {
+                        start: action_start,
+                        duration: a.duration.max(0.0),
+                        target,
+                        easing: None,
+                    };
+                    Some((a.actuator, vec![segment], target))
                 })
                 .collect();
             for robot_move in &step.moves {
@@ -520,32 +564,49 @@ impl TimingChart {
                 let Some(point) = robot.point(robot_move.point) else {
                     continue;
                 };
-                let solution = kinematics::solve_ik(self, robot, point, &values);
+                let plan = robot_path::plan_move(self, robot, point, robot_move.kind, &values);
                 // 同じステップで関節に直接置いた動作より、ロボットの移動を優先する
-                targets.retain(|(id, _, _)| !solution.values.contains_key(id));
-                targets.extend(
-                    solution
-                        .values
+                motions.retain(|(id, _, _)| !plan.joints.iter().any(|j| j.actuator == *id));
+                let duration = robot_move.duration.max(0.0);
+                for joint in &plan.joints {
+                    let mut previous = 0.0;
+                    let segments = joint
+                        .waypoints
                         .iter()
-                        .map(|(&id, &v)| (id, v, robot_move.duration)),
-                );
+                        .map(|&(end, target)| {
+                            let segment = Segment {
+                                start: action_start + previous * duration,
+                                duration: (end - previous) * duration,
+                                target,
+                                easing: joint.easing,
+                            };
+                            previous = end;
+                            segment
+                        })
+                        .collect();
+                    let end_value = plan.end_values.get(&joint.actuator).copied().unwrap_or(0.0);
+                    motions.push((joint.actuator, segments, end_value));
+                }
                 schedule.moves.push(SolvedMove {
                     step: index,
                     robot: robot.id,
                     point: point.id,
-                    position_error: solution.position_error,
-                    angle_error_deg: solution.angle_error.to_degrees(),
-                    reached: solution.reached,
+                    kind: robot_move.kind,
+                    start: action_start,
+                    duration,
+                    position_error: plan.position_error,
+                    angle_error_deg: plan.angle_error.to_degrees(),
+                    reached: plan.reached,
+                    path_reached: plan.path_reached,
+                    min_dexterity: plan.min_dexterity,
+                    singular: plan.singular,
+                    path: plan.samples,
                 });
             }
-            targets.sort_by_key(|(id, _, _)| *id);
-            for (id, target, duration) in targets {
-                schedule.segments.entry(id).or_default().push(Segment {
-                    start: action_start,
-                    duration: duration.max(0.0),
-                    target,
-                });
-                values.insert(id, target);
+            motions.sort_by_key(|(id, _, _)| *id);
+            for (id, segments, end_value) in motions {
+                schedule.segments.entry(id).or_default().extend(segments);
+                values.insert(id, end_value);
             }
             let end = action_start + step.duration();
             schedule.steps.push(StepSpan {
@@ -582,6 +643,8 @@ pub struct Segment {
     pub start: f64,
     pub duration: f64,
     pub target: f64,
+    /// 速度の付け方。None ならアクチュエータの設定に従う (直線補間の区切りは等速)。
+    pub easing: Option<Easing>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -626,17 +689,37 @@ pub struct Schedule {
     pub moves: Vec<SolvedMove>,
 }
 
-/// ロボットの移動1つ分の逆運動学の結果
-#[derive(Clone, Copy, Debug)]
+/// ロボットの移動1つ分の逆運動学と経路の結果
+#[derive(Clone, Debug)]
 pub struct SolvedMove {
     pub step: usize,
     pub robot: u32,
     pub point: u32,
+    pub kind: MoveKind,
+    /// 動き始めた時刻と動作時間 (秒)
+    pub start: f64,
+    pub duration: f64,
     /// 届かなかった距離 (モデル単位)
     pub position_error: f64,
     /// 工具の向きのずれ (度)
     pub angle_error_deg: f64,
+    /// 教示点に届いたか
     pub reached: bool,
+    /// 経路の途中もすべて届いたか (直線補間で意味がある)
+    pub path_reached: bool,
+    /// 経路の上で最小の動かしやすさ (0〜1)
+    pub min_dexterity: f64,
+    /// 特異点の近くを通るか
+    pub singular: bool,
+    /// TCP の通り道を区切った点 (3D ビューの表示用)
+    pub path: Vec<PathSample>,
+}
+
+impl SolvedMove {
+    /// 教示点にも途中にも問題がないか
+    pub fn ok(&self) -> bool {
+        self.reached && self.path_reached && !self.singular
+    }
 }
 
 impl Schedule {
@@ -655,7 +738,8 @@ impl Schedule {
             } else {
                 (t - segment.start) / segment.duration
             };
-            value += (segment.target - value) * actuator.easing.apply(progress);
+            let easing = segment.easing.unwrap_or(actuator.easing);
+            value += (segment.target - value) * easing.apply(progress);
         }
         actuator.clamp(value)
     }

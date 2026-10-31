@@ -15,8 +15,8 @@ use bevy::{ecs::system::SystemParam, prelude::*};
 use bevy_egui::egui;
 
 use super::chart::{
-    Action, Actuator, ActuatorKind, Axis, Easing, INTERLOCK_TIMEOUT, RobotMove, Schedule, Step,
-    TimingChart,
+    Action, Actuator, ActuatorKind, Axis, Easing, INTERLOCK_TIMEOUT, MoveKind, RobotMove, Schedule,
+    Step, TimingChart,
 };
 use super::robot_ui::RobotUiState;
 use super::sensor::SensorKind;
@@ -555,6 +555,7 @@ fn add_robot_move(chart: &mut TimingChart, step: usize, robot: u32) {
         robot,
         point,
         duration: 1.0,
+        kind: Default::default(),
     });
 }
 
@@ -854,14 +855,19 @@ fn draw_chart(
                     );
                     painter.rect_filled(band, 2.0, MOVE_FILL);
                 }
-                let reached = schedule.solved_move(i, robot.id).is_none_or(|m| m.reached);
+                let solved = schedule.solved_move(i, robot.id);
                 let name = robot
                     .point(robot_move.point)
                     .map_or("?", |p| p.name.as_str());
-                let (text, color) = if reached {
-                    (format!("→ {name}"), text_color)
-                } else {
-                    (format!("⚠ {name}"), ERROR_COLOR)
+                // 直線補間は「L→」。届かない点は赤、特異点の近くを通るときは黄色の ⚠
+                let arrow = match robot_move.kind {
+                    MoveKind::Joint => "→",
+                    MoveKind::Linear => "L→",
+                };
+                let (text, color) = match solved {
+                    Some(m) if !m.reached || !m.path_reached => (format!("⚠ {name}"), ERROR_COLOR),
+                    Some(m) if m.singular => (format!("⚠ {arrow} {name}"), WARN_COLOR),
+                    _ => (format!("{arrow} {name}"), text_color),
                 };
                 painter.text(
                     cell.min + egui::vec2(4.0, ROW_HEIGHT / 2.0),
@@ -1376,7 +1382,7 @@ fn robot_cell_editor(
         return;
     }
     if chart.steps[step].robot_move(id).is_none() {
-        if ui.button("教示点への移動 (MoveJ) を追加").clicked() {
+        if ui.button("教示点への移動を追加").clicked() {
             add_robot_move(chart, step, id);
         }
         return;
@@ -1397,6 +1403,15 @@ fn robot_cell_editor(
                     }
                 });
             ui.end_row();
+            ui.label("補間");
+            egui::ComboBox::from_id_salt("move_kind")
+                .selected_text(robot_move.kind.label())
+                .show_ui(ui, |ui| {
+                    for kind in [MoveKind::Joint, MoveKind::Linear] {
+                        ui.selectable_value(&mut robot_move.kind, kind, kind.label());
+                    }
+                });
+            ui.end_row();
             ui.label("動作時間");
             ui.add(
                 egui::DragValue::new(&mut robot_move.duration)
@@ -1407,14 +1422,29 @@ fn robot_cell_editor(
             ui.end_row();
         });
     if let Some(solved) = schedule.solved_move(step, id) {
-        if solved.reached {
-            ui.weak("各関節を同時に動かして教示点へ移動します (MoveJ)。");
-        } else {
+        if solved.ok() {
+            ui.weak(match solved.kind {
+                MoveKind::Joint => "各関節を同時に動かして教示点へ移動します。",
+                MoveKind::Linear => "TCP をまっすぐ教示点へ動かします。",
+            });
+        }
+        if !solved.reached {
             ui.colored_label(
                 ERROR_COLOR,
                 format!(
                     "⚠ 届きません (位置 {:.3} / 向き {:.1}° ずれ)",
                     solved.position_error, solved.angle_error_deg
+                ),
+            );
+        } else if !solved.path_reached {
+            ui.colored_label(ERROR_COLOR, "⚠ 直線の途中に届かないところがあります");
+        }
+        if solved.singular {
+            ui.colored_label(
+                WARN_COLOR,
+                format!(
+                    "⚠ 特異点の近くを通ります (動かしやすさ {:.2})。関節が急に大きく回ることがあります",
+                    solved.min_dexterity
                 ),
             );
         }

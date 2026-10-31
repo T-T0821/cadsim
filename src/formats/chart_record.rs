@@ -8,7 +8,7 @@ use glam::{DQuat, DVec3};
 use serde::{Deserialize, Serialize};
 
 use crate::interchange::{NodeTransform, Track};
-use crate::motion::chart::{Interlock, Robot, RobotMove, Sensor, SensorKind, TeachPoint};
+use crate::motion::chart::{Interlock, MoveKind, Robot, RobotMove, Sensor, SensorKind, TeachPoint};
 use crate::motion::{Action, Actuator, ActuatorKind, Axis, Easing, Step, TimingChart};
 
 type NodePath = Vec<usize>;
@@ -56,6 +56,19 @@ pub struct RobotMoveRecord {
     pub robot: u32,
     pub point: u32,
     pub duration: f64,
+    #[serde(default, skip_serializing_if = "is_joint_move")]
+    pub kind: MoveKindRecord,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum MoveKindRecord {
+    #[default]
+    Joint,
+    Linear,
+}
+
+fn is_joint_move(kind: &MoveKindRecord) -> bool {
+    *kind == MoveKindRecord::Joint
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -253,6 +266,10 @@ pub fn chart_to_record(
                         robot: m.robot,
                         point: m.point,
                         duration: m.duration,
+                        kind: match m.kind {
+                            MoveKind::Joint => MoveKindRecord::Joint,
+                            MoveKind::Linear => MoveKindRecord::Linear,
+                        },
                     })
                     .collect(),
             })
@@ -417,6 +434,10 @@ pub fn chart_from_record(
                     robot: m.robot,
                     point: m.point,
                     duration: m.duration,
+                    kind: match m.kind {
+                        MoveKindRecord::Joint => MoveKind::Joint,
+                        MoveKindRecord::Linear => MoveKind::Linear,
+                    },
                 })
                 .collect(),
         })
@@ -591,6 +612,7 @@ mod tests {
                     robot,
                     point,
                     duration: 1.0,
+                    kind: MoveKind::Linear,
                 }],
             },
             Step {

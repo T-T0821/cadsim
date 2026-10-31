@@ -3,16 +3,25 @@
 //! - ジョグ: 関節ごとのスライダか、TCP を X / Y / Z に少しずつ動かすボタン (逆運動学) で
 //!   一時的に姿勢を動かす。チャートは変えず、再生やスクラブでチャートの位置に戻る。
 //! - 教示点: 今の TCP を登録するか、座標を直接入力する。選択中のステップに移動を置ける。
+//! - 経路の確認: 届かない移動・特異点の近くを通る移動の一覧と、移動中の干渉チェック。
+//!   3D ビューには TCP の通り道を描き、問題のあるところに色を付ける。
 
 use bevy::math::DVec3;
 use bevy::prelude::*;
 use bevy_egui::egui;
 
-use super::chart::{Robot, RobotMove, TeachPoint, TimingChart};
+use super::chart::{MoveKind, Robot, RobotMove, TeachPoint, TimingChart};
 use super::kinematics::{self, Tcp};
+use super::path_interference::{PathBody, PathHit, robot_path_interference};
+use super::robot_path::SINGULAR_DEXTERITY;
 use super::ui::MotionUi;
-use super::ui::{ChartUiState, ERROR_COLOR};
+use super::ui::{ChartUiState, ERROR_COLOR, WARN_COLOR};
 use super::{ChartSchedule, JogPose, SimulationPose};
+use crate::model::Model;
+use crate::simulation::{InterferenceCheck, SimBody};
+
+/// 移動中の干渉を調べる時刻の間隔 (秒)
+const INTERFERENCE_INTERVAL: f64 = 0.05;
 
 /// 工具を向ける方向の候補 (教示点の設定用)
 const APPROACHES: [(&str, Option<[f64; 3]>); 7] = [
@@ -33,6 +42,10 @@ pub struct RobotUiState {
     keep_orientation: bool,
     /// 直前のジョグや教示点への移動が届かなかったときの表示
     message: Option<String>,
+    /// 次のフレームで、このロボットの移動中の干渉を調べる
+    interference_request: Option<u32>,
+    /// 直前に調べた移動中の干渉 (ロボット, 結果)。チャートを変えたら消す。
+    interference: Option<(u32, Vec<PathHit>)>,
 }
 
 impl Default for RobotUiState {
@@ -41,6 +54,8 @@ impl Default for RobotUiState {
             jog_step: 10.0,
             keep_orientation: true,
             message: None,
+            interference_request: None,
+            interference: None,
         }
     }
 }
@@ -260,23 +275,141 @@ fn robot_panel(
                     robot: robot.id,
                     point: point.id,
                     duration: 1.0,
+                    kind: Default::default(),
                 });
             }
             PointAction::Delete => chart.remove_point(robot.id, point.id),
         }
     }
-    let unreachable = schedule
+    path_check(ui, schedule, &robot, chart_state, state);
+    new_jog
+}
+
+/// 経路の確認: チャートに置いた移動のうち、届かない・特異点の近くを通るものと、移動中の干渉
+fn path_check(
+    ui: &mut egui::Ui,
+    schedule: &ChartSchedule,
+    robot: &Robot,
+    chart_state: &mut ChartUiState,
+    state: &mut RobotUiState,
+) {
+    let moves: Vec<_> = schedule
         .moves
         .iter()
-        .filter(|m| m.robot == robot.id && !m.reached)
-        .count();
-    if unreachable > 0 {
-        ui.colored_label(
-            ERROR_COLOR,
-            format!("⚠ チャート中に届かない移動が {unreachable} 件あります"),
-        );
+        .filter(|m| m.robot == robot.id)
+        .collect();
+    if moves.is_empty() {
+        return;
     }
-    new_jog
+    ui.separator();
+    ui.strong("経路の確認");
+    let point_name = |id: u32| robot.point(id).map_or("?", |p| p.name.as_str());
+    let mut problems = 0;
+    for m in &moves {
+        let issue = if !m.reached {
+            Some((ERROR_COLOR, "届きません"))
+        } else if !m.path_reached {
+            Some((ERROR_COLOR, "直線の途中に届かないところがあります"))
+        } else if m.singular {
+            Some((WARN_COLOR, "特異点の近くを通ります"))
+        } else {
+            None
+        };
+        if let Some((color, text)) = issue {
+            problems += 1;
+            let label = format!("⚠ S{} → {}: {text}", m.step + 1, point_name(m.point));
+            if ui
+                .add(
+                    egui::Label::new(egui::RichText::new(label).color(color))
+                        .sense(egui::Sense::click()),
+                )
+                .on_hover_text("クリックでそのステップを選択")
+                .clicked()
+            {
+                chart_state.selected_step = Some(m.step);
+            }
+        }
+    }
+    if problems == 0 {
+        ui.weak("すべての移動が届き、特異点の近くも通りません。");
+    }
+
+    ui.horizontal(|ui| {
+        if ui
+            .button("移動中の干渉を調べる")
+            .on_hover_text("ロボットに載った部品が、ほかの部品に食い込まないかを移動ごとに調べます")
+            .clicked()
+        {
+            state.interference_request = Some(robot.id);
+        }
+    });
+    let Some((checked, hits)) = &state.interference else {
+        return;
+    };
+    if *checked != robot.id {
+        return;
+    }
+    if hits.is_empty() {
+        ui.weak("移動中の干渉はありません。");
+    }
+    for hit in hits {
+        let label = format!(
+            "⚠ S{} → {}: {} と {} が干渉 ({:.2}〜{:.2} s)",
+            hit.step + 1,
+            point_name(hit.point),
+            hit.robot_part,
+            hit.other_part,
+            hit.start,
+            hit.end
+        );
+        if ui
+            .add(
+                egui::Label::new(egui::RichText::new(label).color(ERROR_COLOR))
+                    .sense(egui::Sense::click()),
+            )
+            .on_hover_text("クリックでそのステップを選択")
+            .clicked()
+        {
+            chart_state.selected_step = Some(hit.step);
+        }
+    }
+}
+
+/// 「移動中の干渉を調べる」が押されていたら調べる。チャートが変わったら古い結果を消す。
+pub fn check_path_interference(
+    mut state: ResMut<RobotUiState>,
+    chart: Res<TimingChart>,
+    schedule: Res<ChartSchedule>,
+    check: Res<InterferenceCheck>,
+    model: Res<Model>,
+    bodies: Query<(&SimBody, Option<&Name>)>,
+) {
+    if chart.is_changed() && state.interference.is_some() {
+        state.interference = None;
+    }
+    let Some(robot) = state.interference_request.take() else {
+        return;
+    };
+    let bodies: Vec<PathBody> = bodies
+        .iter()
+        .filter(|(body, _)| model.get(body.id).is_some())
+        .map(|(body, name)| PathBody {
+            id: body.id,
+            name: name.map_or_else(|| format!("#{}", body.id), |n| n.to_string()),
+            mesh: body.mesh.clone(),
+            placement: model.world_matrix(body.id),
+            ancestors: model.ancestors(body.id),
+        })
+        .collect();
+    let hits = robot_path_interference(
+        &bodies,
+        &chart,
+        &schedule,
+        &check.settings,
+        robot,
+        INTERFERENCE_INTERVAL,
+    );
+    state.interference = Some((robot, hits));
 }
 
 fn robot_settings(
@@ -456,6 +589,8 @@ const LINK_COLOR: Color = Color::srgb(0.3, 0.85, 0.95);
 const TCP_COLOR: Color = Color::srgb(1.0, 0.45, 0.1);
 const POINT_COLOR: Color = Color::srgb(0.3, 0.9, 0.4);
 const POINT_ERROR_COLOR: Color = Color::srgb(0.95, 0.25, 0.25);
+const PATH_COLOR: Color = Color::srgba(0.3, 0.9, 0.4, 0.7);
+const PATH_WARN_COLOR: Color = Color::srgb(1.0, 0.75, 0.15);
 
 /// 関節の軸、リンクの骨格、TCP と工具軸、教示点を描く
 pub fn draw_robots(
@@ -516,12 +651,31 @@ pub fn draw_robots(
         gizmos.sphere(v(position), (0.013 * k) as f32, TCP_COLOR);
         gizmos.arrow(v(position), v(position + tool_axis * 0.09 * k), TCP_COLOR);
 
+        // TCP の通り道。特異点の近くは黄色、届かないところは赤
+        for solved in schedule.moves.iter().filter(|m| m.robot == robot.id) {
+            for pair in solved.path.windows(2) {
+                let color = if !pair[1].reached {
+                    POINT_ERROR_COLOR
+                } else if solved.kind == MoveKind::Linear && pair[1].dexterity < SINGULAR_DEXTERITY
+                {
+                    PATH_WARN_COLOR
+                } else {
+                    PATH_COLOR
+                };
+                gizmos.line(
+                    v(DVec3::from_array(pair[0].position)),
+                    v(DVec3::from_array(pair[1].position)),
+                    color,
+                );
+            }
+        }
+
         for point in &robot.points {
             let reached = schedule
                 .moves
                 .iter()
                 .filter(|m| m.robot == robot.id && m.point == point.id)
-                .all(|m| m.reached);
+                .all(|m| m.reached && m.path_reached);
             let color = if reached {
                 POINT_COLOR
             } else {
