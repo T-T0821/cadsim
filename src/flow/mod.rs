@@ -13,11 +13,12 @@
 //! 3D の部品に塗る色 ([`FlowColors`]、viewport.rs が使う) を受け持つ。
 
 pub mod record;
+mod scenario_ui;
 mod staff_ui;
 mod ui;
 pub mod xlsx;
 
-pub use cadsim_core::flow::{model, palette, sim};
+pub use cadsim_core::flow::{model, palette, scenario, sim};
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -152,7 +153,7 @@ impl FlowRun {
 
     /// 結果が今のモデルと合っていない
     pub fn is_stale(&self, model: &FlowModel) -> bool {
-        self.ran_with.as_ref().is_some_and(|m| m != model)
+        self.ran_with.as_ref().is_some_and(|m| !m.same_setup(model))
     }
 }
 

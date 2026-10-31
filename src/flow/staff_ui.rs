@@ -58,6 +58,7 @@ pub fn staff_tab(ui: &mut egui::Ui, flow: &mut FlowModel, st: &mut StaffUiState)
                 {
                     let mut m = sample_line();
                     apply_sample_staffing(&mut m);
+                    m.scenarios = std::mem::take(&mut flow.scenarios);
                     *flow = m;
                     st.comparison = None;
                     st.rule_comparison = None;
@@ -338,7 +339,11 @@ fn comparison_section(ui: &mut egui::Ui, flow: &FlowModel, st: &mut StaffUiState
         ui.weak("名簿の上の人から順に出勤させ、1 人〜出勤できる人数まで回して比べます。");
         return;
     };
-    if st.compared_with.as_ref().is_some_and(|m| m != flow) {
+    if st
+        .compared_with
+        .as_ref()
+        .is_some_and(|m| !m.same_setup(flow))
+    {
         ui.colored_label(WARN, "設定が変わりました。結果は前の設定のものです。");
     }
     let c = match result {
@@ -442,7 +447,11 @@ fn rule_comparison_section(ui: &mut egui::Ui, flow: &FlowModel, st: &mut StaffUi
         ui.weak("同じ人数で、誰がどの工程へ行くかの決め方だけを変えて比べます。");
         return;
     };
-    if st.rules_compared_with.as_ref().is_some_and(|m| m != flow) {
+    if st
+        .rules_compared_with
+        .as_ref()
+        .is_some_and(|m| !m.same_setup(flow))
+    {
         ui.colored_label(WARN, "設定が変わりました。結果は前の設定のものです。");
     }
     let rows = match result {
