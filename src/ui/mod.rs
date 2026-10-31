@@ -26,6 +26,7 @@ mod menu;
 pub mod modeling;
 pub mod playful;
 mod properties;
+mod replace;
 mod status;
 pub mod theme;
 mod tree;
@@ -54,6 +55,7 @@ use crate::model::{Model, Selection};
 use crate::motion::{self, MotionUi, at_design_pose};
 use crate::physics::physics_stopped;
 use crate::project::{ProjectState, show_confirm_dialog};
+use crate::result_export::ResultExport;
 use crate::viewport::{RenderStats, ViewSettings};
 
 pub struct UiPlugin;
@@ -101,6 +103,7 @@ pub struct UiState<'w> {
     pub diagnostics: Res<'w, DiagnosticsStore>,
     pub render_stats: Res<'w, RenderStats>,
     pub playful: ResMut<'w, playful::PlayfulUi>,
+    pub results: ResMut<'w, ResultExport>,
 }
 
 /// UI 専用のカメラ。3D カメラはパネルを除いた領域だけに描くので、
@@ -157,6 +160,7 @@ fn draw_ui(mut contexts: EguiContexts, mut state: UiState) -> Result {
     view_cube::show(&ctx, view, &mut state);
     status::show_notifications(&ctx, view, &mut state);
     animation::show(&ctx, view, &mut state);
+    replace::show(&ctx, &mut state);
     modeling::show(&ctx, &mut state);
     flow::show_window(&ctx, &mut state.flow, &state.model, &state.selection);
     show_confirm_dialog(&ctx, &mut state.project);
