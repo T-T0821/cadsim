@@ -25,6 +25,8 @@
 //! - `flow`        工程モデル (生成・工程・バッファ・排出) の早回しとスループット統計
 //! - `stress`      負荷テスト用の数千部品のシーン
 //! - `bench`       `--bench` で FPS を測って終了する
+//! - `floor`       作業者と AGV (床の上を動くもの)、床の上の幾何計算
+//! - `safety`      安全機器 (ライトカーテン・エリアセンサ・安全柵・非常停止) と動作範囲
 
 // Windows のリリースビルドでは、起動時に黒いコンソール窓を出さない
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
@@ -35,6 +37,7 @@ mod bench;
 mod bvh;
 mod camera;
 mod file_io;
+mod floor;
 mod flow;
 mod gizmo;
 mod history;
@@ -45,6 +48,7 @@ mod model;
 mod motion;
 mod part_mesh;
 mod project;
+mod safety;
 mod shortcuts;
 mod simulation;
 mod step_import;
@@ -84,6 +88,7 @@ fn main() {
             motion::MotionPlugin,
             flow::FlowPlugin,
             bench::BenchPlugin,
+            (safety::SafetyPlugin, floor::FloorPlugin),
         ))
         .run();
 }
