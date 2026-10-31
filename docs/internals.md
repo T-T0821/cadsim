@@ -44,6 +44,7 @@ crates/cadsim_core/   Bevy に依存しないドメイン (cargo test -p cadsim_
 ├── shape.rs         取り込んだ形状 (B-rep・面メッシュ・計測値) とアセンブリの木 (ImportNode)
 ├── gamify.rs        ゲーム風 UI の中身: ミッションの判定・経験値とレベル・紙吹雪 (docs/playful-ui.md)
 ├── math.rs          回転・行列・外接箱の計算 (f64)
+├── model.rs         設計データ: アセンブリの木 (f64)。ノード・箱・取り込んだ部品
 ├── remap.rs         形状の差し替え: 古い木と新しい木のノードの対応づけ
 ├── simulation/      干渉チェックの幾何計算 (geometry / mesh / interference / overlap)
 ├── drawing.rs       2D 図面: 投影・かくれ線・シルエット・寸法・図枠 (docs/drawing.md)
@@ -60,7 +61,7 @@ crates/cadsim_io/     Bevy に依存しないアダプター (cargo test -p cads
     └── samples.rs    動作確認用のサンプルシーン (ロボット)
 src/                  アプリ本体 (Bevy + egui)
 ├── main.rs          アプリの組み立て (プラグインを並べるだけ)
-├── model.rs         設計データ: アセンブリの木 (f64) と選択状態
+├── model.rs         設計データ (cadsim_core::model) を Bevy の Resource で包む型と、選択状態
 ├── step_import.rs   cadsim_io::step を再公開する
 ├── file_io.rs       ダイアログ・ドラッグ&ドロップ・別スレッドでの読み込み・書き出し
 ├── interchange/     cadsim_io::interchange を再公開し、モデルとの変換だけを持つ

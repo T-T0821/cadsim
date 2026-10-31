@@ -26,9 +26,7 @@ use bevy::prelude::*;
 use bevy_egui::EguiPrimaryContextPass;
 
 pub use cadsim_core::physics::cable::{Cable, CableAnchor, CableKind, CableReport};
-pub use cadsim_core::physics::settings::{
-    BeltDrive, BodyMode, ColliderShape, LocalAxis, PartPhysics,
-};
+pub use cadsim_core::physics::settings::{BeltDrive, BodyMode, ColliderShape, LocalAxis};
 pub use records::{CableRecord, PartPhysicsRecord};
 
 use cadsim_core::physics::cable::{CableState, Obstacle};
