@@ -23,6 +23,7 @@ Release は**人が手動で実行したときだけ**作られます。PR を m
 
 - フォント・サンプルの STEP・Web ビューアのひな形などの素材は `include_bytes!` / `include_str!` で実行ファイルに埋め込んでいるので、別ファイルを同梱しなくてよい。素材を増やすときも実行時にファイルを読まず、同じように埋め込むこと。
 - Windows では C ランタイムを静的リンクしている([`.cargo/config.toml`](../.cargo/config.toml) の `+crt-static`)。VC++ 再頒布可能パッケージ(`VCRUNTIME140.dll` など)が入っていない PC でも exe だけで動く。
+- xz (liblzma) は同じ設定ファイルの `LZMA_API_STATIC` でソースからビルドして静的リンクしている。これがないと Mac の CI で Homebrew の `liblzma.dylib` に依存してしまい、Homebrew のない Mac で起動できなくなる。
 - ワークフローで依存ライブラリを確かめている。Windows は `dumpbin /dependents` で C ランタイムの DLL に依存していないこと、Mac は `otool -L` で `/System/Library/` と `/usr/lib/` 以外の dylib に依存していないことを見て、違えば失敗させる。
 - Mac は `.app` 1つにまとまっているので、どこに置いても動く。
 - 見た目などの設定だけは OS の設定フォルダ(`src/preferences_file.rs`)に保存する。なくても標準の設定で起動する。
