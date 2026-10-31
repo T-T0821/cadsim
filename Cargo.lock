@@ -2489,6 +2489,7 @@ dependencies = [
  "glam 0.33.12",
  "truck-meshalgo",
  "truck-modeling",
+ "truck-shapeops",
  "truck-stepio",
  "truck-topology",
 ]
@@ -2511,6 +2512,7 @@ dependencies = [
  "stl_io",
  "tobj",
  "truck-meshalgo",
+ "truck-modeling",
  "truck-stepio",
  "truck-topology",
  "ureq",

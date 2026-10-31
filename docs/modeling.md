@@ -6,10 +6,10 @@
 
 | 層 | 場所 | 役割 |
 | --- | --- | --- |
-| ユースケース | `src/modeling.rs` | 形を作る(truck の B-rep)、部品として加える・置き換える、元に戻す履歴に積む |
+| ドメイン + ユースケース | `crates/cadsim_core/src/modeling.rs` | 形を作る(truck の B-rep)、部品として加える・置き換える、元に戻すための `ModelChange` を返す。B-rep の詰め方はポート `SolidStore` で受け取る |
+| アダプター | `crates/cadsim_io/src/modeled.rs` | `SolidStore` の実装 `JsonSolids`(B-rep ⇔ JSON)と、`ModeledSource` から部品を作り直す `ModeledSourceExt` |
+| アプリ | `src/modeling.rs` | `JsonSolids` を渡し、返ってきた変更を元に戻す履歴に積むだけ |
 | UI | `src/ui/modeling.rs` | 「モデリング」ウィンドウ。入力を集めて `modeling` を呼ぶだけ |
-
-`modeling.rs` は `Model` と `History` を書き換えるので今はアプリ側にあります。`Model` が `cadsim_core` に移ったら(architecture.md の手順 4)一緒に移します。
 
 ## 形の作り方
 
