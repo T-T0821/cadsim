@@ -13,5 +13,6 @@ pub mod physics;
 pub mod remap;
 pub mod simulation;
 pub mod site;
+pub mod staffing;
 pub mod usecase;
 pub mod video;
