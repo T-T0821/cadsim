@@ -16,7 +16,7 @@
 
 use super::chart::{Action, ActuatorKind, Axis, Interlock, Step, TimingChart};
 use super::sensor::SensorKind;
-use cadsim_core::conveyor::{BeltAxis, ConveyorConfig, ConveyorEnd};
+use cadsim_core::conveyor::{BeltAxis, ConveyorConfig, ConveyorEnd, SourceOutput};
 
 use crate::model::Model;
 
@@ -62,6 +62,13 @@ pub fn load_demo(model: &mut Model, chart: &mut TimingChart, conveyors: &mut Con
         "排出コンベア",
         [0.8, BELT_TOP, 3.0],
         [PICK_X + PLACE_TRAVEL, BELT_TOP / 2.0, 1.0],
+    );
+    // 投入口 (供給コンベアの始端の手前) と排出口 (排出コンベアの終端の先の受け箱)
+    let feeder = add("投入シュート", [0.4, 1.4, 0.8], [PICK_X - 3.1, 0.7, 0.0]);
+    let bin = add(
+        "排出箱",
+        [0.8, BELT_TOP, 0.4],
+        [PICK_X + PLACE_TRAVEL, BELT_TOP / 2.0, 2.7],
     );
     let carriage = add("X軸キャリッジ", [0.6, 0.3, 0.6], [PICK_X, 3.3, 0.0]);
     let rod_top = 3.15;
@@ -182,24 +189,48 @@ pub fn load_demo(model: &mut Model, chart: &mut TimingChart, conveyors: &mut Con
         ),
     ];
 
-    {
+    // ワークは2種類を交互に流す
+    let tall = {
+        let k = conveyors.add_kind();
+        k.name = "ワーク A".into();
+        k.size = WORK.map(|v| v * S);
+        k.id
+    };
+    let flat = {
+        let k = conveyors.add_kind();
+        k.name = "ワーク B".into();
+        k.size = [WORK[0], WORK[1] * 0.6, WORK[2]].map(|v| v * S);
+        k.id
+    };
+    let infeed_id = {
         let c = conveyors.add_conveyor();
         c.name = "供給コンベア".into();
         c.part = Some(infeed);
         c.axis = BeltAxis::X;
         c.speed = 1.2 * S;
-        c.feed_interval = Some(5.0);
         c.end = ConveyorEnd::Stopper;
-        c.work_size = WORK.map(|v| v * S);
-    }
+        c.id
+    };
     {
         let c = conveyors.add_conveyor();
         c.name = "排出コンベア".into();
         c.part = Some(outfeed);
         c.axis = BeltAxis::Z;
         c.speed = 0.8 * S;
-        c.feed_interval = None;
         c.end = ConveyorEnd::Discharge;
+    }
+    {
+        let source = conveyors.add_source();
+        source.name = "投入シュート".into();
+        source.part = Some(feeder);
+        source.output = SourceOutput::Conveyor(infeed_id);
+        source.interval = 5.0;
+        source.kinds = vec![tall, flat];
+    }
+    {
+        let sink = conveyors.add_sink();
+        sink.name = "排出箱".into();
+        sink.part = Some(bin);
     }
     {
         let g = conveyors.add_gripper();
