@@ -8,6 +8,8 @@
 //! センサーはアクチュエータに載せられ、載せた先と一緒に動く。
 //! そのとき、同じアクチュエータが動かす部品 (センサーを取り付けている部品) は検知しない。
 
+use std::collections::HashMap;
+
 use bevy::math::{DQuat, DVec3};
 
 use super::chart::{Axis, Interlock, Schedule, Step, TimingChart};
@@ -171,7 +173,17 @@ pub fn sensor_states_at(
     targets: &[DesignTarget],
     extra: &[TargetBox],
 ) -> Vec<bool> {
-    let poses = actuator_poses(chart, schedule, t);
+    sensor_states(chart, &actuator_poses(chart, schedule, t), targets, extra)
+}
+
+/// アクチュエータの動き (`poses`: アクチュエータ id → 親の動きも含めた変換) が
+/// わかっているときの、全センサーの ON / OFF。PLC が位置を決めているときに使う。
+pub fn sensor_states(
+    chart: &TimingChart,
+    poses: &HashMap<u32, RigidPose>,
+    targets: &[DesignTarget],
+    extra: &[TargetBox],
+) -> Vec<bool> {
     let pose_of = |actuator: Option<u32>| {
         actuator
             .and_then(|id| poses.get(&id).copied())

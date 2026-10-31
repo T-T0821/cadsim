@@ -33,15 +33,16 @@ use std::collections::HashMap;
 
 use bevy::prelude::*;
 
-pub use chart::{Action, ActuatorKind, Axis, Schedule, Step, TimingChart};
+pub use chart::{Action, Actuator, ActuatorKind, Axis, Schedule, Step, TimingChart};
 #[cfg(test)]
 pub use demo::load_demo;
 pub use export::chart_animation;
-pub use pose::{RigidPose, part_poses};
+pub use pose::{RigidPose, part_poses, part_poses_from_values};
 pub use ui::{MotionUi, show_panel};
 
 use crate::model::{Model, NodeId};
 use targets::{design_targets, extra_targets_at};
+use crate::plc::plc_active;
 
 pub struct MotionPlugin;
 
@@ -55,9 +56,15 @@ impl Plugin for MotionPlugin {
             .init_resource::<SensorTimeline>()
             .init_resource::<ui::ChartUiState>()
             .configure_sets(Update, MotionSet::Sensors.after(MotionSet::Pose))
+            .configure_sets(Update, MotionSet::Drive.in_set(MotionSet::Pose))
             .add_systems(
                 Update,
-                (update_schedule, advance_playback, update_pose)
+                (
+                    update_schedule,
+                    advance_playback,
+                    // PLC 連携中は時刻表ではなく PLC が位置を決める (MotionSet::Drive)
+                    update_pose.run_if(not(plc_active)),
+                )
                     .chain()
                     .in_set(MotionSet::Pose),
             )
@@ -77,6 +84,8 @@ impl Plugin for MotionPlugin {
 pub enum MotionSet {
     Pose,
     Sensors,
+    /// 時刻表以外 (PLC 連携) で `SimulationPose` を書くシステム。`Pose` の中で動く。
+    Drive,
 }
 
 /// チャートを時刻に展開したもの。チャートか部品が編集されたときだけ作り直す。
@@ -232,6 +241,19 @@ fn update_pose(
     pose.parts = pose::part_poses(&chart, &schedule, t);
 }
 
+/// いま表示している各アクチュエータの動き (アクチュエータ id → 変換)。
+/// アクチュエータの動きは、それが動かすノードのどれかの動きと同じ。
+fn actuator_poses_of(chart: &TimingChart, pose: &SimulationPose) -> HashMap<u32, RigidPose> {
+    chart
+        .actuators
+        .iter()
+        .filter_map(|a| {
+            let p = a.parts.iter().find_map(|node| pose.parts.get(node))?;
+            Some((a.id, *p))
+        })
+        .collect()
+}
+
 fn update_sensor_states(
     chart: Res<TimingChart>,
     model: Res<Model>,
@@ -242,7 +264,8 @@ fn update_sensor_states(
     let t = pose.time;
     let targets = design_targets(&model, &chart);
     let extra = extra_targets_at(&schedule, t);
-    let on = sensor::sensor_states_at(&chart, &schedule, t, &targets, &extra);
+    // 位置は SimulationPose から取る (時刻表でも PLC 連携でも、表示と同じ位置で検知する)
+    let on = sensor::sensor_states(&chart, &actuator_poses_of(&chart, &pose), &targets, &extra);
     let signals: Vec<SensorSignal> = chart
         .sensors
         .iter()

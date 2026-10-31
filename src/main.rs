@@ -46,6 +46,7 @@ mod bench;
 mod bom;
 mod bvh;
 mod camera;
+mod defeature;
 mod documents;
 mod drawing;
 mod file_io;
@@ -63,6 +64,7 @@ mod modeling;
 mod motion;
 mod part_mesh;
 mod physics;
+mod plc;
 mod preferences_file;
 mod project;
 mod result_export;
@@ -104,7 +106,7 @@ fn main() {
             ui::UiPlugin,
             simulation::SimulationPlugin,
             annotation::AnnotationPlugin,
-            motion::MotionPlugin,
+            (motion::MotionPlugin, plc::PlcPlugin),
             (flow::FlowPlugin, bench::BenchPlugin),
             (safety::SafetyPlugin, floor::FloorPlugin),
             (

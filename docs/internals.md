@@ -62,6 +62,7 @@ src/                  アプリ本体 (Bevy + egui)
 ├── viewport.rs      3D 表示: メッシュ作成、選択の強調、簡略表示 (LOD)、グリッド、クリック選択
 ├── part_mesh.rs     部品1つ分の表示用メッシュ (面をまとめたもの・面番号の表・簡略形状。Bevy に依存しない)
 ├── bvh.rs           外接箱の木 (BVH) とレイの当たり判定 (Bevy に依存しない)
+├── defeature.rs     小さな穴とフィレットを消した表示用メッシュを作る (Bevy に依存しない)
 ├── stress.rs        負荷テスト用の数千部品のシーン
 ├── bench.rs         `--bench` で FPS を測って終了する
 ├── camera.rs        オービットカメラ、標準ビュー、全体表示、透視 / 平行投影
@@ -78,6 +79,7 @@ src/                  アプリ本体 (Bevy + egui)
 ├── math.rs          f64 の配置を Bevy の Transform にする (計算は cadsim_core::math)
 ├── japanese_font.rs egui に日本語フォントを登録
 ├── simulation/      干渉チェックの配線・表示・パネルと距離計測 (詳しくは docs/simulation.md)
+├── plc/             PLC 連携: domain / usecase / adapter (Modbus TCP) / UI (詳しくは docs/plc.md)
 ├── annotation.rs    3D 上の寸法と注記 (置く操作・描画・パネル・保存形式)
 ├── modeling.rs      円柱・押し出し・穴あけ・ブーリアン (truck の B-rep。docs/modeling.md)
 ├── drawing/         図面の材料をモデルから集める (計算は cadsim_core::drawing)
@@ -198,6 +200,7 @@ src/                  アプリ本体 (Bevy + egui)
 5. 稜線は線のメッシュで GPU に描かせる。グリッドと選択の外接箱は Gizmos で描く。グリッドの間隔はモデルの大きさに合わせて 1, 10, 100… と変わる。
 6. 部品のエンティティには干渉チェック用の `SimBody`(部品座標の f64 三角形メッシュ + 姿勢 + モデル上で表示中か)も付ける。姿勢と表示/非表示は 2. と一緒に写し、`src/simulation/` がこれを拾って判定する。干渉中の部品は半透明の赤にする。
 7. 画面上で小さい部品は粗いメッシュに替え、ごく小さい部品は描かない(`update_level_of_detail`)。大規模アセンブリ向けの工夫は [performance.md](performance.md) にまとめている。
+8. 「小さな穴とフィレットを省略」がオンなら、取り込んだ形状ごとに裏のスレッドで簡略化した形を作り、できたものから表示を差し替える(`defeature_shapes`)。しくみは [defeature.md](defeature.md)。
 
 ### 画面の割り付け(`ui/mod.rs`)
 

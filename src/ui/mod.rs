@@ -54,9 +54,10 @@ use crate::japanese_font::install_japanese_font;
 use crate::model::{Model, Selection};
 use crate::motion::{self, MotionUi, at_design_pose};
 use crate::physics::physics_stopped;
+use crate::plc::plc_active;
 use crate::project::{ProjectState, show_confirm_dialog};
 use crate::result_export::ResultExport;
-use crate::viewport::{RenderStats, ViewSettings};
+use crate::viewport::{Defeaturing, RenderStats, ViewSettings};
 
 pub struct UiPlugin;
 
@@ -72,10 +73,11 @@ impl Plugin for UiPlugin {
                     playful::apply_theme,
                     draw_ui,
                     playful::draw_overlay,
-                    // 動作シミュレーション・物理演算で部品が動いている間はギズモで編集しない
+                    // 動作シミュレーション・物理演算・PLC 連携で部品が動いている間はギズモで編集しない
                     transform_gizmo_system
                         .run_if(at_design_pose)
-                        .run_if(physics_stopped),
+                        .run_if(physics_stopped)
+                        .run_if(not(plc_active)),
                 )
                     .chain(),
             );
@@ -104,6 +106,7 @@ pub struct UiState<'w> {
     pub render_stats: Res<'w, RenderStats>,
     pub playful: ResMut<'w, playful::PlayfulUi>,
     pub results: ResMut<'w, ResultExport>,
+    pub defeaturing: Res<'w, Defeaturing>,
 }
 
 /// UI 専用のカメラ。3D カメラはパネルを除いた領域だけに描くので、

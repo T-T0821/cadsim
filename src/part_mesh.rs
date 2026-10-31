@@ -34,15 +34,33 @@ const COARSE_CELLS: u32 = 10;
 impl PartMesh {
     /// truck の面メッシュ (f64) と稜線から作る
     pub fn new(faces: &[PolygonMesh], edges: &[Vec<Point3>]) -> PartMesh {
+        PartMesh::from_faces(
+            faces.iter().enumerate().map(|(i, poly)| (i as u32, poly)),
+            edges,
+        )
+    }
+
+    /// 面の番号を指定して作る (形状を簡略化して面が抜けても、元の番号のままにするため)
+    pub fn with_face_ids(faces: &[(u32, PolygonMesh)], edges: &[Vec<Point3>]) -> PartMesh {
+        PartMesh::from_faces(faces.iter().map(|(i, poly)| (*i, poly)), edges)
+    }
+
+    fn from_faces<'a>(
+        faces: impl Iterator<Item = (u32, &'a PolygonMesh)>,
+        edges: &[Vec<Point3>],
+    ) -> PartMesh {
         let mut positions = Vec::new();
         let mut normals = Vec::new();
         let mut triangle_face = Vec::new();
-        for (face, poly) in faces.iter().enumerate() {
+        for (face, poly) in faces {
             let points = poly.positions();
             let poly_normals = poly.normals();
             for tri in poly.faces().triangle_iter() {
                 let [a, b, c] = tri.map(|v| to_vec3(&points[v.pos]));
                 let flat = (b - a).cross(c - a).normalize_or_zero();
+                if flat == Vec3::ZERO {
+                    continue; // つぶれた三角形 (簡略化で頂点が重なったものなど)
+                }
                 for (v, p) in tri.iter().zip([a, b, c]) {
                     // 曲面は truck が付けた頂点法線を使う。面の向きを反転して法線が
                     // 三角形の裏を向いているときや、法線が無いときは平らな法線にする。
@@ -55,7 +73,7 @@ impl PartMesh {
                     positions.push(p);
                     normals.push(n);
                 }
-                triangle_face.push(face as u32);
+                triangle_face.push(face);
             }
         }
         let edges: Vec<Vec<Vec3>> = edges

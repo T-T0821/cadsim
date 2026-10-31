@@ -13,12 +13,18 @@
 //! - クリックでの選択は、部品の外接箱と部品内の三角形の2段の BVH で探す (`PartPicker`)。
 //!   計測や寸法のツールも同じものを使う。
 //! - 部品には干渉チェック用の `SimBody` (f64 メッシュ + 姿勢) も付け、干渉中の部品は半透明にする。
+//! - 「小さな穴とフィレットを省略」をオンにすると、取り込んだ形状ごとに裏のスレッドで
+//!   簡略化した形 (`defeature.rs`) を作り、できたものから表示を差し替える。干渉チェックは元の形のまま。
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use bevy::{
-    asset::RenderAssetUsages, ecs::system::SystemParam, mesh::PrimitiveTopology, prelude::*,
+    asset::RenderAssetUsages,
+    ecs::system::SystemParam,
+    mesh::PrimitiveTopology,
+    prelude::*,
+    tasks::{AsyncComputeTaskPool, Task, block_on, poll_once},
     window::PrimaryWindow,
 };
 use truck_meshalgo::prelude::*;
@@ -28,6 +34,7 @@ use bevy::prelude::Transform;
 use crate::annotation::annotate_tool_off;
 use crate::bvh::{Bounds, Bvh};
 use crate::camera::{ViewportRect, alt_pressed, pointer_in_3d_view};
+use crate::defeature::{DefeatureOptions, DefeatureStats, defeature_shape};
 use crate::flow::FlowColors;
 use crate::gizmo::gizmo_not_focused;
 use crate::math::{Aabb, to_transform};
@@ -36,6 +43,7 @@ use crate::motion::{MotionSet, SimulationPose};
 use crate::part_mesh::{PartMesh, shell_edges};
 use crate::physics::{PhysicsPose, PhysicsSet};
 use crate::simulation::{self, InterferenceCheck, Pose, SimBody, TriMesh, measure::not_measuring};
+use crate::step_import::ImportedShape;
 
 /// 箱のテッセレーションの許容誤差 (モデル単位)
 const BOX_TESSELLATION_TOL: f64 = 0.005;
@@ -49,6 +57,7 @@ impl Plugin for ViewportPlugin {
             .init_resource::<SceneCache>()
             .init_resource::<RenderStats>()
             .init_resource::<ViewsRebuilt>()
+            .init_resource::<Defeaturing>()
             .add_systems(Startup, create_palette)
             .add_systems(
                 Update,
@@ -60,6 +69,7 @@ impl Plugin for ViewportPlugin {
                         .run_if(annotate_tool_off)
                         .run_if(crate::site::plan_tool_off),
                     rebuild_dirty_parts,
+                    defeature_shapes,
                     // 動作シミュレーションと物理演算の動きが決まってから配置を写す
                     sync_views.after(MotionSet::Pose).after(PhysicsSet::Step),
                     update_level_of_detail,
@@ -85,6 +95,22 @@ pub struct ViewSettings {
     pub coarse_below_px: f32,
     /// これより小さければ描かない
     pub hide_below_px: f32,
+    /// 取り込んだ部品の小さな穴とフィレットを消した形で表示する
+    pub defeature: bool,
+    /// この直径以下の穴を消す (モデルの単位)
+    pub defeature_hole: f32,
+    /// この半径以下のフィレットを消す (モデルの単位)
+    pub defeature_fillet: f32,
+}
+
+impl ViewSettings {
+    /// 形状の簡略化がオンならその条件
+    fn defeature_options(&self) -> Option<DefeatureOptions> {
+        self.defeature.then_some(DefeatureOptions {
+            max_hole_diameter: self.defeature_hole as f64,
+            max_fillet_radius: self.defeature_fillet as f64,
+        })
+    }
 }
 
 impl Default for ViewSettings {
@@ -97,6 +123,9 @@ impl Default for ViewSettings {
             simplify_small_parts: true,
             coarse_below_px: 60.0,
             hide_below_px: 2.0,
+            defeature: false,
+            defeature_hole: 20.0,
+            defeature_fillet: 5.0,
         }
     }
 }
@@ -134,9 +163,10 @@ struct ViewsRebuilt(bool);
 #[derive(Component)]
 struct PartView {
     node: NodeId,
-    mesh: Arc<PartMesh>,
-    full: Handle<Mesh>,
-    coarse: Option<Handle<Mesh>>,
+    /// 取り込んだ形状の id (簡略化した形に差し替えるため)。箱では None。
+    shape: Option<usize>,
+    /// いま表示している形 (元の形か、簡略化した形)
+    display: DisplayMesh,
     edges: Entity,
     /// 自分と祖先がすべて表示中
     shown: bool,
@@ -151,15 +181,23 @@ struct EdgeLines;
 #[derive(Component)]
 struct FaceOverlay;
 
-/// 部品1つ分の GPU 用メッシュ
+/// 1つの形の表示用メッシュ (選択用の `PartMesh` と GPU 用のメッシュ)
 #[derive(Clone)]
-struct PartAssets {
+struct DisplayMesh {
     mesh: Arc<PartMesh>,
     full: Handle<Mesh>,
     coarse: Option<Handle<Mesh>>,
     edges: Handle<Mesh>,
+}
+
+/// 部品1つ分の GPU 用メッシュ
+#[derive(Clone)]
+struct PartAssets {
+    display: DisplayMesh,
     /// 干渉チェック用の f64 メッシュ
     sim: Arc<TriMesh>,
+    /// 取り込んだ形状 (簡略化の元の B-rep を持つ)
+    shape: Option<Arc<ImportedShape>>,
 }
 
 /// 取り込んだ形状のメッシュ (形状の id ごと)。同じ形状の部品はこれを共有する。
@@ -285,29 +323,34 @@ fn rebuild_dirty_parts(
                         poly
                     })
                     .collect();
-                let sim = Arc::new(simulation::trimesh_from_polygons(&faces));
-                upload(Arc::new(PartMesh::new(&faces, &edges)), sim, &mut meshes)
+                PartAssets {
+                    display: upload(Arc::new(PartMesh::new(&faces, &edges)), &mut meshes),
+                    sim: Arc::new(simulation::trimesh_from_polygons(&faces)),
+                    shape: None,
+                }
             }
             NodeKind::Imported { shape, .. } => shared
                 .0
                 .entry(shape.id)
-                .or_insert_with(|| {
-                    let sim = Arc::new(simulation::trimesh_from_polygons(&shape.faces));
-                    upload(shape.mesh.clone(), sim, &mut meshes)
+                .or_insert_with(|| PartAssets {
+                    display: upload(shape.mesh.clone(), &mut meshes),
+                    sim: Arc::new(simulation::trimesh_from_polygons(&shape.faces)),
+                    shape: Some(shape.clone()),
                 })
                 .clone(),
         };
+        let shape = assets.shape.as_ref().map(|shape| shape.id);
 
         let edges = commands
             .spawn((
-                Mesh3d(assets.edges),
+                Mesh3d(assets.display.edges.clone()),
                 MeshMaterial3d(palette.edge.clone()),
                 EdgeLines,
             ))
             .id();
         commands
             .spawn((
-                Mesh3d(assets.full.clone()),
+                Mesh3d(assets.display.full.clone()),
                 MeshMaterial3d(palette.selected.clone()),
                 // 干渉チェックの対象。姿勢と表示/非表示は sync_views がモデルから写す。
                 SimBody {
@@ -321,9 +364,8 @@ fn rebuild_dirty_parts(
                 Visibility::default(),
                 PartView {
                     node: id,
-                    mesh: assets.mesh,
-                    full: assets.full,
-                    coarse: assets.coarse,
+                    shape,
+                    display: assets.display,
                     edges,
                     shown: true,
                     highlighted: false,
@@ -341,9 +383,8 @@ fn short_path(model: &Model, id: NodeId) -> String {
 }
 
 /// 表示用メッシュを GPU に送る形にする
-fn upload(mesh: Arc<PartMesh>, sim: Arc<TriMesh>, meshes: &mut Assets<Mesh>) -> PartAssets {
-    PartAssets {
-        sim,
+fn upload(mesh: Arc<PartMesh>, meshes: &mut Assets<Mesh>) -> DisplayMesh {
+    DisplayMesh {
         full: meshes.add(triangle_mesh(&mesh.positions, &mesh.normals)),
         coarse: mesh
             .coarse
@@ -371,6 +412,131 @@ fn line_mesh(lines: &[Vec<Vec3>]) -> Mesh {
         .collect();
     Mesh::new(PrimitiveTopology::LineList, RenderAssetUsages::RENDER_WORLD)
         .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
+}
+
+// ---------------------------------------------------------------------------
+// 形状の簡略化 (小さな穴とフィレットを消す)
+// ---------------------------------------------------------------------------
+
+type DefeatureTask = Task<Option<(PartMesh, DefeatureStats)>>;
+
+/// 簡略化の計算結果 (形状の id ごと)。表示メニューの状態表示にも使う。
+#[derive(Resource, Default)]
+pub struct Defeaturing {
+    /// 計算中 (条件, タスク)
+    tasks: HashMap<usize, (DefeatureOptions, DefeatureTask)>,
+    /// できた結果 (条件, 簡略化した形, 消したものの数)。消すものが無ければ形は None。
+    done: HashMap<usize, (DefeatureOptions, Option<DisplayMesh>, DefeatureStats)>,
+    /// 表示に反映した条件
+    applied: Option<DefeatureOptions>,
+}
+
+impl Defeaturing {
+    /// まだ計算中の形状の数
+    pub fn pending(&self) -> usize {
+        self.tasks.len()
+    }
+
+    /// いまの条件で消した穴とフィレットの数 (形状ごとに数える)
+    pub fn removed(&self) -> DefeatureStats {
+        let mut total = DefeatureStats::default();
+        for (options, _, stats) in self.done.values() {
+            if Some(*options) == self.applied {
+                total += *stats;
+            }
+        }
+        total
+    }
+}
+
+/// 簡略化がオンなら形状ごとに裏のスレッドで簡略化し、できたものから表示を差し替える。
+/// 条件を変えている間は、新しい結果ができるまで前の結果を表示しておく。
+#[allow(clippy::too_many_arguments)]
+fn defeature_shapes(
+    settings: Res<ViewSettings>,
+    shared: Res<SharedMeshes>,
+    mut work: ResMut<Defeaturing>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut rebuilt: ResMut<ViewsRebuilt>,
+    mut views: Query<&mut PartView>,
+    mut edge_meshes: Query<&mut Mesh3d, (With<EdgeLines>, Without<PartView>)>,
+) {
+    let wanted = settings.defeature_options();
+    let mut changed = rebuilt.0 || wanted != work.applied;
+    work.applied = wanted;
+    let Some(options) = wanted else {
+        work.tasks.clear(); // 落とすと計算も止まる
+        if changed {
+            apply_display(&shared, &work, &mut views, &mut edge_meshes, &mut rebuilt);
+        }
+        return;
+    };
+
+    // 条件が変わった計算はやめ、まだの形状の計算を始める
+    work.tasks.retain(|_, (o, _)| *o == options);
+    for (&id, assets) in &shared.0 {
+        let Some(shape) = assets.shape.as_ref().filter(|s| !s.breps.is_empty()) else {
+            continue;
+        };
+        let up_to_date = work.done.get(&id).is_some_and(|(o, ..)| *o == options);
+        if up_to_date || work.tasks.contains_key(&id) {
+            continue;
+        }
+        let shape = shape.clone();
+        let task = AsyncComputeTaskPool::get()
+            .spawn(async move { defeature_shape(&shape.breps, &options) });
+        work.tasks.insert(id, (options, task));
+    }
+
+    let mut finished = Vec::new();
+    for (&id, (_, task)) in work.tasks.iter_mut() {
+        if let Some(result) = block_on(poll_once(task)) {
+            finished.push((id, result));
+        }
+    }
+    for (id, result) in finished {
+        work.tasks.remove(&id);
+        let (display, stats) = match result {
+            Some((mesh, stats)) => (Some(upload(Arc::new(mesh), &mut meshes)), stats),
+            None => (None, DefeatureStats::default()),
+        };
+        work.done.insert(id, (options, display, stats));
+        changed = true;
+    }
+    if changed {
+        apply_display(&shared, &work, &mut views, &mut edge_meshes, &mut rebuilt);
+    }
+}
+
+/// 部品ごとに、元の形か簡略化した形のどちらを表示するかを決めて差し替える
+fn apply_display(
+    shared: &SharedMeshes,
+    work: &Defeaturing,
+    views: &mut Query<&mut PartView>,
+    edge_meshes: &mut Query<&mut Mesh3d, (With<EdgeLines>, Without<PartView>)>,
+    rebuilt: &mut ViewsRebuilt,
+) {
+    for mut view in views.iter_mut() {
+        let Some(id) = view.shape else {
+            continue;
+        };
+        let simplified = work
+            .applied
+            .and_then(|_| work.done.get(&id))
+            .and_then(|(_, display, _)| display.as_ref());
+        let Some(wanted) = simplified.or_else(|| shared.0.get(&id).map(|a| &a.display)) else {
+            continue;
+        };
+        if view.display.full == wanted.full {
+            continue;
+        }
+        view.display = wanted.clone();
+        if let Ok(mut edges) = edge_meshes.get_mut(view.edges) {
+            edges.0 = wanted.edges.clone();
+        }
+        // 面の強調表示などを新しい形で作り直す (面の番号は変わらない)
+        rebuilt.0 = true;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -574,7 +740,7 @@ fn update_level_of_detail(
     let mut new_stats = RenderStats::default();
     for (view, transform, in_view, mut visibility, mut mesh) in &mut views {
         new_stats.parts += 1;
-        let bounds = view.mesh.bounds;
+        let bounds = view.display.mesh.bounds;
         let diameter = (bounds.max - bounds.min).length() * transform.scale().max_element();
         let center = transform.transform_point(bounds.center());
         let distance = if orthographic {
@@ -586,16 +752,16 @@ fn update_level_of_detail(
 
         let simplify = settings.simplify_small_parts && !view.highlighted;
         let visible = view.shown && !(simplify && pixels < settings.hide_below_px);
-        let coarse = simplify && pixels < settings.coarse_below_px && view.coarse.is_some();
+        let coarse = simplify && pixels < settings.coarse_below_px && view.display.coarse.is_some();
 
         visibility.set_if_neq(if visible {
             Visibility::Inherited
         } else {
             Visibility::Hidden
         });
-        let wanted = match (&view.coarse, coarse) {
+        let wanted = match (&view.display.coarse, coarse) {
             (Some(handle), true) => handle,
-            _ => &view.full,
+            _ => &view.display.full,
         };
         if mesh.0 != *wanted {
             mesh.0 = wanted.clone();
@@ -618,10 +784,15 @@ fn update_level_of_detail(
             new_stats.outside_view += 1;
         } else if coarse {
             new_stats.coarse += 1;
-            new_stats.triangles += view.mesh.coarse.as_ref().map_or(0, |c| c.0.len() / 3);
+            new_stats.triangles += view
+                .display
+                .mesh
+                .coarse
+                .as_ref()
+                .map_or(0, |c| c.0.len() / 3);
         } else {
             new_stats.full += 1;
-            new_stats.triangles += view.mesh.triangle_count();
+            new_stats.triangles += view.display.mesh.triangle_count();
         }
     }
     *stats = new_stats;
@@ -662,7 +833,7 @@ fn update_face_overlay(
         commands.entity(overlay).try_despawn();
     }
     if let Some((part, face, view)) = wanted {
-        let (positions, normals) = view.mesh.face_triangles(face);
+        let (positions, normals) = view.display.mesh.face_triangles(face);
         let overlay = commands
             .spawn((
                 Mesh3d(meshes.add(triangle_mesh(&positions, &normals))),
@@ -802,7 +973,8 @@ pub struct PartHit {
 }
 
 /// 表示中の部品にレイを当てる。部品の外接箱の BVH → 部品内の三角形の BVH の順に調べるので、
-/// 数千部品でも速い。簡略表示中の部品も元の (詳細な) 形状で当たりを調べる。
+/// 数千部品でも速い。画面上で小さくて粗く描いている部品も詳細な形状で当たりを調べる
+/// (穴とフィレットを省略しているときは、省略した形で調べる)。
 #[derive(SystemParam)]
 pub struct PartPicker<'w, 's> {
     views: Query<'w, 's, (Entity, &'static PartView, &'static GlobalTransform)>,
@@ -820,7 +992,7 @@ impl PartPicker<'_, '_> {
         let world_bounds: Vec<Bounds> = parts
             .iter()
             .map(|(_, view, transform)| {
-                let b = view.mesh.bounds;
+                let b = view.display.mesh.bounds;
                 let corners = Aabb {
                     min: b.min.as_dvec3(),
                     max: b.max.as_dvec3(),
@@ -840,11 +1012,11 @@ impl PartPicker<'_, '_> {
         let (index, t) = Bvh::build(&world_bounds).cast(origin, dir, |i, _| {
             let (_, view, transform) = parts[i as usize];
             let (o, d) = local_ray(transform);
-            view.mesh.ray_cast(o, d).map(|(_, t)| t)
+            view.display.mesh.ray_cast(o, d).map(|(_, t)| t)
         })?;
         let (entity, view, transform) = parts[index as usize];
         let (o, d) = local_ray(transform);
-        let (face, _) = view.mesh.ray_cast(o, d)?;
+        let (face, _) = view.display.mesh.ray_cast(o, d)?;
         Some(PartHit {
             entity,
             node: view.node,

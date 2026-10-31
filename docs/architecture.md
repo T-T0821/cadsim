@@ -87,6 +87,7 @@ crates/
 新しく足した機能のうち、すでに層を分けてあるもの:
 
 - `src/result_export/report/` … ユースケース層 (CSV の作成)。Bevy の ECS・egui・ファイルシステムに依存しない。移行時は `usecase/report` へ移す。`src/result_export/plugin.rs` は UI 層。
+- PLC 連携(`src/plc/`)は先に `domain` / `usecase` / `adapter` / UI に分けてあるので、移行時はディレクトリごと core / io へ移せます。
 
 各段の終わりに、この文書の「目標のディレクトリ構成」と実際の構成の差を更新します。
 

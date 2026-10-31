@@ -8,10 +8,9 @@
 use bevy::prelude::*;
 
 use super::chart::TimingChart;
-use super::pose::actuator_poses;
 use super::sensor::SensorKind;
 use super::ui::ChartUiState;
-use super::{ChartSchedule, SensorStates, SimulationPose};
+use super::{SensorStates, SimulationPose, actuator_poses_of};
 
 const ON_COLOR: Color = Color::srgb(0.2, 0.9, 0.3);
 const BEAM_OFF_COLOR: Color = Color::srgb(0.95, 0.25, 0.2);
@@ -23,7 +22,6 @@ const BODY_SIZE: f32 = 8.0;
 pub fn draw_sensors(
     mut gizmos: Gizmos,
     chart: Res<TimingChart>,
-    schedule: Res<ChartSchedule>,
     pose: Res<SimulationPose>,
     states: Res<SensorStates>,
     ui_state: Res<ChartUiState>,
@@ -31,7 +29,7 @@ pub fn draw_sensors(
     if chart.sensors.is_empty() {
         return;
     }
-    let poses = actuator_poses(&chart, &schedule, pose.time);
+    let poses = actuator_poses_of(&chart, &pose);
     for sensor in &chart.sensors {
         let mount = sensor
             .mounted_on
