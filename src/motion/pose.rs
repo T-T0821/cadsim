@@ -95,10 +95,19 @@ fn local_motion(actuator: &Actuator, value: f64) -> RigidPose {
 
 /// 時刻 t における、各アクチュエータの「親の動きも含めた」変換
 pub fn actuator_poses(chart: &TimingChart, schedule: &Schedule, t: f64) -> HashMap<u32, RigidPose> {
+    actuator_poses_from(chart, |a| schedule.value_at(a, t))
+}
+
+/// アクチュエータごとの値 (`value_of`) から、「親の動きも含めた」変換を求める。
+/// 値の出どころは時刻表でも PLC でもよい。
+fn actuator_poses_from(
+    chart: &TimingChart,
+    value_of: impl Fn(&Actuator) -> f64,
+) -> HashMap<u32, RigidPose> {
     let local: HashMap<u32, RigidPose> = chart
         .actuators
         .iter()
-        .map(|a| (a.id, local_motion(a, schedule.value_at(a, t))))
+        .map(|a| (a.id, local_motion(a, value_of(a))))
         .collect();
 
     let mut world = HashMap::new();
@@ -121,7 +130,23 @@ pub fn actuator_poses(chart: &TimingChart, schedule: &Schedule, t: f64) -> HashM
 
 /// 時刻 t における各部品の変換 (動かない部品は含まない)
 pub fn part_poses(chart: &TimingChart, schedule: &Schedule, t: f64) -> HashMap<u32, RigidPose> {
-    let actuator_poses = actuator_poses(chart, schedule, t);
+    parts_moved_by(chart, actuator_poses(chart, schedule, t))
+}
+
+/// アクチュエータの現在値 (id → 値) から各部品の変換を求める。PLC 連携で使う。
+/// `values` にないアクチュエータは原点 (値 0) にあるものとする。
+pub fn part_poses_from_values(
+    chart: &TimingChart,
+    values: &HashMap<u32, f64>,
+) -> HashMap<u32, RigidPose> {
+    let poses = actuator_poses_from(chart, |a| values.get(&a.id).copied().unwrap_or(0.0));
+    parts_moved_by(chart, poses)
+}
+
+fn parts_moved_by(
+    chart: &TimingChart,
+    actuator_poses: HashMap<u32, RigidPose>,
+) -> HashMap<u32, RigidPose> {
     let mut parts = HashMap::new();
     for actuator in &chart.actuators {
         for &part in &actuator.parts {

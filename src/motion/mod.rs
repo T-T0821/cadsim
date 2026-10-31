@@ -27,14 +27,15 @@ use std::collections::HashMap;
 
 use bevy::prelude::*;
 
-pub use chart::{Action, ActuatorKind, Axis, Schedule, Step, TimingChart};
+pub use chart::{Action, Actuator, ActuatorKind, Axis, Schedule, Step, TimingChart};
 #[cfg(test)]
 pub use demo::load_demo;
 pub use export::chart_animation;
-pub use pose::{RigidPose, part_poses};
+pub use pose::{RigidPose, part_poses, part_poses_from_values};
 pub use ui::{MotionUi, show_panel};
 
 use crate::model::{Model, NodeId};
+use crate::plc::plc_active;
 
 pub struct MotionPlugin;
 
@@ -45,9 +46,15 @@ impl Plugin for MotionPlugin {
             .init_resource::<Playback>()
             .init_resource::<SimulationPose>()
             .init_resource::<ui::ChartUiState>()
+            .configure_sets(Update, MotionSet::Drive.in_set(MotionSet::Pose))
             .add_systems(
                 Update,
-                (update_schedule, advance_playback, update_pose)
+                (
+                    update_schedule,
+                    advance_playback,
+                    // PLC 連携中は時刻表ではなく PLC が位置を決める (MotionSet::Drive)
+                    update_pose.run_if(not(plc_active)),
+                )
                     .chain()
                     .in_set(MotionSet::Pose),
             );
@@ -59,6 +66,8 @@ impl Plugin for MotionPlugin {
 #[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum MotionSet {
     Pose,
+    /// 時刻表以外 (PLC 連携) で `SimulationPose` を書くシステム。`Pose` の中で動く。
+    Drive,
 }
 
 /// チャートを時刻に展開したもの。チャートが編集されたときだけ作り直す。
