@@ -18,6 +18,7 @@ on:
     paths:
       - ".github/workflows/release.yml"
       - "packaging/**"
+      - ".cargo/**"
       - "Cargo.toml"
       - "Cargo.lock"
 
@@ -65,22 +66,37 @@ jobs:
       - name: Build
         run: cargo build --release --locked
 
-      - name: Package (.zip)
+      # exe 1つで動くことを確かめる: Windows 標準以外の DLL (VC++ ランタイムなど) に依存していたら失敗させる
+      - name: Check DLL dependencies
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath
+          $dumpbin = Get-ChildItem "$vs\VC\Tools\MSVC" -Recurse -Filter dumpbin.exe | Where-Object { $_.FullName -match 'Hostx64\\x64' } | Select-Object -First 1
+          $deps = & $dumpbin.FullName /dependents "target/release/$env:APP_NAME.exe" | Where-Object { $_ -match '^\s+\S+\.dll\s*$' } | ForEach-Object { $_.Trim() }
+          $deps
+          $bad = $deps | Where-Object { $_ -match '^(vcruntime|msvcp|ucrtbase)' -or $_ -match '^api-ms-win-crt-' }
+          if ($bad) { Write-Error "C ランタイムの DLL に依存しています: $bad"; exit 1 }
+
+      - name: Package (.exe と .zip)
         shell: pwsh
         env:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
-          $dir = "cadsim-v$env:VERSION-windows-x86_64"
-          New-Item -ItemType Directory $dir | Out-Null
-          Copy-Item "target/release/$env:APP_NAME.exe" $dir
-          Copy-Item README.md $dir
-          Compress-Archive -Path $dir -DestinationPath "$dir.zip"
-          "PKG=$dir.zip" | Out-File -FilePath $env:GITHUB_ENV -Append
+          $name = "cadsim-v$env:VERSION-windows-x86_64"
+          # 単体の exe (ダウンロードしてそのままダブルクリックで起動)
+          Copy-Item "target/release/$env:APP_NAME.exe" "$name.exe"
+          # exe と README をまとめた zip
+          New-Item -ItemType Directory $name | Out-Null
+          Copy-Item "target/release/$env:APP_NAME.exe" $name
+          Copy-Item README.md $name
+          Compress-Archive -Path $name -DestinationPath "$name.zip"
 
       - uses: actions/upload-artifact@v4
         with:
           name: windows
-          path: ${{ env.PKG }}
+          path: |
+            cadsim-v*-windows-x86_64.exe
+            cadsim-v*-windows-x86_64.zip
 
   macos:
     name: "macOS (Universal: Apple Silicon + Intel)"
@@ -115,6 +131,11 @@ jobs:
             "target/aarch64-apple-darwin/release/$APP_NAME" \
             "target/x86_64-apple-darwin/release/$APP_NAME"
           sed "s/__VERSION__/${VERSION%-dev}/g" packaging/macos/Info.plist > "$app/Contents/Info.plist"
+          # .app だけで動くことを確かめる: macOS 標準以外の dylib に依存していたら失敗させる
+          otool -L "$app/Contents/MacOS/$APP_NAME"
+          if otool -L "$app/Contents/MacOS/$APP_NAME" | tail -n +2 | grep -vE '^[[:space:]]+(/System/Library/|/usr/lib/)' | grep -v ':$'; then
+            echo "::error::macOS 標準以外のライブラリに依存しています"; exit 1
+          fi
           # 署名なしだと Apple Silicon で起動できないため、アドホック署名だけ付ける
           codesign --force --deep --sign - "$app"
           pkg="cadsim-v$VERSION-macos-universal.zip"

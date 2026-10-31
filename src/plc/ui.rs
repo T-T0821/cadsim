@@ -38,7 +38,12 @@ pub fn plc_window(
         .default_open(false)
         .show(ctx, |ui| {
             ui.horizontal(|ui| {
-                for m in [PlcMode::Off, PlcMode::Simulated, PlcMode::External] {
+                for m in [
+                    PlcMode::Off,
+                    PlcMode::Simulated,
+                    PlcMode::External,
+                    PlcMode::LogReplay,
+                ] {
                     ui.radio_value(&mut mode, m, mode_label(m));
                 }
             });
@@ -56,6 +61,7 @@ pub fn plc_window(
                     ui.label("PLC の出力で動かすときは、上でモードを選んでください。");
                 }
                 PlcMode::Simulated => simulated_controls(ui, &chart, session),
+                PlcMode::LogReplay => log_controls(ui, &chart, session, notice),
                 PlcMode::External => {
                     ui.horizontal(|ui| {
                         ui.label("通信方式");
@@ -96,6 +102,7 @@ fn mode_label(mode: PlcMode) -> &'static str {
         PlcMode::Off => "オフ (チャート再生)",
         PlcMode::Simulated => "内蔵の模擬PLC",
         PlcMode::External => "外部PLC",
+        PlcMode::LogReplay => "ログ再生",
     }
 }
 
@@ -132,6 +139,91 @@ fn simulated_controls(ui: &mut egui::Ui, chart: &TimingChart, plc: &mut PlcSessi
     };
     if !plc.sequencer.running {
         ui.weak("停止中は下の I/O モニタで出力を手動で切り替えられます。");
+    }
+}
+
+fn log_controls(
+    ui: &mut egui::Ui,
+    chart: &TimingChart,
+    plc: &mut PlcSession,
+    notice: &mut Option<String>,
+) {
+    ui.label("実機で記録した PLC の出力 (GX LogViewer などの CSV) を時刻どおりに流し、設備を動かします。");
+    if ui
+        .button("ログ CSV を読み込み…")
+        .on_hover_text("列見出しは I/O 表の「ログ列名」(空なら信号名) と突き合わせます")
+        .clicked()
+        && let Some(path) = rfd::FileDialog::new()
+            .add_filter("CSV", &["csv", "txt"])
+            .pick_file()
+    {
+        *notice = Some(match std::fs::read(&path) {
+            Ok(bytes) => match plc.load_log(&decode_text(&bytes)) {
+                Ok(log) => {
+                    let mut text = format!(
+                        "{} 行・{:.1} 秒・{} 信号を読み込みました。",
+                        log.rows(),
+                        log.duration(),
+                        log.signals()
+                    );
+                    if !log.unused_columns.is_empty() {
+                        text += &format!(" 使わない列: {}。", log.unused_columns.join("、"));
+                    }
+                    text
+                }
+                Err(e) => e,
+            },
+            Err(e) => format!("読み込めませんでした: {e}"),
+        });
+    }
+
+    let mut seek = None;
+    let Some(player) = &mut plc.log else {
+        ui.weak("まだログを読み込んでいません。");
+        return;
+    };
+    ui.horizontal(|ui| {
+        if ui.button("⏮").on_hover_text("先頭へ").clicked() {
+            seek = Some(0.0);
+        }
+        let label = if player.playing {
+            "⏸ 一時停止"
+        } else {
+            "▶ 再生"
+        };
+        if ui.button(label).clicked() {
+            if !player.playing && player.time >= player.log.duration() {
+                seek = Some(0.0);
+            }
+            player.playing = !player.playing;
+        }
+        ui.checkbox(&mut player.looping, "繰り返し");
+        egui::ComboBox::from_id_salt("plc_log_speed")
+            .width(60.0)
+            .selected_text(format!("x{}", player.speed))
+            .show_ui(ui, |ui| {
+                for speed in [0.1, 0.25, 0.5, 1.0, 2.0, 5.0] {
+                    ui.selectable_value(&mut player.speed, speed, format!("x{speed}"));
+                }
+            });
+    });
+    let mut time = player.time;
+    let slider = egui::Slider::new(&mut time, 0.0..=player.log.duration())
+        .suffix(" s")
+        .fixed_decimals(2);
+    if ui.add(slider).changed() {
+        seek = Some(time);
+    }
+    if let Some(t) = seek {
+        plc.seek_log(chart, t);
+    }
+}
+
+/// ファイルの中身を文字列にする。UTF-8 でなければ Shift_JIS (日本語版 Windows のツールが書き出す CSV) とみなす。
+fn decode_text(bytes: &[u8]) -> String {
+    match std::str::from_utf8(bytes) {
+        Ok(text) => text.to_string(),
+        Err(_) => encoding_rs::SHIFT_JIS.decode(bytes).0.into_owned(),
     }
 }
 

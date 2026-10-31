@@ -100,6 +100,7 @@ mod tests {
                 },
             ],
             dwell: 0.5,
+            ..Default::default()
         });
         chart.steps.push(Step {
             comment: "戻り".into(),
@@ -109,6 +110,7 @@ mod tests {
                 duration: 0.4,
             }],
             dwell: 0.0,
+            ..Default::default()
         });
 
         let text = cycle_time_csv(&chart, &chart.schedule());

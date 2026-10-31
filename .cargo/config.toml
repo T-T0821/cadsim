@@ -1,0 +1,9 @@
+# Windows (MSVC) では C ランタイムを実行ファイルに静的リンクする。
+# これで VCRUNTIME140.dll などが入っていない PC でも、exe 1つだけで起動できる。
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+# xz (liblzma) はシステムのものを探さず、ソースからビルドして静的リンクする。
+# macOS の CI では Homebrew の liblzma.dylib に依存してしまい、Homebrew のない Mac で起動できなくなるため。
+[env]
+LZMA_API_STATIC = "1"

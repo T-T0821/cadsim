@@ -33,6 +33,8 @@
 # ラインを検討する
 
 - [タイミングチャートと動作シミュレーション](timing-chart.md)
+- [センサーとインターロック](sensors.md)
+- [コンベアでワークを流し、チャックで掴んで運ぶ](conveyor.md)
 - [工程シミュレーションでスループットを見る](flow.md)
 - [安全機器を置いて止まり方を確かめる](safety.md)
 - [作業者と AGV を動かす](operator-agv.md)
@@ -46,7 +48,7 @@
 
 # 開発中の機能
 
-- [センサー・シーケンサー(PLC)](upcoming/sensors-plc.md)
+- [シーケンサー(PLC)](upcoming/sensors-plc.md)
 - [関節とロボットの動き](upcoming/robot.md)
 - [標準部品ライブラリ](upcoming/parts-library.md)
 

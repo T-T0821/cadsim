@@ -2456,6 +2456,7 @@ dependencies = [
  "bevy_egui",
  "cadsim_core",
  "e57",
+ "encoding_rs",
  "glam 0.33.12",
  "gltf",
  "image",
