@@ -1,16 +1,24 @@
-//! 3D ビュー左下の「平面図」パネル: 下敷きの一覧・配置・縮尺合わせ
+//! 3D ビュー左下の「平面図・点群」パネル: 下敷きの一覧・配置・縮尺合わせと、
+//! 点群の一覧・配置・表示の細かさ・設備との干渉の結果
 
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 
-use super::PlanTool;
+use super::cloud_view::{CloudCheck, CloudDisplay};
+use super::{PlanTool, format_count};
 use crate::camera::ViewportRect;
+use crate::drawing::format_length;
 use crate::model::Model;
+use crate::simulation::SimBody;
 
+#[allow(clippy::too_many_arguments)]
 pub fn site_panel(
     mut contexts: EguiContexts,
     mut model: ResMut<Model>,
     mut tool: ResMut<PlanTool>,
+    mut display: ResMut<CloudDisplay>,
+    mut check: ResMut<CloudCheck>,
+    bodies: Query<(&SimBody, Option<&Name>)>,
     viewport: Res<ViewportRect>,
 ) -> Result {
     if model.site.is_empty() {
@@ -26,7 +34,7 @@ pub fn site_panel(
     let unit = model.unit.clone();
     let model = model.bypass_change_detection();
     let tool = tool.bypass_change_detection();
-    egui::Window::new("平面図")
+    egui::Window::new("平面図・点群")
         .pivot(egui::Align2::LEFT_BOTTOM)
         .default_pos(corner)
         .resizable(false)
@@ -101,8 +109,123 @@ pub fn site_panel(
                 }
                 model.site.remove_underlay(index);
             }
+            if !model.site.clouds.is_empty() {
+                if count > 0 {
+                    ui.separator();
+                }
+                let names = |id: u32| {
+                    bodies
+                        .iter()
+                        .find(|(b, _)| b.id == id)
+                        .and_then(|(_, n)| n.map(|n| n.to_string()))
+                        .unwrap_or_else(|| format!("#{id}"))
+                };
+                clouds_ui(
+                    ui,
+                    model,
+                    display.bypass_change_detection(),
+                    check.bypass_change_detection(),
+                    &unit,
+                    &names,
+                );
+            }
         });
     Ok(())
+}
+
+fn clouds_ui(
+    ui: &mut egui::Ui,
+    model: &mut Model,
+    display: &mut CloudDisplay,
+    check: &mut CloudCheck,
+    unit: &str,
+    names: &dyn Fn(u32) -> String,
+) {
+    let mut remove = None;
+    for (index, placed) in model.site.clouds.iter_mut().enumerate() {
+        ui.push_id(("cloud", index), |ui| {
+            ui.horizontal(|ui| {
+                ui.checkbox(&mut placed.visible, "")
+                    .on_hover_text("表示 / 非表示");
+                ui.strong(&placed.name);
+                if ui.small_button("削除").clicked() {
+                    remove = Some(index);
+                }
+            });
+            ui.weak(format!(
+                "{} 点 → {} 点 (間隔 {} {unit})",
+                format_count(placed.cloud.source_points),
+                format_count(placed.cloud.points.len() as u64),
+                format_length(placed.cloud.voxel),
+            ));
+            egui::Grid::new("cloud").num_columns(2).show(ui, |ui| {
+                ui.label("位置 X / Y / Z");
+                ui.horizontal(|ui| {
+                    for v in &mut placed.offset {
+                        ui.add(egui::DragValue::new(v).speed(10.0));
+                    }
+                });
+                ui.end_row();
+                ui.label("回転");
+                ui.add(
+                    egui::DragValue::new(&mut placed.rotation_deg)
+                        .speed(0.5)
+                        .suffix("°"),
+                );
+                ui.end_row();
+            });
+        });
+    }
+    if let Some(index) = remove {
+        model.site.remove_cloud(index);
+    }
+    ui.horizontal(|ui| {
+        ui.label("表示の細かさ");
+        ui.add(egui::Slider::new(&mut display.detail, 0.25..=4.0).logarithmic(true))
+            .on_hover_text("大きくすると遠くの点まで細かく描く (重くなる)");
+    });
+
+    ui.separator();
+    ui.horizontal(|ui| {
+        ui.strong("点群との干渉");
+        ui.checkbox(&mut check.auto, "自動");
+        if ui.button("今すぐチェック").clicked() {
+            check.request();
+        }
+        if check.running {
+            ui.spinner();
+        }
+    });
+    ui.horizontal(|ui| {
+        ui.label("近接の警告距離");
+        ui.add(
+            egui::DragValue::new(&mut check.warning)
+                .speed(1.0)
+                .range(0.0..=1e7),
+        );
+        ui.label(unit);
+    });
+    if check.hits.is_empty() {
+        ui.weak("点群とぶつかる・近づく部品はありません");
+    }
+    egui::ScrollArea::vertical()
+        .max_height(160.0)
+        .show(ui, |ui| {
+            for (_, hit) in &check.hits {
+                let name = names(hit.body);
+                if hit.inside > 0 {
+                    ui.colored_label(
+                        egui::Color32::from_rgb(240, 60, 60),
+                        format!("干渉  {name}: 内側に {} 点", hit.inside),
+                    );
+                } else if let Some(d) = hit.distance() {
+                    ui.colored_label(
+                        egui::Color32::from_rgb(230, 200, 40),
+                        format!("近接  {name}: {} {unit}", format_length(d)),
+                    );
+                }
+            }
+        });
 }
 
 fn calibration_ui(

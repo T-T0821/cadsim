@@ -153,7 +153,7 @@ struct PlyVertex {
 
 fn read_ply(mut reader: impl BufRead, push: &mut Sink) -> Result<(), String> {
     let mut line = String::new();
-    let mut read_line = |reader: &mut dyn BufRead, line: &mut String| -> Result<(), String> {
+    let read_line = |reader: &mut dyn BufRead, line: &mut String| -> Result<(), String> {
         line.clear();
         let n = reader.read_line(line).map_err(|e| e.to_string())?;
         if n == 0 {

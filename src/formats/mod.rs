@@ -1,12 +1,14 @@
 //! ファイル形式の読み書き (アダプター層)
 //!
-//! 平面図 (DXF / PDF / 画像) の読み込みと、図面 (DXF) の書き出し。
+//! 平面図 (DXF / PDF / 画像)・点群 (PLY / LAS / E57) の読み込みと、
+//! 図面 (DXF / PDF)・部品表 (CSV / Excel) の書き出し。
 //! Bevy にも egui にも依存しない。
 
 pub mod bom_out;
 pub mod drawing_out;
 pub mod dxf;
 pub mod pdf_plan;
+pub mod pointcloud_read;
 pub mod site_record;
 
 use std::path::Path;

@@ -107,7 +107,6 @@ impl Decimator {
         let mut cloud = PointCloud {
             points,
             colors,
-            center,
             source_points: self.seen,
             voxel: self.voxel,
             tiles: Vec::new(),
@@ -150,11 +149,9 @@ const POINTS_PER_TILE: usize = 60_000;
 pub const LOD_LEVELS: usize = 4;
 
 pub struct PointCloud {
-    /// `center` から見た位置 (f32 で足りるよう、真ん中を原点にしてある)
+    /// 読み込んだ座標の真ん中から見た位置 (測量座標のように大きな値でも f32 で足りるように)
     pub points: Vec<Vec3>,
     pub colors: Option<Vec<[u8; 3]>>,
-    /// 点群の真ん中 (読み込んだ座標をモデルの単位・Y 上にしたもの)
-    pub center: DVec3,
     /// 間引く前の点の数
     pub source_points: u64,
     /// 間引きに使ったボクセルの一辺
@@ -319,7 +316,7 @@ impl PlacedCloud {
         }
     }
 
-    /// 点群の座標系 → ワールド
+    /// 点群の座標系 (真ん中が原点) → ワールド
     pub fn to_world(&self) -> DMat4 {
         DMat4::from_translation(DVec3::from(self.offset))
             * DMat4::from_rotation_y(self.rotation_deg.to_radians())
@@ -368,7 +365,7 @@ pub fn check_body(
             if i & 2 == 0 { world_box.min.y } else { world_box.max.y },
             if i & 4 == 0 { world_box.min.z } else { world_box.max.z },
         );
-        (to_cloud.transform_point3(p) - cloud.center).as_vec3()
+        to_cloud.transform_point3(p).as_vec3()
     });
     let (lo, hi) = corners.fold(
         (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)),
@@ -387,7 +384,7 @@ pub fn check_body(
     };
     let mut best = warning;
     for &i in candidates.iter().step_by(stride) {
-        let local = cloud.center + cloud.points[i as usize].as_dvec3();
+        let local = cloud.points[i as usize].as_dvec3();
         let world = to_world.transform_point3(local);
         if !aabb_contains(&world_box, world) {
             continue;

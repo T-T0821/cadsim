@@ -1,8 +1,10 @@
-//! 現場のデータ: 床に敷く平面図 (DXF / PDF / 画像) と縮尺合わせ
+//! 現場のデータ: 床に敷く平面図 (DXF / PDF / 画像) と縮尺合わせ、計測した点群 (PLY / LAS / E57)
 //!
 //! | ファイル | 役割 |
 //! | --- | --- |
 //! | `underlay.rs` | 下敷きの配置と縮尺合わせの計算 (ドメイン) |
+//! | `pointcloud.rs` | 点群の間引き・LOD・設備との干渉と距離 (ドメイン) |
+//! | `cloud_view.rs` | 点群の 3D 表示 (LOD) と、干渉チェックの実行・表示 |
 //! | `model.rs` | プロジェクトに属する現場データの入れ物 (ドメイン) |
 //! | `view.rs` | 下敷きの 3D 表示 |
 //! | `panel.rs` | 「平面図」パネル |
@@ -11,7 +13,9 @@
 //! ここは Bevy のシステムで「入力を集める → ドメインを呼ぶ → 表示に写す」だけをする。
 
 pub mod model;
+mod cloud_view;
 mod panel;
+pub mod pointcloud;
 pub mod underlay;
 mod view;
 
@@ -28,8 +32,10 @@ use bevy_egui::EguiPrimaryContextPass;
 
 use crate::camera::{CameraRequest, ViewportRect, alt_pressed, pointer_in_3d_view};
 use crate::file_io::{ImportJobs, file_name};
+use crate::formats::pointcloud_read::{default_settings, is_cloud_file, read_cloud};
 use crate::formats::read_plan_file;
 use crate::model::Model;
+use pointcloud::{CloudSettings, PlacedCloud, PointCloud};
 use underlay::{PlanContent, Underlay, unit_in_mm};
 
 pub struct SitePlugin;
@@ -38,6 +44,8 @@ impl Plugin for SitePlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SiteJobs>()
             .init_resource::<PlanTool>()
+            .init_resource::<cloud_view::CloudDisplay>()
+            .init_resource::<cloud_view::CloudCheck>()
             .add_systems(
                 Update,
                 (
@@ -46,6 +54,9 @@ impl Plugin for SitePlugin {
                     pick_plan_point.run_if(pointer_in_3d_view).run_if(plan_tool_on),
                     view::sync_underlays,
                     view::draw_plan_tool,
+                    cloud_view::sync_clouds,
+                    cloud_view::run_cloud_check,
+                    cloud_view::draw_cloud_hits,
                 )
                     .chain(),
             )
@@ -53,13 +64,19 @@ impl Plugin for SitePlugin {
     }
 }
 
-/// 読み込み中の平面図 (ファイル名, 読み込み元, 中身 or エラー文)
-type PlanResult = (String, PathBuf, Result<PlanContent, String>);
+/// 別スレッドで読んだもの
+enum SiteLoaded {
+    Plan(PlanContent),
+    Cloud(PointCloud, CloudSettings),
+}
+
+/// 読み込みの結果 (ファイル名, 読み込み元, 中身 or エラー文)
+type SiteResult = (String, PathBuf, Result<SiteLoaded, String>);
 
 #[derive(Resource)]
 struct SiteJobs {
-    sender: Sender<PlanResult>,
-    receiver: Mutex<Receiver<PlanResult>>,
+    sender: Sender<SiteResult>,
+    receiver: Mutex<Receiver<SiteResult>>,
 }
 
 impl Default for SiteJobs {
@@ -72,14 +89,28 @@ impl Default for SiteJobs {
     }
 }
 
-/// 「開く」で選ばれた平面図を別スレッドで読む
-fn start_loading(mut jobs: ResMut<ImportJobs>, site_jobs: Res<SiteJobs>) {
+/// 「開く」で選ばれた平面図・点群を別スレッドで読む
+fn start_loading(mut jobs: ResMut<ImportJobs>, site_jobs: Res<SiteJobs>, model: Res<Model>) {
+    let model_mm = unit_in_mm(&model.unit);
     for path in std::mem::take(&mut jobs.site_files) {
         let name = file_name(&path);
         jobs.loading.push(name.clone());
         let sender = site_jobs.sender.clone();
+        let mut settings = default_settings(&path, model_mm);
+        // PLY は単位を持たないので、OBJ / STL と同じ単位の設定で読む
+        if path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("ply"))
+        {
+            settings.unit_mm = jobs.units.meters_per_unit * 1000.0;
+            settings.z_up = jobs.units.z_up;
+        }
         std::thread::spawn(move || {
-            let result = read_plan_file(&path);
+            let result = if is_cloud_file(&path) {
+                read_cloud(&path, &settings, model_mm).map(|c| SiteLoaded::Cloud(c, settings))
+            } else {
+                read_plan_file(&path).map(SiteLoaded::Plan)
+            };
             let _ = sender.send((name, path, result));
         });
     }
@@ -92,47 +123,77 @@ fn receive_loaded(
     mut panel: ResMut<PlanTool>,
     mut camera: MessageWriter<CameraRequest>,
 ) {
-    let finished: Vec<PlanResult> = match site_jobs.receiver.lock() {
+    let finished: Vec<SiteResult> = match site_jobs.receiver.lock() {
         Ok(receiver) => receiver.try_iter().collect(),
         Err(_) => return,
     };
     for (name, path, result) in finished {
         jobs.loading.retain(|n| *n != name);
-        match result {
-            Ok(content) => {
-                let known_scale = content.unit_mm.is_some();
-                let lines = content.segment_count();
-                let model_mm = unit_in_mm(&model.unit);
-                let mut underlay = Underlay::new(name.clone(), path, content, model_mm);
-                // 単位の分からない画像は、幅が 10 m になる大きさで敷いておく
-                if !known_scale
-                    && let Some((min, max)) = underlay.content.bounds()
-                    && max.x > min.x
-                {
-                    underlay.scale = 10_000.0 / model_mm / (max.x - min.x);
-                }
-                // 図面の左下をワールドの原点に合わせる
-                if let Some((min, _)) = underlay.content.bounds() {
-                    underlay.place(min, DVec3::ZERO);
-                }
-                model.site.add_underlay(underlay);
-                panel.open = true;
-                camera.write(CameraRequest::FitAll);
-                let mut message = format!("{name} を平面図として敷きました");
-                if lines > 0 {
-                    message += &format!(" (線 {lines} 本)");
-                }
-                if !known_scale {
-                    message += "。「平面図」パネルの「縮尺合わせ」で実寸に合わせてください";
-                }
-                jobs.messages.push(message);
+        let message = match result {
+            Ok(SiteLoaded::Plan(content)) => add_plan(&mut model, name, path, content),
+            Ok(SiteLoaded::Cloud(cloud, settings)) => {
+                let kept = cloud.points.len();
+                let seen = cloud.source_points;
+                let spacing = cloud.voxel;
+                model
+                    .site
+                    .add_cloud(PlacedCloud::new(name.clone(), path, cloud, settings));
+                format!(
+                    "{name} を点群として読み込みました ({} 点 → {} 点に間引き、間隔 {} {})",
+                    format_count(seen),
+                    format_count(kept as u64),
+                    crate::drawing::format_length(spacing),
+                    model.unit
+                )
             }
             Err(err) => {
                 error!("{name}: {err}");
                 jobs.messages.push(format!("{name}: {err}"));
+                continue;
             }
-        }
+        };
+        panel.open = true;
+        camera.write(CameraRequest::FitAll);
+        jobs.messages.push(message);
     }
+}
+
+/// 点の数を「1234万」のように短く書く
+pub fn format_count(n: u64) -> String {
+    if n >= 100_000_000 {
+        format!("{:.1}億", n as f64 / 1e8)
+    } else if n >= 10_000 {
+        format!("{}万", n / 10_000)
+    } else {
+        n.to_string()
+    }
+}
+
+fn add_plan(model: &mut Model, name: String, path: PathBuf, content: PlanContent) -> String {
+    let known_scale = content.unit_mm.is_some();
+    let lines = content.segment_count();
+    let model_mm = unit_in_mm(&model.unit);
+    let mut underlay = Underlay::new(name.clone(), path, content, model_mm);
+    // 単位の分からない画像は、幅が 10 m になる大きさで敷いておく
+    if !known_scale
+        && let Some((min, max)) = underlay.content.bounds()
+        && max.x > min.x
+    {
+        underlay.scale = 10_000.0 / model_mm / (max.x - min.x);
+    }
+    // 図面の左下をワールドの原点に合わせる
+    if let Some((min, _)) = underlay.content.bounds() {
+        underlay.place(min, DVec3::ZERO);
+    }
+    model.site.add_underlay(underlay);
+    let mut message = format!("{name} を平面図として敷きました");
+    if lines > 0 {
+        message += &format!(" (線 {lines} 本)");
+    }
+    if !known_scale {
+        message += "。「平面図・点群」パネルの「縮尺合わせ」で実寸に合わせてください";
+    }
+    message
 }
 
 /// 「平面図」パネルの状態と、縮尺合わせの道具

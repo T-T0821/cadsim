@@ -20,6 +20,7 @@ use crate::interchange::{
     self, FORMATS, Scene, UnitOptions,
     model_io::{model_to_scene, scene_to_import},
 };
+use crate::formats::pointcloud_read::{CLOUD_EXTENSIONS, is_cloud_file};
 use crate::formats::{PLAN_EXTENSIONS, is_plan_file};
 use crate::model::{Model, NodeId, Selection, StepSource};
 use crate::project::{ProjectAction, ProjectState, is_project_file};
@@ -88,7 +89,7 @@ pub struct ImportJobs {
     export_requested: Option<ExportScope>,
     /// OBJ / STL の単位と上方向 (読み込みと書き出しの両方で使う)
     pub units: UnitOptions,
-    /// 平面図として開くファイル (site が受け取って読む)
+    /// 平面図・点群として開くファイル (site が受け取って読む)
     pub site_files: Vec<PathBuf>,
 }
 
@@ -194,7 +195,7 @@ fn open_command_line_file(mut jobs: ResMut<ImportJobs>, mut project: ResMut<Proj
 fn open_any(path: PathBuf, jobs: &mut ImportJobs, project: &mut ProjectState) {
     if is_project_file(&path) {
         project.request(ProjectAction::OpenPath(path));
-    } else if is_plan_file(&path) {
+    } else if is_plan_file(&path) || is_cloud_file(&path) {
         jobs.site_files.push(path);
     } else {
         jobs.open_path(path);
@@ -218,6 +219,7 @@ fn open_dialog_if_requested(
             .flat_map(|f| f.extensions.iter().copied()),
     );
     all.extend(PLAN_EXTENSIONS);
+    all.extend(CLOUD_EXTENSIONS);
     let mut dialog = rfd::FileDialog::new()
         .set_title("開く")
         .add_filter("対応しているすべての形式", &with_upper_case(&all))
@@ -229,6 +231,10 @@ fn open_dialog_if_requested(
     dialog = dialog.add_filter(
         "平面図 (DXF / PDF / 画像)",
         &with_upper_case(PLAN_EXTENSIONS),
+    );
+    dialog = dialog.add_filter(
+        "点群 (PLY / LAS / E57)",
+        &with_upper_case(CLOUD_EXTENSIONS),
     );
     let picked = dialog.add_filter("すべてのファイル", &["*"]).pick_file();
     if let Some(path) = picked {

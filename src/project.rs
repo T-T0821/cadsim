@@ -31,7 +31,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::annotation::{AnnotationRecord, Annotations, to_records};
 use crate::camera::CameraRequest;
-use crate::formats::site_record::{UnderlayRecord, load_site};
+use crate::formats::site_record::{CloudRecord, UnderlayRecord, load_site};
 use crate::file_io::{ImportJobs, file_name, load_source, receive_imports, source_name};
 use crate::history::History;
 use crate::interchange::UnitOptions;
@@ -94,6 +94,9 @@ pub struct ProjectFile {
     /// 床に敷いた平面図
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub underlays: Vec<UnderlayRecord>,
+    /// 読み込んだ点群
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub point_clouds: Vec<CloudRecord>,
 }
 
 fn default_unit() -> String {
@@ -174,6 +177,7 @@ impl ProjectFile {
             nodes,
             annotations: Vec::new(),
             underlays: crate::formats::site_record::to_records(&model.site, base_dir),
+            point_clouds: crate::formats::site_record::cloud_records(&model.site, base_dir),
         }
     }
 
@@ -437,7 +441,13 @@ impl LoadedProject {
                 }
             })
             .collect();
-        let site = load_site(&file.underlays, base_dir, &mut warnings);
+        let site = load_site(
+            &file.underlays,
+            &file.point_clouds,
+            base_dir,
+            crate::site::underlay::unit_in_mm(&file.unit),
+            &mut warnings,
+        );
         Self {
             file,
             sources,
