@@ -61,14 +61,16 @@ crates/
 │       │                 staffing (作業者の名簿・スキル・シフト・人数の比較),
 │       │                 safety (安全機器・検知・安全距離), floor (作業者・AGV・床の幾何),
 │       │                 line (工程と AGV の受け渡し・PLC の信号表・ワークの位置),
-│       │                 line_draft (言葉で組むラインの下書き・整え方・並べ方)
+│       │                 line_draft (言葉で組むラインの下書き・整え方・並べ方),
+│       │                 ui_check (画面の自動確認の手順書・進め方・部品の探し方・画像の比べ方)
 │       └── usecase/      document (開く・保存・取り込み・書き出し), edit, history, compose_line (言葉でラインを組む),
 │                         report (シミュレーション結果の CSV), llm (生成 AI のポート LlmClient), help (使い方を AI に聞く), script (部品スクリプトの実行と ScriptHost ポート),
 │                         ports (SceneReader / SceneWriter / ProjectStore などのトレイト)
 └── cadsim_io/            3. アダプター (Bevy なし)
     └── src/              step, interchange (gltf / obj / stl / usd), project_file (JSON),
                           modbus, rtde (UR の関節角度の受信), video, xlsx (工程シミュレーションの結果), rhai (部品スクリプトのエンジン),
-                          claude (生成 AI の Claude API), line_draft_json (生成 AI とやり取りするラインの下書きの JSON)
+                          claude (生成 AI の Claude API), line_draft_json (生成 AI とやり取りするラインの下書きの JSON),
+                          ui_check (画面の自動確認の PNG・結果の JSON・報告書の HTML)
 ```
 
 ルートの `Cargo.toml` の `default-members` に全 crate を並べているので、引数なしの `cargo test` / `cargo clippy` でワークスペース全体を確かめられます。
@@ -118,6 +120,7 @@ crates/
 | 生成 AI の呼び出し | `usecase::llm`(ポート `LlmClient`) | `cadsim_io::claude`(Claude API) | `assistant/`(`settings_file.rs`・`job.rs` は Bevy 非依存) |
 | チャート・ラダーの自動生成 | —(`TimingChart` がアプリ側なので `sequence_gen/{spec, ladder, log_events, usecase}.rs` はアプリ側。Bevy 非依存で、チャートと一緒に手順 2 で core へ) | `sequence_gen/json.rs`(下書き ⇔ JSON) | `sequence_gen/{mod, ui}.rs` |
 | ライン連携 | `line::{coupler, signals, workpieces}`、`flow::sim` の連携の口 | — | `line/`(`stepper.rs` は Bevy 非依存。AGV のシミュレーションと一緒に手順 2 で core へ) |
+| 画面での動作確認の自動化 | `ui_check::{scenario, runner, widget, compare, report}` | `cadsim_io::ui_check`(PNG・JSON・HTML) | `ui_check/mod.rs`(入力を流して撮る Bevy のシステム)、`ui_check/suite.rs`(手順書ごとにアプリを起動し直す。Bevy なし) |
 | 言葉でラインを組む | `line_draft::{model, check, layout, rules}`(ドメイン)、`usecase::compose_line`(生成 AI のポート `LineDraftAi`) | `cadsim_io::line_draft_json`(AI への指示と返答の JSON) | `line_compose/`(`apply.rs` は Bevy 非依存。`TimingChart` が core に移ったら一緒に移す) |
 | 最初の5分 (ようこそ画面・章立てのチュートリアル) | `gamify`(章・ミッションの手順・使う道具 `workspace::Tool`・とばす・判定) | `cadsim_io::preferences_file`(とばしたミッション・ようこそ画面を閉じたか) | `ui/tutorial.rs`(ようこそ画面・カードの手順・矢印)、`ui/playful.rs`、起動時のデモラインは `project.rs` の `ProjectAction::OpenDemoLine` |
 

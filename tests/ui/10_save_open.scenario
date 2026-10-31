@@ -1,0 +1,33 @@
+# プロジェクトの保存と読み込み、glTF の取り込み
+# 自動確認では保存ダイアログを出さず target/ui-check/10_save_open/saved/project.cadsim に書く
+wait_loaded
+wait 30
+click "サンプル装置"             # 万力の代わりにサンプル装置 (ガントリーとコンベア) になる
+expect "ガントリー梁"
+click "作成"
+click "箱を追加"
+wait_loaded
+key ctrl+s
+wait_loaded
+screenshot 01_saved
+
+# 新規にして空になったことを確かめる
+key ctrl+n
+wait_loaded
+wait 30
+expect_not "ガントリー梁"
+screenshot 02_new
+
+# 保存したものを開き直す
+open saved/project.cadsim
+wait_loaded
+wait 60
+expect "ガントリー梁"
+screenshot 03_reopened
+
+# アニメーション付きの glTF を取り込む
+open assets/sample_robot.glb
+wait_loaded
+wait 60
+expect "ロボット"
+screenshot 04_gltf

@@ -92,8 +92,9 @@ fn interference_section(
     let contact = count(|s| matches!(s, PairStatus::Contact));
     let near = count(|s| matches!(s, PairStatus::Near { .. }));
     ui.label(format!(
-        "{} 部品を {:.2} ms でチェック",
-        report.body_count, report.elapsed_ms
+        "{} 部品を {} ms でチェック",
+        report.body_count,
+        crate::ui_check::measured(report.elapsed_ms, 2)
     ));
     ui.horizontal(|ui| {
         ui.colored_label(color(INTERFERENCE_COLOR), format!("干渉 {interfering}"));

@@ -1,0 +1,16 @@
+# タイミングチャート: サンプル装置を読み込んで再生する
+wait_loaded
+wait 60
+click "サンプル装置"
+wait 30
+screenshot 01_sample_chart
+
+click "▶ 再生"
+wait 60
+screenshot 02_playing_1s
+wait 60
+screenshot 03_playing_2s
+
+click "⏮ 先頭へ"
+wait 10
+screenshot 04_rewound

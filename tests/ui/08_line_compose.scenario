@@ -1,0 +1,18 @@
+# 言葉でラインを組む: 文から下書きを作ってモデルに置く (AI なし、キーワードから作る)
+wait_loaded
+wait 30
+click "ライン"
+click "言葉でラインを組む…"
+expect "下書きを作る"
+screenshot 01_window
+
+click "コンベア1本、センサー1個、ストッパで外観検査"
+click "下書きを作る"
+wait_loaded
+wait 10
+screenshot 02_draft
+
+click "モデルとチャートに置く"
+wait_loaded
+wait 60
+screenshot 03_placed

@@ -813,6 +813,13 @@ cargo clippy --all-targets --locked -- -D warnings
 cargo test --locked
 ```
 
+画面に関わる変更をしたら、画面での動作確認も流してください。主な操作 (部品の選択、表示の切り替え、タイミングチャートの再生、工程シミュレーション、部品ライブラリ、PLC 連携、動画の書き出し、言葉でラインを組む、保存と読み込みなど) を自動で操作して画面を撮り、前に撮った基準画像と見比べます。結果は `target/ui-check/index.html` で見られます。
+
+```sh
+cargo ui-check                             # Windows / Mac / 画面のある Linux
+tools/ui_check.sh                          # 画面のない Linux (仮想画面で動かす)
+```
+
 | 資料 | 内容 |
 | --- | --- |
 | [docs/architecture.md](docs/architecture.md) | コードのレイヤー分けと依存の向き |
@@ -842,6 +849,7 @@ cargo test --locked
 | [docs/video-export.md](docs/video-export.md) | 動画書き出しのしくみ |
 | [docs/demo-line.md](docs/demo-line.md) | デモライン(`samples/demo_line.cadsim`)の中身と、作り直すスクリプトの使い方 |
 | [docs/release.md](docs/release.md) | Windows / Mac 向けの配布パッケージと Release の作り方 |
+| [docs/ui-check.md](docs/ui-check.md) | 画面での動作確認の自動化(手順書の書き方、基準画像の更新、結果の見かた) |
 
 ## ライセンス
 

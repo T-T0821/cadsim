@@ -1,0 +1,17 @@
+# 部品ライブラリ: 標準部品 (エアシリンダ) を置き、I/O 一覧を出す
+wait_loaded
+wait 30
+click "部品ライブラリ"            # たたまれた窓を開く
+expect "エアシリンダ"
+screenshot 01_library
+
+# 「+」で注視点に置く (一番上の + がエアシリンダ)
+click "+" 1
+wait_loaded
+wait 30
+expect "選択: "
+screenshot 02_cylinder_placed
+
+click "I/O 一覧を表示"
+wait 10
+screenshot 03_io_list

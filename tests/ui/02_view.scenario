@@ -1,0 +1,24 @@
+# 表示: 標準ビュー・平行投影・半透明・3D ビューのクリックで選ぶ
+wait_loaded
+wait 90
+
+click "正面"
+wait 60
+screenshot 01_front
+
+click "平行"
+wait 30
+screenshot 02_ortho
+
+click "等角"
+click "透視"
+wait 60
+click "半透明"
+screenshot 03_ghost
+click "半透明"
+
+# 3D ビューの真ん中あたりの部品をクリックして選ぶ
+click_at 780 380
+expect "選択: "
+screenshot 04_picked_in_view
+key esc

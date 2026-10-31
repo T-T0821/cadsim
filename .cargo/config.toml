@@ -7,3 +7,8 @@ rustflags = ["-C", "target-feature=+crt-static"]
 # macOS の CI では Homebrew の liblzma.dylib に依存してしまい、Homebrew のない Mac で起動できなくなるため。
 [env]
 LZMA_API_STATIC = "1"
+
+# 画面での動作確認: `cargo ui-check` (後ろに --only 名前 / --update などを付けられる。docs/ui-check.md)
+# 開発ビルドで動かす。Windows のリリースビルドはコンソールを持たず、結果の要約が端末に出ないため
+[alias]
+ui-check = ["run", "--locked", "--", "--ui-check"]

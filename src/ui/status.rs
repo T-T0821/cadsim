@@ -27,7 +27,8 @@ pub fn show(root: &mut egui::Ui, state: &mut UiState) {
                     .get(&FrameTimeDiagnosticsPlugin::FPS)
                     .and_then(|d| d.smoothed());
                 if let Some(fps) = fps {
-                    ui.monospace(format!("{fps:5.1} FPS"));
+                    let fps = crate::ui_check::measured(fps, 1);
+                    ui.monospace(format!("{fps:>5} FPS"));
                 }
                 let stats = *state.render_stats;
                 if stats.parts > 0 {

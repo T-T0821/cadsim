@@ -565,6 +565,10 @@ fn draw_toast(ctx: &egui::Context, view: egui::Rect, now: f64, state: &mut Playf
 }
 
 fn draw_confetti(ctx: &egui::Context, view: egui::Rect, now: f64, state: &mut PlayfulUi) {
+    // 画面の自動確認では描かない。続けて達成したときに降り始めが入れ替わり、写真が毎回ずれやすいため
+    if crate::ui_check::running() {
+        state.confetti.clear();
+    }
     if state.confetti.is_empty() {
         return;
     }

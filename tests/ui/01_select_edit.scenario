@@ -1,0 +1,24 @@
+# 起動・部品の選択・ギズモ・削除と元に戻す
+# 起動するとサンプルのアセンブリ (万力) が開く
+wait_loaded
+wait 90
+expect "SampleVise"
+screenshot 01_startup
+
+# ツリーの行をクリックして選ぶ
+click "⚙ BasePlate_1"
+expect "選択: "
+screenshot 02_selected
+
+# ギズモを回転に切り替える
+key e
+screenshot 03_rotate_gizmo
+
+# 削除して、元に戻す
+key w
+key delete
+expect_not "⚙ BasePlate_1"
+screenshot 04_deleted
+key ctrl+z
+expect "⚙ BasePlate_1"
+screenshot 05_undo

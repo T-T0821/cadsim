@@ -1,0 +1,14 @@
+# 作成: 箱と円柱を追加する
+wait_loaded
+wait 30
+click "作成"
+click "箱を追加"
+wait_loaded
+wait 30
+expect "選択: "
+screenshot 01_box
+
+click "作成"
+click "円柱を追加…"
+wait 10
+screenshot 02_cylinder_dialog
