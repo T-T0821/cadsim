@@ -4,6 +4,7 @@
 //! - `pose`: 時刻 t における部品の位置・姿勢 (f64 の剛体変換)
 //! - `ui`: タイミングチャートの編集画面と再生コントロール
 //! - `demo`: 動作確認用のサンプル装置 (ピック & プレース)
+//! - `export`: 1サイクルの動きを書き出し用のアニメーション (glTF / USD) にする
 //!
 //! 設計データ (Model) は書き換えず、再生中の動きは [`SimulationPose`] に出す。
 //! 3D 表示 (viewport.rs) は部品の配置にこの動きを重ねて描く。
@@ -18,6 +19,7 @@
 
 mod chart;
 mod demo;
+mod export;
 mod pose;
 mod ui;
 
@@ -26,6 +28,9 @@ use std::collections::HashMap;
 use bevy::prelude::*;
 
 pub use chart::{Schedule, TimingChart};
+#[cfg(test)]
+pub use demo::load_demo;
+pub use export::chart_animation;
 pub use pose::RigidPose;
 pub use ui::{MotionUi, show_panel};
 
