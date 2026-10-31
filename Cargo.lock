@@ -2270,20 +2270,17 @@ dependencies = [
  "bevy",
  "bevy_egui",
  "cadsim_core",
+ "cadsim_io",
  "e57",
  "glam 0.33.12",
- "gltf",
  "image",
  "krilla",
  "lopdf",
- "openusd",
  "rfd",
  "rust_xlsxwriter",
  "ruststep",
  "serde",
  "serde_json",
- "stl_io",
- "tobj",
  "transform-gizmo",
  "truck-meshalgo",
  "truck-modeling",
@@ -2297,6 +2294,18 @@ name = "cadsim_core"
 version = "0.1.0"
 dependencies = [
  "glam 0.33.12",
+]
+
+[[package]]
+name = "cadsim_io"
+version = "0.1.0"
+dependencies = [
+ "glam 0.33.12",
+ "gltf",
+ "openusd",
+ "serde_json",
+ "stl_io",
+ "tobj",
 ]
 
 [[package]]

@@ -39,17 +39,20 @@ crates/cadsim_core/   Bevy に依存しないドメイン (cargo test -p cadsim_
 ├── drawing.rs       2D 図面: 投影・かくれ線・シルエット・寸法・図枠 (docs/drawing.md)
 ├── site/            平面図の下敷きの配置と縮尺合わせ、点群の間引き・LOD・干渉 (docs/site.md)
 └── flow/            工程モデル (model)、離散事象シミュレーションと集計 (sim)、状態・稼働率の色 (palette)
+crates/cadsim_io/     Bevy に依存しないアダプター (cargo test -p cadsim_io で単体テスト)
+└── interchange/     glTF / OBJ / STL などの読み書き (形式に依存しない中間表現 Scene を経由)
+    ├── mod.rs        Scene・Format・対応形式の一覧 FORMATS
+    ├── gltf.rs / obj.rs / stl.rs
+    ├── usd.rs        OpenUSD (.usda / .usdc / .usdz)
+    ├── web_viewer.rs Web ビューア (.html、GLB を埋め込んだ1ファイル。docs/web-viewer.md)
+    └── samples.rs    動作確認用のサンプルシーン (ロボット)
 src/                  アプリ本体 (Bevy + egui)
 ├── main.rs          アプリの組み立て (プラグインを並べるだけ)
 ├── model.rs         設計データ: アセンブリの木 (f64) と選択状態
 ├── step_import.rs   STEP → アセンブリの木と B-rep (Bevy に依存しない)
 ├── file_io.rs       ダイアログ・ドラッグ&ドロップ・別スレッドでの読み込み・書き出し
-├── interchange/     glTF / OBJ / STL などの読み書き (形式に依存しない中間表現 Scene を経由)
-│   ├── mod.rs        Scene・Format・対応形式の一覧 FORMATS
+├── interchange/     cadsim_io::interchange を再公開し、モデルとの変換だけを持つ
 │   ├── model_io.rs   Scene ⇔ Model の変換 (単位の換算、メッシュの稜線)
-│   ├── gltf.rs / obj.rs / stl.rs
-│   ├── usd.rs        OpenUSD (.usda / .usdc / .usdz)
-│   ├── web_viewer.rs Web ビューア (.html、GLB を埋め込んだ1ファイル。docs/web-viewer.md)
 │   └── samples.rs    サンプルファイルを作るテスト (手で実行)
 ├── animation.rs     取り込んだアニメーションの再生
 ├── project.rs       プロジェクトファイル (.cadsim) の保存と読み込み
@@ -138,7 +141,7 @@ src/                  アプリ本体 (Bevy + egui)
 
 書き出した glb は Khronos の glTF Validator でエラー・警告なしを確認しています。
 
-**新しい形式の足し方**: `src/interchange/xxx.rs` に `import(&Path, &UnitOptions) -> Result<Scene, String>` と `export(&Scene, &Path, &UnitOptions) -> Result<(), String>` を書き、`interchange/mod.rs` の `FORMATS` に1行足します。開くダイアログ・ドラッグ&ドロップ・書き出しメニューに自動で出ます。
+**新しい形式の足し方**: `crates/cadsim_io/src/interchange/xxx.rs` に `import(&Path, &UnitOptions) -> Result<Scene, String>` と `export(&Scene, &Path, &UnitOptions) -> Result<(), String>` を書き、`interchange/mod.rs` の `FORMATS` に1行足します。開くダイアログ・ドラッグ&ドロップ・書き出しメニューに自動で出ます。
 
 | glTF のアニメーションを再生(干渉チェックも追従) | OBJ に書き出したサンプルを取り込み直したところ |
 | --- | --- |
@@ -150,7 +153,7 @@ src/                  アプリ本体 (Bevy + egui)
 
 いまの制限: テクスチャ・スキン・モーフターゲットは読み飛ばします。プロジェクトに保存する配置は移動と回転だけなので、glTF ノードの拡大縮小は保存すると失われます。プロジェクトを開き直すとき OBJ / STL は既定の単位(mm・Y 軸が上)で読み直します。
 
-### OpenUSD の読み書き(`interchange/usd.rs`)
+### OpenUSD の読み書き(`cadsim_io/src/interchange/usd.rs`)
 
 純 Rust の [`openusd`](https://crates.io/crates/openusd) crate を使い、C++ の USD ライブラリには依存しません。
 
