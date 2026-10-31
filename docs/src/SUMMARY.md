@@ -21,11 +21,12 @@
 - [干渉チェックと距離計測](simulation.md)
 - [寸法と注記](annotations.md)
 - [タイミングチャートと動作シミュレーション](timing-chart.md)
+- [センサーとインターロック](sensors.md)
 - [ショートカット一覧](shortcuts.md)
 
 # 開発中の機能
 
-- [センサー・シーケンサー(PLC)](upcoming/sensors-plc.md)
+- [シーケンサー(PLC)](upcoming/sensors-plc.md)
 - [関節とロボットの動き](upcoming/robot.md)
 - [標準部品ライブラリ](upcoming/parts-library.md)
 - [CSV 出力](upcoming/csv.md)

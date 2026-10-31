@@ -22,8 +22,9 @@ cadsim は、工場のライン設備を 3D で組み立てて動きを確かめ
 | 干渉チェック(干渉・接触・近接)と距離計測 | 使える | [干渉チェックと距離計測](simulation.md) |
 | 3D 上の寸法(点間距離・辺の長さ・面間距離)と注記 | 使える | [寸法と注記](annotations.md) |
 | タイミングチャートと動作シミュレーション | 使える | [タイミングチャート](timing-chart.md) |
+| 光電・近接センサーとステップの開始条件(インターロック) | 使える | [センサーとインターロック](sensors.md) |
 | Windows / Mac 向けのダウンロード版 | 使える | [インストールと起動](install.md) |
-| センサー・シーケンサー(PLC) | 予定 | [センサー・PLC](upcoming/sensors-plc.md) |
+| シーケンサー(PLC) | 予定 | [シーケンサー(PLC)](upcoming/sensors-plc.md) |
 | 関節とロボットの動き | 予定 | [関節とロボット](upcoming/robot.md) |
 | 標準部品ライブラリ | 予定 | [部品ライブラリ](upcoming/parts-library.md) |
 | CSV 出力 | 予定 | [CSV 出力](upcoming/csv.md) |
