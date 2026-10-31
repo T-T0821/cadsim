@@ -1,6 +1,6 @@
 # シミュレーション機能の設計 (干渉チェック・距離計測)
 
-このドキュメントは `src/simulation/` の設計をまとめたものです。
+このドキュメントは干渉チェックと距離計測の設計をまとめたものです。計算部分は `crates/cadsim_core/src/simulation/`、Bevy での配線・表示・パネルは `src/simulation/` にあります。
 「何ができるか」→「どう動くか」→「どこを触ればよいか」の順に書いています。
 
 ## 1. できること
@@ -151,18 +151,18 @@ A∩B の表面は「A の表面のうち B の内側にある部分」と「B �
 
 ## 6. ファイルと役割
 
-| ファイル | 役割 | Bevy に依存 |
+| ファイル | 役割 | 層 |
 | --- | --- | --- |
-| `mod.rs` | プラグイン、`SimBody`、判定の実行タイミング | する |
-| `geometry.rs` | 姿勢・外接箱・三角形の交差と距離 (純粋な f64 計算) | しない |
-| `mesh.rs` | `TriMesh` と BVH、内外判定、最近点 | しない |
-| `interference.rs` | 組ごとの判定 (干渉 / 接触 / 近接) | しない |
-| `overlap.rs` | 干渉部分の立体と体積 | しない |
-| `view.rs` | 判定結果の3D表示 | する |
-| `measure.rs` | 距離計測ツール | する |
-| `panel.rs` | シミュレーションパネル | する |
+| `crates/cadsim_core/src/simulation/geometry.rs` | 姿勢・外接箱・三角形の交差と距離 (純粋な f64 計算) | ドメイン |
+| `crates/cadsim_core/src/simulation/mesh.rs` | `TriMesh` と BVH、内外判定、最近点 | ドメイン |
+| `crates/cadsim_core/src/simulation/interference.rs` | 組ごとの判定 (干渉 / 接触 / 近接) | ドメイン |
+| `crates/cadsim_core/src/simulation/overlap.rs` | 干渉部分の立体と体積 | ドメイン |
+| `src/simulation/mod.rs` | プラグイン、`SimBody`、判定の実行タイミング | UI (Bevy) |
+| `src/simulation/view.rs` | 判定結果の3D表示 | UI (Bevy) |
+| `src/simulation/measure.rs` | 距離計測ツール | UI (Bevy) |
+| `src/simulation/panel.rs` | シミュレーションパネル | UI (Bevy) |
 
-計算部分 (`geometry` / `mesh` / `interference` / `overlap`) は Bevy の外で単体テストしています (`cargo test`)。
+計算部分は Bevy に依存しない `cadsim_core` にあるので、`cargo test -p cadsim_core` で Bevy をビルドせずに単体テストできます。
 
 ## 7. 制約と今後
 

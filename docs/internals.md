@@ -23,8 +23,13 @@
 
 ## コードの構成
 
+層の分け方は [architecture.md](architecture.md) を見てください。
+
 ```text
-src/
+crates/cadsim_core/   Bevy に依存しないドメイン (cargo test -p cadsim_core で単体テスト)
+├── math.rs          回転・行列・外接箱の計算 (f64)
+└── simulation/      干渉チェックの幾何計算 (geometry / mesh / interference / overlap)
+src/                  アプリ本体 (Bevy + egui)
 ├── main.rs          アプリの組み立て (プラグインを並べるだけ)
 ├── model.rs         設計データ: アセンブリの木 (f64) と選択状態
 ├── step_import.rs   STEP → アセンブリの木と B-rep (Bevy に依存しない)
@@ -48,9 +53,9 @@ src/
 │   └── demo.rs       サンプル装置 (ピック & プレース)
 ├── shortcuts.rs     キーボードショートカット
 ├── history.rs       元に戻す・やり直し
-├── math.rs          回転・行列・外接箱の計算
+├── math.rs          f64 の配置を Bevy の Transform にする (計算は cadsim_core::math)
 ├── japanese_font.rs egui に日本語フォントを登録
-├── simulation/      干渉チェックと距離計測 (詳しくは docs/simulation.md)
+├── simulation/      干渉チェックの配線・表示・パネルと距離計測 (詳しくは docs/simulation.md)
 ├── annotation.rs    3D 上の寸法と注記 (置く操作・描画・パネル・保存形式)
 └── ui/
     ├── mod.rs        画面の割り付け (上 → 下 → 左 → 右 → 残りが 3D ビュー)

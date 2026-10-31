@@ -12,7 +12,7 @@
 //! 境界は分割の細かさ分だけギザギザになるので、輪郭は交線 (`PairResult::curves`)
 //! で補って描く。体積も同じ精度の近似値。
 
-use bevy::math::DVec3;
+use glam::DVec3;
 
 use super::geometry::{
     Aabb, Triangle, bisect, closest_points_on_triangles, longest_edge, signed_volume,
