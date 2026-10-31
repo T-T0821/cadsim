@@ -3,6 +3,7 @@
 //! 上に実行の操作 (▶ / ⏸ / ⏩ 最後まで / 速度 / 色分け / Excel)、その下にタブ:
 //! - 工程: 要素の一覧と、選んだ要素の設定。回す時間など
 //! - 人員: シフト・作業者の名簿とできる工程・人数の比較 (`staff_ui.rs`)
+//! - 案の比較: 設定を案として取っておき、繰り返し回して並べる (`scenario_ui.rs`)
 //! - 結果: ラインの集計と設備ごとの表、作業者ごとの表
 //! - グラフ: 状態の割合の積み上げ横棒、排出数と仕掛数の推移、状態の時系列
 
@@ -12,6 +13,7 @@ use bevy_egui::egui::{self, Color32, Pos2, Rect as ERect, Stroke, Vec2};
 
 use super::model::{ElementId, ElementKind, Failure, FlowModel, KindTag, Labor, sample_line};
 use super::palette::{busy_rgb, state_rgb};
+use super::scenario_ui::{ScenarioUiState, scenario_tab};
 use super::sim::{Report, State, WorkerState};
 use super::staff_ui::{StaffUiState, staff_tab};
 use super::{ColorMode, FlowRes, FlowRun};
@@ -22,6 +24,7 @@ enum Tab {
     #[default]
     Line,
     Staff,
+    Scenarios,
     Results,
     Charts,
 }
@@ -34,6 +37,7 @@ pub struct FlowUiState {
     /// 回せなかった理由
     problems: Vec<String>,
     staff: StaffUiState,
+    scenarios: ScenarioUiState,
 }
 
 #[derive(SystemParam)]
@@ -49,7 +53,9 @@ impl FlowUi<'_> {
     }
 
     pub fn load_sample(&mut self) {
+        let scenarios = std::mem::take(&mut self.flow.0.scenarios);
         self.flow.0 = sample_line();
+        self.flow.0.scenarios = scenarios;
         self.run.stop();
         self.ui.selected = None;
         self.run.open = true;
@@ -82,6 +88,7 @@ pub fn show_window(ctx: &egui::Context, state: &mut FlowUi, model: &Model, selec
                 let tab = &mut state.ui.tab;
                 ui.selectable_value(tab, Tab::Line, "工程");
                 ui.selectable_value(tab, Tab::Staff, "人員");
+                ui.selectable_value(tab, Tab::Scenarios, "案の比較");
                 ui.selectable_value(tab, Tab::Results, "結果");
                 ui.selectable_value(tab, Tab::Charts, "グラフ");
             });
@@ -90,6 +97,12 @@ pub fn show_window(ctx: &egui::Context, state: &mut FlowUi, model: &Model, selec
                 Tab::Line => line_tab(ui, state, model, selection),
                 Tab::Staff => {
                     if staff_tab(ui, &mut state.flow, &mut state.ui.staff) {
+                        state.run.stop();
+                        state.ui.selected = None;
+                    }
+                }
+                Tab::Scenarios => {
+                    if scenario_tab(ui, &mut state.flow, &mut state.ui.scenarios) {
                         state.run.stop();
                         state.ui.selected = None;
                     }
@@ -279,7 +292,9 @@ fn line_tab(ui: &mut egui::Ui, state: &mut FlowUi, model: &Model, selection: &Se
             )
             .clicked()
         {
+            let scenarios = std::mem::take(&mut flow.0.scenarios);
             flow.0 = sample_line();
+            flow.0.scenarios = scenarios;
             run.stop();
             ui_state.selected = None;
         }

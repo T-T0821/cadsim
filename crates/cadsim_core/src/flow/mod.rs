@@ -8,4 +8,5 @@
 
 pub mod model;
 pub mod palette;
+pub mod scenario;
 pub mod sim;
