@@ -247,3 +247,9 @@ cargo test --locked
 | [docs/performance.md](docs/performance.md) | 大規模アセンブリを軽くするしくみと、負荷テスト・FPS の測り方 |
 | [docs/project-file.md](docs/project-file.md) | プロジェクトファイル(.cadsim)の形式 |
 | [docs/release.md](docs/release.md) | Windows / Mac 向けの配布パッケージと Release の作り方 |
+
+## ライセンス
+
+[MIT License](LICENSE-MIT) と [Apache License 2.0](LICENSE-APACHE) のどちらかを選んで使えます(デュアルライセンス)。
+
+ただし、同梱の日本語フォント `assets/fonts/NotoSansJP-Subset.otf` は [SIL Open Font License 1.1](assets/fonts/OFL.txt) です。
