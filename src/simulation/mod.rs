@@ -50,6 +50,9 @@ pub struct SimBody {
     pub id: u32,
     pub mesh: Arc<TriMesh>,
     pub pose: Pose,
+    /// モデル上で表示中か (非表示にした部品は調べない)。表示の都合で描かないだけの
+    /// 部品 (画面上で小さい部品など) は表示中のままにする。
+    pub shown: bool,
 }
 
 /// 干渉チェックの設定と、最新の結果
@@ -123,7 +126,7 @@ impl Plugin for SimulationPlugin {
 }
 
 /// 動いた・表示が切り替わった部品
-type ChangedBody = (With<SimBody>, Or<(Changed<SimBody>, Changed<Visibility>)>);
+type ChangedBody = Changed<SimBody>;
 
 /// 部品が増えた・減った・動いた・表示が切り替わった・設定が変わったときに判定し直す。
 ///
@@ -132,7 +135,7 @@ type ChangedBody = (With<SimBody>, Or<(Changed<SimBody>, Changed<Visibility>)>);
 fn run_interference_check(
     mut check: ResMut<InterferenceCheck>,
     mut job: ResMut<OverlapJob>,
-    bodies: Query<(&SimBody, &Visibility)>,
+    bodies: Query<&SimBody>,
     changed: Query<(), ChangedBody>,
     mut removed: RemovedComponents<SimBody>,
 ) {
@@ -144,8 +147,8 @@ fn run_interference_check(
     // 非表示にした部品は調べない
     let mut inputs: Vec<Body> = bodies
         .iter()
-        .filter(|(_, visibility)| **visibility != Visibility::Hidden)
-        .map(|(body, _)| Body {
+        .filter(|body| body.shown)
+        .map(|body| Body {
             id: body.id,
             mesh: &body.mesh,
             pose: body.pose,
@@ -173,7 +176,7 @@ fn run_interference_check(
     if overlap_pending {
         let shapes: HashMap<u32, (Arc<TriMesh>, Pose)> = bodies
             .iter()
-            .map(|(b, _)| (b.id, (b.mesh.clone(), b.pose)))
+            .map(|b| (b.id, (b.mesh.clone(), b.pose)))
             .collect();
         let tolerance = check.settings.tolerance;
         let task = AsyncComputeTaskPool::get().spawn(async move {

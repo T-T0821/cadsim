@@ -94,16 +94,33 @@ pub struct PairResult {
 }
 
 /// すべての組を調べ、問題のある組 (干渉・接触・近接) だけを返す。
+///
+/// 全部の組 (n² / 2) を調べると数千部品では重いので、外接箱を X 方向に並べて
+/// 重なりうる組だけを拾う (sweep and prune)。結果の並びは全部の組を順に調べたときと同じ。
 pub fn check_all(bodies: &[Body], settings: &CheckSettings) -> Vec<PairResult> {
+    let reach = settings.clearance_warning.max(settings.tolerance);
+    let aabbs: Vec<Aabb> = bodies.iter().map(Body::world_aabb).collect();
+    let mut order: Vec<usize> = (0..bodies.len()).collect();
+    order.sort_by(|&a, &b| aabbs[a].min.x.total_cmp(&aabbs[b].min.x));
+
     let mut results = Vec::new();
-    for (i, a) in bodies.iter().enumerate() {
-        for b in &bodies[i + 1..] {
-            if let Some(result) = check_pair(a, b, settings) {
-                results.push(result);
+    for (k, &i) in order.iter().enumerate() {
+        for &j in &order[k + 1..] {
+            // X 方向で離れていれば、それより右の箱はもっと離れている
+            if aabbs[j].min.x - aabbs[i].max.x >= reach {
+                break;
+            }
+            if aabbs[i].gap(&aabbs[j]) >= reach {
+                continue;
+            }
+            let (a, b) = (i.min(j), i.max(j));
+            if let Some(result) = check_pair(&bodies[a], &bodies[b], settings) {
+                results.push(((a, b), result));
             }
         }
     }
-    results
+    results.sort_by_key(|(pair, _)| *pair);
+    results.into_iter().map(|(_, result)| result).collect()
 }
 
 /// 2部品を調べる。問題がなければ None。
@@ -223,6 +240,40 @@ mod tests {
     use super::*;
     use crate::simulation::mesh::tests::box_mesh;
     use bevy::math::DQuat;
+
+    /// 組を絞り込んだ結果が、全部の組を順に調べた結果と同じ
+    #[test]
+    fn check_all_matches_all_pairs() {
+        let meshes: Vec<TriMesh> = (0..40)
+            .map(|i| {
+                let (x, z) = ((i % 8) as f64 * 1.5, (i / 8) as f64 * 1.5);
+                // 少し大きめにして、隣どうしが重なったり接したりするようにする
+                box_mesh([x, 0.0, z], [1.4 + (i % 3) as f64 * 0.1, 1.0, 1.0])
+            })
+            .collect();
+        let bodies: Vec<Body> = meshes
+            .iter()
+            .enumerate()
+            .map(|(i, mesh)| Body {
+                id: i as u32,
+                mesh,
+                pose: Pose::IDENTITY,
+            })
+            .collect();
+        let settings = CheckSettings::default();
+        let mut brute = Vec::new();
+        for (i, a) in bodies.iter().enumerate() {
+            for b in &bodies[i + 1..] {
+                brute.extend(check_pair(a, b, &settings).map(|r| (r.a, r.b)));
+            }
+        }
+        let fast: Vec<(u32, u32)> = check_all(&bodies, &settings)
+            .iter()
+            .map(|r| (r.a, r.b))
+            .collect();
+        assert!(!brute.is_empty());
+        assert_eq!(fast, brute);
+    }
 
     fn status(a: &TriMesh, b: &TriMesh) -> Option<PairStatus> {
         let body = |id, mesh| Body {
