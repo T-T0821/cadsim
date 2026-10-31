@@ -20,6 +20,8 @@ pub struct HeadcountRow {
     pub no_operator_ratio: f64,
     pub wip_average: f64,
     pub lead_time: Option<f64>,
+    /// 人が要るのに、出勤している人の誰もできない工程の名前
+    pub uncovered: Vec<String>,
 }
 
 /// 比べた結果
@@ -59,6 +61,18 @@ pub fn compare_headcount(
             let mut m = model.clone();
             m.staffing = model.staffing.with_headcount(headcount);
             let r = Simulation::run(&m)?;
+            let uncovered = m
+                .elements
+                .iter()
+                .filter(|e| e.labor.needs_operator())
+                .filter(|e| {
+                    !m.staffing
+                        .workers
+                        .iter()
+                        .any(|w| !w.absent && w.speed_for(e.id).is_some())
+                })
+                .map(|e| e.name.clone())
+                .collect();
             Ok(HeadcountRow {
                 headcount,
                 output: r.output,
@@ -67,6 +81,7 @@ pub fn compare_headcount(
                 no_operator_ratio: r.no_operator_ratio(&m).unwrap_or(0.0),
                 wip_average: r.wip_average,
                 lead_time: r.lead_time,
+                uncovered,
             })
         })
         .collect::<Result<Vec<_>, Vec<String>>>()?;
@@ -98,6 +113,9 @@ mod tests {
         apply_sample_staffing(&mut m);
         let c = compare_headcount(&m, Some(80.0)).unwrap();
         assert_eq!(c.rows.len(), 3);
+        // A さん 1 人では検査ができない
+        assert_eq!(c.rows[0].uncovered, ["検査"]);
+        assert!(c.rows[2].uncovered.is_empty());
         // 人が増えるほど人待ちは減り、排出は減らない
         for pair in c.rows.windows(2) {
             assert!(pair[1].output + 2 >= pair[0].output, "{pair:?}");

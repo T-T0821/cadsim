@@ -120,7 +120,7 @@ fn shifts_section(ui: &mut egui::Ui, flow: &mut FlowModel) {
                         ui.label("〜");
                         clock_edit(ui, ("break_end", id, k), &mut b.end);
                         if ui
-                            .small_button("✕")
+                            .small_button("消す")
                             .on_hover_text("この休憩を消す")
                             .clicked()
                         {
@@ -325,6 +325,7 @@ fn comparison_section(ui: &mut egui::Ui, flow: &FlowModel, st: &mut StaffUiState
                 "工程の人待ち",
                 "仕掛数 (平均)",
                 "リードタイム",
+                "",
             ] {
                 ui.strong(title);
             }
@@ -346,6 +347,14 @@ fn comparison_section(ui: &mut egui::Ui, flow: &FlowModel, st: &mut StaffUiState
                 ui.label(text(
                     r.lead_time.map_or("-".into(), |t| format!("{t:.0} 秒")),
                 ));
+                if r.uncovered.is_empty() {
+                    ui.label("");
+                } else {
+                    ui.colored_label(
+                        WARN,
+                        format!("できる人がいない: {}", r.uncovered.join("・")),
+                    );
+                }
                 ui.end_row();
             }
         });
