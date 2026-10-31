@@ -478,7 +478,7 @@ pub fn sample_line() -> FlowModel {
 /// 日勤 (8:00〜17:00、休憩 10:00〜10:10・12:00〜13:00・15:00〜15:10) の 3 人。
 /// 工程の名前で探すので、[`sample_line`] のあとに呼ぶ。
 pub fn apply_sample_staffing(m: &mut FlowModel) {
-    use crate::staffing::model::{Break, Shift, Skill, Worker};
+    use crate::staffing::model::{AssignRule, Break, Shift, Skill, Worker};
     const H: f64 = 3600.0;
     let find = |m: &FlowModel, name: &str| m.elements.iter().find(|e| e.name == name).map(|e| e.id);
     let (Some(machining), Some(assembly), Some(inspection)) =
@@ -512,10 +512,22 @@ pub fn apply_sample_staffing(m: &mut FlowModel) {
         ],
     });
     let skill = |element, speed| Skill { element, speed };
-    for (name, skills) in [
-        ("Aさん", vec![skill(assembly, 1.1), skill(machining, 1.0)]),
-        ("Bさん", vec![skill(assembly, 1.0), skill(inspection, 1.0)]),
-        ("Cさん", vec![skill(inspection, 1.2), skill(machining, 1.0)]),
+    for (name, skills, primary) in [
+        (
+            "Aさん",
+            vec![skill(assembly, 1.1), skill(machining, 1.0)],
+            machining,
+        ),
+        (
+            "Bさん",
+            vec![skill(assembly, 1.0), skill(inspection, 1.0)],
+            assembly,
+        ),
+        (
+            "Cさん",
+            vec![skill(inspection, 1.2), skill(machining, 1.0)],
+            inspection,
+        ),
     ] {
         staffing.insert_worker(Worker {
             id: 0,
@@ -523,8 +535,10 @@ pub fn apply_sample_staffing(m: &mut FlowModel) {
             shift: Some(day),
             absent: false,
             skills,
+            primary: Some(primary),
         });
     }
+    staffing.rule = AssignRule::Primary;
     m.staffing = staffing;
 }
 

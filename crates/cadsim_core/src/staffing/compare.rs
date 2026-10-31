@@ -3,9 +3,9 @@
 //! 何人目までを出すかは名簿の上から順 ([`Staffing::with_headcount`])。
 //! 名簿の並びを変えれば、誰を残すかも変えられる。
 
-use super::model::Staffing;
+use super::model::{AssignRule, Staffing};
 use crate::flow::model::FlowModel;
-use crate::flow::sim::Simulation;
+use crate::flow::sim::{Report, Simulation};
 
 /// 人数1通り分の結果
 #[derive(Clone, Debug, PartialEq)]
@@ -60,35 +60,80 @@ pub fn compare_headcount(
         .map(|headcount| {
             let mut m = model.clone();
             m.staffing = model.staffing.with_headcount(headcount);
-            let r = Simulation::run(&m)?;
-            let uncovered = m
-                .elements
-                .iter()
-                .filter(|e| e.labor.needs_operator())
-                .filter(|e| {
-                    !m.staffing
-                        .workers
-                        .iter()
-                        .any(|w| !w.absent && w.speed_for(e.id).is_some())
-                })
-                .map(|e| e.name.clone())
-                .collect();
-            Ok(HeadcountRow {
-                headcount,
-                output: r.output,
-                throughput_per_hour: r.throughput_per_hour,
-                worker_utilization: r.worker_utilization().unwrap_or(0.0),
-                no_operator_ratio: r.no_operator_ratio(&m).unwrap_or(0.0),
-                wip_average: r.wip_average,
-                lead_time: r.lead_time,
-                uncovered,
-            })
+            run_row(&m).map(|(row, _)| row)
         })
         .collect::<Result<Vec<_>, Vec<String>>>()?;
     Ok(HeadcountComparison {
         rows,
         target_per_hour,
     })
+}
+
+/// 今の名簿のまま回して1行にする
+fn run_row(m: &FlowModel) -> Result<(HeadcountRow, Report), Vec<String>> {
+    let r = Simulation::run(m)?;
+    let uncovered = m
+        .elements
+        .iter()
+        .filter(|e| e.labor.needs_operator())
+        .filter(|e| {
+            !m.staffing
+                .workers
+                .iter()
+                .any(|w| !w.absent && w.speed_for(e.id).is_some())
+        })
+        .map(|e| e.name.clone())
+        .collect();
+    let row = HeadcountRow {
+        headcount: m.staffing.present_count(),
+        output: r.output,
+        throughput_per_hour: r.throughput_per_hour,
+        worker_utilization: r.worker_utilization().unwrap_or(0.0),
+        no_operator_ratio: r.no_operator_ratio(m).unwrap_or(0.0),
+        wip_average: r.wip_average,
+        lead_time: r.lead_time,
+        uncovered,
+    };
+    Ok((row, r))
+}
+
+/// 割り当てのルール1つ分の結果
+#[derive(Clone, Debug, PartialEq)]
+pub struct RuleRow {
+    pub rule: AssignRule,
+    pub row: HeadcountRow,
+    /// 作業者の稼働率のいちばん低い人・高い人 (0〜1)。偏りの目安。
+    pub utilization_min: f64,
+    pub utilization_max: f64,
+    /// 全員が別の工程へ歩いた回数の合計
+    pub walks: u32,
+}
+
+/// 今の名簿・人数のまま、割り当てのルールだけを変えて回して比べる
+pub fn compare_rules(model: &FlowModel) -> Result<Vec<RuleRow>, Vec<String>> {
+    let problems = model.problems();
+    if !problems.is_empty() {
+        return Err(problems);
+    }
+    if model.staffing.present_count() == 0 {
+        return Err(vec!["出勤する作業者がいません".into()]);
+    }
+    AssignRule::ALL
+        .into_iter()
+        .map(|rule| {
+            let mut m = model.clone();
+            m.staffing.rule = rule;
+            let (row, report) = run_row(&m)?;
+            let util = report.workers.iter().map(|w| w.utilization());
+            Ok(RuleRow {
+                rule,
+                row,
+                utilization_min: util.clone().fold(f64::INFINITY, f64::min),
+                utilization_max: util.fold(0.0, f64::max),
+                walks: report.workers.iter().map(|w| w.walks).sum(),
+            })
+        })
+        .collect()
 }
 
 /// 名簿の並びで「上から何人」を決めるので、並べ替えを用意する (`up` なら前へ)
@@ -126,6 +171,21 @@ mod tests {
         if let Some(n) = need {
             assert!(c.rows[n - 1].throughput_per_hour >= 80.0);
         }
+    }
+
+    #[test]
+    fn rules_are_compared_with_the_same_people() {
+        let mut m = sample_line();
+        apply_sample_staffing(&mut m);
+        let rows = compare_rules(&m).unwrap();
+        assert_eq!(rows.len(), 3);
+        for r in &rows {
+            assert_eq!(r.row.headcount, 3);
+            assert!(r.utilization_min <= r.utilization_max);
+        }
+        // 持ち場の人が先なら、速い人ルールより歩く回数が少ない
+        let walks = |rule| rows.iter().find(|r| r.rule == rule).unwrap().walks;
+        assert!(walks(AssignRule::Primary) < walks(AssignRule::Fastest));
     }
 
     #[test]
