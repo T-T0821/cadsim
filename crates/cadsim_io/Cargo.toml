@@ -31,3 +31,5 @@ openusd = "0.8"
 truck-meshalgo = "0.4"
 truck-stepio = "0.3"
 truck-topology = "0.6"
+# 生成 AI (Claude API) への HTTPS の問い合わせ。純 Rust (rustls)
+ureq = "3"

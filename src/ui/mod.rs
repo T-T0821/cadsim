@@ -118,6 +118,8 @@ pub struct UiState<'w> {
     pub jog: ResMut<'w, crate::library::Jog>,
     /// 「自作部品として保存」のウィンドウ
     pub custom_dialog: ResMut<'w, crate::custom_part::SaveDialog>,
+    pub assistant: ResMut<'w, crate::assistant::AiAssistant>,
+    pub sequence_gen: ResMut<'w, crate::sequence_gen::SequenceGen>,
 }
 
 /// UI 専用のカメラ。3D カメラはパネルを除いた領域だけに描くので、
