@@ -12,8 +12,10 @@
 //! [`Simulation::deliver`])。
 //!
 //! 人が要る工程 ([`Labor`]) は、ワークが届くと「人待ち」になり、その工程ができて手の空いている
-//! 出勤中の作業者を呼ぶ。来られる人が複数いれば速い人、同じなら今その工程にいる人を選ぶ。
-//! 作業者は手が空くと、人待ちの工程のうちいちばん長く待っているところへ行く。
+//! 出勤中の作業者を呼ぶ。来られる人が複数いれば、割り当てのルール ([`AssignRule`]) で選ぶ
+//! (速い人 / いちばん長く手待ちしている人 / 持ち場の人)。
+//! 作業者は手が空くと、人待ちの工程のうちいちばん長く待っているところへ行く
+//! (「持ち場の人が先」なら自分の持ち場を先に見る)。
 //! 別の工程へ移るときは歩行時間がかかる。シフトの終わりや休憩に入るときは、
 //! 今の作業を終えてから抜ける (作業の途中では抜けない)。
 
@@ -21,7 +23,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BinaryHeap, VecDeque};
 
 use super::model::{ElementId, ElementKind, FlowModel, Labor, RunSettings};
-use crate::staffing::model::WorkerId;
+use crate::staffing::model::{AssignRule, WorkerId};
 
 /// 設備の状態
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -229,6 +231,8 @@ struct WorkerRt {
     shift: Option<crate::staffing::model::Shift>,
     /// 要素ごとの作業の速さ (できない工程は None)
     speed: Vec<Option<f64>>,
+    /// 持ち場 (要素の添字)
+    primary: Option<usize>,
     /// 集計期間に終えた作業の数
     tasks: u32,
     /// 集計期間に歩いた回数
@@ -929,6 +933,7 @@ impl Simulation {
                 at: None,
                 shift,
                 speed,
+                primary: w.primary.and_then(|p| self.model.index_of(p)),
                 tasks: 0,
                 walks: 0,
             });
@@ -978,14 +983,24 @@ impl Simulation {
 
     /// 人待ちになった工程に作業者を呼ぶ。来られる人がいなければ人待ちのまま。
     fn call_operator(&mut self, i: usize) {
-        let best = (0..self.workers.len())
-            .filter(|&w| self.workers[w].state == WorkerState::Idle)
-            .filter_map(|w| Some((w, self.workers[w].speed[i]?)))
-            .max_by(|(a, sa), (b, sb)| {
-                sa.total_cmp(sb)
-                    // 同じ速さなら、今その工程にいる人 → 名簿の上の人
-                    .then((self.workers[*a].at == Some(i)).cmp(&(self.workers[*b].at == Some(i))))
-                    .then(b.cmp(a))
+        let rule = self.model.staffing.rule;
+        let workers = &self.workers;
+        let best = (0..workers.len())
+            .filter(|&w| workers[w].state == WorkerState::Idle)
+            .filter_map(|w| Some((w, workers[w].speed[i]?)))
+            .max_by(|&(a, sa), &(b, sb)| {
+                let (wa, wb) = (&workers[a], &workers[b]);
+                let first = match rule {
+                    AssignRule::Fastest => std::cmp::Ordering::Equal,
+                    // 手待ちに入った時刻が早い人ほど優先
+                    AssignRule::LongestIdle => wb.since.total_cmp(&wa.since),
+                    AssignRule::Primary => (wa.primary == Some(i)).cmp(&(wb.primary == Some(i))),
+                };
+                first
+                    .then(sa.total_cmp(&sb))
+                    // 同じなら、今その工程にいる人 → 名簿の上の人
+                    .then((wa.at == Some(i)).cmp(&(wb.at == Some(i))))
+                    .then(b.cmp(&a))
             })
             .map(|(w, _)| w);
         if let Some(w) = best {
@@ -995,14 +1010,20 @@ impl Simulation {
 
     /// 手の空いた作業者に、いちばん長く人待ちしている工程を割り当てる
     fn find_work(&mut self, w: usize) {
-        let target = (0..self.runtime.len())
-            .filter(|&i| {
-                let rt = &self.runtime[i];
-                rt.state == State::NoOperator
-                    && rt.operator.is_none()
-                    && self.workers[w].speed[i].is_some()
-            })
-            .min_by(|&a, &b| self.runtime[a].since.total_cmp(&self.runtime[b].since));
+        let waiting = |i: usize| {
+            let rt = &self.runtime[i];
+            rt.state == State::NoOperator
+                && rt.operator.is_none()
+                && self.workers[w].speed[i].is_some()
+        };
+        let own = self.workers[w]
+            .primary
+            .filter(|&p| self.model.staffing.rule == AssignRule::Primary && waiting(p));
+        let target = own.or_else(|| {
+            (0..self.runtime.len())
+                .filter(|&i| waiting(i))
+                .min_by(|&a, &b| self.runtime[a].since.total_cmp(&self.runtime[b].since))
+        });
         if let Some(i) = target {
             self.assign(w, i);
         }
@@ -1649,6 +1670,46 @@ mod tests {
         let r = Simulation::run(&m).unwrap();
         assert_eq!(r.workers.len(), 1);
         assert!(close(r.throughput_per_hour, 180.0, 3.0));
+    }
+
+    #[test]
+    fn longest_idle_spreads_work_evenly() {
+        // 3 人とも同じ速さで 1 工程だけ。速い人ルールでは名簿の上の人に偏るが、
+        // 手待ちの長い人ルールでは均等になる。
+        let base = staffed(line(15.0, &[10.0]), &[Labor::Full], 3);
+        let fastest = Simulation::run(&base).unwrap();
+        let mut even = base.clone();
+        even.staffing.rule = AssignRule::LongestIdle;
+        let even = Simulation::run(&even).unwrap();
+        let tasks = |r: &Report| r.workers.iter().map(|w| w.tasks).collect::<Vec<_>>();
+        assert_eq!(fastest.output, even.output);
+        let f = tasks(&fastest);
+        assert!(f[0] > f[1] + f[2], "{f:?}");
+        let e = tasks(&even);
+        let (lo, hi) = (e.iter().min().unwrap(), e.iter().max().unwrap());
+        assert!(hi - lo <= 1, "{e:?}");
+    }
+
+    #[test]
+    fn primary_rule_keeps_people_at_their_stations() {
+        // 2 人とも 2 工程できるが、持ち場を分けると歩かなくて済む
+        let mut m = staffed(line(1.0, &[10.0, 10.0]), &[Labor::Full, Labor::Full], 2);
+        m.staffing.walk_seconds = 5.0;
+        let (p1, p2) = (m.elements[1].id, m.elements[2].id);
+        let walks_fastest: u32 = Simulation::run(&m)
+            .unwrap()
+            .workers
+            .iter()
+            .map(|w| w.walks)
+            .sum();
+        m.staffing.rule = AssignRule::Primary;
+        m.staffing.workers[0].primary = Some(p1);
+        m.staffing.workers[1].primary = Some(p2);
+        let r = Simulation::run(&m).unwrap();
+        let walks: u32 = r.workers.iter().map(|w| w.walks).sum();
+        assert!(walks <= 2, "{walks}");
+        assert!(walks_fastest > walks, "{walks_fastest}");
+        assert!(close(r.throughput_per_hour, 360.0, 3.0));
     }
 
     #[test]
