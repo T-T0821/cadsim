@@ -41,8 +41,8 @@ pub use pose::{RigidPose, part_poses, part_poses_from_values};
 pub use ui::{MotionUi, show_panel};
 
 use crate::model::{Model, NodeId};
-use targets::{design_targets, extra_targets_at};
 use crate::plc::plc_active;
+use targets::{design_targets, extra_targets_at};
 
 pub struct MotionPlugin;
 
