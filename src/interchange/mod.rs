@@ -5,6 +5,7 @@
 //! - 書き出し: モデル → `Scene` → ファイル
 //!
 //! `Scene` は常にアプリの座標系 (メートル、Y 軸が上) で持つ。単位や上方向の違いは各形式の側で変換する。
+//! Web ビューア (.html) は書き出し専用で、GLB をビューアの HTML に埋め込む。
 //! 新しい形式は `xxx.rs` に `import` / `export` を書き、[`FORMATS`] に1行足せば UI に出る。
 
 use std::path::Path;
@@ -18,6 +19,7 @@ pub mod obj;
 mod samples;
 pub mod stl;
 pub mod usd;
+pub mod web_viewer;
 
 /// 読み書きの結果。エラーは利用者に見せる日本語の文
 pub type ExchangeResult<T> = Result<T, String>;
@@ -306,6 +308,14 @@ pub const FORMATS: &[Format] = &[
         export: Some(usd::export),
         needs_units: false,
         export_note: "",
+    },
+    Format {
+        name: "Web ビューア (.html)",
+        extensions: &["html"],
+        import: None,
+        export: Some(web_viewer::export),
+        needs_units: false,
+        export_note: "ブラウザ・スマホ・VR で見る用 (読み込みは不可)",
     },
 ];
 

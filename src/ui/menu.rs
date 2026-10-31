@@ -3,12 +3,14 @@
 use bevy_egui::egui;
 
 use super::UiState;
+use super::modeling::Tab;
 use crate::camera::{CameraRequest, StandardView};
 use crate::file_io::ExportScope;
 use crate::gizmo::Tool;
 use crate::history::Request;
 use crate::interchange::{FORMATS, LENGTH_UNITS};
 use crate::project::ProjectAction;
+use cadsim_core::gamify::ThemeKind;
 
 pub fn show(root: &mut egui::Ui, state: &mut UiState) {
     egui::Panel::top("menu_bar").show(root, |ui| {
@@ -17,7 +19,8 @@ pub fn show(root: &mut egui::Ui, state: &mut UiState) {
             edit_menu(ui, state);
             view_menu(ui, state);
             create_menu(ui, state);
-            help_menu(ui);
+            line_menu(ui, state);
+            help_menu(ui, state);
         });
         ui.separator();
         toolbar(ui, state);
@@ -42,6 +45,13 @@ fn file_menu(ui: &mut egui::Ui, state: &mut UiState) {
         if ui.button("サンプルのアセンブリを取り込む").clicked() {
             state.jobs.open_sample();
         }
+        ui.menu_button("負荷テスト用シーンを開く", |ui| {
+            for count in [1000, 5000, 10000] {
+                if ui.button(format!("部品 {count} 個")).clicked() {
+                    state.jobs.open_stress(count);
+                }
+            }
+        });
         ui.separator();
         if ui.button("保存  (Ctrl+S)").clicked() {
             state.project.request(ProjectAction::Save);
@@ -63,6 +73,8 @@ fn file_menu(ui: &mut egui::Ui, state: &mut UiState) {
         ui.separator();
         ui.weak("ウィンドウへのドラッグ&ドロップでも開けます");
         ui.weak(format!("取り込める形式: STEP, {}", format_list()));
+        ui.weak("平面図として床に敷く形式: DXF, PDF, PNG, JPG");
+        ui.weak("点群: PLY, LAS, E57 (PLY は「OBJ / STL の単位」で読みます)");
     });
 }
 
@@ -81,6 +93,30 @@ fn export_menu(ui: &mut egui::Ui, state: &mut UiState) {
             .clicked()
         {
             state.jobs.request_export(ExportScope::Selection);
+        }
+        if ui
+            .button("ブラウザ / VR で見る")
+            .on_hover_text("Web ビューアにして既定のブラウザで開きます。WebXR 対応のブラウザなら VR ヘッドセットで実寸で見られます")
+            .clicked()
+        {
+            state.jobs.request_browser_view();
+        }
+        ui.separator();
+        if ui
+            .button("図面 (PDF / DXF)…")
+            .on_hover_text("表示中の部品の上面図・正面図を、寸法付きで A3 の図面にする")
+            .clicked()
+        {
+            state.documents.open_drawing_dialog();
+            ui.close();
+        }
+        if ui
+            .button("部品表 (Excel / CSV)…")
+            .on_hover_text("同じ部品をまとめて数えた部品表と、ツリーの構成表")
+            .clicked()
+        {
+            state.documents.request_bom();
+            ui.close();
         }
         ui.separator();
         ui.weak("保存ダイアログで選んだ拡張子の形式で書き出します");
@@ -175,11 +211,58 @@ fn view_menu(ui: &mut egui::Ui, state: &mut UiState) {
             &mut state.settings.ghost_unselected,
             "選択以外を半透明にする",
         );
+        ui.checkbox(
+            &mut state.settings.simplify_small_parts,
+            "画面上で小さい部品を簡略表示",
+        )
+        .on_hover_text("遠くの部品を粗い形にし、ごく小さい部品は描かずに軽くする");
+        ui.add_enabled_ui(state.settings.simplify_small_parts, |ui| {
+            ui.add(
+                egui::Slider::new(&mut state.settings.coarse_below_px, 0.0..=300.0)
+                    .text("簡略表示 (px 未満)"),
+            );
+            ui.add(
+                egui::Slider::new(&mut state.settings.hide_below_px, 0.0..=20.0)
+                    .text("省略 (px 未満)"),
+            );
+        });
         ui.separator();
         if ui.button("すべて表示").clicked() {
             state.model.show_all();
         }
+        ui.separator();
+        theme_menu(ui, state);
     });
+}
+
+/// 見た目 (ゲーム風 / シンプル) とミッションカードの表示
+fn theme_menu(ui: &mut egui::Ui, state: &mut UiState) {
+    ui.menu_button("テーマ", |ui| {
+        for (theme, hover) in [
+            (
+                ThemeKind::Playful,
+                "明るい色と丸いボタン。ミッション達成で紙吹雪が舞います",
+            ),
+            (ThemeKind::Plain, "落ち着いた標準の見た目。演出なし"),
+        ] {
+            let selected = state.playful.prefs.theme == theme;
+            if ui
+                .radio(selected, theme.label())
+                .on_hover_text(hover)
+                .clicked()
+            {
+                state.playful.set_theme(theme);
+            }
+        }
+    });
+    let mut show = state.playful.prefs.show_missions;
+    if ui
+        .checkbox(&mut show, "ミッションを表示")
+        .on_hover_text("3D ビューの左下に、操作を覚えるためのミッションを出す")
+        .changed()
+    {
+        state.playful.set_show_missions(show);
+    }
 }
 
 fn create_menu(ui: &mut egui::Ui, state: &mut UiState) {
@@ -187,11 +270,52 @@ fn create_menu(ui: &mut egui::Ui, state: &mut UiState) {
         if ui.button("箱を追加").clicked() {
             add_box(state);
         }
+        ui.separator();
+        for tab in [Tab::Cylinder, Tab::Extrude, Tab::Hole, Tab::Boolean] {
+            let text = match tab {
+                Tab::Cylinder => "円柱を追加…",
+                Tab::Extrude => "押し出しで追加…",
+                Tab::Hole => "穴をあける…",
+                Tab::Boolean => "ブーリアン (和・差・積)…",
+            };
+            if ui.button(text).clicked() {
+                state.modeling.open_tab(tab);
+                ui.close();
+            }
+        }
     });
 }
 
-fn help_menu(ui: &mut egui::Ui) {
+fn line_menu(ui: &mut egui::Ui, state: &mut UiState) {
+    ui.menu_button("ライン", |ui| {
+        let label = if state.flow.run.open {
+            "工程シミュレーションを閉じる"
+        } else {
+            "工程シミュレーション…"
+        };
+        if ui
+            .button(label)
+            .on_hover_text("工程とバッファを並べてラインを早回しし、稼働率やスループットを集計する")
+            .clicked()
+        {
+            state.flow.toggle();
+        }
+        if ui.button("サンプル工程を読み込む").clicked() {
+            state.flow.load_sample();
+        }
+    });
+}
+
+fn help_menu(ui: &mut egui::Ui, state: &mut UiState) {
     ui.menu_button("ヘルプ", |ui| {
+        if ui
+            .button("ミッションを最初からやり直す")
+            .on_hover_text("チュートリアルのミッションと経験値を最初に戻す")
+            .clicked()
+        {
+            state.playful.reset_missions();
+        }
+        ui.separator();
         egui::Grid::new("shortcuts").striped(true).show(ui, |ui| {
             for (key, action) in [
                 ("左クリック", "部品を選択"),

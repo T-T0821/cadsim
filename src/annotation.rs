@@ -19,7 +19,6 @@ use std::sync::Arc;
 
 use bevy::{
     math::{DMat4, DVec3},
-    picking::mesh_picking::ray_cast::{MeshRayCast, MeshRayCastSettings},
     prelude::*,
     window::PrimaryWindow,
 };
@@ -36,7 +35,7 @@ use crate::math::euler_deg_to_quat;
 use crate::model::{BoxPart, Model, NodeId, NodeKind, Selection};
 use crate::simulation::measure::MeasureTool;
 use crate::ui::widgets::length;
-use crate::viewport::FaceTag;
+use crate::viewport::PartPicker;
 
 /// 吸着する距離 (画面上のピクセル)
 const SNAP_PX: f32 = 12.0;
@@ -93,7 +92,7 @@ pub struct Anchor {
     pub local: [f64; 3],
 }
 
-/// 部品の面。番号はビューのピッキング (`FaceTag`) と同じ並び。
+/// 部品の面。番号はビューのピッキング (`PartHit::face`) と同じ並び。
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct FaceRef {
     pub node: NodeId,
@@ -254,7 +253,7 @@ pub enum AnnotationRecord {
     Note { at: AnchorRecord, text: String },
 }
 
-fn node_path(model: &Model, id: NodeId) -> Option<NodePath> {
+pub fn node_path(model: &Model, id: NodeId) -> Option<NodePath> {
     model
         .ancestors(id)
         .iter()
@@ -268,7 +267,7 @@ fn node_path(model: &Model, id: NodeId) -> Option<NodePath> {
         .collect()
 }
 
-fn node_at_path(model: &Model, path: &[usize]) -> Option<NodeId> {
+pub fn node_at_path(model: &Model, path: &[usize]) -> Option<NodeId> {
     let (&first, rest) = path.split_first()?;
     let mut id = *model.roots[..].get(first)?;
     for &index in rest {
@@ -463,7 +462,7 @@ fn push_unique(points: &mut Vec<DVec3>, p: DVec3) {
     }
 }
 
-/// 箱の B-rep から取り出す。面の並びは truck の面の並び (= ビューの FaceTag)。
+/// 箱の B-rep から取り出す。面の並びは truck の面の並び (= ビューのピッキングの面番号)。
 fn solid_geometry(solid: &Solid) -> PartGeometry {
     let mut g = PartGeometry::default();
     for face in solid.face_iter() {
@@ -902,8 +901,7 @@ fn annotate_input(
     viewport: Res<ViewportRect>,
     window: Single<&Window, With<PrimaryWindow>>,
     camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
-    mut ray_cast: MeshRayCast,
-    faces: Query<&FaceTag>,
+    picker: PartPicker,
     model: Res<Model>,
     cache: Res<GeometryCache>,
     mut tool: ResMut<AnnotateTool>,
@@ -928,12 +926,8 @@ fn annotate_input(
     let hit = camera
         .viewport_to_world(camera_transform, cursor)
         .ok()
-        .and_then(|ray| {
-            ray_cast
-                .cast_ray(ray, &MeshRayCastSettings::default())
-                .iter()
-                .find_map(|(entity, hit)| faces.get(*entity).ok().map(|tag| (tag, hit.point)))
-        });
+        .and_then(|ray| picker.cast(ray))
+        .map(|hit| (hit, hit.point));
 
     // 吸着や辺の候補は、画面上でカーソルの近くにある部品だけから探す
     let near_cursor = |id: NodeId| {
@@ -1632,7 +1626,7 @@ mod tests {
 
     #[test]
     fn box_face_order_matches_picking() {
-        // ビューの FaceTag は三角形分割後の面の並び。寸法側の面番号と同じ面を指すこと
+        // ビューのピッキングの面番号は三角形分割後の面の並び。寸法側の面番号と同じ面を指すこと
         let part = BoxPart {
             size: [2.0, 1.0, 3.0],
             position: [0.5, 0.0, 0.0],

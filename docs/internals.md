@@ -20,11 +20,27 @@
 | tobj(OBJ の読み込み) | 4 |
 | stl_io(STL の読み書き) | 0.11 |
 | openusd(OpenUSD の読み書き。純 Rust) | 0.8 |
+| truck-shapeops(ブーリアン演算) | 0.4 |
+| glam(f64 のベクトル・行列。bevy_math と同じ版) | 0.33 |
+| lopdf(PDF の平面図の読み込み) | 0.46 |
+| image(PNG / JPEG の平面図) | 0.25 |
+| e57(E57 の点群の読み込み) | 0.11 |
+| krilla(図面の PDF 書き出し) | 0.8 |
+| rust_xlsxwriter(部品表・工程シミュレーションの Excel 書き出し) | 0.102 |
 
 ## コードの構成
 
+層の分け方は [architecture.md](architecture.md) を見てください。
+
 ```text
-src/
+crates/cadsim_core/   Bevy に依存しないドメイン (cargo test -p cadsim_core で単体テスト)
+├── gamify.rs        ゲーム風 UI の中身: ミッションの判定・経験値とレベル・紙吹雪 (docs/playful-ui.md)
+├── math.rs          回転・行列・外接箱の計算 (f64)
+├── simulation/      干渉チェックの幾何計算 (geometry / mesh / interference / overlap)
+├── drawing.rs       2D 図面: 投影・かくれ線・シルエット・寸法・図枠 (docs/drawing.md)
+├── site/            平面図の下敷きの配置と縮尺合わせ、点群の間引き・LOD・干渉 (docs/site.md)
+└── flow/            工程モデル (model)、離散事象シミュレーションと集計 (sim)、状態・稼働率の色 (palette)
+src/                  アプリ本体 (Bevy + egui)
 ├── main.rs          アプリの組み立て (プラグインを並べるだけ)
 ├── model.rs         設計データ: アセンブリの木 (f64) と選択状態
 ├── step_import.rs   STEP → アセンブリの木と B-rep (Bevy に依存しない)
@@ -34,10 +50,16 @@ src/
 │   ├── model_io.rs   Scene ⇔ Model の変換 (単位の換算、メッシュの稜線)
 │   ├── gltf.rs / obj.rs / stl.rs
 │   ├── usd.rs        OpenUSD (.usda / .usdc / .usdz)
+│   ├── web_viewer.rs Web ビューア (.html、GLB を埋め込んだ1ファイル。docs/web-viewer.md)
 │   └── samples.rs    サンプルファイルを作るテスト (手で実行)
 ├── animation.rs     取り込んだアニメーションの再生
 ├── project.rs       プロジェクトファイル (.cadsim) の保存と読み込み
-├── viewport.rs      3D 表示: メッシュ作成、選択の強調、稜線・グリッド、クリック選択
+├── preferences_file.rs 見た目とミッションの設定 (preferences.json) の読み書き (Bevy に依存しない)
+├── viewport.rs      3D 表示: メッシュ作成、選択の強調、簡略表示 (LOD)、グリッド、クリック選択
+├── part_mesh.rs     部品1つ分の表示用メッシュ (面をまとめたもの・面番号の表・簡略形状。Bevy に依存しない)
+├── bvh.rs           外接箱の木 (BVH) とレイの当たり判定 (Bevy に依存しない)
+├── stress.rs        負荷テスト用の数千部品のシーン
+├── bench.rs         `--bench` で FPS を測って終了する
 ├── camera.rs        オービットカメラ、標準ビュー、全体表示、透視 / 平行投影
 ├── gizmo.rs         移動・回転・拡大縮小のギズモとスナップ
 ├── motion/          タイミングチャートと動作シミュレーション
@@ -49,10 +71,29 @@ src/
 │   └── demo.rs       サンプル装置 (ピック & プレース)
 ├── shortcuts.rs     キーボードショートカット
 ├── history.rs       元に戻す・やり直し
-├── math.rs          回転・行列・外接箱の計算
+├── math.rs          f64 の配置を Bevy の Transform にする (計算は cadsim_core::math)
 ├── japanese_font.rs egui に日本語フォントを登録
-├── simulation/      干渉チェックと距離計測 (詳しくは docs/simulation.md)
+├── simulation/      干渉チェックの配線・表示・パネルと距離計測 (詳しくは docs/simulation.md)
 ├── annotation.rs    3D 上の寸法と注記 (置く操作・描画・パネル・保存形式)
+├── modeling.rs      円柱・押し出し・穴あけ・ブーリアン (truck の B-rep。docs/modeling.md)
+├── drawing/         図面の材料をモデルから集める (計算は cadsim_core::drawing)
+├── bom.rs           部品表 (同じ部品をまとめて数える)
+├── documents.rs     図面・部品表の書き出しダイアログと保存
+├── site/            平面図・点群の読み込みの配線、3D 表示、「平面図・点群」パネル
+├── formats/         平面図・点群・図面・部品表のファイル形式 (Bevy に依存しない)
+│   ├── dxf.rs        DXF の読み込み (平面図) と書き出し (図面)
+│   ├── pdf_plan.rs   PDF の線と画像を平面図にする
+│   ├── pointcloud_read.rs PLY / LAS / E57 の読み込み
+│   ├── drawing_out.rs 図面の PDF / DXF
+│   ├── bom_out.rs    部品表の CSV / Excel
+│   └── site_record.rs .cadsim に書く平面図・点群の記録
+├── flow/            工程シミュレーションの配線と画面 (計算は cadsim_core::flow。詳しくは docs/flow.md)
+│   ├── record.rs     .cadsim に書く形
+│   ├── xlsx.rs       Excel 書き出し
+│   ├── mod.rs        プラグイン、早送りの再生、3D の色分け (FlowColors)
+│   └── ui.rs         工程シミュレーションのウィンドウ
+├── safety/          安全機器・動作範囲・距離の確認 (詳しくは docs/safety-and-floor.md)
+├── floor/           作業者と AGV、床の上の幾何計算 (詳しくは docs/safety-and-floor.md)
 └── ui/
     ├── mod.rs        画面の割り付け (上 → 下 → 左 → 右 → 残りが 3D ビュー)
     ├── menu.rs       メニューバーとツールバー
@@ -60,6 +101,9 @@ src/
     ├── properties.rs プロパティパネル
     ├── status.rs     ステータスバーと読み込み中の表示
     ├── animation.rs  アニメーションの再生パネル
+    ├── modeling.rs   「モデリング」ウィンドウ (円柱・押し出し・穴あけ・ブーリアン)
+    ├── theme.rs      見た目 (ゲーム風 / シンプル) の配色と角丸
+    ├── playful.rs    ミッションカード・マスコット・お祝いと紙吹雪
     ├── view_cube.rs  ビューキューブと座標軸
     └── widgets.rs    数値入力などの小さな部品
 ```
@@ -142,12 +186,13 @@ src/
 
 ### 表示と選択(`viewport.rs`)
 
-1. 部品1つにつき Bevy のエンティティ(`PartView`)を作り、子に面ごとのメッシュ(`FaceTag { node, face }`)を付ける。
-2. 配置と表示/非表示は毎フレーム `Model` から写す。形状が変わったとき(`dirty`)だけメッシュを作り直す。
-3. 左クリックで `MeshRayCast` を撃ち、当たった `FaceTag` から部品と面を特定する。
-4. マテリアルは「選択(アセンブリなら子孫すべて)→ 青」「クリックした面 → オレンジ」「ツリーでホバー → 水色」「それ以外 → 部品の色」で決める。
-5. 稜線・グリッド・選択の外接箱は Gizmos で描く。グリッドの間隔はモデルの大きさに合わせて 1, 10, 100… と変わる。
-6. 部品のエンティティには干渉チェック用の `SimBody`(部品座標の f64 三角形メッシュ + 姿勢)も付ける。姿勢は配置と一緒に毎フレーム写し、`src/simulation/` がこれを拾って判定する。干渉中の部品は半透明の赤にする。
+1. 部品1つにつき Bevy のエンティティを2つだけ作る。面をすべてまとめた1つのメッシュ(`PartView`)と、子の稜線のメッシュ(`EdgeLines`)。どの三角形がどの面かは `PartMesh::triangle_face` が持つ。
+2. 配置・表示/非表示・色・強調は、`Model`・選択・表示設定・干渉の結果・動作シミュレーションのどれかが変わったフレームだけ、木を1回たどって(`Model::visit_parts`)写す。形状が変わったとき(`dirty`)だけメッシュを作り直す。
+3. クリックした部品と面は `PartPicker` で求める。部品の外接箱の BVH → 部品内の三角形の BVH の順に調べる(`bvh.rs`)。計測ツールと寸法ツールも同じものを使う。
+4. マテリアルは「選択(アセンブリなら子孫すべて)→ 青」「ツリーでホバー → 水色」「それ以外 → 部品の色」で決める。クリックした面は、その面だけのメッシュを重ねてオレンジにする。
+5. 稜線は線のメッシュで GPU に描かせる。グリッドと選択の外接箱は Gizmos で描く。グリッドの間隔はモデルの大きさに合わせて 1, 10, 100… と変わる。
+6. 部品のエンティティには干渉チェック用の `SimBody`(部品座標の f64 三角形メッシュ + 姿勢 + モデル上で表示中か)も付ける。姿勢と表示/非表示は 2. と一緒に写し、`src/simulation/` がこれを拾って判定する。干渉中の部品は半透明の赤にする。
+7. 画面上で小さい部品は粗いメッシュに替え、ごく小さい部品は描かない(`update_level_of_detail`)。大規模アセンブリ向けの工夫は [performance.md](performance.md) にまとめている。
 
 ### 画面の割り付け(`ui/mod.rs`)
 
@@ -170,7 +215,7 @@ egui のパネルを上・下・左・右の順に置き、残った領域を 3D
 - チャートは「ステップ × アクチュエータ」の表。ステップの動作は同時に始まり、すべて完了 + タイマーで次へ進む。サイクル開始時はすべてのアクチュエータが原点(設計位置)にある。
 - 再生中の動きは `motion::SimulationPose` に入る(アクチュエータに割り当てたノード id → 設計位置からのワールド座標での剛体変換, f64)。
 - `SimulationPose::pose_of(&model, node)` は、部品自身か、いちばん近い祖先のアセンブリの動きを返す。
-- `viewport.rs` の `sync_placement_and_visibility` が `.after(MotionSet::Pose)` で動きを部品の配置に重ね、表示用の `Transform` と干渉チェック用の `SimBody.pose` の両方に写すので、再生・スクラブ中も各時刻の位置で干渉チェックが走る。設計データ(`Model`)は書き換えない。
+- `viewport.rs` の `sync_views` が `.after(MotionSet::Pose)` で動きを部品の配置に重ね、表示用の `Transform` と干渉チェック用の `SimBody.pose` の両方に写すので、再生・スクラブ中も各時刻の位置で干渉チェックが走る。設計データ(`Model`)は書き換えない。
 - 書き出し(`motion/export.rs`)では、1サイクルを 1/30 秒ごとに標本化し、親と違う動きをするノードだけに「親から見た配置」のキーを作る(`(動き × 設計のワールド配置)` を親の同じ時刻のワールド配置で割る)。アセンブリに割り当てた動きは、シーンの親子関係で子孫に伝わる。
 
 ### センサーとインターロック(`motion/sensor.rs`, `motion/targets.rs`)
@@ -181,6 +226,12 @@ egui のパネルを上・下・左・右の順に置き、残った領域を 3D
 - インターロックはステップの開始条件(`Step::interlocks`)。`TimingChart::schedule_with` が時刻表を作るとき、前のステップの終了時刻から 0.02 秒ずつ時刻を進めてセンサーを調べ、成り立った時刻に動作を始める(`StepSpan::action_start`)。5 秒(`INTERLOCK_TIMEOUT`)で成り立たなければ `Schedule::stop` に止まったステップを記録し、以降のステップは長さ 0 で並べる。時刻表は再生前に作るので、スクラブや繰り返しでも結果は毎回同じ。
 - サイクル全体の ON / OFF は `SensorTimeline`(チャートの波形用)、再生位置の ON / OFF は `SensorStates` に入る。`SensorStates` は `MotionSet::Sensors`(`MotionSet::Pose` の後)で更新するので、外部へ渡す処理は `.after(MotionSet::Sensors)` で読む。
 
+### 安全機器・作業者・AGV(`safety/`, `floor/`)
+
+- 検知・ラッチ・安全距離・動作範囲・作業者の計画・AGV の配車はすべて Bevy に依存しない関数で、単体テストを付けている。
+- 侵入物は `safety::SafetyIntruders` に毎フレーム集める (可動部・作業者・AGV)。停止信号が出ると、タイミングチャートの再生と AGV が止まる。
+- 作業者と AGV はチャートとは別の時計 `floor::FloorClock` で動く。詳しくは [safety-and-floor.md](safety-and-floor.md)。
+
 ### 寸法と注記(`annotation.rs`)
 
 - 値は f64 の形状から計算し、単位はモデルの単位(mm など)で出す。吸着は頂点・辺の中点・面の中心の 12 px 以内。
@@ -190,12 +241,16 @@ egui のパネルを上・下・左・右の順に置き、残った領域を 3D
 - 追加・削除・すべて削除・注記の文字の編集は元に戻せる。部品を削除すると寸法は隠れ、部品の削除を元に戻すと寸法も戻る。
 - 距離計測(シミュレーション)と寸法の道具は、片方を始めるともう片方は止まる。
 
+### 工程シミュレーション(`flow/`)
+
+工程モデルの離散事象シミュレーションと集計、3D の色分け、Excel 書き出しのしくみは [flow.md](flow.md) にまとめています。工程モデルの編集は元に戻す履歴に入りません。
+
 ### 元に戻す・やり直し(`history.rs`)
 
 変更を済ませてから記録する方式です。モデルを書き換えたあと、その変更を戻すための `Command` を `History` に積みます。
 
 - モデルの変更は `ModelChange` で表します。中身は変更前と変更後のノードの写し(`Model::snapshot`、子孫ごと)です。取り込んだ形状は `Arc` で共有しているので、大きなアセンブリでも写すのは軽く済みます。
-- 履歴に載るもの: 箱の追加、STEP の読み込み、削除(Delete キー・ツリー・プロパティ)、すべて閉じる、ギズモでの移動・回転・拡大縮小、プロパティでの寸法・位置・回転・名前・色の変更。
+- 履歴に載るもの: 箱の追加、円柱・押し出しの追加、穴あけ・ブーリアン、STEP の読み込み、削除(Delete キー・ツリー・プロパティ)、すべて閉じる、ギズモでの移動・回転・拡大縮小、プロパティでの寸法・位置・回転・名前・色の変更。
 - 表示/非表示、選択、カメラは見た目の操作なので履歴に載せません。
 - ギズモや数値欄のドラッグは毎フレーム値が変わります。`History::begin_edit` が最初の状態だけを覚え、マウスを離した時点(数値を打ち込んだときは入力欄から抜けた時点)で1件にまとめます。
 - 新しく編集するとやり直しの履歴は消えます。履歴は最大 200 件です。

@@ -46,36 +46,56 @@ cadsim は Clean Architecture をもとに、コードを4つの層に分けま�
 Cargo のワークスペースに分け、依存の向きをコンパイラに守らせます(内側の crate の `Cargo.toml` に Bevy を書かなければ、使おうとした時点でビルドが通りません)。
 
 ```text
-Cargo.toml                ワークスペース
+Cargo.toml                ワークスペース兼アプリ本体 (4. UI・フレームワーク)
+src/                      アプリ本体。assets/ の場所を変えないようにルートに置いたままにする
+├── main.rs               プラグインを並べるだけ
+├── resources.rs          ドメインの型を包む Resource
+├── view/                 viewport, camera, gizmo, 干渉の表示, 動画の撮影
+├── input/                shortcuts, ファイルダイアログ, ドラッグ&ドロップ
+└── ui/                   menu, tree, properties, status, 各パネル
 crates/
 ├── cadsim_core/          1. ドメイン + 2. ユースケース (Bevy なし)
 │   └── src/
 │       ├── domain/       model, math, selection, simulation (幾何・干渉・計測),
-│       │                 motion (チャート・姿勢・運動学), plc (シーケンス・I/O 表), flow
+│       │                 motion (チャート・姿勢・運動学), plc (シーケンス・I/O 表), flow,
+│       │                 safety (安全機器・検知・安全距離), floor (作業者・AGV・床の幾何)
 │       └── usecase/      document (開く・保存・取り込み・書き出し), edit, history,
 │                         ports (SceneReader / SceneWriter / ProjectStore などのトレイト)
-├── cadsim_io/            3. アダプター (Bevy なし)
-│   └── src/              step, interchange (gltf / obj / stl / usd), project_file (JSON),
-│                         modbus, video
-└── cadsim/               4. UI・フレームワーク (実行ファイル)
-    └── src/
-        ├── main.rs       プラグインを並べるだけ
-        ├── resources.rs  ドメインの型を包む Resource
-        ├── view/         viewport, camera, gizmo, 干渉の表示, 動画の撮影
-        ├── input/        shortcuts, ファイルダイアログ, ドラッグ&ドロップ
-        └── ui/           menu, tree, properties, status, 各パネル
+└── cadsim_io/            3. アダプター (Bevy なし)
+    └── src/              step, interchange (gltf / obj / stl / usd), project_file (JSON),
+                          modbus, video, xlsx (工程シミュレーションの結果)
 ```
+
+ルートの `Cargo.toml` の `default-members` に全 crate を並べているので、引数なしの `cargo test` / `cargo clippy` でワークスペース全体を確かめられます。
 
 ## いまのコードからの移し方
 
 機能追加の PR(タイミングチャート、ロボット、PLC、センサー、動画書き出し、搬送など)が落ち着いてから、動作を変えずに次の順で少しずつ移します。
 1つの PR は1段だけにし、毎回 `cargo fmt` / `clippy` / `test` が通る状態でマージします。
 
-1. **ワークスペース化。** 今の crate を `crates/cadsim/` に移し、空の `cadsim_core` と `cadsim_io` を作る。中身は変えない。
-2. **純粋な計算を core へ。** `math`、`simulation` の幾何・干渉・計測、`motion` の計算部分などを移す。`bevy::math` は同じ型の `glam` に置き換える。
-3. **ファイル形式を io へ。** `step_import`、`interchange`、`.cadsim` の JSON の構造体を移す。
+1. **ワークスペース化と純粋な計算を core へ。** ✅ ルートをワークスペースにして `cadsim_core` を作り、`math` と `simulation` の幾何・干渉の計算を移した。`bevy::math` は同じ版の `glam` に置き換え、アプリ側の `math` / `simulation` から再公開しているので呼び出し側は変わらない。
+   - ゲーム風 UI の判定(`gamify`)は最初から `cadsim_core` に置いた。設定ファイルの読み書き(`src/preferences_file.rs`)はアダプター層の候補で、`cadsim_io` ができたら移す。
+2. **残りの純粋な計算を core へ。** `motion` のチャート・姿勢・運動学、PLC のシーケンスなど。進行中の機能ブランチが触っているので、それらが入ってから移す。
+3. **ファイル形式を io へ。** `cadsim_io` を作り、`step_import`、`interchange`、`.cadsim` の JSON の構造体を移す。
 4. **設計データを core へ。** `Model`・`Selection` などから `#[derive(Resource)]` を外し、UI 層の包み型に置き換える。
 5. **ユースケースを切り出す。** 開く・保存・取り込み・書き出し・削除・元に戻すを `usecase` の関数にし、Bevy のシステムからはそれを呼ぶだけにする。元に戻す履歴は `World` ではなくドキュメント(モデル + チャートなど)を書き換える形にする。
 6. **UI 層を整理する。** 残った Bevy / egui のコードを `view` / `input` / `ui` に分ける。
 
+いまの `src/safety/` と `src/floor/` は、`device.rs`・`check.rs`・`geom.rs`・`operator_plan.rs`・`agv_sim.rs` が Bevy に依存しない層 (2. で core へ移すもの)、`mod.rs`・`view.rs`・`panel.rs` が UI 層です。
+
 各段の終わりに、この文書の「目標のディレクトリ構成」と実際の構成の差を更新します。
+
+### すでに層を分けて書いてあるもの
+
+- 工程シミュレーション: ドメイン(工程モデル・離散事象シミュレーション・色)は `cadsim_core::flow` に置いた。アプリの `src/flow/` のうち `record.rs`(.cadsim の形)と `xlsx.rs`(Excel 書き出し)は Bevy に依存しないアダプターで、`cadsim_io` を作る段でそのまま移す。`mod.rs`・`ui.rs` が UI 層。
+
+### 移行の途中で足した機能の置き場所
+
+| 機能 | ドメイン(`cadsim_core`) | アダプター(いまはアプリ側、手順 3 で `cadsim_io` へ) | UI(アプリ側) |
+| --- | --- | --- | --- |
+| 平面図の下敷き・点群 | `site::{underlay, pointcloud, model}` | `formats::{dxf, pdf_plan, pointcloud_read, site_record}` | `site/`(表示・パネル・縮尺合わせ) |
+| 2D 図面 | `drawing` | `formats::drawing_out` | `documents.rs` |
+| 部品表 | —(`Model` を読むので `bom.rs` はアプリ側。手順 4 で core へ) | `formats::bom_out` | `documents.rs` |
+| モデリング | —(`Model` と履歴を書き換えるので `modeling.rs` はアプリ側。手順 4 で core へ) | — | `ui/modeling.rs` |
+
+`formats/` と `bom.rs`・`modeling.rs`・`drawing/collect.rs` は Bevy に依存しない書き方にしてあり、`Model` が core に移ればそのまま移せます。
