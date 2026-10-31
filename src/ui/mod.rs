@@ -55,6 +55,7 @@ use crate::model::{Model, Selection};
 use crate::motion::{self, MotionUi, at_design_pose};
 use crate::physics::physics_stopped;
 use crate::project::{ProjectState, show_confirm_dialog};
+use crate::result_export::ResultExport;
 use crate::viewport::{RenderStats, ViewSettings};
 
 pub struct UiPlugin;
@@ -102,6 +103,7 @@ pub struct UiState<'w> {
     pub diagnostics: Res<'w, DiagnosticsStore>,
     pub render_stats: Res<'w, RenderStats>,
     pub playful: ResMut<'w, playful::PlayfulUi>,
+    pub results: ResMut<'w, ResultExport>,
 }
 
 /// UI 専用のカメラ。3D カメラはパネルを除いた領域だけに描くので、

@@ -60,6 +60,7 @@ crates/
 │       │                 motion (チャート・姿勢・運動学), plc (シーケンス・I/O 表), flow,
 │       │                 safety (安全機器・検知・安全距離), floor (作業者・AGV・床の幾何)
 │       └── usecase/      document (開く・保存・取り込み・書き出し), edit, history,
+│                         report (シミュレーション結果の CSV),
 │                         ports (SceneReader / SceneWriter / ProjectStore などのトレイト)
 └── cadsim_io/            3. アダプター (Bevy なし)
     └── src/              step, interchange (gltf / obj / stl / usd), project_file (JSON),
@@ -82,6 +83,10 @@ crates/
 6. **UI 層を整理する。** 残った Bevy / egui のコードを `view` / `input` / `ui` に分ける。
 
 いまの `src/safety/` と `src/floor/` は、`device.rs`・`check.rs`・`geom.rs`・`operator_plan.rs`・`agv_sim.rs` が Bevy に依存しない層 (2. で core へ移すもの)、`mod.rs`・`view.rs`・`panel.rs` が UI 層です。
+
+新しく足した機能のうち、すでに層を分けてあるもの:
+
+- `src/result_export/report/` … ユースケース層 (CSV の作成)。Bevy の ECS・egui・ファイルシステムに依存しない。移行時は `usecase/report` へ移す。`src/result_export/plugin.rs` は UI 層。
 
 各段の終わりに、この文書の「目標のディレクトリ構成」と実際の構成の差を更新します。
 

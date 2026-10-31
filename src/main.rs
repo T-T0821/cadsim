@@ -65,6 +65,7 @@ mod part_mesh;
 mod physics;
 mod preferences_file;
 mod project;
+mod result_export;
 mod safety;
 mod shortcuts;
 mod simulation;
@@ -106,7 +107,11 @@ fn main() {
             motion::MotionPlugin,
             (flow::FlowPlugin, bench::BenchPlugin),
             (safety::SafetyPlugin, floor::FloorPlugin),
-            (site::SitePlugin, documents::DocumentsPlugin),
+            (
+                site::SitePlugin,
+                documents::DocumentsPlugin,
+                result_export::ResultExportPlugin,
+            ),
             physics::PhysicsPlugin,
         ))
         .run();
