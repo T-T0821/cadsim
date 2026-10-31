@@ -392,6 +392,22 @@ fn line_menu(ui: &mut egui::Ui, state: &mut UiState) {
         if ui.button("サンプル工程を読み込む").clicked() {
             state.flow.load_sample();
         }
+        ui.separator();
+        let label = if state.line.open {
+            "ライン連携を閉じる"
+        } else {
+            "ライン連携…"
+        };
+        if ui
+            .button(label)
+            .on_hover_text(
+                "工程シミュレーション・AGV・作業者・タイミングチャートを同じ時計で動かし、安全停止で全体を止める",
+            )
+            .clicked()
+        {
+            state.line.toggle();
+            ui.close();
+        }
     });
 }
 

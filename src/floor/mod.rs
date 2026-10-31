@@ -15,7 +15,7 @@ pub(crate) mod agv_sim;
 pub mod geom;
 pub(crate) mod operator_plan;
 mod panel;
-mod sample;
+pub(crate) mod sample;
 mod view;
 
 use std::collections::HashMap;
@@ -37,7 +37,7 @@ use operator_plan::{Operator, OperatorPlan};
 const PERSON_RADIUS: f64 = 300.0;
 const PERSON_HEIGHT: f64 = 1700.0;
 /// AGV の高さ (mm)
-const AGV_HEIGHT: f64 = 400.0;
+pub(crate) const AGV_HEIGHT: f64 = 400.0;
 
 pub struct FloorPlugin;
 
@@ -140,6 +140,20 @@ pub struct FloorState {
 impl FloorState {
     fn reset_sim(&mut self) {
         self.sim = None;
+    }
+
+    /// 実行中の AGV シミュレーション (ライン連携から使う)
+    pub(crate) fn agv_sim(&self) -> Option<&AgvSim> {
+        self.sim.as_ref()
+    }
+
+    pub(crate) fn agv_sim_mut(&mut self) -> Option<&mut AgvSim> {
+        self.sim.as_mut()
+    }
+
+    /// AGV を最初の位置から走らせ直す
+    pub(crate) fn restart_agv(&mut self, layout: &AgvLayoutRes) {
+        self.sim = Some(AgvSim::new(&layout.graph, &layout.flows, &layout.params));
     }
 }
 

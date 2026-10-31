@@ -5,7 +5,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::model::{Element, ElementKind, Energy, Failure, FlowModel, RunSettings};
+use super::model::{AgvCall, Element, ElementKind, Energy, Failure, FlowModel, RunSettings};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct FlowRecord {
@@ -40,6 +40,22 @@ pub struct ElementRecord {
     pub standby_kw: f64,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub air_l_per_min: f64,
+    /// ライン連携: 送り出しを運ぶ AGV の積み込み・荷降ろしの点の id
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agv: Option<AgvCallRecord>,
+    /// ライン連携: 加工を始めるたびにタイミングチャートを頭から再生する
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub starts_chart: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
+pub struct AgvCallRecord {
+    pub from: u32,
+    pub to: u32,
+}
+
+fn is_false(v: &bool) -> bool {
+    !*v
 }
 
 fn is_zero(v: &f64) -> bool {
@@ -114,6 +130,11 @@ pub fn to_record(model: &FlowModel, part_path: impl Fn(u32) -> Option<Vec<usize>
                 rated_kw: e.energy.rated_kw,
                 standby_kw: e.energy.standby_kw,
                 air_l_per_min: e.energy.air_l_per_min,
+                agv: e.carrier.map(|c| AgvCallRecord {
+                    from: c.from,
+                    to: c.to,
+                }),
+                starts_chart: e.starts_chart,
             })
             .collect(),
     }
@@ -185,6 +206,11 @@ pub fn from_record(
                 standby_kw: r.standby_kw,
                 air_l_per_min: r.air_l_per_min,
             },
+            carrier: r.agv.map(|c| AgvCall {
+                from: c.from,
+                to: c.to,
+            }),
+            starts_chart: r.starts_chart,
         });
         if !inserted {
             warnings.push(format!(
@@ -205,6 +231,8 @@ mod tests {
     fn round_trip_keeps_the_line() {
         let mut model = sample_line();
         model.elements[1].part = Some(42);
+        model.elements[1].carrier = Some(AgvCall { from: 3, to: 5 });
+        model.elements[1].starts_chart = true;
         let record = to_record(&model, |id| (id == 42).then(|| vec![0, 3]));
         let json = serde_json::to_string(&record).unwrap();
         assert!(json.contains("\"type\":\"Process\""), "{json}");

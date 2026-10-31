@@ -103,6 +103,7 @@ pub struct UiState<'w> {
     pub documents: ResMut<'w, crate::documents::DocumentExport>,
     pub modeling: ResMut<'w, modeling::ModelingUi>,
     pub flow: FlowUi<'w>,
+    pub line: ResMut<'w, crate::line::LineState>,
     pub diagnostics: Res<'w, DiagnosticsStore>,
     pub render_stats: Res<'w, RenderStats>,
     pub playful: ResMut<'w, playful::PlayfulUi>,
