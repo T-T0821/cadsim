@@ -9,6 +9,7 @@ use crate::camera::CameraRequest;
 use crate::gizmo::snap_settings_ui;
 use crate::math::{euler_deg_to_quat, quat_to_euler_deg, split_placement};
 use crate::model::{NodeId, NodeKind};
+use crate::motion;
 use crate::physics::{BeltDrive, BodyMode, ColliderShape, LocalAxis};
 
 pub fn show(root: &mut egui::Ui, state: &mut UiState) {
@@ -35,6 +36,7 @@ pub fn show(root: &mut egui::Ui, state: &mut UiState) {
                     egui::CollapsingHeader::new("ギズモのスナップ")
                         .default_open(false)
                         .show(ui, |ui| snap_settings_ui(ui, &mut state.gizmo));
+                    motion::show_robot_section(ui, &mut state.motion);
                 });
         });
 }

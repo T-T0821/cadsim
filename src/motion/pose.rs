@@ -9,7 +9,8 @@ use std::collections::HashMap;
 use bevy::math::{DMat4, DQuat, DVec3};
 use truck_modeling::Matrix4;
 
-use super::chart::{Actuator, ActuatorKind, Schedule, TimingChart};
+use super::chart::Schedule;
+use super::chart::{Actuator, ActuatorKind, TimingChart};
 
 /// 回転してから平行移動する剛体変換 (f64)
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -77,12 +78,20 @@ impl RigidPose {
     }
 }
 
+/// 設計位置での動く向き (直動は移動方向、回転は回転軸の単位ベクトル)
+pub fn direction(actuator: &Actuator) -> DVec3 {
+    let direction = DVec3::from_array(actuator.axis.unit_vector());
+    if actuator.reversed {
+        -direction
+    } else {
+        direction
+    }
+}
+
 /// 1台のアクチュエータ自身の動き (親の動きは含まない)
 fn local_motion(actuator: &Actuator, value: f64) -> RigidPose {
-    let mut direction = DVec3::from_array(actuator.axis.unit_vector());
-    if actuator.reversed {
-        direction = -direction;
-    }
+    let direction = direction(actuator);
+    let value = actuator.clamp(value);
     match actuator.kind {
         ActuatorKind::Cylinder => RigidPose::from_translation(direction * value * actuator.stroke),
         ActuatorKind::LinearAxis => RigidPose::from_translation(direction * value),
@@ -98,8 +107,17 @@ pub fn actuator_poses(chart: &TimingChart, schedule: &Schedule, t: f64) -> HashM
     actuator_poses_from(chart, |a| schedule.value_at(a, t))
 }
 
+/// 各アクチュエータの値から、「親の動きも含めた」変換を求める (順運動学)。
+/// `values` にないアクチュエータは原点 (0) にあるものとする。
+pub fn actuator_poses_for(
+    chart: &TimingChart,
+    values: &HashMap<u32, f64>,
+) -> HashMap<u32, RigidPose> {
+    actuator_poses_from(chart, |a| values.get(&a.id).copied().unwrap_or(0.0))
+}
+
 /// アクチュエータごとの値 (`value_of`) から、「親の動きも含めた」変換を求める。
-/// 値の出どころは時刻表でも PLC でもよい。
+/// 値の出どころは時刻表でも PLC でもジョグでもよい。
 fn actuator_poses_from(
     chart: &TimingChart,
     value_of: impl Fn(&Actuator) -> f64,
@@ -130,22 +148,13 @@ fn actuator_poses_from(
 
 /// 時刻 t における各部品の変換 (動かない部品は含まない)
 pub fn part_poses(chart: &TimingChart, schedule: &Schedule, t: f64) -> HashMap<u32, RigidPose> {
-    parts_moved_by(chart, actuator_poses(chart, schedule, t))
+    part_poses_for(chart, &actuator_poses(chart, schedule, t))
 }
 
-/// アクチュエータの現在値 (id → 値) から各部品の変換を求める。PLC 連携で使う。
-/// `values` にないアクチュエータは原点 (値 0) にあるものとする。
-pub fn part_poses_from_values(
+/// 各アクチュエータの変換から、各部品の変換を求める (動かない部品は含まない)
+pub fn part_poses_for(
     chart: &TimingChart,
-    values: &HashMap<u32, f64>,
-) -> HashMap<u32, RigidPose> {
-    let poses = actuator_poses_from(chart, |a| values.get(&a.id).copied().unwrap_or(0.0));
-    parts_moved_by(chart, poses)
-}
-
-fn parts_moved_by(
-    chart: &TimingChart,
-    actuator_poses: HashMap<u32, RigidPose>,
+    actuator_poses: &HashMap<u32, RigidPose>,
 ) -> HashMap<u32, RigidPose> {
     let mut parts = HashMap::new();
     for actuator in &chart.actuators {

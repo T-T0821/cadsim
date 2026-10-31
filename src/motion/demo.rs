@@ -1,4 +1,6 @@
-//! 動作確認用のサンプル装置: 供給コンベア → ガントリーのピック & プレース → 排出コンベア
+//! 動作確認用のサンプル装置
+//!
+//! ## 供給コンベア → ガントリーのピック & プレース → 排出コンベア ([`load_demo`])
 //!
 //! ```text
 //!  S1 ワーク到着待ち  S2 リフタ下降  S3 チャック閉(把持)  S4 リフタ上昇
@@ -13,8 +15,13 @@
 //!   X軸を動かすステップ (S5, S9) は、これが ON になるまで始めない。
 //! - 近接センサー「チャック閉確認」(リフタに取り付け): 可動爪が閉じていると ON。
 //!   掴んで上げるステップ (S4) は ON、離して上げるステップ (S8) は OFF になるまで始めない。
+//!
+//! ## 4軸ロボット ([`load_robot_demo`])
+//!
+//! 旋回 (J1) + 肩・肘・手首 (J2〜J4) のアームと、手首に載ったグリッパのシリンダ。
+//! コンベア上の教示点から置き台の上の教示点へ、工具を下向きにしたまま運ぶ。
 
-use super::chart::{Action, ActuatorKind, Axis, Interlock, Step, TimingChart};
+use super::chart::{Action, ActuatorKind, Axis, Interlock, RobotMove, Step, TimingChart};
 use super::sensor::SensorKind;
 use cadsim_core::conveyor::{BeltAxis, ConveyorConfig, ConveyorEnd, SourceOutput};
 
@@ -238,5 +245,159 @@ pub fn load_demo(model: &mut Model, chart: &mut TimingChart, conveyors: &mut Con
         g.chuck = Some(chuck);
         g.tcp = [PICK_X, BELT_TOP + WORK[1] / 2.0 + LIFT, 0.0].map(|v| v * S);
         g.reach = 0.2 * S;
+    }
+}
+
+/// モデルとチャートを4軸ロボットのサンプルに置き換える
+pub fn load_robot_demo(model: &mut Model, chart: &mut TimingChart) {
+    model.clear();
+    model.unit = "mm".into();
+    *chart = TimingChart::default();
+
+    let mut add = |name: &str, size: [f64; 3], position: [f64; 3]| {
+        let id = model.add_box(size.map(|v| v * S), position.map(|v| v * S));
+        if let Some(node) = model.get_mut(id) {
+            node.name = name.into();
+        }
+        id
+    };
+    // 設計位置 (全関節 0) ではアームはまっすぐ上を向いている
+    add("架台", [0.8, 0.6, 0.8], [0.0, 0.3, 0.0]);
+    add("コンベア", [1.4, 0.6, 1.0], [2.0, 0.3, 0.0]);
+    add("置き台", [1.0, 0.5, 1.0], [0.0, 0.25, -1.9]);
+    let turret = add("旋回ベース", [0.7, 0.3, 0.7], [0.0, 0.75, 0.0]);
+    let shoulder = add("肩", [0.4, 0.4, 0.5], [0.0, 1.1, 0.0]);
+    let upper_arm = add("上腕", [0.22, 0.9, 0.22], [0.0, 1.75, 0.0]);
+    let forearm = add("前腕", [0.18, 0.9, 0.18], [0.0, 2.8, 0.0]);
+    let wrist = add("手首", [0.24, 0.3, 0.24], [0.0, 3.45, 0.0]);
+    let hand = add("ハンド", [0.4, 0.08, 0.2], [0.0, 3.64, 0.0]);
+    let fixed_finger = add("固定爪", [0.04, 0.2, 0.16], [-0.18, 3.78, 0.0]);
+    let moving_finger = add("可動爪", [0.04, 0.2, 0.16], [0.18, 3.78, 0.0]);
+
+    let mut joint = |name: &str, axis: Axis, pivot: [f64; 3], parent, parts, limit: f64| {
+        let id = chart.add_actuator(ActuatorKind::RotaryTable);
+        let a = chart.actuator_mut(id).unwrap();
+        a.name = name.into();
+        a.axis = axis;
+        a.pivot = pivot.map(|v| v * S);
+        a.mounted_on = parent;
+        a.parts = parts;
+        a.limits = Some([-limit, limit]);
+        id
+    };
+    let j1 = joint(
+        "J1 旋回",
+        Axis::Y,
+        [0.0; 3],
+        None,
+        vec![turret, shoulder],
+        170.0,
+    );
+    let j2 = joint(
+        "J2 肩",
+        Axis::Z,
+        [0.0, 1.1, 0.0],
+        Some(j1),
+        vec![upper_arm],
+        120.0,
+    );
+    let j3 = joint(
+        "J3 肘",
+        Axis::Z,
+        [0.0, 2.3, 0.0],
+        Some(j2),
+        vec![forearm],
+        150.0,
+    );
+    let j4 = joint(
+        "J4 手首",
+        Axis::Z,
+        [0.0, 3.3, 0.0],
+        Some(j3),
+        vec![wrist, hand, fixed_finger],
+        135.0,
+    );
+    let gripper = chart.add_actuator(ActuatorKind::Cylinder);
+    {
+        let a = chart.actuator_mut(gripper).unwrap();
+        a.name = "グリッパ".into();
+        a.axis = Axis::X;
+        a.reversed = true;
+        a.stroke = 0.2 * S;
+        a.mounted_on = Some(j4);
+        a.parts = vec![moving_finger];
+        a.default_duration = 0.3;
+    }
+
+    let robot = chart.add_robot(j4);
+    let down = Some([0.0, -1.0, 0.0]);
+    let [pick_above, pick, place_above, place] = {
+        let r = chart.robot_mut(robot).unwrap();
+        r.name = "4軸アーム".into();
+        r.tcp = [0.0, 3.85 * S, 0.0];
+        let mut point = |name: &str, p: [f64; 3]| r.add_point(name.into(), p.map(|v| v * S), down);
+        [
+            point("ピック上", [1.9, 1.5, 0.0]),
+            point("ピック", [1.9, 0.85, 0.0]),
+            point("プレース上", [0.0, 1.4, -1.9]),
+            point("プレース", [0.0, 0.75, -1.9]),
+        ]
+    };
+
+    let to = |point, duration| RobotMove {
+        robot,
+        point,
+        duration,
+    };
+    let step = |comment: &str, moves: Vec<RobotMove>, actions: Vec<Action>, dwell: f64| Step {
+        comment: comment.into(),
+        actions,
+        dwell,
+        moves,
+        ..Default::default()
+    };
+    let act = |actuator, target, duration| Action {
+        actuator,
+        target,
+        duration,
+    };
+    let home: Vec<Action> = [j1, j2, j3, j4]
+        .into_iter()
+        .map(|j| act(j, 0.0, 1.4))
+        .collect();
+    chart.steps = vec![
+        step("ピック上へ", vec![to(pick_above, 1.4)], vec![], 0.0),
+        step("下降", vec![to(pick, 0.6)], vec![], 0.0),
+        step("把持", vec![], vec![act(gripper, 1.0, 0.3)], 0.2),
+        step("上昇", vec![to(pick_above, 0.6)], vec![], 0.0),
+        step("プレース上へ", vec![to(place_above, 1.4)], vec![], 0.0),
+        step("下降", vec![to(place, 0.6)], vec![], 0.0),
+        step("解放", vec![], vec![act(gripper, 0.0, 0.3)], 0.2),
+        step("上昇", vec![to(place_above, 0.6)], vec![], 0.0),
+        step("原点復帰", vec![], home, 0.0),
+    ];
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn robot_demo_reaches_every_point_and_returns_home() {
+        let mut model = Model::default();
+        let mut chart = TimingChart::default();
+        load_robot_demo(&mut model, &mut chart);
+        let schedule = chart.schedule();
+        assert_eq!(schedule.moves.len(), 6);
+        for m in &schedule.moves {
+            assert!(m.reached, "{m:?}");
+        }
+        for actuator in &chart.actuators {
+            assert!(
+                schedule.final_value(actuator).abs() < 1e-9,
+                "{}",
+                actuator.name
+            );
+        }
     }
 }

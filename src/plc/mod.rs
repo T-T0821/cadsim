@@ -19,7 +19,7 @@ use bevy::prelude::*;
 use bevy_egui::EguiPrimaryContextPass;
 
 use crate::history::{TrackDocExt, TrackedDoc};
-use crate::motion::{MotionSet, SimulationPose, TimingChart, part_poses_from_values};
+use crate::motion::{MotionSet, SimulationPose, TimingChart, actuator_poses_for, part_poses_for};
 pub use adapter::record::PlcRecord;
 use adapter::record::PlcSettings;
 use domain::io::AddressPlan;
@@ -127,7 +127,10 @@ fn run_plc(
     mut pose: ResMut<SimulationPose>,
 ) {
     let values = plc.session.scan(&chart, time.delta_secs_f64());
-    pose.parts = part_poses_from_values(&chart, values);
+    // ロボットの表示 (TCP・骨格) も PLC の値に合わせるため、関節の値と変換も入れる
+    pose.actuators = actuator_poses_for(&chart, values);
+    pose.parts = part_poses_for(&chart, &pose.actuators);
+    pose.values = values.clone();
     pose.time = 0.0;
     pose.step = plc.session.running_step();
 }
