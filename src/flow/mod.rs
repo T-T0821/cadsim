@@ -26,7 +26,30 @@ use bevy::prelude::*;
 pub use ui::{FlowUi, show_window};
 
 use crate::file_io::ImportJobs;
+use crate::history::{TrackDocExt, TrackedDoc};
 use crate::model::{Model, NodeId};
+
+/// 工程モデルの編集を元に戻す履歴に載せる
+struct FlowDoc;
+
+impl TrackedDoc for FlowDoc {
+    type Value = FlowModel;
+    const LABEL: &'static str = "工程モデルを編集";
+
+    fn read(world: &World) -> FlowModel {
+        world.resource::<FlowRes>().0.clone()
+    }
+
+    fn write(world: &mut World, value: FlowModel) {
+        world.resource_mut::<FlowRes>().0 = value;
+        // 前の工程で回した結果は合わなくなるので捨てる
+        world.resource_mut::<FlowRun>().stop();
+    }
+
+    fn same(a: &FlowModel, b: &FlowModel) -> bool {
+        a == b
+    }
+}
 use model::FlowModel;
 use sim::{Report, Simulation};
 
@@ -35,6 +58,7 @@ pub struct FlowPlugin;
 impl Plugin for FlowPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<FlowRes>()
+            .track_doc::<FlowDoc>()
             .init_resource::<FlowRun>()
             .init_resource::<FlowColors>()
             .init_resource::<ui::FlowUiState>()

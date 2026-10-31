@@ -11,9 +11,16 @@
 //! ギズモやパネルのドラッグは毎フレーム値が変わるので、`begin_edit` で変更前を覚えておき、
 //! マウスを離した時点で `finish_gesture_when_idle` が1件の履歴にまとめる。
 //! 表示/非表示の切り替えは見た目の操作なので履歴に載せない。
+//!
+//! タイミングチャート・工程モデル・床の配置・平面図のように、画面のあちこちで編集される文書は
+//! [`TrackedDoc`] を実装して `app.track_doc::<…>()` で登録する。編集する場所ごとに履歴を積む代わりに、
+//! マウスを離して入力欄からも抜けたときに前の状態と比べ、変わっていれば1件の履歴にする。
+
+use std::marker::PhantomData;
 
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass};
+use cadsim_core::usecase::edit_tracker::EditTracker;
 
 use crate::gizmo::transform_gizmo_system;
 use crate::model::{Model, Node, NodeId, NodeKind, Selection, Snapshot};
@@ -26,7 +33,10 @@ pub struct HistoryPlugin;
 impl Plugin for HistoryPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<History>()
-            .add_systems(Update, apply_history_requests)
+            .add_systems(
+                Update,
+                (record_tracked_docs, apply_history_requests).chain(),
+            )
             .add_systems(
                 EguiPrimaryContextPass,
                 finish_gesture_when_idle.after(transform_gizmo_system),
@@ -56,15 +66,46 @@ pub struct History {
     pending: Option<Snapshot>,
     /// メニューやショートカットから頼まれた操作。`apply_history_requests` が処理する。
     pub request: Option<Request>,
+    /// 見張っている文書 (タイミングチャートなど)
+    trackers: Vec<Box<dyn AnyTracker>>,
+    /// マウスを離していて、入力欄にもフォーカスがない (編集の区切り)
+    idle: bool,
 }
 
 impl History {
     /// 済ませた変更を履歴に積む。やり直しの履歴は捨てる。
     pub fn push(&mut self, command: impl Command) {
+        self.push_boxed(Box::new(command));
+    }
+
+    fn push_boxed(&mut self, command: Box<dyn Command>) {
         self.redo_stack.clear();
-        self.undo_stack.push(Box::new(command));
+        self.undo_stack.push(command);
         if self.undo_stack.len() > MAX_HISTORY {
             self.undo_stack.remove(0);
+        }
+    }
+
+    /// 履歴を空にする (新規作成・開くとき)。見張っている文書は、次に見た状態から数え直す。
+    pub fn clear(&mut self) {
+        self.undo_stack.clear();
+        self.redo_stack.clear();
+        self.pending = None;
+        self.request = None;
+        for tracker in &mut self.trackers {
+            tracker.reset();
+        }
+    }
+
+    /// 見張っている文書の変更を履歴に積む
+    fn record_tracked(&mut self, world: &World) {
+        let changes: Vec<_> = self
+            .trackers
+            .iter_mut()
+            .filter_map(|t| t.poll(world))
+            .collect();
+        for change in changes {
+            self.push_boxed(change);
         }
     }
 
@@ -133,22 +174,47 @@ impl History {
         model.clear();
         self.push(ModelChange {
             label: "すべて閉じる".into(),
-            changes: before.into_iter().map(|b| (Some(b), None)).collect(),
+            changes: removals(before),
         });
     }
+
+    /// モデルを丸ごと作り直して履歴に積む (サンプル装置の読み込みなど)
+    pub fn replace_all(
+        &mut self,
+        model: &mut Model,
+        label: String,
+        rebuild: impl FnOnce(&mut Model),
+    ) {
+        self.finish_edit(model);
+        let before = model.snapshot_all();
+        rebuild(model);
+        let after = model.snapshot_all();
+        let mut changes = removals(before);
+        changes.extend(after.into_iter().map(|a| (None, Some(a))));
+        self.push(ModelChange { label, changes });
+    }
 }
+
+/// 最上位のノードをすべて消す変更。戻すときに元の並び順で戻るよう、後ろのノードから消す順に並べる
+/// (戻すときは逆順に、前のノードから元の位置へ差し込まれる)。
+fn removals(before: Vec<Snapshot>) -> Vec<(Option<Snapshot>, Option<Snapshot>)> {
+    before.into_iter().rev().map(|b| (Some(b), None)).collect()
+}
+
+impl History {}
 
 fn node_name(snapshot: &Snapshot) -> &str {
     snapshot.nodes.first().map_or("", |(_, n)| n.name.as_str())
 }
 
-/// 編集で変わりうるところ (名前・配置・色・箱の寸法) が同じなら true。
+/// 編集で変わりうるところ (名前・配置・色・物理の設定・箱の寸法) が同じなら true。
 /// 表示/非表示は履歴に載せないので比べない。
 fn same_snapshot(a: &Snapshot, b: &Snapshot) -> bool {
     let same_node = |x: &Node, y: &Node| {
         x.name == y.name
             && x.placement == y.placement
             && x.color == y.color
+            && x.physics == y.physics
             && x.children == y.children
             && match (&x.kind, &y.kind) {
                 (NodeKind::Box(p), NodeKind::Box(q)) => p == q,
@@ -205,6 +271,7 @@ impl Command for ModelChange {
 pub fn run(world: &mut World, request: Request) -> bool {
     let done = world.resource_scope(|world, mut history: Mut<History>| {
         history.finish_edit(world.resource::<Model>());
+        history.record_tracked(world);
         let history = &mut *history;
         let (from, to) = match request {
             Request::Undo => (&mut history.undo_stack, &mut history.redo_stack),
@@ -218,6 +285,10 @@ pub fn run(world: &mut World, request: Request) -> bool {
             Request::Redo => command.redo(world),
         }
         to.push(command);
+        // 戻した状態を「変更なし」として覚え直す (戻したこと自体を履歴に積まないように)
+        for tracker in &mut history.trackers {
+            tracker.sync(world);
+        }
         true
     });
     // 消えたノードを選んだままにしない
@@ -247,17 +318,106 @@ fn finish_gesture_when_idle(
     model: Res<Model>,
     mut history: ResMut<History>,
 ) -> Result {
-    if history.pending.is_none() {
-        return Ok(());
-    }
     let ctx = contexts.ctx_mut()?;
     let idle = !buttons.pressed(MouseButton::Left)
         && !ctx.egui_is_using_pointer()
         && ctx.memory(|m| m.focused().is_none());
-    if idle {
+    if history.idle != idle {
+        history.idle = idle;
+    }
+    if idle && history.pending.is_some() {
         history.finish_edit(&model);
     }
     Ok(())
+}
+
+/// 編集の区切りで、見張っている文書の変更を履歴に積む
+fn record_tracked_docs(world: &mut World) {
+    world.resource_scope(|world, mut history: Mut<History>| {
+        if history.idle && !history.trackers.is_empty() {
+            history.bypass_change_detection().record_tracked(world);
+        }
+    });
+}
+
+// ---------------------------------------------------------------------------
+// 見張る文書
+// ---------------------------------------------------------------------------
+
+/// 画面のあちこちで編集される文書 (タイミングチャート・工程モデルなど)。
+/// `app.track_doc::<D>()` で登録すると、変更が自動で元に戻す履歴に載る。
+pub trait TrackedDoc: Send + Sync + 'static {
+    /// 比べる・戻すための写し。毎フレーム作るので軽く写せる形にする (大きな中身は `Arc` で共有する)
+    type Value: Clone + Send + Sync + 'static;
+    /// 履歴の説明 (例: "タイミングチャートを編集")
+    const LABEL: &'static str;
+    fn read(world: &World) -> Self::Value;
+    fn write(world: &mut World, value: Self::Value);
+    fn same(a: &Self::Value, b: &Self::Value) -> bool;
+}
+
+pub trait TrackDocExt {
+    fn track_doc<D: TrackedDoc>(&mut self) -> &mut Self;
+}
+
+impl TrackDocExt for App {
+    fn track_doc<D: TrackedDoc>(&mut self) -> &mut Self {
+        self.init_resource::<History>();
+        self.world_mut()
+            .resource_mut::<History>()
+            .trackers
+            .push(Box::new(Tracker::<D> {
+                inner: EditTracker::default(),
+                doc: PhantomData,
+            }));
+        self
+    }
+}
+
+trait AnyTracker: Send + Sync {
+    fn poll(&mut self, world: &World) -> Option<Box<dyn Command>>;
+    fn sync(&mut self, world: &World);
+    fn reset(&mut self);
+}
+
+struct Tracker<D: TrackedDoc> {
+    inner: EditTracker<D::Value>,
+    doc: PhantomData<fn() -> D>,
+}
+
+impl<D: TrackedDoc> AnyTracker for Tracker<D> {
+    fn poll(&mut self, world: &World) -> Option<Box<dyn Command>> {
+        let (before, after) = self.inner.observe(D::read(world), D::same)?;
+        Some(Box::new(DocChange::<D> { before, after }))
+    }
+
+    fn sync(&mut self, world: &World) {
+        self.inner.sync(D::read(world));
+    }
+
+    fn reset(&mut self) {
+        self.inner.reset();
+    }
+}
+
+/// 見張っている文書の変更1回分
+struct DocChange<D: TrackedDoc> {
+    before: D::Value,
+    after: D::Value,
+}
+
+impl<D: TrackedDoc> Command for DocChange<D> {
+    fn label(&self) -> String {
+        D::LABEL.into()
+    }
+
+    fn undo(&self, world: &mut World) {
+        D::write(world, self.before.clone());
+    }
+
+    fn redo(&self, world: &mut World) {
+        D::write(world, self.after.clone());
+    }
 }
 
 #[cfg(test)]
@@ -369,6 +529,144 @@ mod tests {
             h.finish_edit(m);
         });
         assert!(!run(&mut world, Request::Redo));
+    }
+
+    #[test]
+    fn physics_only_edit_is_recorded() {
+        let mut world = world();
+        let id = add_box(&mut world, 1.0);
+        edit(&mut world, |m, h| {
+            h.begin_edit(m, id);
+            m.get_mut(id).unwrap().physics.mode = crate::physics::BodyMode::Dynamic;
+            h.finish_edit(m);
+        });
+        assert_eq!(world.resource::<History>().undo_stack.len(), 2);
+        assert!(run(&mut world, Request::Undo));
+        let mode = world.resource::<Model>().get(id).unwrap().physics.mode;
+        assert_eq!(mode, crate::physics::BodyMode::Mechanism);
+    }
+
+    #[test]
+    fn replace_all_keeps_order_on_undo() {
+        let mut world = world();
+        let a = add_box(&mut world, 1.0);
+        let b = add_box(&mut world, 2.0);
+        let c = add_box(&mut world, 3.0);
+        let new = edit(&mut world, |m, h| {
+            let mut new = 0;
+            h.replace_all(m, "サンプル装置".into(), |m| {
+                m.clear();
+                new = m.add_box([4.0; 3], [0.0; 3]);
+            });
+            new
+        });
+        assert_eq!(world.resource::<Model>().roots, vec![new]);
+        assert!(run(&mut world, Request::Undo));
+        assert_eq!(world.resource::<Model>().roots, vec![a, b, c]);
+        assert!(run(&mut world, Request::Redo));
+        assert_eq!(world.resource::<Model>().roots, vec![new]);
+        // すべて閉じるも元の並びで戻る
+        assert!(run(&mut world, Request::Undo));
+        edit(&mut world, |m, h| h.clear_all(m));
+        assert!(run(&mut world, Request::Undo));
+        assert_eq!(world.resource::<Model>().roots, vec![a, b, c]);
+    }
+
+    /// 見張る文書の例: 数値1つのリソース
+    #[derive(Resource, Default)]
+    struct Counter(i32);
+
+    impl TrackedDoc for Counter {
+        type Value = i32;
+        const LABEL: &'static str = "数を編集";
+        fn read(world: &World) -> i32 {
+            world.resource::<Counter>().0
+        }
+        fn write(world: &mut World, value: i32) {
+            world.resource_mut::<Counter>().0 = value;
+        }
+        fn same(a: &i32, b: &i32) -> bool {
+            a == b
+        }
+    }
+
+    fn tracked_app() -> App {
+        let mut app = App::new();
+        app.init_resource::<Model>()
+            .init_resource::<Selection>()
+            .init_resource::<Counter>()
+            .track_doc::<Counter>()
+            .add_systems(
+                Update,
+                (record_tracked_docs, apply_history_requests).chain(),
+            );
+        app.world_mut().resource_mut::<History>().idle = true;
+        app.update();
+        app
+    }
+
+    fn counter(app: &App) -> i32 {
+        app.world().resource::<Counter>().0
+    }
+
+    fn set_counter(app: &mut App, value: i32) {
+        app.world_mut().resource_mut::<Counter>().0 = value;
+    }
+
+    fn request(app: &mut App, request: Request) {
+        app.world_mut().resource_mut::<History>().request = Some(request);
+        app.update();
+    }
+
+    #[test]
+    fn tracked_doc_edits_become_history_steps() {
+        let mut app = tracked_app();
+        set_counter(&mut app, 1);
+        app.update();
+        // ドラッグ中 (idle でない) の変更はまとめて1件
+        app.world_mut().resource_mut::<History>().idle = false;
+        for v in 2..=5 {
+            set_counter(&mut app, v);
+            app.update();
+        }
+        app.world_mut().resource_mut::<History>().idle = true;
+        app.update();
+        let history = app.world().resource::<History>();
+        assert_eq!(history.undo_stack.len(), 2);
+        assert_eq!(history.undo_label().as_deref(), Some("数を編集"));
+
+        request(&mut app, Request::Undo);
+        assert_eq!(counter(&app), 1);
+        // 戻したこと自体は履歴に積まない
+        app.update();
+        assert_eq!(app.world().resource::<History>().redo_stack.len(), 1);
+        request(&mut app, Request::Undo);
+        assert_eq!(counter(&app), 0);
+        request(&mut app, Request::Redo);
+        request(&mut app, Request::Redo);
+        assert_eq!(counter(&app), 5);
+    }
+
+    #[test]
+    fn undo_flushes_unfinished_tracked_edit_and_clear_restarts() {
+        let mut app = tracked_app();
+        app.world_mut().resource_mut::<History>().idle = false;
+        set_counter(&mut app, 7);
+        app.update();
+        // 入力欄にフォーカスがあるまま Ctrl+Z: 打ち込んだ値を1件にしてから戻す
+        request(&mut app, Request::Undo);
+        assert_eq!(counter(&app), 0);
+
+        // 開き直したあとは、その状態から数える
+        app.world_mut().resource_mut::<History>().idle = true;
+        set_counter(&mut app, 3);
+        app.world_mut().resource_mut::<History>().clear();
+        app.update();
+        assert!(app.world().resource::<History>().undo_label().is_none());
+        set_counter(&mut app, 4);
+        app.update();
+        request(&mut app, Request::Undo);
+        assert_eq!(counter(&app), 3);
     }
 
     #[test]

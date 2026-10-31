@@ -19,6 +19,7 @@ use super::sensor::SensorKind;
 use super::{ChartSchedule, Playback, SensorStates, SensorTimeline, demo};
 use crate::camera::CameraRequest;
 use crate::conveyor::ConveyorConfigRes;
+use crate::history::History;
 use crate::model::{Model, NodeId, Selection};
 use crate::recording::Recorder;
 
@@ -98,6 +99,7 @@ pub fn show_panel(
     model: &mut Model,
     selection: &Selection,
     camera: &mut MessageWriter<CameraRequest>,
+    history: &mut History,
 ) {
     // 編集はコピーに対して行い、変わったときだけ書き戻す (毎フレーム変更扱いにしないため)
     let mut edited = motion.chart.clone();
@@ -155,7 +157,11 @@ pub fn show_panel(
         return;
     }
     if load_demo {
-        demo::load_demo(model, &mut edited, &mut motion.conveyors);
+        // 部品の入れ替えは1件の履歴にする (チャートの入れ替えは見張りが別の1件にする)
+        let conveyors = &mut motion.conveyors;
+        history.replace_all(model, "サンプル装置を読み込み".into(), |model| {
+            demo::load_demo(model, &mut edited, conveyors)
+        });
         camera.write(CameraRequest::FitAll);
         play = Playback::default();
         *state = ChartUiState::default();

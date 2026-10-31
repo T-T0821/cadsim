@@ -155,6 +155,7 @@ fn draw_ui(mut contexts: EguiContexts, mut state: UiState) -> Result {
         &mut state.model,
         &state.selection,
         &mut state.camera,
+        &mut state.history,
     );
     tree::show(&mut root, &mut state);
     properties::show(&mut root, &mut state);

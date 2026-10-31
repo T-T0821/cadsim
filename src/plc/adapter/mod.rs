@@ -2,3 +2,4 @@
 
 pub mod modbus;
 pub mod opcua;
+pub mod record;
