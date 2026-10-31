@@ -53,9 +53,10 @@ pub struct Sensor {
 
 impl Sensor {
     pub fn new(id: u32, kind: SensorKind) -> Self {
+        // 既定値は mm で考えた長さ (光軸 100 mm、検出距離 20 mm)
         let range = match kind {
-            SensorKind::Photoelectric => 1.0,
-            SensorKind::Proximity => 0.1,
+            SensorKind::Photoelectric => 100.0,
+            SensorKind::Proximity => 20.0,
         };
         Self {
             id,

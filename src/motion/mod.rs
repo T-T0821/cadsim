@@ -4,6 +4,7 @@
 //! - `pose`: 時刻 t における部品の位置・姿勢 (f64 の剛体変換)
 //! - `sensor`: 光電・近接センサーの検知判定と、インターロック付きの時刻表 (Bevy 非依存)
 //! - `ui`: タイミングチャートの編集画面と再生コントロール
+//! - `targets`: モデルの部品を、センサーが検知する直方体に変換する (Bevy 非依存)
 //! - `sensor_view`: 3D ビューにセンサーの光軸・検出範囲を描く
 //! - `demo`: 動作確認用のサンプル装置 (ピック & プレース)
 //!
@@ -23,21 +24,19 @@ mod demo;
 mod pose;
 mod sensor;
 mod sensor_view;
+mod targets;
 mod ui;
 
 use std::collections::HashMap;
 
-use bevy::math::{DQuat, DVec3};
 use bevy::prelude::*;
 
 pub use chart::{Schedule, TimingChart};
 pub use pose::RigidPose;
-pub use sensor::TargetBox;
 pub use ui::{MotionUi, show_panel};
 
-use crate::math::euler_deg_to_quat;
-use crate::model::{Model, NodeId, NodeKind};
-use sensor::DesignTarget;
+use crate::model::{Model, NodeId};
+use targets::{design_targets, extra_targets_at};
 
 pub struct MotionPlugin;
 
@@ -160,62 +159,6 @@ impl SimulationPose {
 /// ギズモでの編集はこのときだけ許可する (動いた位置を設計値として書き戻さないため)。
 pub fn at_design_pose(playback: Res<Playback>) -> bool {
     !playback.playing && playback.time == 0.0
-}
-
-/// 設計位置の部品を、センサーの検知対象にする。
-/// アクチュエータが動かす部品 (またはそれを含むアセンブリ) には、そのアクチュエータを付ける。
-fn design_targets(model: &Model, chart: &TimingChart) -> Vec<DesignTarget> {
-    let actuator_of = |id: NodeId| {
-        model.ancestors(id).iter().rev().find_map(|node| {
-            chart
-                .actuators
-                .iter()
-                .find(|a| a.parts.contains(node))
-                .map(|a| a.id)
-        })
-    };
-    model
-        .roots
-        .iter()
-        .flat_map(|&root| model.subtree(root))
-        .filter_map(|id| {
-            Some(DesignTarget {
-                shape: part_box(model, id)?,
-                actuator: actuator_of(id),
-            })
-        })
-        .collect()
-}
-
-/// 部品をワールド座標の直方体にする。箱はそのまま、取り込んだ部品は部品座標系での外接箱。
-fn part_box(model: &Model, id: NodeId) -> Option<TargetBox> {
-    let (center, rotation, half_size) = match &model.get(id)?.kind {
-        NodeKind::Assembly { .. } => return None,
-        NodeKind::Box(part) => (
-            DVec3::from(part.position),
-            euler_deg_to_quat(part.rotation_deg),
-            DVec3::from(part.size) / 2.0,
-        ),
-        NodeKind::Imported { shape, .. } => (
-            (shape.stats.min + shape.stats.max) / 2.0,
-            DQuat::IDENTITY,
-            (shape.stats.max - shape.stats.min) / 2.0,
-        ),
-    };
-    // 配置は剛体 (+ 一様な拡大) とみなす
-    let (scale, world_rotation, _) = model.world_matrix(id).to_scale_rotation_translation();
-    Some(TargetBox {
-        id,
-        center: model.world_matrix(id).transform_point3(center),
-        rotation: world_rotation * rotation,
-        half_size: half_size * scale,
-    })
-}
-
-/// 部品以外の検知対象 (コンベア上のワークなど) を、時刻 t の位置で返す。
-/// 時刻表の t より前の部分だけから決まるものなら、インターロックの待ちにも使える。
-fn extra_targets_at(_schedule: &Schedule, _t: f64) -> Vec<TargetBox> {
-    Vec::new()
 }
 
 fn update_schedule(

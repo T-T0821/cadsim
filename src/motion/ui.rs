@@ -1023,8 +1023,9 @@ fn sensor_editor(ui: &mut egui::Ui, chart: &mut TimingChart, id: u32, state: &mu
                 SensorKind::Proximity => "検出面 X/Y/Z",
             });
             ui.horizontal(|ui| {
+                // 1ピクセルのドラッグで 0.5 (mm など) 動かす
                 for v in &mut sensor.position {
-                    ui.add(egui::DragValue::new(v).speed(0.01));
+                    ui.add(egui::DragValue::new(v).speed(0.5));
                 }
             });
             ui.end_row();
@@ -1046,8 +1047,8 @@ fn sensor_editor(ui: &mut egui::Ui, chart: &mut TimingChart, id: u32, state: &mu
             });
             ui.add(
                 egui::DragValue::new(&mut sensor.range)
-                    .speed(0.01)
-                    .range(0.0..=100.0),
+                    .speed(0.5)
+                    .range(0.0..=100_000.0),
             );
             ui.end_row();
 

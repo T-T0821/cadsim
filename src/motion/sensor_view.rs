@@ -17,8 +17,8 @@ const ON_COLOR: Color = Color::srgb(0.2, 0.9, 0.3);
 const BEAM_OFF_COLOR: Color = Color::srgb(0.95, 0.25, 0.2);
 const PROXIMITY_OFF_COLOR: Color = Color::srgba(0.5, 0.5, 0.55, 0.8);
 const SELECT_COLOR: Color = Color::srgb(1.0, 0.65, 0.2);
-/// センサー本体 (投光器・検出面) を表す箱の大きさ
-const BODY_SIZE: f32 = 0.08;
+/// センサー本体 (投光器・検出面) を表す箱の大きさ (mm)
+const BODY_SIZE: f32 = 8.0;
 
 pub fn draw_sensors(
     mut gizmos: Gizmos,
