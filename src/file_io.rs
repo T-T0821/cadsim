@@ -31,7 +31,6 @@ use crate::stress::stress_scene;
 
 /// 起動時に開くファイルを指定しなかったときに使うサンプル
 const SAMPLE_STEP: &str = include_str!("../assets/sample_assembly.step");
-const SAMPLE_NAME: &str = "sample_assembly.step";
 
 pub struct FileIoPlugin;
 
@@ -213,19 +212,10 @@ pub fn read_step(source: &StepSource) -> Result<String, String> {
 
 /// 読み込み元の表示名。STEP のルートノードの名前にもなる。
 pub fn source_name(source: &StepSource) -> String {
-    match source {
-        StepSource::Sample => SAMPLE_NAME.into(),
-        StepSource::Stress(parts) => format!("負荷テスト ({parts} 部品)"),
-        StepSource::File(path) => file_name(path),
-        StepSource::Modeled(modeled) => modeled.name.clone(),
-    }
+    source.display_name()
 }
 
-pub fn file_name(path: &Path) -> String {
-    path.file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| path.display().to_string())
-}
+pub use cadsim_core::model::file_name;
 
 /// `cargo run -- 部品.step` (または `line.cadsim`) のように渡されたファイルを開く。
 /// 無ければサンプルを開く。`--stress 5000` なら負荷テスト用のシーンを開く

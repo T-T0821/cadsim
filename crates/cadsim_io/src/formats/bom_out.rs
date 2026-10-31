@@ -5,8 +5,8 @@
 
 use rust_xlsxwriter::{Format, Workbook};
 
-use crate::bom::Bom;
-use crate::drawing::format_length;
+use cadsim_core::bom::Bom;
+use cadsim_core::drawing::format_length;
 
 fn bom_header(unit: &str) -> Vec<String> {
     [
@@ -133,8 +133,8 @@ pub fn write_xlsx(bom: &Bom) -> Result<Vec<u8>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bom::make_bom;
-    use crate::model::Model;
+    use cadsim_core::bom::make_bom;
+    use cadsim_core::model::Model;
 
     fn bom() -> Bom {
         let mut model = Model::default();

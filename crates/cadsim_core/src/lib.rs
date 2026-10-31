@@ -4,6 +4,7 @@
 //! ここに置いたコードは Bevy をビルドせずに `cargo test -p cadsim_core` で確かめられる。
 
 pub mod animation;
+pub mod bom;
 pub mod bvh;
 pub mod conveyor;
 pub mod custom_part;

@@ -4,6 +4,7 @@
 //! 図面 (DXF / PDF)・部品表 (CSV / Excel) の書き出し。
 //! Bevy にも egui にも依存しない。
 
+pub mod bom_out;
 pub mod conveyor_record;
 pub mod drawing_out;
 pub mod dxf;
