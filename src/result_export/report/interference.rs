@@ -307,6 +307,7 @@ mod tests {
                     duration: 2.0,
                 }],
                 dwell: 0.0,
+                ..Default::default()
             });
         }
         (bodies, chart)

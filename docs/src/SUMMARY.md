@@ -29,12 +29,13 @@
 - [平面図を床に敷く](floor-plan.md)
 - [点群を読み込む](point-cloud.md)
 - [タイミングチャートと動作シミュレーション](timing-chart.md)
+- [センサーとインターロック](sensors.md)
 - [シミュレーション結果の CSV 出力](csv-export.md)
 - [ショートカット一覧](shortcuts.md)
 
 # 開発中の機能
 
-- [センサー・シーケンサー(PLC)](upcoming/sensors-plc.md)
+- [シーケンサー(PLC)](upcoming/sensors-plc.md)
 - [関節とロボットの動き](upcoming/robot.md)
 - [標準部品ライブラリ](upcoming/parts-library.md)
 

@@ -27,9 +27,10 @@ cadsim は、工場のライン設備を 3D で組み立てて動きを確かめ
 | 平面図(DXF / PDF / 画像)を床に敷く、縮尺合わせ | 使える | [平面図を床に敷く](floor-plan.md) |
 | 点群(PLY / LAS / E57)の表示と干渉チェック | 使える | [点群を読み込む](point-cloud.md) |
 | タイミングチャートと動作シミュレーション | 使える | [タイミングチャート](timing-chart.md) |
+| 光電・近接センサーとステップの開始条件(インターロック) | 使える | [センサーとインターロック](sensors.md) |
 | サイクルタイムと干渉結果の CSV 出力 | 使える | [CSV 出力](csv-export.md) |
 | Windows / Mac 向けのダウンロード版 | 使える | [インストールと起動](install.md) |
-| センサー・シーケンサー(PLC) | 予定 | [センサー・PLC](upcoming/sensors-plc.md) |
+| シーケンサー(PLC) | 予定 | [シーケンサー(PLC)](upcoming/sensors-plc.md) |
 | 関節とロボットの動き | 予定 | [関節とロボット](upcoming/robot.md) |
 | 標準部品ライブラリ | 予定 | [部品ライブラリ](upcoming/parts-library.md) |
 

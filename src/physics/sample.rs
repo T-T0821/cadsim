@@ -310,6 +310,7 @@ pub fn load_sample_line(model: &mut Model, chart: &mut TimingChart) {
             duration: 0.3,
         }],
         dwell,
+        ..Default::default()
     };
     chart.steps = vec![
         step("ストッパ下げ (ワークを通す)", 1.0, 1.2),
