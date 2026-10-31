@@ -1,13 +1,14 @@
-//! 「PLC 連携」ウィンドウ: モードの切り替え、模擬 PLC の運転、Modbus の接続、I/O モニタ
+//! 「PLC 連携」ウィンドウ: モードの切り替え、模擬 PLC の運転、外部 PLC (Modbus TCP / OPC UA) の接続、I/O モニタ
 
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 
-use super::Plc;
 use super::adapter::modbus::{ModbusClient, ModbusSettings};
+use super::adapter::opcua::{OpcUaClient, OpcUaSettings};
 use super::domain::io::{AddressPlan, IoPoint};
 use super::domain::io_csv::CsvReport;
-use super::usecase::{LinkStatus, PlcMode, PlcSession};
+use super::usecase::{LinkStatus, PlcLink, PlcMode, PlcSession};
+use super::{Plc, Protocol};
 use crate::camera::ViewportRect;
 use crate::motion::{Playback, TimingChart};
 
@@ -44,7 +45,9 @@ pub fn plc_window(
             ui.separator();
             let Plc {
                 session,
+                protocol,
                 modbus,
+                opcua,
                 notice,
             } = &mut *plc;
             match session.mode {
@@ -53,7 +56,20 @@ pub fn plc_window(
                     ui.label("PLC の出力で動かすときは、上でモードを選んでください。");
                 }
                 PlcMode::Simulated => simulated_controls(ui, &chart, session),
-                PlcMode::External => modbus_controls(ui, session, modbus),
+                PlcMode::External => {
+                    ui.horizontal(|ui| {
+                        ui.label("通信方式");
+                        // つないでいる間は切り替えない
+                        ui.add_enabled_ui(!session.is_connected(), |ui| {
+                            ui.radio_value(protocol, Protocol::ModbusTcp, "Modbus TCP");
+                            ui.radio_value(protocol, Protocol::OpcUa, "OPC UA");
+                        });
+                    });
+                    match protocol {
+                        Protocol::ModbusTcp => modbus_controls(ui, session, modbus),
+                        Protocol::OpcUa => opcua_controls(ui, session, opcua),
+                    }
+                }
             }
             if session.is_active() {
                 ui.separator();
@@ -79,7 +95,7 @@ fn mode_label(mode: PlcMode) -> &'static str {
     match mode {
         PlcMode::Off => "オフ (チャート再生)",
         PlcMode::Simulated => "内蔵の模擬PLC",
-        PlcMode::External => "Modbus TCP",
+        PlcMode::External => "外部PLC",
     }
 }
 
@@ -119,6 +135,45 @@ fn simulated_controls(ui: &mut egui::Ui, chart: &TimingChart, plc: &mut PlcSessi
     }
 }
 
+fn opcua_controls(ui: &mut egui::Ui, plc: &mut PlcSession, settings: &mut OpcUaSettings) {
+    let connected = plc.is_connected();
+    ui.add_enabled_ui(!connected, |ui| {
+        egui::Grid::new("opcua_settings")
+            .num_columns(2)
+            .show(ui, |ui| {
+                ui.label("エンドポイント");
+                ui.text_edit_singleline(&mut settings.endpoint);
+                ui.end_row();
+                ui.label("通信周期");
+                ui.add(
+                    egui::DragValue::new(&mut settings.interval_ms)
+                        .range(10..=1000)
+                        .suffix(" ms"),
+                );
+                ui.end_row();
+            });
+    });
+    let with_node = plc
+        .table
+        .points
+        .iter()
+        .filter(|p| !p.node.is_empty())
+        .count();
+    let text = format!(
+        "OPC UA ノードを決めた信号: {with_node} / {}",
+        plc.table.points.len()
+    );
+    if with_node == 0 {
+        ui.colored_label(
+            WARN_COLOR,
+            text + "。I/O 表を CSV に書き出し、「OPC UAノード」列を埋めて読み込んでください。",
+        );
+    } else {
+        ui.label(text);
+    }
+    connect_row(ui, plc, || Box::new(OpcUaClient::start(settings.clone())));
+}
+
 fn modbus_controls(ui: &mut egui::Ui, plc: &mut PlcSession, settings: &mut ModbusSettings) {
     let connected = plc.is_connected();
     ui.add_enabled_ui(!connected, |ui| {
@@ -143,13 +198,18 @@ fn modbus_controls(ui: &mut egui::Ui, plc: &mut PlcSession, settings: &mut Modbu
                 ui.end_row();
             });
     });
+    connect_row(ui, plc, || Box::new(ModbusClient::start(settings.clone())));
+}
+
+/// 接続 / 切断のボタンと通信の状態
+fn connect_row(ui: &mut egui::Ui, plc: &mut PlcSession, start: impl FnOnce() -> Box<dyn PlcLink>) {
     ui.horizontal(|ui| {
-        if connected {
+        if plc.is_connected() {
             if ui.button("切断").clicked() {
                 plc.disconnect();
             }
         } else if ui.button("接続").clicked() {
-            plc.connect(Box::new(ModbusClient::start(settings.clone())));
+            plc.connect(start());
         }
         match plc.link_status() {
             LinkStatus::Disconnected => ui.label("未接続"),

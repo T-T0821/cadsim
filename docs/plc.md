@@ -13,6 +13,7 @@
 | ドメイン | `domain/io_csv.rs` | I/O 対応表の CSV 書き出しと読み戻し(信号ごとの個別設定 `PointSettings`)|
 | ドメイン | `domain/sequencer.rs` | 内蔵の模擬 PLC。チャートのステップを I/O で実行 |
 | ユースケース | `usecase.rs` | `PlcSession`: 1スキャン分の処理。外部 PLC との通信はポート `PlcLink` で受け取る |
+| アダプター | `adapter/opcua.rs` | `PlcLink` の OPC UA クライアント実装([async-opcua](https://crates.io/crates/async-opcua)、MPL-2.0)|
 | アダプター | `adapter/modbus.rs` | `PlcLink` の Modbus TCP 実装([tokio-modbus](https://crates.io/crates/tokio-modbus))|
 | UI | `mod.rs`, `ui.rs` | `Plc` リソース(`PlcSession` の包み型)、Bevy のシステム、「PLC連携」ウィンドウ |
 
@@ -56,6 +57,15 @@ PLC 連携中は `update_pose`(時刻表での再生)とギズモを止める(`p
 - 連続した番号は1回の要求にまとめる(1要求 120 点まで)。
 - 通信は別スレッド。画面側は最新の要求を共有メモリに置き、届いた読み値を写すだけで待たない。切れたら 1 秒ごとにつなぎ直す。
 - テストでは tokio-modbus のサーバーを PLC の代わりに立てて、読み書きが届くことを確かめている。
+
+## OPC UA
+
+- I/O 表で「OPC UAノード」を決めた信号だけを扱う。PLC の出力のノードはサブスクリプションで購読し、設備の状態は変わった値だけ Write する。
+- 書き込む型はノードの今の値の型に合わせる(最初に Read して覚える)。整数型のノードは I/O 表のスケールで換算し(例: Int16 の 1250 × 0.1 = 125.0)、Float / Double はそのままの値を使う。範囲外は型の端に丸める。
+- 購読するノードの集まりが変わったら、サブスクリプションを作り直す。
+- SecurityPolicy None・匿名ログインのみ。証明書の置き場所 (pki) は一時フォルダに作る。
+- 通信は別スレッドの tokio ランタイムで行う。切れたら 1 秒ごとにつなぎ直す。
+- 本物のサーバー相手のテストは `#[ignore]` にしてある(`CADSIM_OPCUA_ENDPOINT` を指定して `cargo test -- --ignored opcua`)。必要なノードはテストのコメントにある。
 
 ## 通信方式を足すとき
 
