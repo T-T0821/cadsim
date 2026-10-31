@@ -2,7 +2,7 @@
 //!
 //! | ファイル | 役割 |
 //! | --- | --- |
-//! | `device.rs` | 機器のデータ、侵入の検知、停止信号のラッチ、ISO 13855 の安全距離 (Bevy 非依存) |
+//! | `cadsim_core::safety::device` | 機器のデータ、侵入の検知、停止信号のラッチ、ISO 13855 の安全距離 |
 //! | `check.rs` | 動作範囲 (危険源) と、柵・ライトカーテンの距離の確認 (Bevy 非依存) |
 //! | `view.rs` | 機器と動作範囲の 3D 表示 |
 //! | `panel.rs` | 「安全」パネル |
@@ -12,7 +12,7 @@
 //! を出し、タイミングチャートの再生を止める。リセットするまで再生できない。
 
 mod check;
-pub(crate) mod device;
+pub use cadsim_core::safety::device;
 mod panel;
 mod view;
 

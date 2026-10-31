@@ -6,7 +6,7 @@
 //!
 //! Bevy に依存しない純粋なデータと計算だけを置く。長さは mm、時間は秒。
 
-use bevy::math::DVec2;
+use glam::DVec2;
 
 /// 作業者の手順 1つ
 #[derive(Clone, Debug, PartialEq)]

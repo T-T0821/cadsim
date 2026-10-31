@@ -5,7 +5,7 @@
 //!
 //! Bevy に依存しない純粋な計算だけを置く。
 
-use bevy::math::{DVec2, DVec3};
+use glam::{DVec2, DVec3};
 
 use crate::math::Aabb;
 
