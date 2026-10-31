@@ -8,6 +8,7 @@
 //! | 設備 → PLC | `<バッファ>.数` (ワード) `<バッファ>.満杯` | バッファの中身 |
 //! | 設備 → PLC | `ライン.運転中` `ライン.排出数` (ワード) `安全.停止` | ライン全体 |
 //! | 設備 → PLC | `AGV.搬送待ち` (ワード) `AGV<n>.搬送中` | AGV |
+//! | 設備 → PLC | `コンベア.投入数` `コンベア.排出数` `コンベア.仕掛数` (ワード) | ワーク搬送 (投入口があるときだけ) |
 //! | PLC → 設備 | `ライン.運転` | OFF の間はライン全体を止める |
 //! | PLC → 設備 | `<生成>.投入許可` | OFF の間はその生成からワークを出さない |
 //!
@@ -111,6 +112,23 @@ pub struct SignalSources {
     pub agv_loaded: Vec<bool>,
     /// AGV を頼んでまだ積んでいない搬送の数
     pub agv_waiting: usize,
+    /// コンベアのワークの数。ワーク搬送を使っていなければ None (信号を作らない)。
+    pub conveyor: Option<ConveyorCounts>,
+}
+
+/// コンベアで流れるワークの数
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ConveyorCounts {
+    /// 投入口から出した数
+    pub fed: u32,
+    /// 排出口・排出端のコンベアから出ていった数
+    pub discharged: u32,
+    /// 投入されてまだ排出されていない数
+    pub in_process: usize,
+}
+
+fn word_value(n: usize) -> i32 {
+    i32::try_from(n).unwrap_or(i32::MAX)
 }
 
 /// 今の信号表。`sim` が None (まだ回していない) なら設備の状態はすべて OFF・0。
@@ -167,6 +185,12 @@ pub fn line_signals(
     table.word("AGV.搬送待ち", sources.agv_waiting as i32);
     for (i, loaded) in sources.agv_loaded.iter().enumerate() {
         table.bit(Direction::ToPlc, &format!("AGV{}.搬送中", i + 1), *loaded);
+    }
+    // ワードの後ろに足す (ワーク搬送の有無で工程・AGV の番号がずれないように)
+    if let Some(c) = sources.conveyor {
+        table.word("コンベア.投入数", word_value(c.fed as usize));
+        table.word("コンベア.排出数", word_value(c.discharged as usize));
+        table.word("コンベア.仕掛数", word_value(c.in_process));
     }
 
     table.bit(Direction::FromPlc, RUN, inputs.run);
@@ -260,6 +284,37 @@ mod tests {
         assert_eq!(find(&rows, RUN).address, FROM_PLC_BITS);
         assert_eq!(find(&rows, "ライン.運転中").address, TO_PLC_BITS);
         assert_eq!(find(&rows, "ライン.排出数").address, TO_PLC_WORDS);
+    }
+
+    #[test]
+    fn conveyor_words_come_last_and_only_when_used() {
+        let model = sample_line();
+        let inputs = LineInputs::default();
+        let without = line_signals(&model, None, &SignalSources::default(), &inputs);
+        assert!(without.iter().all(|s| !s.name.starts_with("コンベア")));
+        let sources = SignalSources {
+            conveyor: Some(ConveyorCounts {
+                fed: 7,
+                discharged: 4,
+                in_process: 3,
+            }),
+            ..SignalSources::default()
+        };
+        let with = line_signals(&model, None, &sources, &inputs);
+        assert_eq!(find(&with, "コンベア.投入数").value, Value::Word(7));
+        assert_eq!(find(&with, "コンベア.排出数").value, Value::Word(4));
+        assert_eq!(find(&with, "コンベア.仕掛数").value, Value::Word(3));
+        // ほかの信号の番号は変わらない
+        for s in &without {
+            assert_eq!(find(&with, &s.name).address, s.address);
+        }
+        let last_word = without
+            .iter()
+            .filter(|s| matches!(s.value, Value::Word(_)))
+            .map(|s| s.address)
+            .max()
+            .unwrap();
+        assert_eq!(find(&with, "コンベア.投入数").address, last_word + 1);
     }
 
     #[test]

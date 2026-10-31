@@ -104,6 +104,20 @@ impl TrackedDoc for PlcPlanDoc {
     }
 }
 
+impl Plc {
+    /// ライン連携の信号を I/O 表に載せて設備 → PLC の値を書き、PLC が書いた
+    /// PLC → 設備 の信号を返す (PLC が書いていないモードなら None)。
+    /// 1つ目の戻り値は I/O 表が作り直されたか。
+    pub(crate) fn exchange_line(
+        &mut self,
+        signals: &[cadsim_core::line::Signal],
+        chart: &TimingChart,
+    ) -> (bool, Option<Vec<(String, bool)>>) {
+        let changed = self.session.set_line_signals(signals, chart);
+        (changed, self.session.line_outputs())
+    }
+}
+
 /// 外部の PLC との通信方式
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 enum Protocol {

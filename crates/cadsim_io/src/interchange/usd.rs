@@ -24,7 +24,7 @@ use std::fmt::Write as _;
 use std::io::Cursor;
 use std::path::Path;
 
-use bevy::math::{DAffine3, DMat4, DQuat, DVec3};
+use glam::{DAffine3, DMat4, DQuat, DVec3};
 use openusd::{gf, sdf, usd, usda, usdc, usdz};
 
 use super::{

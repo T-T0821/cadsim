@@ -31,7 +31,7 @@ cadsim は Clean Architecture をもとに、コードを4つの層に分けま�
 
 | 層 | 置くもの | 依存してよいもの | 依存してはいけないもの |
 | --- | --- | --- | --- |
-| 1. ドメイン | 設計データの型とその規則。純粋な計算 | `glam`(f64 のベクトル・行列)、`truck`(形状カーネル)、標準ライブラリ | Bevy、egui、ファイル形式・通信のライブラリ、ファイルシステム |
+| 1. ドメイン | 設計データの型とその規則。純粋な計算 | `glam`(f64 のベクトル・行列)、`truck`(形状カーネル。B-rep の曲線・曲面の型だけ `truck-stepio` から使う)、標準ライブラリ | Bevy、egui、ファイル形式・通信のライブラリ、ファイルシステム |
 | 2. ユースケース | 「ユーザーがしたいこと」1つ = 関数 1つ。必要な外部 I/O はトレイト(ポート)で受け取る | ドメイン | Bevy、egui、具体的なファイル形式 |
 | 3. アダプター | ポートの実装。ファイル形式・通信・エンコードの変換 | ドメイン、ユースケース(ポート)、`ruststep`・`gltf`・`openusd`・`serde_json` など | Bevy、egui |
 | 4. UI・フレームワーク | Bevy の `Resource` / `Component` / システム、egui の画面。入力をユースケースの呼び出しに変え、結果を画面に写す | すべての内側の層 | — |
@@ -58,6 +58,7 @@ crates/
 │   └── src/
 │       ├── domain/       model, math, selection, remap (形状の差し替えの対応づけ), simulation (幾何・干渉・計測),
 │       │                 motion (チャート・姿勢・運動学), plc (シーケンス・I/O 表), flow, conveyor,
+│       │                 staffing (作業者の名簿・スキル・シフト・人数の比較),
 │       │                 safety (安全機器・検知・安全距離), floor (作業者・AGV・床の幾何),
 │       │                 line (工程と AGV の受け渡し・PLC の信号表・ワークの位置)
 │       └── usecase/      document (開く・保存・取り込み・書き出し), edit, history,
@@ -78,7 +79,7 @@ crates/
 1. **ワークスペース化と純粋な計算を core へ。** ✅ ルートをワークスペースにして `cadsim_core` を作り、`math` と `simulation` の幾何・干渉の計算を移した。`bevy::math` は同じ版の `glam` に置き換え、アプリ側の `math` / `simulation` から再公開しているので呼び出し側は変わらない。
    - ゲーム風 UI の判定(`gamify`)は最初から `cadsim_core` に置いた。設定ファイルの読み書き(`src/preferences_file.rs`)はアダプター層の候補で、`cadsim_io` ができたら移す。
 2. **残りの純粋な計算を core へ。** `motion` のチャート・姿勢・運動学、PLC のシーケンスなど。進行中の機能ブランチが触っているので、それらが入ってから移す。
-3. **ファイル形式を io へ。** `cadsim_io` を作り、`step_import`、`interchange`、`.cadsim` の JSON の構造体を移す。
+3. **ファイル形式を io へ。** 🔶 `cadsim_io` を作り、3D ファイル形式の読み書き (`interchange` の Scene・glTF・OBJ・STL・USD・Web ビューア) を移した。アプリ側の `interchange` から再公開しているので呼び出し側は変わらない。`Scene` ⇔ `Model` の変換 (`model_io`) は手順 4 で `Model` が core に移ってから io へ移す。続いて STEP の読み込みを `cadsim_io::step` に移し、取り込んだ形状とアセンブリの木の型 (`ImportedShape` など) は `cadsim_core::shape`、表示用メッシュ (`part_mesh`)・BVH・アニメーションの型 (`Animation` など) は `cadsim_core` に移した (io → core の向き)。残りは `.cadsim` の JSON の構造体、`formats/`、`flow` の `record.rs`・`xlsx.rs`。
 4. **設計データを core へ。** `Model`・`Selection` などから `#[derive(Resource)]` を外し、UI 層の包み型に置き換える。
 5. **ユースケースを切り出す。** 開く・保存・取り込み・書き出し・削除・元に戻すを `usecase` の関数にし、Bevy のシステムからはそれを呼ぶだけにする。元に戻す履歴は `World` ではなくドキュメント(モデル + チャートなど)を書き換える形にする。
 6. **UI 層を整理する。** 残った Bevy / egui のコードを `view` / `input` / `ui` に分ける。
@@ -99,7 +100,7 @@ crates/
 
 ### 移行の途中で足した機能の置き場所
 
-| 機能 | ドメイン(`cadsim_core`) | アダプター(いまはアプリ側、手順 3 で `cadsim_io` へ) | UI(アプリ側) |
+| 機能 | ドメイン(`cadsim_core`) | アダプター(いまはアプリ側、手順 3 で `cadsim_io` へ。3D ファイル形式は移動済み) | UI(アプリ側) |
 | --- | --- | --- | --- |
 | 平面図の下敷き・点群 | `site::{underlay, pointcloud, model}` | `formats::{dxf, pdf_plan, pointcloud_read, site_record}` | `site/`(表示・パネル・縮尺合わせ) |
 | 2D 図面 | `drawing` | `formats::drawing_out` | `documents.rs` |

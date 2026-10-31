@@ -3,6 +3,10 @@
 //! - `chart`: アクチュエータとステップのデータ、時刻表への変換 (Bevy 非依存)
 //! - `pose`: 時刻 t における部品の位置・姿勢 (f64 の剛体変換、順運動学)
 //! - `kinematics`: ロボット (関節の直列リンク) のヤコビアンと逆運動学
+//! - `teach`: 3D ビューでクリックした面から教示点の位置と工具の向きを決める
+//! - `robot_time`: ロボットの移動の最短時間 (台形の速度) とサイクルタイムの見積もり
+//! - `melfa`: ロボットの動きを MELFA-BASIC VI のプログラムにする
+//! - `robot_path`: ロボットの移動の経路 (関節補間・直線補間) と、途中の届かない点・特異点の判定
 //! - `sensor`: 光電・近接センサーの検知判定と、インターロック付きの時刻表 (Bevy 非依存)
 //! - `ui`: タイミングチャートの編集画面と再生コントロール
 //! - `targets`: モデルの部品を、センサーが検知する直方体に変換する (Bevy 非依存)
@@ -26,11 +30,16 @@ pub mod chart;
 mod demo;
 mod export;
 mod kinematics;
+mod melfa;
+mod path_interference;
 mod pose;
+mod robot_path;
+mod robot_time;
 mod robot_ui;
 mod sensor;
 mod sensor_view;
 mod targets;
+mod teach;
 mod ui;
 
 use std::collections::HashMap;
@@ -42,7 +51,7 @@ pub use chart::{Action, Actuator, ActuatorKind, Axis, Easing, Schedule, Step, Ti
 pub use demo::load_demo;
 pub use export::chart_animation;
 pub use pose::{RigidPose, actuator_poses, actuator_poses_for, part_poses, part_poses_for};
-pub use robot_ui::show_robot_section;
+pub use robot_ui::{show_robot_section, teach_tool_off};
 pub use ui::{MotionUi, show_panel};
 
 use crate::history::{TrackDocExt, TrackedDoc};
@@ -123,7 +132,18 @@ impl Plugin for MotionPlugin {
                     .chain()
                     .in_set(MotionSet::Sensors),
             )
-            .add_systems(Update, robot_ui::draw_robots.after(MotionSet::Pose));
+            .add_systems(Update, robot_ui::draw_robots.after(MotionSet::Pose))
+            .add_systems(
+                Update,
+                robot_ui::check_path_interference.after(MotionSet::Pose),
+            )
+            .add_systems(
+                Update,
+                robot_ui::place_teach_point
+                    .run_if(crate::camera::pointer_in_3d_view)
+                    .after(MotionSet::Pose),
+            )
+            .add_systems(Update, robot_ui::export_melfa);
     }
 }
 

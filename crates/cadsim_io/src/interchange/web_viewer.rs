@@ -10,7 +10,7 @@ use std::path::Path;
 use super::{ExchangeResult, Scene, UnitOptions, gltf::to_glb_bytes, io_error};
 
 /// ビューアの HTML。`__CADSIM_TITLE__` と `__CADSIM_MODEL__` を差し替えて使う
-const TEMPLATE: &str = include_str!("../../assets/web_viewer/viewer.html");
+const TEMPLATE: &str = include_str!("../../../../assets/web_viewer/viewer.html");
 
 pub fn export(scene: &Scene, path: &Path, _units: &UnitOptions) -> ExchangeResult<()> {
     let title = path

@@ -20,11 +20,17 @@ use bevy::prelude::*;
 use bevy_egui::EguiPrimaryContextPass;
 
 use cadsim_core::flow::model::FlowModel;
-use cadsim_core::line::{LineCoupler, LineInputs, may_run};
+use cadsim_core::line::{
+    ConveyorCounts, LineCoupler, LineInputs, Signal, SignalSources, line_signals, may_run,
+};
 
+use crate::conveyor::{ConveyorConfigRes, ConveyorSet, WorkState};
+
+use crate::floor::agv_sim::AgvSim;
 use crate::floor::{AgvLayoutRes, FloorClock, FloorState};
 use crate::flow::{FlowRes, FlowRun};
-use crate::motion::Playback;
+use crate::motion::{MotionSet, Playback, TimingChart};
+use crate::plc::Plc;
 use crate::safety::{SafetySet, SafetyState};
 
 pub struct LinePlugin;
@@ -36,7 +42,9 @@ impl Plugin for LinePlugin {
                 Update,
                 (
                     advance_line.before(SafetySet::Intruders),
+                    exchange_plc.before(MotionSet::Drive),
                     view::draw.after(advance_line),
+                    read_conveyor.after(ConveyorSet::Works),
                 ),
             )
             .add_systems(EguiPrimaryContextPass, panel::line_window);
@@ -64,6 +72,10 @@ pub struct LineState {
     chart_follows: bool,
     /// 安全停止か運転 OFF で止まっている
     halted: bool,
+    /// PLC (外部の PLC かログ再生) が運転・投入許可を書いている
+    plc_drives_inputs: bool,
+    /// コンベアのワークの数 (ワーク搬送の投入口がなければ None)。信号表と集計に使う。
+    conveyor: Option<ConveyorCounts>,
     /// 止めた理由など
     message: Option<String>,
 }
@@ -81,6 +93,8 @@ impl Default for LineState {
             inputs: LineInputs::default(),
             chart_follows: true,
             halted: false,
+            plc_drives_inputs: false,
+            conveyor: None,
             message: None,
         }
     }
@@ -220,5 +234,80 @@ fn advance_line(
     }
     if line.chart_follows && playback.speed != line.speed {
         playback.speed = line.speed;
+    }
+}
+
+/// 今の信号表 (工程・AGV・安全の状態と、運転・投入許可)
+fn current_signals(
+    line: &LineState,
+    flow: &FlowModel,
+    run: &FlowRun,
+    floor: &FloorState,
+    safety: &SafetyState,
+) -> Vec<Signal> {
+    let sim = run.sim.as_ref().filter(|s| s.is_linked());
+    let agv_loaded = floor
+        .agv_sim()
+        .map(|a| {
+            a.vehicles
+                .iter()
+                .map(|v| {
+                    AgvSim::is_loaded(v)
+                        && v.job
+                            .as_ref()
+                            .and_then(|j| j.tag)
+                            .is_some_and(|t| line.coupler.is_loaded(t))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let sources = SignalSources {
+        running: line.playing && !line.halted,
+        safety_stopped: safety.is_stopped(),
+        agv_loaded,
+        agv_waiting: line.coupler.waiting_for_agv(),
+        conveyor: line.conveyor,
+    };
+    line_signals(flow, sim, &sources, &line.inputs)
+}
+
+/// コンベアのワークの数を覚える (信号表は次のフレームの PLC とのやりとりで使う)
+fn read_conveyor(
+    mut line: ResMut<LineState>,
+    config: Res<ConveyorConfigRes>,
+    works: Res<WorkState>,
+) {
+    let counts = (!config.sources.is_empty()).then(|| ConveyorCounts {
+        fed: works.counts().total_fed(),
+        discharged: works.counts().total_discharged(),
+        in_process: works.in_process(),
+    });
+    if line.conveyor != counts {
+        line.bypass_change_detection().conveyor = counts;
+    }
+}
+
+/// 信号表を PLC 連携の I/O に載せ、PLC が書いた運転・投入許可をラインに写す
+fn exchange_plc(
+    mut line: ResMut<LineState>,
+    flow: Res<FlowRes>,
+    run: Res<FlowRun>,
+    floor: Res<FloorState>,
+    safety: Res<SafetyState>,
+    chart: Res<TimingChart>,
+    mut plc: ResMut<Plc>,
+) {
+    let signals = current_signals(&line, &flow, &run, &floor, &safety);
+    let (changed, outputs) = plc
+        .bypass_change_detection()
+        .exchange_line(&signals, &chart);
+    if changed {
+        plc.set_changed();
+    }
+    // 表示と判断のための値なので、変更を知らせない
+    let line = line.bypass_change_detection();
+    line.plc_drives_inputs = outputs.is_some();
+    for (name, on) in outputs.unwrap_or_default() {
+        line.inputs.set(&flow, &name, on);
     }
 }

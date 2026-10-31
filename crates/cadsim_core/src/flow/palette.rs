@@ -9,6 +9,7 @@ pub fn state_rgb(state: State) -> [f32; 3] {
         State::Waiting => [0.95, 0.80, 0.25],
         State::Blocked => [0.95, 0.50, 0.15],
         State::Down => [0.85, 0.20, 0.20],
+        State::NoOperator => [0.62, 0.42, 0.88],
     }
 }
 

@@ -7,6 +7,11 @@
 //! - **排出** はワークを受け取って数える。
 //!
 //! 各要素は送り先を複数持てる。送るときは並び順に見て、最初に受け取れる先へ送る。
+//!
+//! 工程には「人が要るか」([`Labor`]) を付けられる。人が要る工程は、名簿 ([`Staffing`]) の
+//! 作業者のうち、その工程ができて手の空いている人が来るまで「人待ち」で止まる。
+
+pub use crate::staffing::model::{Labor, Staffing};
 
 /// 要素の ID。プロジェクト内で一意。
 pub type ElementId = u32;
@@ -16,6 +21,8 @@ pub type ElementId = u32;
 pub struct FlowModel {
     pub elements: Vec<Element>,
     pub settings: RunSettings,
+    /// 作業者の名簿とシフト
+    pub staffing: Staffing,
     next_id: ElementId,
 }
 
@@ -24,6 +31,7 @@ impl Default for FlowModel {
         Self {
             elements: Vec::new(),
             settings: RunSettings::default(),
+            staffing: Staffing::default(),
             next_id: 1,
         }
     }
@@ -66,6 +74,8 @@ pub struct Element {
     pub carrier: Option<AgvCall>,
     /// ライン連携で、この工程が加工を始めるたびにタイミングチャートを頭から再生する
     pub starts_chart: bool,
+    /// 工程に人が要るか (工程以外は使わない)
+    pub labor: Labor,
 }
 
 /// 送り出したワークを運ぶ AGV の搬送: `from` のステーションで積み、`to` で降ろす。
@@ -204,6 +214,7 @@ impl FlowModel {
             energy: Energy::default(),
             carrier: None,
             starts_chart: false,
+            labor: Labor::None,
         })
     }
 
@@ -251,6 +262,7 @@ impl FlowModel {
         for e in &mut self.elements {
             e.next.retain(|&n| n != id);
         }
+        self.staffing.forget_element(id);
     }
 
     /// 並び順を1つ動かす (`up` なら前へ)
@@ -331,6 +343,26 @@ impl FlowModel {
                     }
                 }
             }
+            if e.kind.tag() == KindTag::Process {
+                match e.labor {
+                    Labor::None => {}
+                    Labor::Load { seconds } if !(seconds >= 0.0 && seconds.is_finite()) => {
+                        out.push(format!("{name}: 人が付く時間は 0 秒以上にしてください"));
+                    }
+                    _ => {
+                        let skilled = self
+                            .staffing
+                            .workers
+                            .iter()
+                            .any(|w| w.speed_for(e.id).is_some());
+                        if !skilled {
+                            out.push(format!(
+                                "{name}: 人が要る工程ですが、できる作業者が名簿にいません"
+                            ));
+                        }
+                    }
+                }
+            }
             let energy = [
                 e.energy.rated_kw,
                 e.energy.standby_kw,
@@ -347,6 +379,7 @@ impl FlowModel {
         if !(s.warmup >= 0.0 && s.warmup < s.duration) {
             out.push("立ち上がり時間は回す時間より短くしてください".into());
         }
+        out.extend(self.staffing.problems());
         out
     }
 }
@@ -441,6 +474,60 @@ pub fn sample_line() -> FlowModel {
     m
 }
 
+/// サンプルラインに人員を入れる: 加工は投入だけ人、組立と検査は手作業。
+/// 日勤 (8:00〜17:00、休憩 10:00〜10:10・12:00〜13:00・15:00〜15:10) の 3 人。
+/// 工程の名前で探すので、[`sample_line`] のあとに呼ぶ。
+pub fn apply_sample_staffing(m: &mut FlowModel) {
+    use crate::staffing::model::{Break, Shift, Skill, Worker};
+    const H: f64 = 3600.0;
+    let find = |m: &FlowModel, name: &str| m.elements.iter().find(|e| e.name == name).map(|e| e.id);
+    let (Some(machining), Some(assembly), Some(inspection)) =
+        (find(m, "加工"), find(m, "組立"), find(m, "検査"))
+    else {
+        return;
+    };
+    m.get_mut(machining).unwrap().labor = Labor::Load { seconds: 8.0 };
+    m.get_mut(assembly).unwrap().labor = Labor::Full;
+    m.get_mut(inspection).unwrap().labor = Labor::Full;
+    let mut staffing = Staffing::default();
+    staffing.walk_seconds = 5.0;
+    let day = staffing.insert_shift(Shift {
+        id: 0,
+        name: "日勤".into(),
+        start: 8.0 * H,
+        end: 17.0 * H,
+        breaks: vec![
+            Break {
+                start: 10.0 * H,
+                end: 10.0 * H + 600.0,
+            },
+            Break {
+                start: 12.0 * H,
+                end: 13.0 * H,
+            },
+            Break {
+                start: 15.0 * H,
+                end: 15.0 * H + 600.0,
+            },
+        ],
+    });
+    let skill = |element, speed| Skill { element, speed };
+    for (name, skills) in [
+        ("Aさん", vec![skill(assembly, 1.1), skill(machining, 1.0)]),
+        ("Bさん", vec![skill(assembly, 1.0), skill(inspection, 1.0)]),
+        ("Cさん", vec![skill(inspection, 1.2), skill(machining, 1.0)]),
+    ] {
+        staffing.insert_worker(Worker {
+            id: 0,
+            name: name.into(),
+            shift: Some(day),
+            absent: false,
+            skills,
+        });
+    }
+    m.staffing = staffing;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -486,5 +573,24 @@ mod tests {
     #[test]
     fn sample_line_is_runnable() {
         assert!(sample_line().problems().is_empty());
+        let mut staffed = sample_line();
+        apply_sample_staffing(&mut staffed);
+        assert!(staffed.problems().is_empty(), "{:?}", staffed.problems());
+        assert_eq!(staffed.staffing.workers.len(), 3);
+    }
+
+    #[test]
+    fn labor_needs_a_skilled_worker() {
+        let mut m = sample_line();
+        let assembly = m.elements[3].id;
+        m.get_mut(assembly).unwrap().labor = Labor::Full;
+        let problems = m.problems().join("\n");
+        assert!(problems.contains("組立: 人が要る工程"), "{problems}");
+        let w = m.staffing.add_worker();
+        m.staffing.worker_mut(w).unwrap().set_skill(assembly, true);
+        assert!(m.problems().is_empty(), "{:?}", m.problems());
+        // 工程を消すとスキルも消える
+        m.remove(assembly);
+        assert!(m.staffing.worker(w).unwrap().skills.is_empty());
     }
 }

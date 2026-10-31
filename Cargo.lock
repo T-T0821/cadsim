@@ -2456,16 +2456,15 @@ dependencies = [
  "bevy",
  "bevy_egui",
  "cadsim_core",
+ "cadsim_io",
  "e57",
  "encoding_rs",
  "gif",
  "glam 0.33.12",
- "gltf",
  "image",
  "krilla",
  "lopdf",
  "openh264",
- "openusd",
  "rapier3d",
  "rfd",
  "rhai",
@@ -2473,8 +2472,6 @@ dependencies = [
  "ruststep",
  "serde",
  "serde_json",
- "stl_io",
- "tobj",
  "tokio",
  "tokio-modbus",
  "transform-gizmo",
@@ -2490,6 +2487,26 @@ name = "cadsim_core"
 version = "0.1.0"
 dependencies = [
  "glam 0.33.12",
+ "truck-meshalgo",
+ "truck-modeling",
+ "truck-stepio",
+ "truck-topology",
+]
+
+[[package]]
+name = "cadsim_io"
+version = "0.1.0"
+dependencies = [
+ "cadsim_core",
+ "glam 0.33.12",
+ "gltf",
+ "openusd",
+ "serde_json",
+ "stl_io",
+ "tobj",
+ "truck-meshalgo",
+ "truck-stepio",
+ "truck-topology",
 ]
 
 [[package]]

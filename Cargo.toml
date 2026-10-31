@@ -5,36 +5,31 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 
 [workspace]
-members = ["crates/cadsim_core"]
+members = ["crates/cadsim_core", "crates/cadsim_io"]
 # 引数なしの cargo test / clippy でワークスペースの全 crate を確かめる
-default-members = [".", "crates/cadsim_core"]
+default-members = [".", "crates/cadsim_core", "crates/cadsim_io"]
 
 [dependencies]
 # 部品スクリプト (Rhai)。純 Rust
 rhai = "1.23"
 cadsim_core = { path = "crates/cadsim_core" }
+cadsim_io = { path = "crates/cadsim_io" }
 bevy = "0.20"
 bevy_egui = "0.43"
 # 動画の書き出し: GIF と PNG 連番は純 Rust、MP4 は同梱の OpenH264 (C++) をビルドして使う。ffmpeg は不要
 gif = "0.14"
-# 3D ファイルの読み書き (glTF / GLB, OBJ, STL)。すべて純 Rust
 openh264 = "0.9"
-gltf = { version = "1.4", features = ["import", "names", "utils", "extras"] }
 rfd = "0.17.2"
 ruststep = "0.4"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
-stl_io = "0.11"
 # PLC との Modbus TCP 通信。純 Rust
 tokio-modbus = { version = "0.17", default-features = false, features = ["tcp-sync"] }
-tobj = { version = "4", default-features = false }
 transform-gizmo = "0.11"
 truck-meshalgo = "0.4"
 truck-modeling = "0.6"
 truck-stepio = "0.3"
 truck-topology = "0.6"
-# OpenUSD (.usda / .usdc / .usdz) の読み書き。純 Rust
-openusd = "0.8"
 glam = { version = "0.33.12", features = ["serde"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 truck-shapeops = { version = "0.4", default-features = false }
@@ -52,6 +47,7 @@ encoding_rs = "0.8"
 # テストで Modbus TCP サーバー (PLC の代わり) を立てる
 tokio = { version = "1", features = ["rt-multi-thread", "net"] }
 tokio-modbus = { version = "0.17", default-features = false, features = ["tcp-sync", "tcp-server"] }
+cadsim_io = { path = "crates/cadsim_io", features = ["test-util"] }
 
 # 開発ビルドでも Bevy などの依存は最適化して、操作を軽くする
 [profile.dev]

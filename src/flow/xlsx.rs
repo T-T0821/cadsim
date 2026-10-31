@@ -4,6 +4,7 @@
 //! - 概要: ラインの集計 (排出数・スループット・サイクルタイム・仕掛数・電力量など) と回した条件
 //! - 設備別: 要素ごとの稼働・待ち・詰まり・故障の割合、電力量・エア消費量と、割合の積み上げ横棒グラフ
 //! - 推移: 一定間隔の排出数の累計・仕掛数と、その折れ線グラフ
+//! - 作業者別 (作業者がいるときだけ): 作業・歩行・手待ちの割合と作業数
 
 use rust_xlsxwriter::{
     Chart, ChartFormat, ChartSolidFill, ChartType, Color, Format, FormatAlign, Workbook, Worksheet,
@@ -11,11 +12,12 @@ use rust_xlsxwriter::{
 };
 
 use super::model::{ElementKind, FlowModel, KindTag};
-use super::sim::{Report, State};
+use super::sim::{Report, State, WorkerState};
 
 const SUMMARY: &str = "概要";
 const ELEMENTS: &str = "設備別";
 const SERIES: &str = "推移";
+const WORKERS: &str = "作業者別";
 
 /// 状態の色 (3D ビューの色分けと同じ)
 fn state_color(state: State) -> Color {
@@ -51,6 +53,15 @@ pub fn report_to_xlsx(model: &FlowModel, report: &Report) -> Result<Vec<u8>, Xls
         &decimal,
     )?;
     series_sheet(workbook.add_worksheet(), report, &header, &decimal)?;
+    if !report.workers.is_empty() {
+        workers_sheet(
+            workbook.add_worksheet(),
+            report,
+            &header,
+            &percent,
+            &decimal,
+        )?;
+    }
     workbook.save_to_buffer()
 }
 
@@ -188,6 +199,7 @@ fn elements_sheet(
         "待ち",
         "詰まり",
         "故障",
+        "人待ち",
         "通過数",
         "故障回数",
         "平均加工時間 (秒)",
@@ -201,7 +213,7 @@ fn elements_sheet(
         sheet.write_string_with_format(0, col as u16, *title, header)?;
     }
     sheet.set_column_width(0, 16)?;
-    sheet.set_column_range_width(8, 12, 16)?;
+    sheet.set_column_range_width(9, 13, 16)?;
     for (i, e) in report.elements.iter().enumerate() {
         let row = i as u32 + 1;
         sheet.write_string(row, 0, &e.name)?;
@@ -212,24 +224,24 @@ fn elements_sheet(
                 sheet.write_number_with_format(row, 2 + k as u16, e.times.ratio(state), percent)?;
             }
         }
-        sheet.write_number(row, 6, e.count)?;
-        sheet.write_number(row, 7, e.failures)?;
+        sheet.write_number(row, 7, e.count)?;
+        sheet.write_number(row, 8, e.failures)?;
         if let Some(c) = e.average_cycle {
-            sheet.write_number_with_format(row, 8, c, decimal)?;
+            sheet.write_number_with_format(row, 9, c, decimal)?;
         }
-        sheet.write_number_with_format(row, 9, e.content_average, decimal)?;
-        sheet.write_number(row, 10, e.content_max as f64)?;
-        sheet.write_number_with_format(row, 11, e.energy_kwh, decimal)?;
-        sheet.write_number_with_format(row, 12, e.air_m3, decimal)?;
+        sheet.write_number_with_format(row, 10, e.content_average, decimal)?;
+        sheet.write_number(row, 11, e.content_max as f64)?;
+        sheet.write_number_with_format(row, 12, e.energy_kwh, decimal)?;
+        sheet.write_number_with_format(row, 13, e.air_m3, decimal)?;
         if report.bottleneck == Some(e.id) {
-            sheet.write_string(row, 13, "★")?;
+            sheet.write_string(row, 14, "★")?;
         }
     }
     let last = report.elements.len() as u32;
     let total = last + 1;
     sheet.write_string_with_format(total, 0, "合計", header)?;
-    sheet.write_number_with_format(total, 11, report.energy_kwh, decimal)?;
-    sheet.write_number_with_format(total, 12, report.air_m3, decimal)?;
+    sheet.write_number_with_format(total, 12, report.energy_kwh, decimal)?;
+    sheet.write_number_with_format(total, 13, report.air_m3, decimal)?;
 
     if last > 0 {
         let mut chart = Chart::new(ChartType::BarPercentStacked);
@@ -249,6 +261,50 @@ fn elements_sheet(
         // 上から要素の並び順に見えるように、項目軸を逆向きにする
         chart.y_axis().set_reverse();
         sheet.insert_chart(total + 2, 0, &chart)?;
+    }
+    Ok(())
+}
+
+fn workers_sheet(
+    sheet: &mut Worksheet,
+    report: &Report,
+    header: &Format,
+    percent: &Format,
+    decimal: &Format,
+) -> Result<(), XlsxError> {
+    sheet.set_name(WORKERS)?;
+    let titles = [
+        "作業者",
+        "稼働率 (作業+歩行)",
+        "作業",
+        "歩行",
+        "手待ち",
+        "出勤時間 (時間)",
+        "作業数",
+        "歩いた回数",
+    ];
+    for (col, title) in titles.iter().enumerate() {
+        sheet.write_string_with_format(0, col as u16, *title, header)?;
+    }
+    sheet.set_column_width(0, 16)?;
+    sheet.set_column_range_width(1, 7, 14)?;
+    for (i, w) in report.workers.iter().enumerate() {
+        let row = i as u32 + 1;
+        sheet.write_string(row, 0, &w.name)?;
+        sheet.write_number_with_format(row, 1, w.utilization(), percent)?;
+        for (k, state) in [
+            WorkerState::Working,
+            WorkerState::Walking,
+            WorkerState::Idle,
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            sheet.write_number_with_format(row, 2 + k as u16, w.times.ratio(state), percent)?;
+        }
+        sheet.write_number_with_format(row, 5, w.times.on_duty() / 3600.0, decimal)?;
+        sheet.write_number(row, 6, w.tasks)?;
+        sheet.write_number(row, 7, w.walks)?;
     }
     Ok(())
 }

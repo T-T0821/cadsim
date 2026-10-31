@@ -6,7 +6,7 @@
 
 use std::{collections::HashMap, path::Path};
 
-use bevy::math::{DQuat, DVec3};
+use glam::{DQuat, DVec3};
 use gltf::{
     Gltf,
     animation::{Interpolation, util::ReadOutputs},

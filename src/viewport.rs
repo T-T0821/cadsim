@@ -67,6 +67,7 @@ impl Plugin for ViewportPlugin {
                         .run_if(gizmo_not_focused)
                         .run_if(not_measuring)
                         .run_if(annotate_tool_off)
+                        .run_if(crate::motion::teach_tool_off)
                         .run_if(crate::site::plan_tool_off),
                     rebuild_dirty_parts,
                     defeature_shapes,

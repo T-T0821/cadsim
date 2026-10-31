@@ -149,6 +149,20 @@ pub fn solve_ik_to(
     best
 }
 
+/// `seed` から少しずつ動かせる範囲だけで解く (初期値を変えた解き直しはしない)。
+/// 直線補間の経路のように、直前の姿勢から飛ばずにつながった解がほしいときに使う。
+pub fn solve_ik_near(
+    chart: &TimingChart,
+    robot: &Robot,
+    target: DVec3,
+    approach: Option<DVec3>,
+    seed: &HashMap<u32, f64>,
+) -> IkSolution {
+    let joints: Vec<u32> = joints(chart, robot);
+    let approach = approach.and_then(|a| a.try_normalize());
+    descend(chart, robot, &joints, target, approach, seed.clone())
+}
+
 /// 減衰最小二乗法で `values` から少しずつ動かして解く
 fn descend(
     chart: &TimingChart,
@@ -175,30 +189,9 @@ fn descend(
             break;
         }
 
-        // ヤコビアン: 各関節を単位量 (ラジアン / モデル単位) 動かしたときの TCP の速度。
-        // 行は位置 3 + (向きを指定したとき) 角速度 3。
+        // 行は位置 3 + (向きを指定したとき) 角速度 3
         let rows = if approach.is_some() { 6 } else { 3 };
-        let mut columns: Vec<[f64; 6]> = Vec::with_capacity(joints.len());
-        for &id in joints {
-            let actuator = chart.actuator(id).expect("関節はチャートにある");
-            let parent = actuator
-                .mounted_on
-                .and_then(|p| poses.get(&p).copied())
-                .unwrap_or_default();
-            let axis = parent.rotation * pose::direction(actuator);
-            let (linear, angular) = match actuator.kind {
-                ActuatorKind::RotaryTable => {
-                    let pivot = parent.transform_point(DVec3::from_array(actuator.pivot));
-                    (axis.cross(current.position - pivot), axis)
-                }
-                _ => (axis, DVec3::ZERO),
-            };
-            // 向きの行は大きさをそろえるため reach 倍する (誤差の側も同じ)
-            let angular = angular * scale;
-            columns.push([
-                linear.x, linear.y, linear.z, angular.x, angular.y, angular.z,
-            ]);
-        }
+        let mut columns = jacobian(chart, joints, &poses, current.position, scale);
         let mut error = [0.0; 6];
         error[..3].copy_from_slice(&position_error.to_array());
         if let Some(w) = angular_error {
@@ -275,6 +268,120 @@ fn descend(
         angle_error: errors.1,
         reached: errors.0 < POSITION_TOLERANCE && errors.1 < ANGLE_TOLERANCE,
     }
+}
+
+/// ヤコビアン: 各関節を単位量 (ラジアン / モデル単位) 動かしたときの TCP の速度を、関節ごとの列にする。
+/// 列の先頭 3 つは並進速度、残り 3 つは角速度を `scale` 倍したもの (大きさをそろえるため)。
+fn jacobian(
+    chart: &TimingChart,
+    joints: &[u32],
+    poses: &HashMap<u32, RigidPose>,
+    tcp_position: DVec3,
+    scale: f64,
+) -> Vec<[f64; 6]> {
+    joints
+        .iter()
+        .map(|&id| {
+            let actuator = chart.actuator(id).expect("関節はチャートにある");
+            let parent = actuator
+                .mounted_on
+                .and_then(|p| poses.get(&p).copied())
+                .unwrap_or_default();
+            let axis = parent.rotation * pose::direction(actuator);
+            let (linear, angular) = match actuator.kind {
+                ActuatorKind::RotaryTable => {
+                    let pivot = parent.transform_point(DVec3::from_array(actuator.pivot));
+                    (axis.cross(tcp_position - pivot), axis)
+                }
+                _ => (axis, DVec3::ZERO),
+            };
+            let angular = angular * scale;
+            [
+                linear.x, linear.y, linear.z, angular.x, angular.y, angular.z,
+            ]
+        })
+        .collect()
+}
+
+/// TCP の動かしやすさ (0〜1)。TCP の位置を動かすヤコビアンの、最小と最大の特異値の比。
+///
+/// 腕が伸び切ったときや、TCP が旋回軸の上に来たときなど、ある向きへ動かせなくなる
+/// 特異姿勢に近いほど 0 に近づく。関節が 3 つ未満のロボットは、関節の数だけの向きで比べる。
+pub fn dexterity(chart: &TimingChart, robot: &Robot, values: &HashMap<u32, f64>) -> f64 {
+    let joints = joints(chart, robot);
+    if joints.is_empty() {
+        return 0.0;
+    }
+    let scale = reach(chart, robot);
+    let poses = pose::actuator_poses_for(chart, values);
+    let position = tcp(robot, &poses).position;
+    // 回転関節の列は reach で割って、直動関節 (単位量で単位の速度) と大きさをそろえる
+    let columns: Vec<DVec3> = jacobian(chart, &joints, &poses, position, scale)
+        .iter()
+        .zip(&joints)
+        .map(|(c, &id)| {
+            let linear = DVec3::new(c[0], c[1], c[2]);
+            let rotary = chart
+                .actuator(id)
+                .is_some_and(|a| a.kind == ActuatorKind::RotaryTable);
+            if rotary { linear / scale } else { linear }
+        })
+        .collect();
+    // 特異値の 2 乗 = グラム行列の固有値。関節が 3 つ以上なら J Jᵀ (3×3)、少なければ Jᵀ J。
+    let n = columns.len().min(3);
+    let mut gram = [[0.0; 3]; 3];
+    for (i, row) in gram.iter_mut().enumerate().take(n) {
+        for (j, cell) in row.iter_mut().enumerate().take(n) {
+            *cell = if columns.len() >= 3 {
+                columns.iter().map(|c| c[i] * c[j]).sum()
+            } else {
+                columns[i].dot(columns[j])
+            };
+        }
+    }
+    let eigen = symmetric_eigenvalues(gram, n);
+    let largest = eigen.iter().copied().fold(0.0, f64::max);
+    if largest <= 1e-24 {
+        return 0.0;
+    }
+    let smallest = eigen.iter().copied().fold(f64::INFINITY, f64::min).max(0.0);
+    (smallest / largest).sqrt()
+}
+
+/// 対称行列 (先頭 n×n) の固有値をヤコビ法で求める
+#[allow(clippy::needless_range_loop)]
+fn symmetric_eigenvalues(mut a: [[f64; 3]; 3], n: usize) -> Vec<f64> {
+    for _ in 0..50 {
+        // いちばん大きい非対角成分を消す回転をかける
+        let mut p = 0;
+        let mut q = 0;
+        let mut off = 0.0;
+        for i in 0..n {
+            for j in i + 1..n {
+                if a[i][j].abs() > off {
+                    off = a[i][j].abs();
+                    p = i;
+                    q = j;
+                }
+            }
+        }
+        if off < 1e-15 {
+            break;
+        }
+        let theta = 0.5 * (2.0 * a[p][q]).atan2(a[q][q] - a[p][p]);
+        let (sin, cos) = theta.sin_cos();
+        for row in a.iter_mut().take(n) {
+            let (x, y) = (row[p], row[q]);
+            row[p] = cos * x - sin * y;
+            row[q] = sin * x + cos * y;
+        }
+        for k in 0..n {
+            let (x, y) = (a[p][k], a[q][k]);
+            a[p][k] = cos * x - sin * y;
+            a[q][k] = sin * x + cos * y;
+        }
+    }
+    (0..n).map(|i| a[i][i]).collect()
 }
 
 /// 向き `from` を `to` に回す微小回転 (回転軸 × 角度の正弦)。真逆のときは直交する軸で回す。
@@ -365,6 +472,16 @@ mod tests {
         let tcp = tcp_for(&chart, chart.robot(robot).unwrap(), &values);
         assert!((tcp.position - DVec3::new(1.0, 1.0, 0.0)).length() < 1e-12);
         assert!((tcp.tool_axis - DVec3::Y).length() < 1e-12);
+    }
+
+    #[test]
+    fn dexterity_drops_to_zero_when_the_arm_is_stretched() {
+        let (chart, robot, shoulder, elbow) = planar_arm();
+        let robot = chart.robot(robot).unwrap();
+        let stretched = HashMap::from([(shoulder, 20.0), (elbow, 0.0)]);
+        assert!(dexterity(&chart, robot, &stretched) < 1e-9);
+        let bent = HashMap::from([(shoulder, 20.0), (elbow, 90.0)]);
+        assert!(dexterity(&chart, robot, &bent) > 0.3);
     }
 
     #[test]
@@ -471,6 +588,7 @@ mod tests {
                 robot,
                 point,
                 duration: 2.0,
+                kind: Default::default(),
             }],
             dwell: 0.5,
             ..Default::default()

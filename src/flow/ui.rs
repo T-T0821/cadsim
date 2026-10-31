@@ -2,16 +2,18 @@
 //!
 //! 上に実行の操作 (▶ / ⏸ / ⏩ 最後まで / 速度 / 色分け / Excel)、その下にタブ:
 //! - 工程: 要素の一覧と、選んだ要素の設定。回す時間など
-//! - 結果: ラインの集計と設備ごとの表
+//! - 人員: シフト・作業者の名簿とできる工程・人数の比較 (`staff_ui.rs`)
+//! - 結果: ラインの集計と設備ごとの表、作業者ごとの表
 //! - グラフ: 状態の割合の積み上げ横棒、排出数と仕掛数の推移、状態の時系列
 
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_egui::egui::{self, Color32, Pos2, Rect as ERect, Stroke, Vec2};
 
-use super::model::{ElementId, ElementKind, Failure, FlowModel, KindTag, sample_line};
+use super::model::{ElementId, ElementKind, Failure, FlowModel, KindTag, Labor, sample_line};
 use super::palette::{busy_rgb, state_rgb};
-use super::sim::{Report, State};
+use super::sim::{Report, State, WorkerState};
+use super::staff_ui::{StaffUiState, staff_tab};
 use super::{ColorMode, FlowRes, FlowRun};
 use crate::model::{Model, Selection};
 
@@ -19,6 +21,7 @@ use crate::model::{Model, Selection};
 enum Tab {
     #[default]
     Line,
+    Staff,
     Results,
     Charts,
 }
@@ -30,6 +33,7 @@ pub struct FlowUiState {
     selected: Option<ElementId>,
     /// 回せなかった理由
     problems: Vec<String>,
+    staff: StaffUiState,
 }
 
 #[derive(SystemParam)]
@@ -77,12 +81,19 @@ pub fn show_window(ctx: &egui::Context, state: &mut FlowUi, model: &Model, selec
             ui.horizontal(|ui| {
                 let tab = &mut state.ui.tab;
                 ui.selectable_value(tab, Tab::Line, "工程");
+                ui.selectable_value(tab, Tab::Staff, "人員");
                 ui.selectable_value(tab, Tab::Results, "結果");
                 ui.selectable_value(tab, Tab::Charts, "グラフ");
             });
             ui.separator();
             match state.ui.tab {
                 Tab::Line => line_tab(ui, state, model, selection),
+                Tab::Staff => {
+                    if staff_tab(ui, &mut state.flow, &mut state.ui.staff) {
+                        state.run.stop();
+                        state.ui.selected = None;
+                    }
+                }
                 Tab::Results => results_tab(ui, state),
                 Tab::Charts => charts_tab(ui, state),
             }
@@ -446,6 +457,9 @@ fn element_editor(
                         minutes(ui, &mut f.mttr);
                         ui.end_row();
                     }
+                    ui.weak("作業者");
+                    labor_editor(ui, &mut e.labor);
+                    ui.end_row();
                 }
                 ElementKind::Buffer { capacity } => {
                     ui.weak("容量");
@@ -546,6 +560,40 @@ fn element_editor(
     });
 }
 
+/// 工程に人が要るか。「人員」タブの名簿のうち、この工程ができる人が来て作業する。
+fn labor_editor(ui: &mut egui::Ui, labor: &mut Labor) {
+    ui.vertical(|ui| {
+        let options = [Labor::None, Labor::Full, Labor::Load { seconds: 10.0 }];
+        egui::ComboBox::from_id_salt("flow_labor")
+            .selected_text(labor.label())
+            .show_ui(ui, |ui| {
+                for option in options {
+                    let selected = std::mem::discriminant(labor) == std::mem::discriminant(&option);
+                    if ui.selectable_label(selected, option.label()).clicked() && !selected {
+                        *labor = option;
+                    }
+                }
+            })
+            .response
+            .on_hover_text(
+                "必要にすると、「人員」タブの名簿でこの工程ができる人が来るまで「人待ち」で止まる",
+            );
+        if let Labor::Load { seconds } = labor {
+            ui.horizontal(|ui| {
+                ui.label("人が付く時間");
+                ui.add(
+                    egui::DragValue::new(seconds)
+                        .speed(0.1)
+                        .range(0.0..=1_000_000.0)
+                        .max_decimals(2)
+                        .suffix(" 秒"),
+                )
+                .on_hover_text("1 個ごとの最初のこの時間だけ人が付き、残りは機械が自動で加工する");
+            });
+        }
+    });
+}
+
 fn settings_editor(ui: &mut egui::Ui, flow: &mut FlowModel) {
     let s = &mut flow.settings;
     ui.horizontal_wrapped(|ui| {
@@ -636,6 +684,10 @@ fn results_tab(ui: &mut egui::Ui, state: &mut FlowUi) {
             summary(ui, report);
             ui.add_space(8.0);
             element_table(ui, report);
+            if !report.workers.is_empty() {
+                ui.add_space(8.0);
+                worker_table(ui, report);
+            }
         });
 }
 
@@ -711,6 +763,7 @@ fn element_table(ui: &mut egui::Ui, r: &Report) {
                 "待ち",
                 "詰まり",
                 "故障",
+                "人待ち",
                 "通過数",
                 "故障回数",
                 "平均加工",
@@ -751,6 +804,44 @@ fn element_table(ui: &mut egui::Ui, r: &Report) {
                 });
                 ui.label(format!("{:.2} kWh", e.energy_kwh));
                 ui.label(format!("{:.2} m³", e.air_m3));
+                ui.end_row();
+            }
+        });
+}
+
+fn worker_table(ui: &mut egui::Ui, r: &Report) {
+    ui.strong("作業者");
+    egui::Grid::new("flow_workers_result")
+        .striped(true)
+        .spacing([12.0, 4.0])
+        .show(ui, |ui| {
+            for title in [
+                "作業者",
+                "稼働率",
+                "作業",
+                "歩行",
+                "手待ち",
+                "出勤時間",
+                "作業数",
+                "歩いた回数",
+            ] {
+                ui.strong(title);
+            }
+            ui.end_row();
+            for w in &r.workers {
+                ui.label(&w.name);
+                ui.strong(format!("{:.0}%", w.utilization() * 100.0))
+                    .on_hover_text("出勤している時間のうち、作業と歩行の割合");
+                for state in [
+                    WorkerState::Working,
+                    WorkerState::Walking,
+                    WorkerState::Idle,
+                ] {
+                    ui.label(format!("{:.1}%", w.times.ratio(state) * 100.0));
+                }
+                ui.label(hours(w.times.on_duty()));
+                ui.label(w.tasks.to_string());
+                ui.label(w.walks.to_string());
                 ui.end_row();
             }
         });

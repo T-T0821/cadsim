@@ -8,7 +8,9 @@ use glam::{DQuat, DVec3};
 use serde::{Deserialize, Serialize};
 
 use crate::interchange::{NodeTransform, Track};
-use crate::motion::chart::{Interlock, Robot, RobotMove, Sensor, SensorKind, TeachPoint};
+use crate::motion::chart::{
+    Interlock, MoveKind, Robot, RobotMove, RobotSpeed, Sensor, SensorKind, TeachPoint,
+};
 use crate::motion::{Action, Actuator, ActuatorKind, Axis, Easing, Step, TimingChart};
 
 type NodePath = Vec<usize>;
@@ -39,6 +41,23 @@ pub struct RobotRecord {
     pub tool_axis: [f64; 3],
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub points: Vec<TeachPointRecord>,
+    /// 回転関節の最高速度 (度/秒)
+    #[serde(default = "default_joint_speed")]
+    pub joint_speed: f64,
+    /// TCP と直動関節の最高速度 (モデル単位/秒)。なければロボットの大きさから決める。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub linear_speed: Option<f64>,
+    /// 最高速度までの加速時間 (秒)
+    #[serde(default = "default_accel_time")]
+    pub accel_time: f64,
+}
+
+fn default_joint_speed() -> f64 {
+    RobotSpeed::default().joint
+}
+
+fn default_accel_time() -> f64 {
+    RobotSpeed::default().accel_time
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -56,6 +75,19 @@ pub struct RobotMoveRecord {
     pub robot: u32,
     pub point: u32,
     pub duration: f64,
+    #[serde(default, skip_serializing_if = "is_joint_move")]
+    pub kind: MoveKindRecord,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum MoveKindRecord {
+    #[default]
+    Joint,
+    Linear,
+}
+
+fn is_joint_move(kind: &MoveKindRecord) -> bool {
+    *kind == MoveKindRecord::Joint
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -253,6 +285,10 @@ pub fn chart_to_record(
                         robot: m.robot,
                         point: m.point,
                         duration: m.duration,
+                        kind: match m.kind {
+                            MoveKind::Joint => MoveKindRecord::Joint,
+                            MoveKind::Linear => MoveKindRecord::Linear,
+                        },
                     })
                     .collect(),
             })
@@ -276,6 +312,9 @@ pub fn chart_to_record(
                         approach: p.approach,
                     })
                     .collect(),
+                joint_speed: r.speed.joint,
+                linear_speed: r.speed.linear,
+                accel_time: r.speed.accel_time,
             })
             .collect(),
     }
@@ -377,6 +416,11 @@ pub fn chart_from_record(
                 })
                 .collect(),
             next_point_id: r.points.iter().map(|p| p.id + 1).max().unwrap_or(1),
+            speed: RobotSpeed {
+                joint: r.joint_speed,
+                linear: r.linear_speed,
+                accel_time: r.accel_time,
+            },
         })
         .collect();
     let has_point = |robot: u32, point: u32| {
@@ -417,6 +461,10 @@ pub fn chart_from_record(
                     robot: m.robot,
                     point: m.point,
                     duration: m.duration,
+                    kind: match m.kind {
+                        MoveKindRecord::Joint => MoveKind::Joint,
+                        MoveKindRecord::Linear => MoveKind::Linear,
+                    },
                 })
                 .collect(),
         })
@@ -569,6 +617,7 @@ mod tests {
         let point = {
             let r = chart.robot_mut(robot).unwrap();
             r.tcp = [0.0, 4.0, 0.0];
+            r.speed.linear = Some(250.0);
             r.add_point("置き".into(), [1.0, 4.0, 0.0], Some([0.0, -1.0, 0.0]))
         };
         let sensor = chart.add_sensor(SensorKind::Proximity);
@@ -591,6 +640,7 @@ mod tests {
                     robot,
                     point,
                     duration: 1.0,
+                    kind: MoveKind::Linear,
                 }],
             },
             Step {

@@ -1,0 +1,25 @@
+[package]
+name = "cadsim_io"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "cadsim のアダプター層。STEP・3D ファイル形式の読み書き。Bevy・egui に依存しない"
+
+[features]
+# アプリ側のテストからテスト用のシーン (interchange::test_util) を使う
+test-util = []
+
+[dependencies]
+cadsim_core = { path = "../cadsim_core" }
+glam = "0.33"
+# 3D ファイルの読み書き (glTF / GLB, OBJ, STL)。すべて純 Rust
+gltf = { version = "1.4", features = ["import", "names", "utils", "extras"] }
+serde_json = "1.0.154"
+stl_io = "0.11"
+tobj = { version = "4", default-features = false }
+# OpenUSD (.usda / .usdc / .usdz) の読み書き。純 Rust
+openusd = "0.8"
+# STEP (AP203 / AP214 / AP242) の読み込みと B-rep のテッセレーション
+truck-meshalgo = "0.4"
+truck-stepio = "0.3"
+truck-topology = "0.6"
