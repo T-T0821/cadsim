@@ -24,7 +24,8 @@ pub fn physics_panel(
     let ctx = contexts.ctx_mut()?;
     // 3D ビューの左下、「安全」パネルの右に並べる (開いて幅が変わっても重ならないよう、前のフレームの幅を使う)
     let corner = viewport.rect.map_or(egui::pos2(8.0, 600.0), |r| {
-        let safety = ctx.memory(|m| m.area_rect(egui::Id::new("安全")));
+        // egui の Window は題名を Option に包んだまま Id にする
+        let safety = ctx.memory(|m| m.area_rect(egui::Id::new(Some("安全"))));
         let left = safety.map_or(r.min.x + 8.0, |s| s.max.x + 8.0);
         egui::pos2(left, r.max.y - 8.0)
     });
