@@ -2498,9 +2498,15 @@ name = "cadsim_io"
 version = "0.1.0"
 dependencies = [
  "cadsim_core",
+ "e57",
  "glam 0.33.12",
  "gltf",
+ "image",
+ "krilla",
+ "lopdf",
  "openusd",
+ "rust_xlsxwriter",
+ "serde",
  "serde_json",
  "stl_io",
  "tobj",

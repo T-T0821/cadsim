@@ -11,8 +11,8 @@ use rust_xlsxwriter::{
     XlsxError,
 };
 
-use super::model::{ElementKind, FlowModel, KindTag};
-use super::sim::{Report, State, WorkerState};
+use cadsim_core::flow::model::{ElementKind, FlowModel, KindTag};
+use cadsim_core::flow::sim::{Report, State, WorkerState};
 
 const SUMMARY: &str = "概要";
 const ELEMENTS: &str = "設備別";
@@ -21,7 +21,7 @@ const WORKERS: &str = "作業者別";
 
 /// 状態の色 (3D ビューの色分けと同じ)
 fn state_color(state: State) -> Color {
-    let [r, g, b] = super::palette::state_rgb(state);
+    let [r, g, b] = cadsim_core::flow::palette::state_rgb(state);
     let c = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u32;
     Color::RGB((c(r) << 16) | (c(g) << 8) | c(b))
 }
@@ -354,9 +354,9 @@ fn series_sheet(
 
 #[cfg(test)]
 mod tests {
-    use super::super::model::sample_line;
-    use super::super::sim::Simulation;
     use super::*;
+    use cadsim_core::flow::model::sample_line;
+    use cadsim_core::flow::sim::Simulation;
 
     #[test]
     fn writes_a_zip_with_three_sheets() {

@@ -77,9 +77,9 @@ crates/
 1つの PR は1段だけにし、毎回 `cargo fmt` / `clippy` / `test` が通る状態でマージします。
 
 1. **ワークスペース化と純粋な計算を core へ。** ✅ ルートをワークスペースにして `cadsim_core` を作り、`math` と `simulation` の幾何・干渉の計算を移した。`bevy::math` は同じ版の `glam` に置き換え、アプリ側の `math` / `simulation` から再公開しているので呼び出し側は変わらない。
-   - ゲーム風 UI の判定(`gamify`)は最初から `cadsim_core` に置いた。設定ファイルの読み書き(`src/preferences_file.rs`)はアダプター層の候補で、`cadsim_io` ができたら移す。
+   - ゲーム風 UI の判定(`gamify`)は最初から `cadsim_core` に置いた。設定ファイルの読み書きは `cadsim_io::preferences_file` に移した。
 2. **残りの純粋な計算を core へ。** 標準部品の `library/catalog.rs`(種類・パラメータ・I/O 点・動作)と `library/geometry.rs`(形状)はすでに Bevy に依存しないので、そのまま移せる。そのほか `motion` のチャート・姿勢・運動学、PLC のシーケンスなど。進行中の機能ブランチが触っているので、それらが入ってから移す。
-3. **ファイル形式を io へ。** 🔶 `cadsim_io` を作り、3D ファイル形式の読み書き (`interchange` の Scene・glTF・OBJ・STL・USD・Web ビューア) を移した。アプリ側の `interchange` から再公開しているので呼び出し側は変わらない。`Scene` ⇔ `Model` の変換 (`model_io`) は手順 4 で `Model` が core に移ってから io へ移す。続いて STEP の読み込みを `cadsim_io::step` に移し、取り込んだ形状とアセンブリの木の型 (`ImportedShape` など) は `cadsim_core::shape`、表示用メッシュ (`part_mesh`)・BVH・アニメーションの型 (`Animation` など) は `cadsim_core` に移した (io → core の向き)。残りは `.cadsim` の JSON の構造体、`formats/`、`flow` の `record.rs`・`xlsx.rs`。
+3. **ファイル形式を io へ。** 🔶 `cadsim_io` を作り、3D ファイル形式の読み書き (`interchange` の Scene・glTF・OBJ・STL・USD・Web ビューア) を移した。アプリ側の `interchange` から再公開しているので呼び出し側は変わらない。`Scene` ⇔ `Model` の変換 (`model_io`) は手順 4 で `Model` が core に移ってから io へ移す。続いて STEP の読み込みを `cadsim_io::step` に移し、取り込んだ形状とアセンブリの木の型 (`ImportedShape` など) は `cadsim_core::shape`、表示用メッシュ (`part_mesh`)・BVH・アニメーションの型 (`Animation` など) は `cadsim_core` に移した (io → core の向き)。さらに平面図・点群・図面の形式 (`formats::{dxf, pdf_plan, pointcloud_read, site_record, drawing_out, conveyor_record}`)、工程シミュレーションの記録と Excel 書き出し (`flow::{record, xlsx}`)、設定ファイル (`preferences_file`) を `cadsim_io` に移した。アプリ側の `formats` / `flow` / `preferences_file` から再公開している。`Model` を読む `formats::{bom_out, chart_record}` と `.cadsim` の JSON の構造体はまだアプリ側。
 4. **設計データを core へ。** 🔶 `Model` と `Node`・`NodeKind`・`BoxPart` などを `cadsim_core::model` に移した。アプリ側の `model::Model` は `#[derive(Resource, Deref, DerefMut)] struct Model(cadsim_core::model::Model)` という包み型で、`Res<Model>` やメソッド呼び出しはそのまま使える。標準部品の種類・パラメータ・形状 (`library::{catalog, geometry}`) と、モデリングで作った形状の出どころ `ModeledSource` も core に置き、JSON との変換はアプリ側の `ModeledSourceExt` に残した。`Selection` は画面の状態なので UI 層 (アプリ側) のまま。`Model` のテストはサンプルの STEP (io) を読むのでアプリ側に残した。続きは `Model` を読み書きするだけの `bom.rs`・`modeling.rs`・`model_io` を core / io へ移すこと。
 5. **ユースケースを切り出す。** 開く・保存・取り込み・書き出し・削除・元に戻すを `usecase` の関数にし、Bevy のシステムからはそれを呼ぶだけにする。元に戻す履歴は `World` ではなくドキュメント(モデル + チャートなど)を書き換える形にする。
 6. **UI 層を整理する。** 残った Bevy / egui のコードを `view` / `input` / `ui` に分ける。
@@ -96,7 +96,7 @@ crates/
 
 ### すでに層を分けて書いてあるもの
 
-- 工程シミュレーション: ドメイン(工程モデル・離散事象シミュレーション・色)は `cadsim_core::flow` に置いた。アプリの `src/flow/` のうち `record.rs`(.cadsim の形)と `xlsx.rs`(Excel 書き出し)は Bevy に依存しないアダプターで、`cadsim_io` を作る段でそのまま移す。`mod.rs`・`ui.rs` が UI 層。
+- 工程シミュレーション: ドメイン(工程モデル・離散事象シミュレーション・色)は `cadsim_core::flow` に置いた。`.cadsim` の形 (`record`) と Excel 書き出し (`xlsx`) は `cadsim_io::flow`。アプリの `src/flow/` の `mod.rs`・`ui.rs`・`staff_ui.rs` が UI 層。
 
 ### 移行の途中で足した機能の置き場所
 
@@ -113,4 +113,4 @@ crates/
 | 実機ロボット (UR) の関節角度の受信 | —(角度から関節の値への直し方 `motion::live_joints` は Bevy 非依存。`motion::chart` と一緒に手順 2 で core へ) | `cadsim_io::rtde`(RTDE の読み書きと通信スレッド) | `motion/ur_ui.rs` |
 | ライン連携 | `line::{coupler, signals, workpieces}`、`flow::sim` の連携の口 | — | `line/`(`stepper.rs` は Bevy 非依存。AGV のシミュレーションと一緒に手順 2 で core へ) |
 
-`formats/` と `bom.rs`・`modeling.rs`・`drawing/collect.rs` は Bevy に依存しない書き方にしてあり、`Model` が core に移ればそのまま移せます。
+`formats::{bom_out, chart_record}` と `bom.rs`・`modeling.rs`・`drawing/collect.rs` は Bevy に依存しない書き方にしてあり、次の手順で core / io に移します。
