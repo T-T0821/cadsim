@@ -27,6 +27,8 @@
 | e57(E57 の点群の読み込み) | 0.11 |
 | krilla(図面の PDF 書き出し) | 0.8 |
 | rust_xlsxwriter(部品表・工程シミュレーションの Excel 書き出し) | 0.102 |
+| rapier3d(物理演算。Bevy に依存しない) | 0.36 |
+| glam(Bevy に依存しない層のベクトル・行列。Bevy と同じ版) | 0.33 |
 
 ## コードの構成
 
@@ -40,6 +42,7 @@ crates/cadsim_core/   Bevy に依存しないドメイン (cargo test -p cadsim_
 ├── drawing.rs       2D 図面: 投影・かくれ線・シルエット・寸法・図枠 (docs/drawing.md)
 ├── site/            平面図の下敷きの配置と縮尺合わせ、点群の間引き・LOD・干渉 (docs/site.md)
 └── flow/            工程モデル (model)、離散事象シミュレーションと集計 (sim)、状態・稼働率の色 (palette)
+└── physics/         物理演算の設定・ケーブルの紐モデル・剛体の進め方 (settings / cable / world)
 src/                  アプリ本体 (Bevy + egui)
 ├── main.rs          アプリの組み立て (プラグインを並べるだけ)
 ├── model.rs         設計データ: アセンブリの木 (f64) と選択状態
@@ -94,6 +97,7 @@ src/                  アプリ本体 (Bevy + egui)
 │   └── ui.rs         工程シミュレーションのウィンドウ
 ├── safety/          安全機器・動作範囲・距離の確認 (詳しくは docs/safety-and-floor.md)
 ├── floor/           作業者と AGV、床の上の幾何計算 (詳しくは docs/safety-and-floor.md)
+├── physics/         物理演算の配線・パネル・サンプルライン、Rapier のアダプター、保存形式 (詳しくは docs/physics.md)
 └── ui/
     ├── mod.rs        画面の割り付け (上 → 下 → 左 → 右 → 残りが 3D ビュー)
     ├── menu.rs       メニューバーとツールバー
@@ -109,7 +113,7 @@ src/                  アプリ本体 (Bevy + egui)
 ```
 
 データは一方向に流れます: **UI・ギズモ・読み込み → `Model`(f64)→ `viewport` が Bevy のエンティティに写す**。
-動作シミュレーションは `Model` を書き換えず、`viewport` が配置を写すときに `SimulationPose` の動きを重ねます。
+動作シミュレーションは `Model` を書き換えず、`viewport` が配置を写すときに `SimulationPose` の動きを重ねます。物理演算で動いている部品は `PhysicsPose` の位置に置きます(`physics::displayed_matrix`)。
 `Model` は Bevy のエンティティを知らないので、表示を変えても設計データには影響しません。
 
 ## 各機能のしくみ
