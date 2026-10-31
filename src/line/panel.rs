@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 
 use cadsim_core::flow::model::{AgvCall, ElementKind, KindTag, sample_line};
-use cadsim_core::line::{Direction, SignalSources, Value, line_signals};
+use cadsim_core::line::{Direction, Value};
 
 use super::LineState;
 use super::stepper::link_problems;
@@ -184,6 +184,14 @@ fn summary(ui: &mut egui::Ui, line: &LineState, run: &FlowRun, floor: &FloorStat
             ui.label("AGV が運んだワーク");
             ui.label(format!("{} 個", line.coupler.carried()));
             ui.end_row();
+            if let Some(c) = line.conveyor {
+                ui.label("コンベア");
+                ui.label(format!(
+                    "投入 {} 個 / 排出 {} 個 / 仕掛 {} 個",
+                    c.fed, c.discharged, c.in_process
+                ));
+                ui.end_row();
+            }
             if let Some(agv) = floor.agv_sim() {
                 ui.label("AGV");
                 ui.label(format!(
@@ -301,30 +309,14 @@ fn signals(
     safety: &SafetyState,
 ) {
     ui.label(
-        "工程・AGV・安全の状態を PLC の入力に、PLC の出力をラインの運転と投入許可に割り付ける表です。PLC をつなぐまでは、PLC → 設備 の信号をクリックして切り替えられます。",
+        "工程・AGV・コンベア・安全の状態を PLC の入力に、PLC の出力をラインの運転と投入許可に割り付ける表です。この表は「PLC 連携」の I/O 一覧の後ろにも並び、外部の PLC (Modbus TCP / OPC UA) とやりとりします。",
     );
-    let sim = run.sim.as_ref().filter(|s| s.is_linked());
-    let agv_loaded = floor
-        .agv_sim()
-        .map(|a| {
-            a.vehicles
-                .iter()
-                .map(|v| {
-                    v.job
-                        .as_ref()
-                        .and_then(|j| j.tag)
-                        .is_some_and(|t| line.coupler.is_loaded(t))
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    let sources = SignalSources {
-        running: line.playing && !line.halted,
-        safety_stopped: safety.is_stopped(),
-        agv_loaded,
-        agv_waiting: line.coupler.waiting_for_agv(),
-    };
-    let rows = line_signals(flow, sim, &sources, &line.inputs);
+    if line.plc_drives_inputs {
+        ui.colored_label(ON, "PLC → 設備 の信号は PLC が書いています");
+    } else {
+        ui.label("PLC から書いていない間は、PLC → 設備 の信号をクリックして切り替えられます。");
+    }
+    let rows = super::current_signals(line, flow, run, floor, safety);
     let mut toggled = None;
     egui::Grid::new("line_signals")
         .num_columns(4)
@@ -355,7 +347,7 @@ fn signals(
                             } else {
                                 ui.visuals().weak_text_color()
                             });
-                        if s.direction == Direction::FromPlc {
+                        if s.direction == Direction::FromPlc && !line.plc_drives_inputs {
                             if ui.button(text).clicked() {
                                 toggled = Some((s.name.clone(), !on));
                             }

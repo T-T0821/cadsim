@@ -2,17 +2,32 @@
 //!
 //! - ジョグ: 関節ごとのスライダか、TCP を X / Y / Z に少しずつ動かすボタン (逆運動学) で
 //!   一時的に姿勢を動かす。チャートは変えず、再生やスクラブでチャートの位置に戻る。
-//! - 教示点: 今の TCP を登録するか、座標を直接入力する。選択中のステップに移動を置ける。
+//! - 教示点: 今の TCP を登録するか、3D ビューで部品の面をクリックして置くか、座標を直接入力する。
+//!   選択中のステップに移動を置ける。
+//! - サイクルタイム: 速度の上限から移動の最短時間を見積もる。MELFA-BASIC VI のプログラムに書き出せる。
+//! - 経路の確認: 届かない移動・特異点の近くを通る移動の一覧と、移動中の干渉チェック。
+//!   3D ビューには TCP の通り道を描き、問題のあるところに色を付ける。
 
 use bevy::math::DVec3;
 use bevy::prelude::*;
 use bevy_egui::egui;
 
-use super::chart::{Robot, RobotMove, TeachPoint, TimingChart};
+use super::chart::{MoveKind, Robot, RobotMove, TeachPoint, TimingChart};
 use super::kinematics::{self, Tcp};
+use super::melfa;
+use super::path_interference::{PathBody, PathHit, robot_path_interference};
+use super::robot_path::SINGULAR_DEXTERITY;
+use super::robot_time;
+use super::teach::{self, point_on_surface};
 use super::ui::MotionUi;
-use super::ui::{ChartUiState, ERROR_COLOR};
+use super::ui::{ChartUiState, ERROR_COLOR, WARN_COLOR};
 use super::{ChartSchedule, JogPose, SimulationPose};
+use crate::model::Model;
+use crate::simulation::{InterferenceCheck, SimBody};
+use crate::viewport::PartPicker;
+
+/// 移動中の干渉を調べる時刻の間隔 (秒)
+const INTERFERENCE_INTERVAL: f64 = 0.05;
 
 /// 工具を向ける方向の候補 (教示点の設定用)
 const APPROACHES: [(&str, Option<[f64; 3]>); 7] = [
@@ -33,6 +48,20 @@ pub struct RobotUiState {
     keep_orientation: bool,
     /// 直前のジョグや教示点への移動が届かなかったときの表示
     message: Option<String>,
+    /// 次のフレームで、このロボットの移動中の干渉を調べる
+    interference_request: Option<u32>,
+    /// 直前に調べた移動中の干渉 (ロボット, 結果)。チャートを変えたら消す。
+    interference: Option<(u32, Vec<PathHit>)>,
+    /// 3D ビューのクリックで教示点を置くロボット (置くモード中だけ Some)
+    placing: Option<u32>,
+    /// 置くとき、クリックした面から教示点を離す距離 (モデル単位)
+    standoff: f64,
+    /// 置くモード中、カーソルの下の面から作る教示点
+    hover: Option<teach::SurfacePoint>,
+    /// 次のフレームで、このロボットのプログラムを書き出す
+    export_request: Option<u32>,
+    /// 書き出しの結果
+    export_message: Option<String>,
 }
 
 impl Default for RobotUiState {
@@ -41,6 +70,13 @@ impl Default for RobotUiState {
             jog_step: 10.0,
             keep_orientation: true,
             message: None,
+            interference_request: None,
+            interference: None,
+            placing: None,
+            standoff: 0.0,
+            hover: None,
+            export_request: None,
+            export_message: None,
         }
     }
 }
@@ -231,15 +267,34 @@ fn robot_panel(
     ui.horizontal(|ui| {
         ui.strong("教示点");
         if ui.button("+ 今の TCP を登録").clicked() {
-            let name = format!("P{}", robot.next_point_id.max(1));
-            let approach = Some(round_direction(tcp.tool_axis).to_array());
+            let name = teach::next_point_name(&robot);
+            let approach = Some(teach::round_direction(tcp.tool_axis, 1.0).to_array());
             if let Some(r) = chart.robot_mut(robot.id) {
                 r.add_point(name, tcp.position.to_array(), approach);
             }
         }
+        let placing = state.placing == Some(robot.id);
+        if ui
+            .selectable_label(placing, "+ 3D ビューで置く")
+            .on_hover_text("部品の面をクリックすると、そこに教示点を置きます")
+            .clicked()
+        {
+            state.placing = if placing { None } else { Some(robot.id) };
+            state.hover = None;
+        }
     });
-    if robot.points.is_empty() {
-        ui.weak("ジョグで TCP を動かしてから「今の TCP を登録」を押します。");
+    if state.placing == Some(robot.id) {
+        ui.horizontal(|ui| {
+            ui.label("面から離す");
+            ui.add(
+                egui::DragValue::new(&mut state.standoff)
+                    .speed(reach * 0.002)
+                    .range(0.0..=f64::MAX),
+            );
+        });
+        ui.weak("部品の面をクリックすると、そこから離した位置に、面に向かう工具の向きで教示点を置きます。Esc でやめます。");
+    } else if robot.points.is_empty() {
+        ui.weak("ジョグで TCP を動かしてから「今の TCP を登録」を押すか、「3D ビューで置く」で部品の面をクリックします。");
     }
     let step = chart_state.selected_step.filter(|&s| s < chart.steps.len());
     for point in &robot.points {
@@ -260,23 +315,199 @@ fn robot_panel(
                     robot: robot.id,
                     point: point.id,
                     duration: 1.0,
+                    kind: Default::default(),
                 });
             }
             PointAction::Delete => chart.remove_point(robot.id, point.id),
         }
     }
-    let unreachable = schedule
+    cycle_time(ui, chart, schedule, &robot, state);
+    path_check(ui, schedule, &robot, chart_state, state);
+    new_jog
+}
+
+/// サイクルタイムの見積もりと、ロボット言語への書き出し
+fn cycle_time(
+    ui: &mut egui::Ui,
+    chart: &mut TimingChart,
+    schedule: &ChartSchedule,
+    robot: &Robot,
+    state: &mut RobotUiState,
+) {
+    if chart.steps.is_empty() {
+        return;
+    }
+    ui.separator();
+    ui.strong("サイクルタイム");
+    let estimate = robot_time::estimate_cycle(chart, schedule);
+    ui.label(format!(
+        "チャート {:.2} s / ロボットを最短で動かすと {:.2} s",
+        estimate.current(),
+        estimate.fastest()
+    ))
+    .on_hover_text("速度の上限 (「設定」) で各移動の最短時間を求めた見積もりです。条件待ちの時間は含みません。");
+    let slow: Vec<String> = schedule
         .moves
         .iter()
-        .filter(|m| m.robot == robot.id && !m.reached)
-        .count();
-    if unreachable > 0 {
+        .filter(|m| m.robot == robot.id)
+        .filter(|m| robot_time::min_move_time(chart, robot, m) > m.duration + 1e-6)
+        .map(|m| format!("S{}", m.step + 1))
+        .collect();
+    if !slow.is_empty() {
         ui.colored_label(
-            ERROR_COLOR,
-            format!("⚠ チャート中に届かない移動が {unreachable} 件あります"),
+            WARN_COLOR,
+            format!(
+                "⚠ 速度の上限を超える移動: {} (動作時間を延ばすか「すべて最短にする」)",
+                slow.join(", ")
+            ),
         );
     }
-    new_jog
+    ui.horizontal(|ui| {
+        if ui
+            .button("すべて最短にする")
+            .on_hover_text("ロボットの移動の動作時間を、速度の上限で動いたときの最短時間にします")
+            .clicked()
+        {
+            robot_time::set_fastest_durations(chart, schedule);
+        }
+        if ui
+            .button("MELFA-BASIC VI で書き出す…")
+            .on_hover_text("三菱電機のロボット言語のプログラム (.prg) に書き出します")
+            .clicked()
+        {
+            state.export_request = Some(robot.id);
+        }
+    });
+    if let Some(message) = &state.export_message {
+        ui.weak(message);
+    }
+}
+
+/// 経路の確認: チャートに置いた移動のうち、届かない・特異点の近くを通るものと、移動中の干渉
+fn path_check(
+    ui: &mut egui::Ui,
+    schedule: &ChartSchedule,
+    robot: &Robot,
+    chart_state: &mut ChartUiState,
+    state: &mut RobotUiState,
+) {
+    let moves: Vec<_> = schedule
+        .moves
+        .iter()
+        .filter(|m| m.robot == robot.id)
+        .collect();
+    if moves.is_empty() {
+        return;
+    }
+    ui.separator();
+    ui.strong("経路の確認");
+    let point_name = |id: u32| robot.point(id).map_or("?", |p| p.name.as_str());
+    let mut problems = 0;
+    for m in &moves {
+        let issue = if !m.reached {
+            Some((ERROR_COLOR, "届きません"))
+        } else if !m.path_reached {
+            Some((ERROR_COLOR, "直線の途中に届かないところがあります"))
+        } else if m.singular {
+            Some((WARN_COLOR, "特異点の近くを通ります"))
+        } else {
+            None
+        };
+        if let Some((color, text)) = issue {
+            problems += 1;
+            let label = format!("⚠ S{} → {}: {text}", m.step + 1, point_name(m.point));
+            if ui
+                .add(
+                    egui::Label::new(egui::RichText::new(label).color(color))
+                        .sense(egui::Sense::click()),
+                )
+                .on_hover_text("クリックでそのステップを選択")
+                .clicked()
+            {
+                chart_state.selected_step = Some(m.step);
+            }
+        }
+    }
+    if problems == 0 {
+        ui.weak("すべての移動が届き、特異点の近くも通りません。");
+    }
+
+    ui.horizontal(|ui| {
+        if ui
+            .button("移動中の干渉を調べる")
+            .on_hover_text("ロボットに載った部品が、ほかの部品に食い込まないかを移動ごとに調べます")
+            .clicked()
+        {
+            state.interference_request = Some(robot.id);
+        }
+    });
+    let Some((checked, hits)) = &state.interference else {
+        return;
+    };
+    if *checked != robot.id {
+        return;
+    }
+    if hits.is_empty() {
+        ui.weak("移動中の干渉はありません。");
+    }
+    for hit in hits {
+        let label = format!(
+            "⚠ S{} → {}: {} と {} が干渉 ({:.2}〜{:.2} s)",
+            hit.step + 1,
+            point_name(hit.point),
+            hit.robot_part,
+            hit.other_part,
+            hit.start,
+            hit.end
+        );
+        if ui
+            .add(
+                egui::Label::new(egui::RichText::new(label).color(ERROR_COLOR))
+                    .sense(egui::Sense::click()),
+            )
+            .on_hover_text("クリックでそのステップを選択")
+            .clicked()
+        {
+            chart_state.selected_step = Some(hit.step);
+        }
+    }
+}
+
+/// 「移動中の干渉を調べる」が押されていたら調べる。チャートが変わったら古い結果を消す。
+pub fn check_path_interference(
+    mut state: ResMut<RobotUiState>,
+    chart: Res<TimingChart>,
+    schedule: Res<ChartSchedule>,
+    check: Res<InterferenceCheck>,
+    model: Res<Model>,
+    bodies: Query<(&SimBody, Option<&Name>)>,
+) {
+    if chart.is_changed() && state.interference.is_some() {
+        state.interference = None;
+    }
+    let Some(robot) = state.interference_request.take() else {
+        return;
+    };
+    let bodies: Vec<PathBody> = bodies
+        .iter()
+        .filter(|(body, _)| model.get(body.id).is_some())
+        .map(|(body, name)| PathBody {
+            id: body.id,
+            name: name.map_or_else(|| format!("#{}", body.id), |n| n.to_string()),
+            mesh: body.mesh.clone(),
+            placement: model.world_matrix(body.id),
+            ancestors: model.ancestors(body.id),
+        })
+        .collect();
+    let hits = robot_path_interference(
+        &bodies,
+        &chart,
+        &schedule,
+        &check.settings,
+        robot,
+        INTERFERENCE_INTERVAL,
+    );
+    state.interference = Some((robot, hits));
 }
 
 fn robot_settings(
@@ -290,6 +521,7 @@ fn robot_settings(
         .iter()
         .filter_map(|id| chart.actuator(*id).map(|a| a.name.clone()))
         .collect();
+    let linear_default = 2.0 * kinematics::reach(chart, robot);
     let Some(r) = chart.robot_mut(robot.id) else {
         return;
     };
@@ -325,6 +557,43 @@ fn robot_settings(
                     ui.add(egui::DragValue::new(v).speed(0.01).range(-1.0..=1.0));
                 }
             });
+            ui.end_row();
+            ui.label("関節の最高速度");
+            ui.add(
+                egui::DragValue::new(&mut r.speed.joint)
+                    .speed(1.0)
+                    .range(1.0..=3600.0)
+                    .suffix(" °/s"),
+            );
+            ui.end_row();
+            ui.label("直線の最高速度");
+            ui.horizontal(|ui| {
+                let mut custom = r.speed.linear.is_some();
+                if ui.checkbox(&mut custom, "").changed() {
+                    r.speed.linear = custom.then_some(linear_default);
+                }
+                match &mut r.speed.linear {
+                    Some(v) => {
+                        ui.add(
+                            egui::DragValue::new(v)
+                                .speed(linear_default * 0.01)
+                                .range(0.0..=f64::MAX)
+                                .suffix(" /s"),
+                        );
+                    }
+                    None => {
+                        ui.weak(format!("自動 ({linear_default:.0} /s)"));
+                    }
+                }
+            });
+            ui.end_row();
+            ui.label("加速時間");
+            ui.add(
+                egui::DragValue::new(&mut r.speed.accel_time)
+                    .speed(0.01)
+                    .range(0.0..=5.0)
+                    .suffix(" s"),
+            );
             ui.end_row();
         });
     ui.weak(format!("関節: {}", chain.join(" → ")));
@@ -430,23 +699,6 @@ fn jog_to(
     values
 }
 
-/// 軸の向きにほぼ一致するなら、その軸にそろえる (登録した教示点の向きをきれいにするため)
-fn round_direction(v: DVec3) -> DVec3 {
-    for axis in [
-        DVec3::X,
-        DVec3::NEG_X,
-        DVec3::Y,
-        DVec3::NEG_Y,
-        DVec3::Z,
-        DVec3::NEG_Z,
-    ] {
-        if v.angle_between(axis) < 1f64.to_radians() {
-            return axis;
-        }
-    }
-    v
-}
-
 // ---------------------------------------------------------------------------
 // 3D ビューへの表示
 // ---------------------------------------------------------------------------
@@ -456,6 +708,8 @@ const LINK_COLOR: Color = Color::srgb(0.3, 0.85, 0.95);
 const TCP_COLOR: Color = Color::srgb(1.0, 0.45, 0.1);
 const POINT_COLOR: Color = Color::srgb(0.3, 0.9, 0.4);
 const POINT_ERROR_COLOR: Color = Color::srgb(0.95, 0.25, 0.25);
+const PATH_COLOR: Color = Color::srgba(0.3, 0.9, 0.4, 0.7);
+const PATH_WARN_COLOR: Color = Color::srgb(1.0, 0.75, 0.15);
 
 /// 関節の軸、リンクの骨格、TCP と工具軸、教示点を描く
 pub fn draw_robots(
@@ -516,12 +770,31 @@ pub fn draw_robots(
         gizmos.sphere(v(position), (0.013 * k) as f32, TCP_COLOR);
         gizmos.arrow(v(position), v(position + tool_axis * 0.09 * k), TCP_COLOR);
 
+        // TCP の通り道。特異点の近くは黄色、届かないところは赤
+        for solved in schedule.moves.iter().filter(|m| m.robot == robot.id) {
+            for pair in solved.path.windows(2) {
+                let color = if !pair[1].reached {
+                    POINT_ERROR_COLOR
+                } else if solved.kind == MoveKind::Linear && pair[1].dexterity < SINGULAR_DEXTERITY
+                {
+                    PATH_WARN_COLOR
+                } else {
+                    PATH_COLOR
+                };
+                gizmos.line(
+                    v(DVec3::from_array(pair[0].position)),
+                    v(DVec3::from_array(pair[1].position)),
+                    color,
+                );
+            }
+        }
+
         for point in &robot.points {
             let reached = schedule
                 .moves
                 .iter()
                 .filter(|m| m.robot == robot.id && m.point == point.id)
-                .all(|m| m.reached);
+                .all(|m| m.reached && m.path_reached);
             let color = if reached {
                 POINT_COLOR
             } else {
@@ -538,4 +811,118 @@ pub fn draw_robots(
             }
         }
     }
+}
+
+/// 「3D ビューで置く」の間、カーソルの下の部品の面を調べ、クリックでそこに教示点を置く
+#[allow(clippy::too_many_arguments)]
+pub fn place_teach_point(
+    buttons: Res<ButtonInput<MouseButton>>,
+    keys: Res<ButtonInput<KeyCode>>,
+    window: Single<&Window, With<bevy::window::PrimaryWindow>>,
+    camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
+    picker: PartPicker,
+    bodies: Query<&SimBody>,
+    mut state: ResMut<RobotUiState>,
+    mut chart: ResMut<TimingChart>,
+    mut gizmos: Gizmos,
+) {
+    let Some(robot) = state.placing else {
+        return;
+    };
+    if keys.just_pressed(KeyCode::Escape) || chart.robot(robot).is_none() {
+        state.placing = None;
+        state.hover = None;
+        return;
+    }
+    let (camera, camera_transform) = *camera;
+    let standoff = state.standoff;
+    state.hover = window.cursor_position().and_then(|cursor| {
+        let ray = camera.viewport_to_world(camera_transform, cursor).ok()?;
+        let hit = picker.cast(ray)?;
+        let body = bodies.get(hit.entity).ok()?;
+        // 当たった点を f64 の形状に載せ直し、その三角形の法線を使う
+        let local = body.pose.inverse().apply(hit.point.as_dvec3());
+        let (q, normal) = body.mesh.closest_point(local)?;
+        let world = body.pose.apply(q);
+        let normal = body.pose.rotation * normal;
+        // 法線がカメラと反対を向いていたら裏返す (面の表裏が逆の形状でも外へ離す)
+        let normal = if normal.dot(ray.direction.as_dvec3()) > 0.0 {
+            -normal
+        } else {
+            normal
+        };
+        Some(point_on_surface(world, normal, standoff))
+    });
+
+    let Some(hover) = state.hover else {
+        return;
+    };
+    let k = kinematics::reach(&chart, chart.robot(robot).expect("上で確かめた"));
+    let p = hover.position.as_vec3();
+    gizmos.sphere(p, (0.016 * k) as f32, POINT_COLOR);
+    gizmos.line(
+        (hover.position - hover.approach * 0.065 * k).as_vec3(),
+        p,
+        POINT_COLOR,
+    );
+
+    // Alt + 左ドラッグはカメラのオービットなので置かない
+    let alt = keys.any_pressed([KeyCode::AltLeft, KeyCode::AltRight]);
+    if !buttons.just_pressed(MouseButton::Left) || alt {
+        return;
+    }
+    if let Some(r) = chart.robot_mut(robot) {
+        let name = teach::next_point_name(r);
+        r.add_point(
+            name,
+            hover.position.to_array(),
+            Some(hover.approach.to_array()),
+        );
+    }
+    state.placing = None;
+    state.hover = None;
+}
+
+/// 「3D ビューで置く」の間は、クリックで部品を選ばない
+pub fn teach_tool_off(state: Res<RobotUiState>) -> bool {
+    state.placing.is_none()
+}
+
+/// 「MELFA-BASIC VI で書き出す」が押されていたら、保存先を選ばせて書き出す
+pub fn export_melfa(
+    mut state: ResMut<RobotUiState>,
+    chart: Res<TimingChart>,
+    schedule: Res<ChartSchedule>,
+    model: Res<Model>,
+    _main_thread: bevy::ecs::system::NonSendMarker,
+) {
+    let Some(id) = state.export_request.take() else {
+        return;
+    };
+    let Some(robot) = chart.robot(id) else {
+        return;
+    };
+    let Some(mut path) = rfd::FileDialog::new()
+        .set_title("ロボットのプログラムを書き出す (MELFA-BASIC VI)")
+        .add_filter("MELFA-BASIC VI", &["prg"])
+        .set_file_name(format!("{}.prg", robot.name))
+        .save_file()
+    else {
+        return;
+    };
+    if path.extension().is_none() {
+        path.set_extension("prg");
+    }
+    let program = melfa::melfa_program(
+        &chart,
+        &schedule,
+        robot,
+        melfa::MelfaOptions {
+            unit_to_mm: melfa::unit_to_mm(&model.unit),
+        },
+    );
+    state.export_message = Some(match std::fs::write(&path, program) {
+        Ok(()) => format!("{} に書き出しました", path.display()),
+        Err(e) => format!("{} に書き込めませんでした: {e}", path.display()),
+    });
 }

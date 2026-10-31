@@ -4,7 +4,9 @@
 
 use std::collections::HashMap;
 
-use super::domain::io::{AddressPlan, IoTable, IoValues};
+use cadsim_core::line::{Direction, Signal, Value};
+
+use super::domain::io::{AddressPlan, IoTable, IoValues, LineSignal, Point, line_points};
 use super::domain::io_csv::{self, CsvReport};
 use super::domain::log::PlcLog;
 use super::domain::plant::Plant;
@@ -23,6 +25,8 @@ pub enum PlcMode {
     External,
     /// 記録した PLC のログ (CSV) を流す
     LogReplay,
+    /// 部品に付けたスクリプトが出力を決める ([`PlcSession::scan_with`])
+    Script,
 }
 
 /// 外部の PLC との通信方式 (ポート)。
@@ -57,6 +61,8 @@ pub struct PlcSession {
     /// 読み込んだ PLC のログと再生位置
     pub log: Option<LogPlayer>,
     plant: Plant,
+    /// I/O 表の後ろに足すライン連携の信号
+    line: Vec<LineSignal>,
     /// 外部の PLC とつないでいる間だけ Some
     link: Option<Box<dyn PlcLink>>,
 }
@@ -109,12 +115,55 @@ impl PlcSession {
 
     /// アクチュエータの増減や番号の割り付けに合わせて I/O 一覧を作り直す。変わったら true。
     pub fn refresh_table(&mut self, chart: &TimingChart) -> bool {
-        let table = IoTable::from_chart(chart, &self.plan);
+        let table =
+            IoTable::from_chart(chart, &self.plan).with_line_signals(&self.line, &self.plan);
         let changed = table != self.table;
         if changed {
             self.table = table;
         }
         changed
+    }
+
+    /// ライン連携の信号表を受け取り、設備 → PLC の値を I/O に書く。
+    /// 信号の並びが変わったら I/O 表を作り直して true を返す。
+    pub fn set_line_signals(&mut self, signals: &[Signal], chart: &TimingChart) -> bool {
+        for s in signals {
+            match (s.direction, s.value) {
+                (Direction::ToPlc, Value::Bit(on)) => {
+                    self.io.set_bit(Point::LineInput(s.address), on)
+                }
+                (Direction::ToPlc, Value::Word(v)) => {
+                    self.io.set_word(Point::LineInputWord(s.address), v as f64)
+                }
+                (Direction::FromPlc, _) => {}
+            }
+        }
+        let line = line_points(signals);
+        if line == self.line {
+            return false;
+        }
+        self.line = line;
+        self.refresh_table(chart)
+    }
+
+    /// PLC が書いたライン連携の PLC → 設備 の信号 (名前, 値)。
+    /// 外部の PLC とつないでいるとき、ログを再生しているとき、部品スクリプトのときだけ返す (内蔵の模擬 PLC は
+    /// ライン連携の信号を書かないので、そのときは画面での切り替えに任せる)。
+    pub fn line_outputs(&self) -> Option<Vec<(String, bool)>> {
+        let drives = match self.mode {
+            PlcMode::External => self.link.is_some(),
+            PlcMode::LogReplay => self.log.is_some(),
+            // 部品スクリプトは I/O 表の名前でライン連携の信号も書ける
+            PlcMode::Script => true,
+            PlcMode::Off | PlcMode::Simulated => false,
+        };
+        drives.then(|| {
+            self.line
+                .iter()
+                .filter(|(_, p)| matches!(p, Point::LineOutput(_)))
+                .map(|(name, p)| (name.clone(), self.io.bit(*p)))
+                .collect()
+        })
     }
 
     /// I/O 対応表を CSV にする (Excel で編集して読み戻せる)
@@ -164,7 +213,7 @@ impl PlcSession {
         // 設備を動かす時間。ログ再生では再生速度を掛け、止めている間は動かさない。
         let mut plant_dt = dt;
         match self.mode {
-            PlcMode::Off => {}
+            PlcMode::Off | PlcMode::Script => {}
             PlcMode::Simulated => self.sequencer.scan(chart, &mut self.io, dt),
             PlcMode::External => {
                 if let Some(link) = &mut self.link {
@@ -182,6 +231,27 @@ impl PlcSession {
         self.plant.take_commands(chart, &self.io);
         self.plant.advance(chart, plant_dt);
         self.plant.values()
+    }
+
+    /// PLC の代わりに `control` が出力を決める1スキャン (部品スクリプト)。
+    /// `control` は I/O 一覧・入出力の値・アクチュエータの現在値を受け取り、出力を書く。
+    pub fn scan_with(
+        &mut self,
+        chart: &TimingChart,
+        dt: f64,
+        control: impl FnOnce(&IoTable, &mut IoValues, &HashMap<u32, f64>),
+    ) -> &HashMap<u32, f64> {
+        self.plant.report(chart, &mut self.io);
+        control(&self.table, &mut self.io, self.plant.values());
+        self.plant.take_commands(chart, &self.io);
+        self.plant.advance(chart, dt);
+        self.plant.values()
+    }
+
+    /// 設備を原点に戻し、出力をすべて OFF にする (部品スクリプトを最初から動かすとき)
+    pub fn reset_plant(&mut self) {
+        self.plant.reset();
+        self.io = IoValues::default();
     }
 
     /// 模擬 PLC が運転中なら、実行中のステップ番号
@@ -239,6 +309,60 @@ mod tests {
     use crate::motion::chart::Step;
     use crate::motion::{Action, ActuatorKind};
     use crate::plc::domain::io::Point;
+    use cadsim_core::flow::model::sample_line;
+    use cadsim_core::line::{LineInputs, SignalSources, line_signals};
+
+    /// 外部 PLC のふり: ライン連携の「運転」を OFF にし、届いた「排出数」を覚える
+    struct LinePlc {
+        run: u16,
+        output: u16,
+        seen_output: std::sync::Arc<std::sync::Mutex<f64>>,
+    }
+
+    impl PlcLink for LinePlc {
+        fn exchange(&mut self, _table: &IoTable, io: &mut IoValues) {
+            *self.seen_output.lock().unwrap() = io.word(Point::LineInputWord(self.output));
+            io.set_bit(Point::LineOutput(self.run), false);
+        }
+        fn status(&self) -> LinkStatus {
+            LinkStatus::Connected { cycle_ms: 0.0 }
+        }
+    }
+
+    #[test]
+    fn line_signals_join_the_io_table_and_are_exchanged_with_the_plc() {
+        let model = sample_line();
+        let chart = TimingChart::default();
+        let signals = line_signals(
+            &model,
+            None,
+            &SignalSources::default(),
+            &LineInputs::default(),
+        );
+        let address = |name: &str| signals.iter().find(|s| s.name == name).unwrap().address;
+        let mut session = PlcSession::default();
+        assert!(session.set_line_signals(&signals, &chart));
+        assert!(!session.set_line_signals(&signals, &chart));
+        assert_eq!(session.table.points.len(), signals.len());
+        assert!(session.table.address_conflicts().is_empty());
+
+        // 模擬 PLC ではライン連携の出力は画面に任せる
+        session.set_mode(PlcMode::Simulated);
+        assert_eq!(session.line_outputs(), None);
+
+        session.set_mode(PlcMode::External);
+        let seen = std::sync::Arc::new(std::sync::Mutex::new(-1.0));
+        session.connect(Box::new(LinePlc {
+            run: address("ライン.運転"),
+            output: address("ライン.排出数"),
+            seen_output: seen.clone(),
+        }));
+        session.set_line_signals(&signals, &chart);
+        session.scan(&chart, 0.01);
+        assert_eq!(*seen.lock().unwrap(), 0.0);
+        let outputs = session.line_outputs().unwrap();
+        assert!(outputs.contains(&("ライン.運転".to_string(), false)));
+    }
 
     /// 出力をそのまま返すだけの外部 PLC (シリンダを出し続ける)
     struct AlwaysExtend(u32);

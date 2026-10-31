@@ -295,9 +295,9 @@ fn node_mesh(kind: &NodeKind) -> Option<TriMesh> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::test_util::sample_scene;
     use super::*;
     use crate::model::StepSource;
+    use cadsim_io::interchange::test_util::sample_scene;
 
     #[test]
     fn scene_round_trips_through_model() {

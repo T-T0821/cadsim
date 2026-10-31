@@ -21,7 +21,7 @@
 //! 旋回 (J1) + 肩・肘・手首 (J2〜J4) のアームと、手首に載ったグリッパのシリンダ。
 //! コンベア上の教示点から置き台の上の教示点へ、工具を下向きにしたまま運ぶ。
 
-use super::chart::{Action, ActuatorKind, Axis, Interlock, RobotMove, Step, TimingChart};
+use super::chart::{Action, ActuatorKind, Axis, Interlock, MoveKind, RobotMove, Step, TimingChart};
 use super::sensor::SensorKind;
 use cadsim_core::conveyor::{BeltAxis, ConveyorConfig, ConveyorEnd, SourceOutput};
 
@@ -344,10 +344,18 @@ pub fn load_robot_demo(model: &mut Model, chart: &mut TimingChart) {
         ]
     };
 
+    // 大きく動くところは関節補間、上下の出し入れは直線補間
     let to = |point, duration| RobotMove {
         robot,
         point,
         duration,
+        kind: MoveKind::Joint,
+    };
+    let straight = |point, duration| RobotMove {
+        robot,
+        point,
+        duration,
+        kind: MoveKind::Linear,
     };
     let step = |comment: &str, moves: Vec<RobotMove>, actions: Vec<Action>, dwell: f64| Step {
         comment: comment.into(),
@@ -367,13 +375,13 @@ pub fn load_robot_demo(model: &mut Model, chart: &mut TimingChart) {
         .collect();
     chart.steps = vec![
         step("ピック上へ", vec![to(pick_above, 1.4)], vec![], 0.0),
-        step("下降", vec![to(pick, 0.6)], vec![], 0.0),
+        step("下降", vec![straight(pick, 0.6)], vec![], 0.0),
         step("把持", vec![], vec![act(gripper, 1.0, 0.3)], 0.2),
-        step("上昇", vec![to(pick_above, 0.6)], vec![], 0.0),
+        step("上昇", vec![straight(pick_above, 0.6)], vec![], 0.0),
         step("プレース上へ", vec![to(place_above, 1.4)], vec![], 0.0),
-        step("下降", vec![to(place, 0.6)], vec![], 0.0),
+        step("下降", vec![straight(place, 0.6)], vec![], 0.0),
         step("解放", vec![], vec![act(gripper, 0.0, 0.3)], 0.2),
-        step("上昇", vec![to(place_above, 0.6)], vec![], 0.0),
+        step("上昇", vec![straight(place_above, 0.6)], vec![], 0.0),
         step("原点復帰", vec![], home, 0.0),
     ];
 }
@@ -390,7 +398,7 @@ mod tests {
         let schedule = chart.schedule();
         assert_eq!(schedule.moves.len(), 6);
         for m in &schedule.moves {
-            assert!(m.reached, "{m:?}");
+            assert!(m.ok(), "{m:?}");
         }
         for actuator in &chart.actuators {
             assert!(

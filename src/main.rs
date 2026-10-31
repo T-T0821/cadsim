@@ -76,6 +76,7 @@ mod project;
 mod recording;
 mod result_export;
 mod safety;
+mod scripting;
 mod shortcuts;
 mod simulation;
 mod site;
@@ -117,6 +118,7 @@ fn main() {
             (
                 motion::MotionPlugin,
                 plc::PlcPlugin,
+                scripting::ScriptPlugin,
                 recording::RecordingPlugin,
             ),
             (
