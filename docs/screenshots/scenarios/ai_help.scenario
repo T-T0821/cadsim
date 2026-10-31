@@ -1,0 +1,12 @@
+# AI に聞く (API キーなし: 質問の言葉から近い道具をボタンで案内する)
+wait_loaded
+click "自由にさわる"
+wait 30
+click "★ Lv."                  # ミッションカードを隠す
+scroll 760 420 4
+wait 60
+click "💬 AI に聞く"
+wait 20
+click "💡 部品どうしがぶつかっていないか調べたい"
+wait 60
+screenshot window

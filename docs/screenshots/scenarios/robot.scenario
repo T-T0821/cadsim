@@ -1,0 +1,15 @@
+# ロボットのサンプル
+wait_loaded
+click "空のプロジェクトから"
+wait_loaded
+wait 30
+click "★ Lv."                  # ミッションカードを隠す
+click "ロボットのサンプル"
+wait_loaded
+wait 60
+scroll 760 420 -3
+click "▶ 再生"
+wait 150
+click "⏸ 一時停止"
+wait 900                         # ミッション達成の表示が消えるのを待つ
+screenshot robot

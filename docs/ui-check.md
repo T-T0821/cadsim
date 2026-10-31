@@ -138,3 +138,15 @@ OS の窓 (ファイルを選ぶダイアログなど) は操作できません�
 動画の書き出しでダイアログを出さず、`target/ui-check/<手順書>/saved/` に書きます (`project.cadsim`・`simulation.gif` など)。
 保存したプロジェクトは `open saved/project.cadsim` で開き直せます。「開く…」のダイアログを出す操作の代わりには `open` を使ってください。
 ほかの書き出し (図面・部品表・Excel など) はまだダイアログを出すので、手順書に入れないでください。
+
+## README の画面写真を撮り直す
+
+README の画面写真も同じしくみで撮っています。手順書は `docs/screenshots/scenarios/` にあり、
+写真は `docs/screenshots/<手順書>/<名前>.png` に置かれます。画面が変わったら次で撮り直し、README から参照している写真を確かめてください。
+
+```sh
+tools/ui_check.sh docs/screenshots/scenarios --update --baseline docs/screenshots
+```
+
+ミッションのお知らせやハイライトが写り込まないよう、手順書の初めで `click "★ Lv."` を押してミッションカードを隠し、
+撮る前に `wait 420` ほど待っています。
