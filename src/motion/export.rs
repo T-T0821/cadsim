@@ -45,6 +45,7 @@ pub fn chart_animation(
             time: t,
             step: None,
             parts: part_poses(chart, schedule, t),
+            ..Default::default()
         })
         .collect();
 
@@ -130,6 +131,7 @@ mod tests {
                     time: t,
                     step: None,
                     parts: part_poses(&chart, &schedule, t),
+                    ..Default::default()
                 };
                 let expected =
                     pose.pose_of(&model, id).unwrap().to_dmat4() * model.world_matrix(id);

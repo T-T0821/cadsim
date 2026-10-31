@@ -8,7 +8,7 @@ use glam::{DQuat, DVec3};
 use serde::{Deserialize, Serialize};
 
 use crate::interchange::{NodeTransform, Track};
-use crate::motion::chart::{Interlock, Sensor, SensorKind};
+use crate::motion::chart::{Interlock, Robot, RobotMove, Sensor, SensorKind, TeachPoint};
 use crate::motion::{Action, Actuator, ActuatorKind, Axis, Easing, Step, TimingChart};
 
 type NodePath = Vec<usize>;
@@ -25,6 +25,37 @@ pub struct ChartRecord {
     pub sensors: Vec<SensorRecord>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub steps: Vec<StepRecord>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub robots: Vec<RobotRecord>,
+}
+
+/// ロボット (先端の関節 `tip` から載せ先をたどった関節の列) と教示点
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct RobotRecord {
+    pub id: u32,
+    pub name: String,
+    pub tip: u32,
+    pub tcp: [f64; 3],
+    pub tool_axis: [f64; 3],
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub points: Vec<TeachPointRecord>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct TeachPointRecord {
+    pub id: u32,
+    pub name: String,
+    pub position: [f64; 3],
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approach: Option<[f64; 3]>,
+}
+
+/// ステップでのロボットの教示点への移動
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct RobotMoveRecord {
+    pub robot: u32,
+    pub point: u32,
+    pub duration: f64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -94,6 +125,9 @@ pub struct ActuatorRecord {
     pub parts: Vec<NodePath>,
     pub easing: EasingRecord,
     pub default_duration: f64,
+    /// 関節の可動範囲 [下限, 上限]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limits: Option<[f64; 2]>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -106,6 +140,8 @@ pub struct StepRecord {
     pub dwell: f64,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub interlocks: Vec<InterlockRecord>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub moves: Vec<RobotMoveRecord>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -167,6 +203,7 @@ pub fn chart_to_record(
                     Easing::Smooth => EasingRecord::Smooth,
                 },
                 default_duration: a.default_duration,
+                limits: a.limits,
             })
             .collect(),
         sensors: chart
@@ -207,6 +244,36 @@ pub fn chart_to_record(
                     .map(|i| InterlockRecord {
                         sensor: i.sensor,
                         on: i.on,
+                    })
+                    .collect(),
+                moves: s
+                    .moves
+                    .iter()
+                    .map(|m| RobotMoveRecord {
+                        robot: m.robot,
+                        point: m.point,
+                        duration: m.duration,
+                    })
+                    .collect(),
+            })
+            .collect(),
+        robots: chart
+            .robots
+            .iter()
+            .map(|r| RobotRecord {
+                id: r.id,
+                name: r.name.clone(),
+                tip: r.tip,
+                tcp: r.tcp,
+                tool_axis: r.tool_axis,
+                points: r
+                    .points
+                    .iter()
+                    .map(|p| TeachPointRecord {
+                        id: p.id,
+                        name: p.name.clone(),
+                        position: p.position,
+                        approach: p.approach,
                     })
                     .collect(),
             })
@@ -251,6 +318,7 @@ pub fn chart_from_record(
                     EasingRecord::Smooth => Easing::Smooth,
                 },
                 default_duration: r.default_duration,
+                limits: r.limits,
                 ..Actuator::new(r.id, kind)
             }
         })
@@ -287,6 +355,35 @@ pub fn chart_from_record(
         })
         .collect();
     let sensor_ids: Vec<u32> = sensors.iter().map(|s| s.id).collect();
+    // 先端の関節が消えたロボットは読まない
+    let robots: Vec<Robot> = record
+        .robots
+        .iter()
+        .filter(|r| ids.contains(&r.tip))
+        .map(|r| Robot {
+            id: r.id,
+            name: r.name.clone(),
+            tip: r.tip,
+            tcp: r.tcp,
+            tool_axis: r.tool_axis,
+            points: r
+                .points
+                .iter()
+                .map(|p| TeachPoint {
+                    id: p.id,
+                    name: p.name.clone(),
+                    position: p.position,
+                    approach: p.approach,
+                })
+                .collect(),
+            next_point_id: r.points.iter().map(|p| p.id + 1).max().unwrap_or(1),
+        })
+        .collect();
+    let has_point = |robot: u32, point: u32| {
+        robots
+            .iter()
+            .any(|r| r.id == robot && r.point(point).is_some())
+    };
     let steps = record
         .steps
         .iter()
@@ -312,14 +409,26 @@ pub fn chart_from_record(
                     on: i.on,
                 })
                 .collect(),
+            moves: s
+                .moves
+                .iter()
+                .filter(|m| has_point(m.robot, m.point))
+                .map(|m| RobotMove {
+                    robot: m.robot,
+                    point: m.point,
+                    duration: m.duration,
+                })
+                .collect(),
         })
         .collect();
     let chart = TimingChart {
         next_actuator_id: ids.iter().map(|id| id + 1).max().unwrap_or(1),
         next_sensor_id: sensor_ids.iter().map(|id| id + 1).max().unwrap_or(1),
+        next_robot_id: robots.iter().map(|r| r.id + 1).max().unwrap_or(1),
         actuators,
         sensors,
         steps,
+        robots,
     };
     (chart, warnings)
 }
@@ -455,6 +564,13 @@ mod tests {
             c.easing = Easing::Linear;
         }
         chart.actuator_mut(table).unwrap().pivot = [1.0, 2.0, 3.0];
+        chart.actuator_mut(table).unwrap().limits = Some([-90.0, 180.0]);
+        let robot = chart.add_robot(table);
+        let point = {
+            let r = chart.robot_mut(robot).unwrap();
+            r.tcp = [0.0, 4.0, 0.0];
+            r.add_point("置き".into(), [1.0, 4.0, 0.0], Some([0.0, -1.0, 0.0]))
+        };
         let sensor = chart.add_sensor(SensorKind::Proximity);
         {
             let s = chart.sensors.iter_mut().find(|s| s.id == sensor).unwrap();
@@ -471,6 +587,11 @@ mod tests {
                 }],
                 dwell: 0.2,
                 interlocks: vec![Interlock { sensor, on: true }],
+                moves: vec![RobotMove {
+                    robot,
+                    point,
+                    duration: 1.0,
+                }],
             },
             Step {
                 comment: String::new(),
@@ -481,6 +602,7 @@ mod tests {
                 }],
                 dwell: 0.0,
                 interlocks: Vec::new(),
+                moves: Vec::new(),
             },
         ];
         chart
@@ -513,6 +635,9 @@ mod tests {
         assert!(restored.steps[0].actions.is_empty());
         assert_eq!(restored.steps[1].actions.len(), 1);
         assert_eq!(restored.next_actuator_id, 3);
+        // 先端の関節が消えたロボットと、その移動も消える
+        assert!(restored.robots.is_empty());
+        assert!(restored.steps[0].moves.is_empty());
     }
 
     #[test]

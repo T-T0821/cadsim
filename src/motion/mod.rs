@@ -1,12 +1,14 @@
 //! タイミングチャート (ステップベース) からの動作シミュレーション
 //!
 //! - `chart`: アクチュエータとステップのデータ、時刻表への変換 (Bevy 非依存)
-//! - `pose`: 時刻 t における部品の位置・姿勢 (f64 の剛体変換)
+//! - `pose`: 時刻 t における部品の位置・姿勢 (f64 の剛体変換、順運動学)
+//! - `kinematics`: ロボット (関節の直列リンク) のヤコビアンと逆運動学
 //! - `sensor`: 光電・近接センサーの検知判定と、インターロック付きの時刻表 (Bevy 非依存)
 //! - `ui`: タイミングチャートの編集画面と再生コントロール
 //! - `targets`: モデルの部品を、センサーが検知する直方体に変換する (Bevy 非依存)
 //! - `sensor_view`: 3D ビューにセンサーの光軸・検出範囲を描く
-//! - `demo`: 動作確認用のサンプル装置 (ピック & プレース)
+//! - `robot_ui`: ロボットの設定・ジョグ・教示点の欄 (右のプロパティ欄) と、3D ビューへの TCP・教示点の表示
+//! - `demo`: 動作確認用のサンプル装置 (ガントリーのピック & プレース、4軸ロボット)
 //! - `export`: 1サイクルの動きを書き出し用のアニメーション (glTF / USD) にする
 //!
 //! 設計データ (Model) は書き換えず、再生中の動きは [`SimulationPose`] に出す。
@@ -23,7 +25,9 @@
 pub mod chart;
 mod demo;
 mod export;
+mod kinematics;
 mod pose;
+mod robot_ui;
 mod sensor;
 mod sensor_view;
 mod targets;
@@ -37,7 +41,8 @@ pub use chart::{Action, Actuator, ActuatorKind, Axis, Easing, Schedule, Step, Ti
 #[cfg(test)]
 pub use demo::load_demo;
 pub use export::chart_animation;
-pub use pose::{RigidPose, actuator_poses, part_poses, part_poses_from_values};
+pub use pose::{RigidPose, actuator_poses, actuator_poses_for, part_poses, part_poses_for};
+pub use robot_ui::show_robot_section;
 pub use ui::{MotionUi, show_panel};
 
 use crate::history::{TrackDocExt, TrackedDoc};
@@ -95,14 +100,17 @@ impl Plugin for MotionPlugin {
             .init_resource::<SimulationPose>()
             .init_resource::<SensorStates>()
             .init_resource::<SensorTimeline>()
+            .init_resource::<JogPose>()
             .init_resource::<ui::ChartUiState>()
             .configure_sets(Update, MotionSet::Sensors.after(MotionSet::Pose))
+            .init_resource::<robot_ui::RobotUiState>()
             .configure_sets(Update, MotionSet::Drive.in_set(MotionSet::Pose))
             .add_systems(
                 Update,
                 (
                     update_schedule,
                     advance_playback,
+                    clear_jog_on_playback,
                     // PLC 連携中は時刻表ではなく PLC が位置を決める (MotionSet::Drive)
                     update_pose.run_if(not(plc_active)),
                 )
@@ -114,7 +122,8 @@ impl Plugin for MotionPlugin {
                 (update_sensor_states, sensor_view::draw_sensors)
                     .chain()
                     .in_set(MotionSet::Sensors),
-            );
+            )
+            .add_systems(Update, robot_ui::draw_robots.after(MotionSet::Pose));
     }
 }
 
@@ -194,6 +203,16 @@ pub struct SimulationPose {
     /// 時刻 `time` で実行中のステップ番号 (0 始まり)
     pub step: Option<usize>,
     pub parts: HashMap<NodeId, RigidPose>,
+    /// 各アクチュエータ (関節) の値と、親の動きも含めた変換
+    pub values: HashMap<u32, f64>,
+    pub actuators: HashMap<u32, RigidPose>,
+}
+
+/// ロボットのジョグ (手動操作) で一時的に動かしている関節の値。
+/// 空でない間は、チャートの値の代わりにこの値で部品を動かす。再生やスクラブで空に戻る。
+#[derive(Resource, Default, PartialEq)]
+pub struct JogPose {
+    pub values: HashMap<u32, f64>,
 }
 
 impl SimulationPose {
@@ -212,8 +231,15 @@ impl SimulationPose {
 
 /// 再生位置が原点 (時刻 0) にあり、部品が設計位置にあるとき true。
 /// ギズモでの編集はこのときだけ許可する (動いた位置を設計値として書き戻さないため)。
-pub fn at_design_pose(playback: Res<Playback>) -> bool {
-    !playback.playing && playback.time == 0.0
+pub fn at_design_pose(playback: Res<Playback>, jog: Res<JogPose>) -> bool {
+    !playback.playing && playback.time == 0.0 && jog.values.is_empty()
+}
+
+/// 再生位置が動いたら、ジョグをやめてチャートどおりの位置に戻す
+fn clear_jog_on_playback(playback: Res<Playback>, mut jog: ResMut<JogPose>) {
+    if playback.is_changed() && !playback.is_added() && !jog.values.is_empty() {
+        jog.values.clear();
+    }
 }
 
 fn update_schedule(
@@ -271,15 +297,20 @@ fn update_pose(
     chart: Res<TimingChart>,
     schedule: Res<ChartSchedule>,
     playback: Res<Playback>,
+    jog: Res<JogPose>,
     mut pose: ResMut<SimulationPose>,
 ) {
-    if !(chart.is_changed() || schedule.is_changed() || playback.is_changed()) {
+    if !(chart.is_changed() || schedule.is_changed() || playback.is_changed() || jog.is_changed()) {
         return;
     }
     let t = playback.time;
     pose.time = t;
     pose.step = schedule.step_at(t);
-    pose.parts = pose::part_poses(&chart, &schedule, t);
+    let mut values = schedule.values_at(&chart, t);
+    values.extend(jog.values.iter().map(|(&id, &v)| (id, v)));
+    pose.actuators = pose::actuator_poses_for(&chart, &values);
+    pose.parts = pose::part_poses_for(&chart, &pose.actuators);
+    pose.values = values;
 }
 
 /// いま表示している各アクチュエータの動き (アクチュエータ id → 変換)。
