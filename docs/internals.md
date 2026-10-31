@@ -79,7 +79,10 @@ src/                  アプリ本体 (Bevy + egui)
 ├── interchange/     cadsim_io::interchange を再公開する
 │   └── samples.rs    サンプルファイルを作るテスト (手で実行)
 ├── animation.rs     取り込んだアニメーションの再生
-├── project.rs       プロジェクトファイル (.cadsim) の保存と読み込み
+├── project/         プロジェクトファイル (.cadsim) の保存と読み込み
+│   ├── file.rs       .cadsim の JSON の形 (Bevy に依存しない)
+│   ├── document.rs   開く・保存の手順: STEP の読み直し、文書の作り直し (Bevy に依存しない)
+│   └── mod.rs        新規・開く・保存の操作、未保存の確認、ウィンドウのタイトル
 ├── preferences_file.rs 設定ファイルの読み書き (cadsim_io::preferences_file の再公開)
 ├── part_mesh.rs / bvh.rs  cadsim_core の同名モジュールを再公開する
 ├── defeature.rs     小さな穴とフィレットを消した表示用メッシュを作る (Bevy に依存しない)
