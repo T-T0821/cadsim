@@ -6,11 +6,14 @@
 pub mod animation;
 pub mod bvh;
 pub mod conveyor;
+pub mod custom_part;
 pub mod drawing;
 pub mod flow;
 pub mod gamify;
+pub mod library;
 pub mod line;
 pub mod math;
+pub mod model;
 pub mod part_mesh;
 pub mod physics;
 pub mod remap;

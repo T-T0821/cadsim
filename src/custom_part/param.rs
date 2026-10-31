@@ -3,49 +3,19 @@
 //! 部品を置いたあとで変えられる値 (シリンダのストローク、動作時間、可動範囲、センサーの検出距離)。
 //! どの値もタイミングチャートのアクチュエータ・センサーの項目を指す。Bevy に依存しない。
 
-use std::collections::HashMap;
+pub use cadsim_core::custom_part::{CustomInstance, ParamTarget, PartParam};
 
 use crate::motion::{ActuatorKind, TimingChart};
 
-/// パラメータが変える項目。中の数値はアクチュエータ・センサーの id。
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub enum ParamTarget {
-    /// シリンダのストローク
-    Stroke(u32),
-    /// 動作時間 (秒)
-    Duration(u32),
-    /// 可動範囲の下限
-    LimitMin(u32),
-    /// 可動範囲の上限
-    LimitMax(u32),
-    /// センサーの光軸の長さ・検出距離
-    SensorRange(u32),
-}
-
-/// 公開パラメータ1つ
-#[derive(Clone, PartialEq, Debug)]
-pub struct PartParam {
-    /// 画面に出す名前 (例: "ストローク")
-    pub label: String,
-    pub target: ParamTarget,
-    /// 今の値 (保存した部品では既定値)
-    pub value: f64,
-}
-
-/// 置いた自作部品のしるし。部品の一番上のノードに付ける。
-#[derive(Clone, PartialEq, Debug, Default)]
-pub struct CustomInstance {
-    /// ライブラリでの部品名
-    pub part: String,
-    /// この部品のアクチュエータ・センサーの名前の頭 (例: "プッシャー 1/")。
-    /// 部品のスクリプトは、頭を付けない名前でこの部品の関節・信号を指せる。
-    pub prefix: String,
-    pub params: Vec<PartParam>,
-}
-
-impl CustomInstance {
+/// 置いた自作部品のパラメータをチャートに書く
+pub trait InstanceOnChart {
     /// `index` 番目のパラメータを `value` にしてチャートに書く。チャートが変わったら true。
-    pub fn set(&mut self, chart: &mut TimingChart, index: usize, value: f64) -> bool {
+    fn set(&mut self, chart: &mut TimingChart, index: usize, value: f64) -> bool;
+}
+
+impl InstanceOnChart for CustomInstance {
+    /// `index` 番目のパラメータを `value` にしてチャートに書く。チャートが変わったら true。
+    fn set(&mut self, chart: &mut TimingChart, index: usize, value: f64) -> bool {
         let Some(param) = self.params.get_mut(index) else {
             return false;
         };
@@ -55,9 +25,21 @@ impl CustomInstance {
     }
 }
 
-impl ParamTarget {
+/// 公開パラメータの項目をタイミングチャートで読み書きする
+pub trait TargetOnChart: Sized {
     /// 公開するかどうかを選ぶ画面の既定の名前
-    pub fn default_label(self, chart: &TimingChart) -> String {
+    fn default_label(self, chart: &TimingChart) -> String;
+    /// 値の単位 (表示用)。長さはモデルの単位 `unit`
+    fn unit(self, chart: &TimingChart, unit: &str) -> String;
+    /// チャートでの今の値。指している項目がなければ None。
+    fn read(self, chart: &TimingChart) -> Option<f64>;
+    /// チャートに値を書く。項目が変わったら true。
+    fn write(self, chart: &mut TimingChart, value: f64) -> bool;
+}
+
+impl TargetOnChart for ParamTarget {
+    /// 公開するかどうかを選ぶ画面の既定の名前
+    fn default_label(self, chart: &TimingChart) -> String {
         let actuator = |id| chart.actuator(id).map_or("?", |a| a.name.as_str());
         let sensor = |id: u32| {
             chart
@@ -76,7 +58,7 @@ impl ParamTarget {
     }
 
     /// 値の単位 (表示用)。長さはモデルの単位 `unit`
-    pub fn unit(self, chart: &TimingChart, unit: &str) -> String {
+    fn unit(self, chart: &TimingChart, unit: &str) -> String {
         match self {
             ParamTarget::Duration(_) => "秒".into(),
             ParamTarget::LimitMin(id) | ParamTarget::LimitMax(id)
@@ -91,7 +73,7 @@ impl ParamTarget {
     }
 
     /// チャートでの今の値。指している項目がなければ None。
-    pub fn read(self, chart: &TimingChart) -> Option<f64> {
+    fn read(self, chart: &TimingChart) -> Option<f64> {
         match self {
             ParamTarget::Stroke(id) => chart.actuator(id).map(|a| a.stroke),
             ParamTarget::Duration(id) => chart.actuator(id).map(|a| a.default_duration),
@@ -104,7 +86,7 @@ impl ParamTarget {
     }
 
     /// チャートに値を書く。項目が変わったら true。
-    pub fn write(self, chart: &mut TimingChart, value: f64) -> bool {
+    fn write(self, chart: &mut TimingChart, value: f64) -> bool {
         let before = self.read(chart);
         match self {
             ParamTarget::Stroke(id) => {
@@ -134,18 +116,6 @@ impl ParamTarget {
             }
         }
         self.read(chart) != before
-    }
-
-    /// 部品を置いたときの id の付け替え
-    pub fn remap(self, actuators: &HashMap<u32, u32>, sensors: &HashMap<u32, u32>) -> Option<Self> {
-        let a = |id: u32| actuators.get(&id).copied();
-        Some(match self {
-            ParamTarget::Stroke(id) => ParamTarget::Stroke(a(id)?),
-            ParamTarget::Duration(id) => ParamTarget::Duration(a(id)?),
-            ParamTarget::LimitMin(id) => ParamTarget::LimitMin(a(id)?),
-            ParamTarget::LimitMax(id) => ParamTarget::LimitMax(a(id)?),
-            ParamTarget::SensorRange(id) => ParamTarget::SensorRange(*sensors.get(&id)?),
-        })
     }
 }
 
@@ -206,20 +176,5 @@ mod tests {
         assert!(ParamTarget::Duration(axis).write(&mut chart, -1.0));
         assert_eq!(chart.actuator(axis).unwrap().default_duration, 0.01);
         assert!(!ParamTarget::Duration(axis).write(&mut chart, 0.01));
-    }
-
-    #[test]
-    fn remap_drops_targets_that_were_not_copied() {
-        let actuators = HashMap::from([(1, 10)]);
-        let sensors = HashMap::from([(5, 50)]);
-        assert_eq!(
-            ParamTarget::Stroke(1).remap(&actuators, &sensors),
-            Some(ParamTarget::Stroke(10))
-        );
-        assert_eq!(
-            ParamTarget::SensorRange(5).remap(&actuators, &sensors),
-            Some(ParamTarget::SensorRange(50))
-        );
-        assert_eq!(ParamTarget::Duration(2).remap(&actuators, &sensors), None);
     }
 }

@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use bevy::math::{DMat4, DVec3};
 
 use super::file::CustomPart;
-use super::param::{CustomInstance, PartParam};
+use super::param::{CustomInstance, PartParam, TargetOnChart};
 use crate::formats::chart_record::chart_from_record;
 use crate::model::{Model, NodeId};
 use crate::motion::TimingChart;
@@ -152,7 +152,7 @@ mod tests {
 
     use super::*;
     use crate::custom_part::file::{SaveRequest, build};
-    use crate::custom_part::param::ParamTarget;
+    use crate::custom_part::param::{InstanceOnChart, ParamTarget};
     use crate::model::{BoxPart, NodeKind};
     use crate::motion::ActuatorKind;
     use crate::motion::chart::SensorKind;

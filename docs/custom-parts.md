@@ -6,7 +6,7 @@
 
 | 層 | 場所 | 中身 |
 | --- | --- | --- |
-| ドメイン | `model.rs` の `Node::custom_part` (`CustomInstance`) | 置いた自作部品のしるし。部品名・名前の頭・公開パラメータ。ノードに持つので、保存・元に戻す・形状の差し替えはほかの設定と同じに扱われる |
+| ドメイン | `cadsim_core::custom_part` (`CustomInstance`・`ParamTarget`)、`Node::custom_part` | 置いた自作部品のしるし。部品名・名前の頭・公開パラメータ。ノードに持つので、保存・元に戻す・形状の差し替えはほかの設定と同じに扱われる |
 | ユースケース | `custom_part/param.rs` | 公開パラメータ (`ParamTarget`: ストローク・動作時間・可動範囲の下限 / 上限・センサーの検出距離) の読み書きと候補の列挙 |
 | ユースケース | `custom_part/place.rs` | 部品をモデルとタイミングチャートに置く。名前の頭を付け、アクチュエータ・センサーの id を付け替える |
 | アダプター | `custom_part/file.rs` | `part.cadpart` の JSON、ライブラリのフォルダへの保存と一覧 |

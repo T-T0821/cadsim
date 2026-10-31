@@ -24,7 +24,6 @@ use bevy::math::DVec3;
 use bevy::prelude::*;
 
 pub use file::{CustomInstanceRecord, LibraryEntry};
-pub use param::CustomInstance;
 pub use ui::{CustomDrag, SaveDialog, palette_section, properties_section, save_window};
 
 use crate::file_io::ImportJobs;
@@ -34,6 +33,7 @@ use crate::model::{Model, NodeId, Selection};
 use crate::motion::TimingChart;
 use crate::project::LoadedProject;
 use file::CustomPart;
+use param::InstanceOnChart;
 
 /// 置く位置を丸める刻み (mm)。標準部品と同じ。
 const DROP_SNAP_MM: f64 = 10.0;

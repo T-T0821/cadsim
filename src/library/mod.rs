@@ -18,8 +18,7 @@
 //! - コンベア: [`Spec::conveying_surface`] が搬送面の中心・向き・長さ・幅・速度を返す。
 //! - PLC の I/O 割付け: [`io_table`] が全機器の I/O 点を返す。
 
-pub mod catalog;
-pub mod geometry;
+pub use cadsim_core::library::{catalog, geometry};
 mod ui;
 
 use std::collections::HashMap;
@@ -369,7 +368,7 @@ mod tests {
     #[test]
     fn bodies_are_scaled_to_the_model_unit() {
         let mut model = Model::default();
-        model.unit = "m".into();
+        model.0.unit = "m".into();
         let id = add_standard(&mut model, PartKind::BeltConveyor, DVec3::ZERO);
         let bounds = model.world_bounds(id).unwrap();
         // 搬送面の高さ 700 mm = 0.7 m (フレームが 15 mm 上に出る)

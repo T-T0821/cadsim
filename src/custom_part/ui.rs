@@ -6,7 +6,7 @@ use bevy_egui::{EguiContexts, egui};
 
 use super::CustomLibrary;
 use super::file::{self, LibraryEntry, SaveRequest};
-use super::param::{ParamTarget, candidates};
+use super::param::{ParamTarget, TargetOnChart, candidates};
 use crate::file_io::ImportJobs;
 use crate::model::{Model, NodeId};
 use crate::motion::TimingChart;

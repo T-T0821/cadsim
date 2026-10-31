@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use bevy::math::DVec3;
 use serde::{Deserialize, Serialize};
 
-use super::param::{CustomInstance, ParamTarget, PartParam};
+use super::param::{CustomInstance, ParamTarget, PartParam, TargetOnChart};
 use crate::annotation::node_path;
 use crate::formats::chart_record::chart_to_record;
 use crate::model::{Model, NodeId};

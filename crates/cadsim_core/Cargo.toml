@@ -9,9 +9,8 @@ description = "cadsim のドメインとユースケース。Bevy・egui・フ�
 glam = "0.33"
 # 形状カーネル (B-rep とテッセレーション)
 truck-meshalgo = "0.4"
+truck-modeling = "0.6"
 truck-topology = "0.6"
 # B-rep の曲線・曲面の型 (Curve3D / Surface) だけを使う。STEP の読み込みは cadsim_io
 truck-stepio = "0.3"
 
-[dev-dependencies]
-truck-modeling = "0.6"

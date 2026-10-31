@@ -42,11 +42,54 @@ impl Labor {
     }
 }
 
+/// 人待ちの工程に、手の空いている誰が行くか
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AssignRule {
+    /// いちばん速い人が行く。同じなら今その工程にいる人
+    #[default]
+    Fastest,
+    /// いちばん長く手待ちしている人が行く (仕事を均等に回す)
+    LongestIdle,
+    /// 持ち場の人が先。持ち場の人がいなければ速い人。手が空いたら自分の持ち場を先に見る
+    Primary,
+}
+
+impl AssignRule {
+    pub const ALL: [AssignRule; 3] = [
+        AssignRule::Fastest,
+        AssignRule::LongestIdle,
+        AssignRule::Primary,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            AssignRule::Fastest => "速い人が行く",
+            AssignRule::LongestIdle => "手待ちの長い人が行く (均等)",
+            AssignRule::Primary => "持ち場の人が先",
+        }
+    }
+
+    /// 保存用の名前
+    pub fn key(self) -> &'static str {
+        match self {
+            AssignRule::Fastest => "Fastest",
+            AssignRule::LongestIdle => "LongestIdle",
+            AssignRule::Primary => "Primary",
+        }
+    }
+
+    pub fn from_key(key: &str) -> Option<AssignRule> {
+        AssignRule::ALL.into_iter().find(|r| r.key() == key)
+    }
+}
+
 /// 名簿とシフト
 #[derive(Clone, Debug, PartialEq)]
 pub struct Staffing {
     pub workers: Vec<Worker>,
     pub shifts: Vec<Shift>,
+    /// 割り当てのルール
+    pub rule: AssignRule,
     /// シミュレーションの 0 秒の時刻 (0:00 からの秒)。既定は 8:00。
     pub start_clock: f64,
     /// 別の工程へ移るときの歩行時間 (秒)。同じ工程を続けるときはかからない。
@@ -60,6 +103,7 @@ impl Default for Staffing {
         Self {
             workers: Vec::new(),
             shifts: Vec::new(),
+            rule: AssignRule::Fastest,
             start_clock: 8.0 * 3600.0,
             walk_seconds: 0.0,
             next_worker: 1,
@@ -78,6 +122,8 @@ pub struct Worker {
     pub absent: bool,
     /// できる工程と速さ
     pub skills: Vec<Skill>,
+    /// 持ち場 (「持ち場の人が先」のルールで使う)。できる工程のうちの1つ。
+    pub primary: Option<ElementId>,
 }
 
 /// できる工程1つ分
@@ -141,6 +187,7 @@ impl Staffing {
             shift,
             absent: false,
             skills: Vec::new(),
+            primary: None,
         })
     }
 
@@ -213,6 +260,9 @@ impl Staffing {
     pub fn forget_element(&mut self, element: ElementId) {
         for w in &mut self.workers {
             w.skills.retain(|s| s.element != element);
+            if w.primary == Some(element) {
+                w.primary = None;
+            }
         }
     }
 
@@ -310,6 +360,9 @@ impl Worker {
             });
         } else if !can {
             self.skills.retain(|s| s.element != element);
+            if self.primary == Some(element) {
+                self.primary = None;
+            }
         }
     }
 }

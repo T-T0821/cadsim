@@ -475,7 +475,7 @@ impl StepFileRecord {
             &StepFileRecord::Stress { parts } => StepSource::Stress(parts),
             StepFileRecord::File { path } => StepSource::File(base_dir.join(path)),
             StepFileRecord::Modeled { name, solid } => {
-                StepSource::Modeled(Arc::new(crate::modeling::ModeledSource {
+                StepSource::Modeled(Arc::new(crate::model::ModeledSource {
                     id: crate::step_import::next_shape_id(),
                     name: name.clone(),
                     json: solid.clone(),
