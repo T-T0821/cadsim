@@ -92,6 +92,8 @@ crates/
 - PLC 連携(`src/plc/`)は先に `domain` / `usecase` / `adapter` / UI に分けてあるので、移行時はディレクトリごと core / io へ移せます。
 - 部品スクリプト(`src/scripting/`)は、`runner.rs`(実行とポート `ScriptHost`)と `controller.rs`(PLC 連携の I/O へのつなぎ)がユースケース層、`rhai_engine.rs` がアダプター層、`mod.rs`・`ui.rs` が UI 層。`controller.rs` は PLC の I/O の型を使うので、PLC 連携と一緒に core へ移す。
 
+- 自作部品は、ノードに付けるしるしと公開パラメータの型(`CustomInstance`・`ParamTarget`)を `cadsim_core::custom_part` に置いた。アプリの `src/custom_part/` のうち `param.rs`(公開パラメータのチャートへの読み書き)と `place.rs`(置くときの名前の頭と id の付け替え)がユースケース層、`file.rs`(`part.cadpart` の JSON とフォルダへの保存)がアダプター層、`mod.rs`・`ui.rs` が UI 層。`param.rs`・`place.rs` はタイミングチャートの型を使うので、チャートを core へ移すときに一緒に移す。
+
 各段の終わりに、この文書の「目標のディレクトリ構成」と実際の構成の差を更新します。
 
 ### すでに層を分けて書いてあるもの

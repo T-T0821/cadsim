@@ -121,6 +121,17 @@ pub struct MotionUi<'w> {
     pub(super) robot: ResMut<'w, RobotUiState>,
 }
 
+impl MotionUi<'_> {
+    pub fn chart(&self) -> &TimingChart {
+        &self.chart
+    }
+
+    /// 書き換えるときだけ呼ぶ (呼ぶとチャートが変わった扱いになる)
+    pub fn chart_mut(&mut self) -> &mut TimingChart {
+        &mut self.chart
+    }
+}
+
 /// 画面下のタイミングチャートのパネル。ステータスバーの上、左右のパネルより外側に置く。
 pub fn show_panel(
     root: &mut egui::Ui,

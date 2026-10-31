@@ -12,7 +12,11 @@
 //! | | それ以外 | 内部信号。どれかのスクリプトが `set` すると作られ、全スクリプトで共有する |
 //! | `set` | I/O の出力ビット (例: `シリンダ1.出`) | 出力を書く (入力・センサーは書けない) |
 //! | `joint` / `move_joint` | アクチュエータ名 | シリンダは 0 = 戻端 / 1 = 出端、直動は移動量、回転は角度 |
+//!
+//! 自作部品の中のスクリプトは、名前の頭 (例: `プッシャー 1/`) を省いて自分の部品の
+//! I/O・センサー・関節を指せる。頭を付けた名前が見つからなければ、書いたとおりの名前で探す。
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 
 use super::runner::{ScriptHost, ScriptRunner, ScriptState};
@@ -30,6 +34,8 @@ const MAX_LOG_LINES: usize = 500;
 pub struct RunningScript {
     pub node: NodeId,
     pub name: String,
+    /// 自作部品の中なら、その部品の名前の頭
+    scope: String,
     /// 文法の誤りなどで開始できなかったときは Err
     runner: Result<ScriptRunner, String>,
 }
@@ -39,6 +45,28 @@ impl RunningScript {
         match &self.runner {
             Ok(runner) => runner.state().clone(),
             Err(e) => ScriptState::Failed(e.clone()),
+        }
+    }
+}
+
+/// 動かすスクリプト1つ分
+#[derive(Clone, Debug, PartialEq)]
+pub struct ScriptSource {
+    pub node: NodeId,
+    /// 部品名 (ログに出す)
+    pub name: String,
+    /// 自作部品の中なら、その部品の名前の頭 (例: "プッシャー 1/")。なければ空。
+    pub scope: String,
+    pub source: String,
+}
+
+impl From<(NodeId, String, String)> for ScriptSource {
+    fn from((node, name, source): (NodeId, String, String)) -> Self {
+        Self {
+            node,
+            name,
+            scope: String::new(),
+            source,
         }
     }
 }
@@ -56,17 +84,26 @@ pub struct ScriptController {
 }
 
 impl ScriptController {
-    /// (部品, 部品名, ソース) の並びからスクリプトを動かし始める
-    pub fn start(scripts: impl IntoIterator<Item = (NodeId, String, String)>) -> Self {
+    /// スクリプトの並びから動かし始める
+    pub fn start(scripts: impl IntoIterator<Item = impl Into<ScriptSource>>) -> Self {
         let mut controller = Self::default();
-        for (node, name, source) in scripts {
+        for script in scripts {
+            let ScriptSource {
+                node,
+                name,
+                scope,
+                source,
+            } = script.into();
             let runner = ScriptRunner::start(&name, &source);
             if let Err(e) = &runner {
                 controller.push_log(format!("[{name}] {e}"));
             }
-            controller
-                .scripts
-                .push(RunningScript { node, name, runner });
+            controller.scripts.push(RunningScript {
+                node,
+                name,
+                scope,
+                runner,
+            });
         }
         controller
     }
@@ -108,6 +145,7 @@ impl ScriptController {
                 internal: &mut self.internal,
                 logs: &mut logs,
                 prefix: &script.name,
+                scope: &script.scope,
             };
             runner.step(&mut host, self.time);
             if let ScriptState::Failed(e) = runner.state() {
@@ -138,9 +176,26 @@ struct IoHost<'a> {
     internal: &'a mut BTreeMap<String, bool>,
     logs: &'a mut Vec<String>,
     prefix: &'a str,
+    scope: &'a str,
 }
 
 impl IoHost<'_> {
+    /// 自作部品のスクリプトなら、部品の名前の頭を付けた名前が I/O・センサー・関節にあればそちらを使う
+    fn resolve<'n>(&self, name: &'n str) -> Cow<'n, str> {
+        if self.scope.is_empty() || name.starts_with(self.scope) {
+            return Cow::Borrowed(name);
+        }
+        let full = format!("{}{name}", self.scope);
+        let known = self.table.points.iter().any(|p| p.name == full)
+            || self.sensors.iter().any(|(n, _)| *n == full)
+            || self.chart.actuators.iter().any(|a| a.name == full);
+        if known {
+            Cow::Owned(full)
+        } else {
+            Cow::Borrowed(name)
+        }
+    }
+
     /// 名前の付いた I/O のビット
     fn bit_point(&self, name: &str) -> Option<Point> {
         self.table
@@ -161,6 +216,8 @@ impl IoHost<'_> {
 
 impl ScriptHost for IoHost<'_> {
     fn signal(&self, name: &str) -> Option<bool> {
+        let resolved = self.resolve(name);
+        let name = resolved.as_ref();
         if let Some(point) = self.bit_point(name) {
             return Some(self.io.bit(point));
         }
@@ -171,6 +228,8 @@ impl ScriptHost for IoHost<'_> {
     }
 
     fn set_signal(&mut self, name: &str, value: bool) -> Result<(), String> {
+        let resolved = self.resolve(name);
+        let name = resolved.as_ref();
         if let Some(point) = self.bit_point(name) {
             if !point.is_output() {
                 return Err(format!("「{name}」は設備からの入力なので書けません"));
@@ -191,11 +250,15 @@ impl ScriptHost for IoHost<'_> {
     }
 
     fn joint(&self, name: &str) -> Option<f64> {
+        let resolved = self.resolve(name);
+        let name = resolved.as_ref();
         let actuator = self.actuator(name).ok()?;
         Some(self.values.get(&actuator.id).copied().unwrap_or(0.0))
     }
 
     fn start_joint_move(&mut self, name: &str, target: f64) -> Result<(), String> {
+        let resolved = self.resolve(name);
+        let name = resolved.as_ref();
         let actuator = self.actuator(name)?;
         let id = actuator.id;
         match actuator.kind {
@@ -222,6 +285,8 @@ impl ScriptHost for IoHost<'_> {
     }
 
     fn joint_arrived(&self, name: &str) -> bool {
+        let resolved = self.resolve(name);
+        let name = resolved.as_ref();
         let Ok(actuator) = self.actuator(name) else {
             return false;
         };
@@ -406,5 +471,50 @@ mod tests {
                 .iter()
                 .all(|s| matches!(s.state(), ScriptState::Failed(_)))
         );
+    }
+
+    #[test]
+    fn scripts_in_custom_parts_use_short_names() {
+        // 同じ自作部品を2つ置いたときの名前
+        let mut chart = TimingChart::default();
+        for prefix in ["P 1/", "P 2/"] {
+            let id = chart.add_actuator(ActuatorKind::Cylinder);
+            let a = chart.actuator_mut(id).unwrap();
+            a.name = format!("{prefix}シリンダ");
+            a.default_duration = 0.2;
+        }
+        let table = IoTable::from_chart(&chart, &AddressPlan::default());
+        let src = r#"
+            wait_signal("ワーク有", true);
+            move_joint("シリンダ", 1);
+            set("出た", get("シリンダ.出端"));
+        "#;
+        let scripts = ["P 1/", "P 2/"].map(|scope| ScriptSource {
+            node: 1,
+            name: scope.trim_end_matches('/').into(),
+            scope: scope.into(),
+            source: src.into(),
+        });
+        let mut controller = ScriptController::start(scripts);
+        let mut plant = Plant::default();
+        let mut io = IoValues::default();
+        // センサーは1つ目の部品のものだけ ON
+        let sensors = [
+            ("P 1/ワーク有".to_string(), true),
+            ("P 2/ワーク有".to_string(), false),
+        ];
+        run(
+            &mut controller,
+            &chart,
+            &table,
+            &mut plant,
+            &mut io,
+            &sensors,
+            2.0,
+        );
+        assert!(io.bit(Point::CylinderExtended(1)), "{:?}", controller.log);
+        assert!(!io.bit(Point::CylinderExtended(2)));
+        // 内部信号は頭を付けずに共有する
+        assert_eq!(controller.internal.get("出た"), Some(&true));
     }
 }

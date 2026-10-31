@@ -96,6 +96,26 @@ fn selected_node(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
         .show(ui, |ui| {
             crate::scripting::script_section(ui, &mut state.model, &mut state.history, id)
         });
+    egui::CollapsingHeader::new("自作部品")
+        .default_open(state.model.get(id).is_some_and(|n| n.custom_part.is_some()))
+        .show(ui, |ui| {
+            let changed = crate::custom_part::properties_section(
+                ui,
+                &state.model,
+                state.motion.chart(),
+                &mut state.custom_dialog,
+                id,
+            );
+            if let Some((index, value)) = changed {
+                crate::custom_part::set_param(
+                    &mut state.model,
+                    state.motion.chart_mut(),
+                    id,
+                    index,
+                    value,
+                );
+            }
+        });
     egui::CollapsingHeader::new("寸法 (外接箱)")
         .default_open(true)
         .show(ui, |ui| bounds_section(ui, state, id));

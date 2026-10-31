@@ -12,6 +12,7 @@ use glam::{DMat4, DVec3};
 use truck_meshalgo::prelude::{EuclideanSpace, Point3, Rad, Vector3};
 use truck_modeling::{Solid, builder};
 
+use crate::custom_part::CustomInstance;
 use crate::library::Spec;
 use crate::math::{Aabb, euler_deg_to_quat};
 use crate::physics::cable::Cable;
@@ -41,6 +42,8 @@ pub struct Node {
     pub physics: PartPhysics,
     /// 部品スクリプト (Rhai)。PLC 連携の「部品スクリプト」モードで動く。
     pub script: Option<String>,
+    /// 自作部品ライブラリから置いた部品の一番上なら、その部品名と公開パラメータ
+    pub custom_part: Option<CustomInstance>,
 }
 
 #[derive(Clone)]
@@ -252,6 +255,7 @@ impl Model {
                 kind,
                 physics: PartPhysics::default(),
                 script: None,
+                custom_part: None,
             },
         );
         match parent.and_then(|p| self.nodes.get_mut(&p)) {

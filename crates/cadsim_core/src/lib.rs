@@ -6,6 +6,7 @@
 pub mod animation;
 pub mod bvh;
 pub mod conveyor;
+pub mod custom_part;
 pub mod drawing;
 pub mod flow;
 pub mod gamify;
