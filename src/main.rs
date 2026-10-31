@@ -37,6 +37,8 @@
 //! - `safety`      安全機器 (ライトカーテン・エリアセンサ・安全柵・非常停止) と動作範囲
 //! - `preferences_file` 見た目とミッションの設定の読み書き (中身は `cadsim_core::gamify`)
 //! - `physics`     物理演算 (重力・接触・摩擦、ベルトコンベア、ケーブル・ホース)
+//! - `recording`   動画書き出しの設定画面と画面のキャプチャ
+//! - `video`       動画のエンコード (MP4 / GIF / PNG。Bevy に依存しない)
 
 // Windows のリリースビルドでは、起動時に黒いコンソール窓を出さない
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
@@ -69,6 +71,7 @@ mod physics;
 mod plc;
 mod preferences_file;
 mod project;
+mod recording;
 mod result_export;
 mod safety;
 mod shortcuts;
@@ -77,6 +80,7 @@ mod site;
 mod step_import;
 mod stress;
 mod ui;
+mod video;
 mod viewport;
 
 use bevy::{diagnostic::FrameTimeDiagnosticsPlugin, prelude::*};
@@ -108,7 +112,11 @@ fn main() {
             ui::UiPlugin,
             simulation::SimulationPlugin,
             annotation::AnnotationPlugin,
-            (motion::MotionPlugin, plc::PlcPlugin),
+            (
+                motion::MotionPlugin,
+                plc::PlcPlugin,
+                recording::RecordingPlugin,
+            ),
             (
                 flow::FlowPlugin,
                 conveyor::ConveyorPlugin,

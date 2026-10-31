@@ -120,6 +120,14 @@ fn export_menu(ui: &mut egui::Ui, state: &mut UiState) {
             state.documents.request_bom();
             ui.close();
         }
+        if ui
+            .button("シミュレーションを動画で書き出し…")
+            .on_hover_text("タイミングチャートの動きを MP4 / GIF / PNG 連番にする")
+            .clicked()
+        {
+            state.recording.open = true;
+            ui.close();
+        }
         ui.separator();
         ui.weak("保存ダイアログで選んだ拡張子の形式で書き出します");
         for format in FORMATS.iter().filter(|f| f.export.is_some()) {
