@@ -17,40 +17,22 @@ use truck_modeling::{Solid, Wire, builder};
 
 use crate::history::ModelChange;
 use crate::math::euler_deg_to_quat;
-use crate::model::{BoxPart, Model, NodeId, NodeKind, StepSource};
+use crate::model::{BoxPart, Model, ModeledSource, NodeId, NodeKind, StepSource};
 use crate::part_mesh::PartMesh;
 use crate::step_import::{ImportNode, ImportedFile, ImportedShape, mesh_stats, next_shape_id};
 
 /// ブーリアンの許容誤差 (形状の大きさに対する割合)
 const BOOLEAN_TOL_RATIO: f64 = 2e-4;
 
-/// モデリングで作った部品の形状の出どころ。B-rep を JSON で持つ。
-#[derive(Debug)]
-pub struct ModeledSource {
-    /// 見分けるための番号 (同じ形状のインスタンスは同じ番号)
-    pub id: usize,
-    /// 製品名 (ツリーと部品表に出る名前)
-    pub name: String,
-    /// `Solid` を serde_json で書いたもの
-    pub json: String,
+/// `ModeledSource` (B-rep を JSON で持つ) と truck の `Solid` の変換
+pub trait ModeledSourceExt: Sized {
+    fn new(name: String, solid: &Solid) -> Result<Self, String>;
+    fn solid(&self) -> Result<Solid, String>;
+    fn to_imported(&self) -> Result<ImportedFile, String>;
 }
 
-impl PartialEq for ModeledSource {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-    }
-}
-
-impl Eq for ModeledSource {}
-
-impl std::hash::Hash for ModeledSource {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.id.hash(state);
-    }
-}
-
-impl ModeledSource {
-    pub fn new(name: String, solid: &Solid) -> Result<Self, String> {
+impl ModeledSourceExt for ModeledSource {
+    fn new(name: String, solid: &Solid) -> Result<Self, String> {
         let json =
             serde_json::to_string(solid).map_err(|e| format!("形状を保存できません: {e}"))?;
         Ok(Self {
@@ -60,12 +42,12 @@ impl ModeledSource {
         })
     }
 
-    pub fn solid(&self) -> Result<Solid, String> {
+    fn solid(&self) -> Result<Solid, String> {
         serde_json::from_str(&self.json).map_err(|e| format!("形状を読めませんでした: {e}"))
     }
 
     /// モデルに取り込める形 (部品1つの木) にする
-    pub fn to_imported(&self) -> Result<ImportedFile, String> {
+    fn to_imported(&self) -> Result<ImportedFile, String> {
         let shape = shape_from_solid(&self.solid()?);
         Ok(ImportedFile {
             root: ImportNode {

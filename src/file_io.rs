@@ -23,6 +23,7 @@ use crate::interchange::{
     model_io::{model_to_scene, scene_to_import},
 };
 use crate::model::{Model, NodeId, Selection, StepSource};
+use crate::modeling::ModeledSourceExt;
 use crate::motion::{ChartSchedule, Schedule, TimingChart, chart_animation};
 use crate::project::{ProjectAction, ProjectState, is_project_file};
 use crate::step_import::{ImportedFile, import_step};
