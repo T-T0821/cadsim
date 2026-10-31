@@ -36,6 +36,7 @@ STEP などの CAD データを読み込み、部品を動かしながら干渉�
 cargo run                         # サンプルのアセンブリを開いて起動
 cargo run -- path/to/part.step    # STEP ファイルを開いて起動
 cargo run -- path/to/line.cadsim  # 保存したプロジェクトを開いて起動
+cargo run -- samples/demo_line.cadsim  # デモライン(ロボットセル・安全柵・AGV・工程まで入ったもの)を開いて起動
 cargo run --release -- --stress 5000  # 部品 5000 個ほどの負荷テスト用シーンを開いて起動
 cargo run --release -- --physics      # 物理演算のサンプルライン(ワーク 100 個)を開いて流し始める
 ```
@@ -130,6 +131,15 @@ cargo run --release -- --physics      # 物理演算のサンプルライン(ワ
 | F1 | AI に聞く(使い方の質問)を開く / 閉じる |
 
 ## できること
+
+### デモラインで一通り試す
+
+`samples/demo_line.cadsim` を「ファイル → 開く」で開くと、ほとんどの機能を一度に試せるラインが出てきます。
+供給コンベアのワークをロボットが掴んで排出コンベアへ移し、整列シリンダで揃えて、AGV が検査場へ運ぶ流れです。
+
+- タイミングチャートの再生ボタンで、ロボットの移載(1 サイクル 6 秒)とコンベアのワークの流れが動きます
+- 安全柵・ライトカーテン・非常停止・エリアセンサーと、投入・検査の作業者 2 人が置いてあります
+- ツールレールの **工程** では、投入 → 移載 → AGV 搬送 → 外観検査 → 出荷の工程シミュレーションと人員配置を試せます
 
 ### 使い方を AI に聞く
 
@@ -814,6 +824,7 @@ cargo test --locked
 | [docs/robot.md](docs/robot.md) | 関節・ロボットの順運動学と逆運動学、教示点への移動の展開 |
 | [docs/project-file.md](docs/project-file.md) | プロジェクトファイル(.cadsim)の形式 |
 | [docs/video-export.md](docs/video-export.md) | 動画書き出しのしくみ |
+| [docs/demo-line.md](docs/demo-line.md) | デモライン(`samples/demo_line.cadsim`)の中身と、作り直すスクリプトの使い方 |
 | [docs/release.md](docs/release.md) | Windows / Mac 向けの配布パッケージと Release の作り方 |
 
 ## ライセンス
