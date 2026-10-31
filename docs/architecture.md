@@ -61,11 +61,11 @@ crates/
 │       │                 safety (安全機器・検知・安全距離), floor (作業者・AGV・床の幾何),
 │       │                 line (工程と AGV の受け渡し・PLC の信号表・ワークの位置)
 │       └── usecase/      document (開く・保存・取り込み・書き出し), edit, history,
-│                         report (シミュレーション結果の CSV),
+│                         report (シミュレーション結果の CSV), script (部品スクリプトの実行と ScriptHost ポート),
 │                         ports (SceneReader / SceneWriter / ProjectStore などのトレイト)
 └── cadsim_io/            3. アダプター (Bevy なし)
     └── src/              step, interchange (gltf / obj / stl / usd), project_file (JSON),
-                          modbus, video, xlsx (工程シミュレーションの結果)
+                          modbus, video, xlsx (工程シミュレーションの結果), rhai (部品スクリプトのエンジン)
 ```
 
 ルートの `Cargo.toml` の `default-members` に全 crate を並べているので、引数なしの `cargo test` / `cargo clippy` でワークスペース全体を確かめられます。
@@ -89,6 +89,7 @@ crates/
 
 - `src/result_export/report/` … ユースケース層 (CSV の作成)。Bevy の ECS・egui・ファイルシステムに依存しない。移行時は `usecase/report` へ移す。`src/result_export/plugin.rs` は UI 層。
 - PLC 連携(`src/plc/`)は先に `domain` / `usecase` / `adapter` / UI に分けてあるので、移行時はディレクトリごと core / io へ移せます。
+- 部品スクリプト(`src/scripting/`)は、`runner.rs`(実行とポート `ScriptHost`)と `controller.rs`(PLC 連携の I/O へのつなぎ)がユースケース層、`rhai_engine.rs` がアダプター層、`mod.rs`・`ui.rs` が UI 層。`controller.rs` は PLC の I/O の型を使うので、PLC 連携と一緒に core へ移す。
 
 各段の終わりに、この文書の「目標のディレクトリ構成」と実際の構成の差を更新します。
 

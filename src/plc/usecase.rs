@@ -23,6 +23,8 @@ pub enum PlcMode {
     External,
     /// 記録した PLC のログ (CSV) を流す
     LogReplay,
+    /// 部品に付けたスクリプトが出力を決める ([`PlcSession::scan_with`])
+    Script,
 }
 
 /// 外部の PLC との通信方式 (ポート)。
@@ -164,7 +166,7 @@ impl PlcSession {
         // 設備を動かす時間。ログ再生では再生速度を掛け、止めている間は動かさない。
         let mut plant_dt = dt;
         match self.mode {
-            PlcMode::Off => {}
+            PlcMode::Off | PlcMode::Script => {}
             PlcMode::Simulated => self.sequencer.scan(chart, &mut self.io, dt),
             PlcMode::External => {
                 if let Some(link) = &mut self.link {
@@ -182,6 +184,27 @@ impl PlcSession {
         self.plant.take_commands(chart, &self.io);
         self.plant.advance(chart, plant_dt);
         self.plant.values()
+    }
+
+    /// PLC の代わりに `control` が出力を決める1スキャン (部品スクリプト)。
+    /// `control` は I/O 一覧・入出力の値・アクチュエータの現在値を受け取り、出力を書く。
+    pub fn scan_with(
+        &mut self,
+        chart: &TimingChart,
+        dt: f64,
+        control: impl FnOnce(&IoTable, &mut IoValues, &HashMap<u32, f64>),
+    ) -> &HashMap<u32, f64> {
+        self.plant.report(chart, &mut self.io);
+        control(&self.table, &mut self.io, self.plant.values());
+        self.plant.take_commands(chart, &self.io);
+        self.plant.advance(chart, dt);
+        self.plant.values()
+    }
+
+    /// 設備を原点に戻し、出力をすべて OFF にする (部品スクリプトを最初から動かすとき)
+    pub fn reset_plant(&mut self) {
+        self.plant.reset();
+        self.io = IoValues::default();
     }
 
     /// 模擬 PLC が運転中なら、実行中のステップ番号

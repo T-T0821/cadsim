@@ -83,6 +83,11 @@ fn selected_node(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
             .default_open(false)
             .show(ui, |ui| physics_section(ui, state, id));
     }
+    egui::CollapsingHeader::new("スクリプト")
+        .default_open(state.model.get(id).is_some_and(|n| n.script.is_some()))
+        .show(ui, |ui| {
+            crate::scripting::script_section(ui, &mut state.model, &mut state.history, id)
+        });
     egui::CollapsingHeader::new("寸法 (外接箱)")
         .default_open(true)
         .show(ui, |ui| bounds_section(ui, state, id));

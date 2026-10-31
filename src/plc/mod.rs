@@ -19,10 +19,15 @@ use bevy::prelude::*;
 use bevy_egui::EguiPrimaryContextPass;
 
 use crate::history::{TrackDocExt, TrackedDoc};
-use crate::motion::{MotionSet, SimulationPose, TimingChart, actuator_poses_for, part_poses_for};
+use crate::motion::{
+    MotionSet, SensorStates, SimulationPose, TimingChart, actuator_poses_for, part_poses_for,
+};
+use crate::scripting::ScriptRun;
 pub use adapter::record::PlcRecord;
 use adapter::record::PlcSettings;
-use domain::io::AddressPlan;
+pub use domain::io::{AddressPlan, IoTable, IoValues, Point};
+#[cfg(test)]
+pub use domain::plant::Plant;
 use usecase::{PlcMode, PlcSession};
 
 pub struct PlcPlugin;
@@ -123,10 +128,28 @@ fn update_io_table(chart: Res<TimingChart>, mut plc: ResMut<Plc>) {
 fn run_plc(
     time: Res<Time>,
     chart: Res<TimingChart>,
+    sensors: Res<SensorStates>,
+    mut scripts: ResMut<ScriptRun>,
     mut plc: ResMut<Plc>,
     mut pose: ResMut<SimulationPose>,
 ) {
-    let values = plc.session.scan(&chart, time.delta_secs_f64());
+    let dt = time.delta_secs_f64();
+    let values = if plc.session.mode == PlcMode::Script {
+        // 部品スクリプトが PLC の代わりに出力を決める。止めている間は出力をそのまま保つ。
+        let sensors: Vec<(String, bool)> = sensors
+            .signals
+            .iter()
+            .map(|s| (s.name.clone(), s.on))
+            .collect();
+        let controller = scripts.running_mut();
+        plc.session.scan_with(&chart, dt, |table, io, values| {
+            if let Some(c) = controller {
+                c.scan(&chart, table, io, values, &sensors, dt);
+            }
+        })
+    } else {
+        plc.session.scan(&chart, dt)
+    };
     // ロボットの表示 (TCP・骨格) も PLC の値に合わせるため、関節の値と変換も入れる
     pose.actuators = actuator_poses_for(&chart, values);
     pose.parts = part_poses_for(&chart, &pose.actuators);
