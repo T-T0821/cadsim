@@ -3,5 +3,6 @@
 
 pub mod io;
 pub mod io_csv;
+pub mod log;
 pub mod plant;
 pub mod sequencer;

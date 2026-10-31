@@ -89,6 +89,8 @@ pub struct PointSettings {
     pub scale: Option<f64>,
     /// OPC UA のノード ID ("ns=2;s=Line1.Cyl1.Out" など)
     pub node: String,
+    /// PLC のログ CSV でこの信号が入っている列の見出し ("Y10" "D100" など)
+    pub log_column: String,
 }
 
 /// I/O 一覧の1行
@@ -103,6 +105,8 @@ pub struct IoPoint {
     pub scale: f64,
     /// OPC UA のノード ID。空ならその信号は OPC UA でやりとりしない。
     pub node: String,
+    /// PLC のログ CSV の列見出し。空なら信号名の列を探す。
+    pub log_column: String,
 }
 
 impl IoPoint {
@@ -177,6 +181,7 @@ impl IoTable {
                     address: custom.address.unwrap_or(auto_address),
                     scale: custom.scale.unwrap_or(scale),
                     node: custom.node,
+                    log_column: custom.log_column,
                 });
             }
         }
@@ -275,6 +280,7 @@ mod tests {
                 address: Some(500),
                 scale: None,
                 node: "ns=2;s=Cyl.Ext".into(),
+                ..Default::default()
             },
         );
         let table = IoTable::from_chart(&chart, &plan);
@@ -304,6 +310,7 @@ mod tests {
             address: 0,
             scale: 0.001,
             node: String::new(),
+            log_column: String::new(),
         };
         assert_eq!(p.encode_word(-1.5), (-1500i16) as u16);
         assert!((p.decode_word(p.encode_word(-1.5)) + 1.5).abs() < 1e-12);
