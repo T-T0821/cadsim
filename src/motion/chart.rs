@@ -285,6 +285,29 @@ pub struct Robot {
     pub tool_axis: [f64; 3],
     pub points: Vec<TeachPoint>,
     pub next_point_id: u32,
+    /// 速度の上限 (サイクルタイムの見積もりとロボット言語の書き出しに使う)
+    pub speed: RobotSpeed,
+}
+
+/// ロボットの速度の上限
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RobotSpeed {
+    /// 回転関節の最高速度 (度/秒)
+    pub joint: f64,
+    /// TCP と直動関節の最高速度 (モデル単位/秒)。None ならロボットの大きさの 2 倍/秒。
+    pub linear: Option<f64>,
+    /// 最高速度まで加速する (減速する) のにかかる時間 (秒)
+    pub accel_time: f64,
+}
+
+impl Default for RobotSpeed {
+    fn default() -> Self {
+        Self {
+            joint: 180.0,
+            linear: None,
+            accel_time: 0.2,
+        }
+    }
 }
 
 impl Robot {
@@ -413,6 +436,7 @@ impl TimingChart {
             tool_axis: [0.0, 1.0, 0.0],
             points: Vec::new(),
             next_point_id: 1,
+            speed: RobotSpeed::default(),
         });
         id
     }
@@ -600,6 +624,15 @@ impl TimingChart {
                     path_reached: plan.path_reached,
                     min_dexterity: plan.min_dexterity,
                     singular: plan.singular,
+                    joint_travel: plan
+                        .joints
+                        .iter()
+                        .map(|j| {
+                            let from = values.get(&j.actuator).copied().unwrap_or(0.0);
+                            let to = plan.end_values.get(&j.actuator).copied().unwrap_or(from);
+                            (j.actuator, (to - from).abs())
+                        })
+                        .collect(),
                     path: plan.samples,
                 });
             }
@@ -711,6 +744,8 @@ pub struct SolvedMove {
     pub min_dexterity: f64,
     /// 特異点の近くを通るか
     pub singular: bool,
+    /// 各関節が動いた量 (回転は度、直動はモデル単位。最短時間の見積もりに使う)
+    pub joint_travel: Vec<(u32, f64)>,
     /// TCP の通り道を区切った点 (3D ビューの表示用)
     pub path: Vec<PathSample>,
 }

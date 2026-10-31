@@ -4,6 +4,7 @@
 //!   一時的に姿勢を動かす。チャートは変えず、再生やスクラブでチャートの位置に戻る。
 //! - 教示点: 今の TCP を登録するか、3D ビューで部品の面をクリックして置くか、座標を直接入力する。
 //!   選択中のステップに移動を置ける。
+//! - サイクルタイム: 速度の上限から移動の最短時間を見積もる。MELFA-BASIC VI のプログラムに書き出せる。
 //! - 経路の確認: 届かない移動・特異点の近くを通る移動の一覧と、移動中の干渉チェック。
 //!   3D ビューには TCP の通り道を描き、問題のあるところに色を付ける。
 
@@ -13,8 +14,10 @@ use bevy_egui::egui;
 
 use super::chart::{MoveKind, Robot, RobotMove, TeachPoint, TimingChart};
 use super::kinematics::{self, Tcp};
+use super::melfa;
 use super::path_interference::{PathBody, PathHit, robot_path_interference};
 use super::robot_path::SINGULAR_DEXTERITY;
+use super::robot_time;
 use super::teach::{self, point_on_surface};
 use super::ui::MotionUi;
 use super::ui::{ChartUiState, ERROR_COLOR, WARN_COLOR};
@@ -55,6 +58,10 @@ pub struct RobotUiState {
     standoff: f64,
     /// 置くモード中、カーソルの下の面から作る教示点
     hover: Option<teach::SurfacePoint>,
+    /// 次のフレームで、このロボットのプログラムを書き出す
+    export_request: Option<u32>,
+    /// 書き出しの結果
+    export_message: Option<String>,
 }
 
 impl Default for RobotUiState {
@@ -68,6 +75,8 @@ impl Default for RobotUiState {
             placing: None,
             standoff: 0.0,
             hover: None,
+            export_request: None,
+            export_message: None,
         }
     }
 }
@@ -312,8 +321,66 @@ fn robot_panel(
             PointAction::Delete => chart.remove_point(robot.id, point.id),
         }
     }
+    cycle_time(ui, chart, schedule, &robot, state);
     path_check(ui, schedule, &robot, chart_state, state);
     new_jog
+}
+
+/// サイクルタイムの見積もりと、ロボット言語への書き出し
+fn cycle_time(
+    ui: &mut egui::Ui,
+    chart: &mut TimingChart,
+    schedule: &ChartSchedule,
+    robot: &Robot,
+    state: &mut RobotUiState,
+) {
+    if chart.steps.is_empty() {
+        return;
+    }
+    ui.separator();
+    ui.strong("サイクルタイム");
+    let estimate = robot_time::estimate_cycle(chart, schedule);
+    ui.label(format!(
+        "チャート {:.2} s / ロボットを最短で動かすと {:.2} s",
+        estimate.current(),
+        estimate.fastest()
+    ))
+    .on_hover_text("速度の上限 (「設定」) で各移動の最短時間を求めた見積もりです。条件待ちの時間は含みません。");
+    let slow: Vec<String> = schedule
+        .moves
+        .iter()
+        .filter(|m| m.robot == robot.id)
+        .filter(|m| robot_time::min_move_time(chart, robot, m) > m.duration + 1e-6)
+        .map(|m| format!("S{}", m.step + 1))
+        .collect();
+    if !slow.is_empty() {
+        ui.colored_label(
+            WARN_COLOR,
+            format!(
+                "⚠ 速度の上限を超える移動: {} (動作時間を延ばすか「すべて最短にする」)",
+                slow.join(", ")
+            ),
+        );
+    }
+    ui.horizontal(|ui| {
+        if ui
+            .button("すべて最短にする")
+            .on_hover_text("ロボットの移動の動作時間を、速度の上限で動いたときの最短時間にします")
+            .clicked()
+        {
+            robot_time::set_fastest_durations(chart, schedule);
+        }
+        if ui
+            .button("MELFA-BASIC VI で書き出す…")
+            .on_hover_text("三菱電機のロボット言語のプログラム (.prg) に書き出します")
+            .clicked()
+        {
+            state.export_request = Some(robot.id);
+        }
+    });
+    if let Some(message) = &state.export_message {
+        ui.weak(message);
+    }
 }
 
 /// 経路の確認: チャートに置いた移動のうち、届かない・特異点の近くを通るものと、移動中の干渉
@@ -454,6 +521,7 @@ fn robot_settings(
         .iter()
         .filter_map(|id| chart.actuator(*id).map(|a| a.name.clone()))
         .collect();
+    let linear_default = 2.0 * kinematics::reach(chart, robot);
     let Some(r) = chart.robot_mut(robot.id) else {
         return;
     };
@@ -489,6 +557,43 @@ fn robot_settings(
                     ui.add(egui::DragValue::new(v).speed(0.01).range(-1.0..=1.0));
                 }
             });
+            ui.end_row();
+            ui.label("関節の最高速度");
+            ui.add(
+                egui::DragValue::new(&mut r.speed.joint)
+                    .speed(1.0)
+                    .range(1.0..=3600.0)
+                    .suffix(" °/s"),
+            );
+            ui.end_row();
+            ui.label("直線の最高速度");
+            ui.horizontal(|ui| {
+                let mut custom = r.speed.linear.is_some();
+                if ui.checkbox(&mut custom, "").changed() {
+                    r.speed.linear = custom.then_some(linear_default);
+                }
+                match &mut r.speed.linear {
+                    Some(v) => {
+                        ui.add(
+                            egui::DragValue::new(v)
+                                .speed(linear_default * 0.01)
+                                .range(0.0..=f64::MAX)
+                                .suffix(" /s"),
+                        );
+                    }
+                    None => {
+                        ui.weak(format!("自動 ({linear_default:.0} /s)"));
+                    }
+                }
+            });
+            ui.end_row();
+            ui.label("加速時間");
+            ui.add(
+                egui::DragValue::new(&mut r.speed.accel_time)
+                    .speed(0.01)
+                    .range(0.0..=5.0)
+                    .suffix(" s"),
+            );
             ui.end_row();
         });
     ui.weak(format!("関節: {}", chain.join(" → ")));
@@ -781,4 +886,43 @@ pub fn place_teach_point(
 /// 「3D ビューで置く」の間は、クリックで部品を選ばない
 pub fn teach_tool_off(state: Res<RobotUiState>) -> bool {
     state.placing.is_none()
+}
+
+/// 「MELFA-BASIC VI で書き出す」が押されていたら、保存先を選ばせて書き出す
+pub fn export_melfa(
+    mut state: ResMut<RobotUiState>,
+    chart: Res<TimingChart>,
+    schedule: Res<ChartSchedule>,
+    model: Res<Model>,
+    _main_thread: bevy::ecs::system::NonSendMarker,
+) {
+    let Some(id) = state.export_request.take() else {
+        return;
+    };
+    let Some(robot) = chart.robot(id) else {
+        return;
+    };
+    let Some(mut path) = rfd::FileDialog::new()
+        .set_title("ロボットのプログラムを書き出す (MELFA-BASIC VI)")
+        .add_filter("MELFA-BASIC VI", &["prg"])
+        .set_file_name(format!("{}.prg", robot.name))
+        .save_file()
+    else {
+        return;
+    };
+    if path.extension().is_none() {
+        path.set_extension("prg");
+    }
+    let program = melfa::melfa_program(
+        &chart,
+        &schedule,
+        robot,
+        melfa::MelfaOptions {
+            unit_to_mm: melfa::unit_to_mm(&model.unit),
+        },
+    );
+    state.export_message = Some(match std::fs::write(&path, program) {
+        Ok(()) => format!("{} に書き出しました", path.display()),
+        Err(e) => format!("{} に書き込めませんでした: {e}", path.display()),
+    });
 }
