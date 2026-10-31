@@ -191,8 +191,10 @@ fn geometry<'a>(
                 DVec3::from(part.position),
             ),
         }),
-        NodeKind::Imported { .. } => Some(PartGeometry::Mesh(meshes.get(&id)?.triangles())),
-        NodeKind::Assembly { .. } => None,
+        NodeKind::Imported { .. } | NodeKind::StandardBody { .. } => {
+            Some(PartGeometry::Mesh(meshes.get(&id)?.triangles()))
+        }
+        NodeKind::Assembly { .. } | NodeKind::Standard(_) => None,
     }
 }
 

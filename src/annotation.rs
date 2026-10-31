@@ -382,8 +382,8 @@ fn anchor_frame(model: &Model, node: NodeId) -> Option<DMat4> {
     let world = model.world_matrix(node);
     match &model.get(node)?.kind {
         NodeKind::Box(part) => Some(world * box_frame(part)),
-        NodeKind::Imported { .. } => Some(world),
-        NodeKind::Assembly { .. } => None,
+        NodeKind::Imported { .. } | NodeKind::StandardBody { .. } => Some(world),
+        NodeKind::Assembly { .. } | NodeKind::Standard(_) => None,
     }
 }
 
@@ -564,8 +564,10 @@ fn imported_geometry(faces: &[PolygonMesh], edges: &[Vec<Point3>]) -> PartGeomet
 fn node_geometry(kind: &NodeKind) -> Option<PartGeometry> {
     match kind {
         NodeKind::Box(part) => Some(solid_geometry(&part.build_solid())),
-        NodeKind::Imported { shape, .. } => Some(imported_geometry(&shape.faces, &shape.edges)),
-        NodeKind::Assembly { .. } => None,
+        NodeKind::Imported { shape, .. } | NodeKind::StandardBody { shape, .. } => {
+            Some(imported_geometry(&shape.faces, &shape.edges))
+        }
+        NodeKind::Assembly { .. } | NodeKind::Standard(_) => None,
     }
 }
 
@@ -606,14 +608,19 @@ impl GeometryCache {
             };
             let key = match &node.kind {
                 NodeKind::Box(part) => CacheKey::Box([part.size, part.position, part.rotation_deg]),
-                NodeKind::Imported { shape, .. } => CacheKey::Shape(shape.id),
-                NodeKind::Assembly { .. } => continue,
+                NodeKind::Imported { shape, .. } | NodeKind::StandardBody { shape, .. } => {
+                    CacheKey::Shape(shape.id)
+                }
+                NodeKind::Assembly { .. } | NodeKind::Standard(_) => continue,
             };
             if self.nodes.get(&id).is_some_and(|(k, _)| *k == key) {
                 continue;
             }
             let geometry = match (&node.kind, &key) {
-                (NodeKind::Imported { .. }, CacheKey::Shape(shape)) => self
+                (
+                    NodeKind::Imported { .. } | NodeKind::StandardBody { .. },
+                    CacheKey::Shape(shape),
+                ) => self
                     .shapes
                     .entry(*shape)
                     .or_insert_with(|| Arc::new(node_geometry(&node.kind).unwrap_or_default()))

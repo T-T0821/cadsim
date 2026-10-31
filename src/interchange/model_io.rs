@@ -263,7 +263,7 @@ pub fn model_to_scene(model: &Model, roots: &[NodeId]) -> (Scene, HashMap<NodeId
 /// 部品の形状を1つの三角形メッシュにする (部品の座標系、モデル単位)
 fn node_mesh(kind: &NodeKind) -> Option<TriMesh> {
     let polys: Vec<PolygonMesh> = match kind {
-        NodeKind::Assembly { .. } => return None,
+        NodeKind::Assembly { .. } | NodeKind::Standard(_) => return None,
         NodeKind::Box(part) => {
             let meshed = part.build_solid().triangulation(BOX_TESSELLATION_TOL);
             meshed.boundaries()[0]
@@ -277,7 +277,9 @@ fn node_mesh(kind: &NodeKind) -> Option<TriMesh> {
                 })
                 .collect()
         }
-        NodeKind::Imported { shape, .. } => shape.faces.clone(),
+        NodeKind::Imported { shape, .. } | NodeKind::StandardBody { shape, .. } => {
+            shape.faces.clone()
+        }
     };
     let mut mesh = TriMesh::default();
     for poly in &polys {

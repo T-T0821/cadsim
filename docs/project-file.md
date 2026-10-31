@@ -61,7 +61,7 @@
 | `nodes` | 最上位のノード。子は `children` に入れ子で書く |
 | `position` / `rotation_deg` | 親から見た配置。回転は X → Y → Z の順に回す角度(度) |
 | `visible` / `color` | 表示/非表示と、ユーザーが付けた色(sRGB 0〜1、子孫にも効く)。省略すると表示・色なし |
-| `kind` | `Assembly`(まとめるだけ)、`Box`(寸法・位置・回転を箱自身が持つ)、`Imported`(`step_files` の番号と製品名) |
+| `kind` | `Assembly`(まとめるだけ)、`Box`(寸法・位置・回転を箱自身が持つ)、`Imported`(`step_files` の番号と製品名)、`Standard`(標準部品。`part` が種類、`params` が寸法パラメータ mm。本体は書かず、開くときにパラメータから作り直す) |
 | `physics`(ノード) | 部品の物理の設定。`mode`(`Fixed` / `Mechanism` / `Dynamic` / `Ignored`)、`shape`(`Auto` / `Box` / `ConvexHull` / `ConvexDecomposition` / `Mesh`)、`friction`、`restitution`、`density`(g/cm³)、`belt`(`axis`・`reversed`・`speed`)。既定(機構で動く)なら省く |
 | `cables` | ケーブル・ホース。`name`、`hose`、`start` / `end`(`node` は寸法と同じ番号の道筋、省くとワールド。`local` は部品の座標系かワールドの位置)、`length`、`diameter`、`min_bend_radius`。端の部品が見つからないものは読み飛ばす |
 | `annotations` | 寸法と注記。`PointDistance` / `EdgeLength` / `FaceDistance` / `Note`。部品は `node` に「最上位から順にたどる子の番号」で書く(例 `[0, 1, 0]` は1つ目の最上位ノードの2番目の子の1番目の子)。`local` は箱なら半寸法で割った値(-1〜1)、取り込んだ部品なら部品の座標系の位置。`face` / `edge` は部品の面・稜線の番号。寸法がなければ項目ごと省く |

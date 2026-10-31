@@ -46,6 +46,9 @@ use overlap::{OverlapRegion, overlap_region};
 #[derive(Component, Clone)]
 pub struct SimBody {
     pub id: u32,
+    /// 同じ値の部品どうしは調べない。標準部品の本体 (ロッドとチューブなど) は
+    /// 組み付いた状態で重なっているので、部品全体の id をここに入れる。ふつうは `id` と同じ。
+    pub group: u32,
     pub mesh: Arc<TriMesh>,
     pub pose: Pose,
     /// モデル上で表示中か (非表示にした部品は調べない)。表示の都合で描かないだけの
@@ -158,7 +161,9 @@ fn run_interference_check(
         compute_overlap: false,
         ..check.settings
     };
-    let pairs = check_all(&inputs, &settings);
+    let groups: HashMap<u32, u32> = bodies.iter().map(|b| (b.id, b.group)).collect();
+    let mut pairs = check_all(&inputs, &settings);
+    pairs.retain(|p| groups.get(&p.a) != groups.get(&p.b));
     let elapsed_ms = started.elapsed().as_secs_f64() * 1000.0;
 
     // 前の計算が残っていれば捨てる (Task を落とすと止まる)

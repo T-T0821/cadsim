@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 
 use crate::drawing::format_length;
 use crate::file_io::source_name;
-use crate::math::split_placement;
+use crate::math::{Aabb, split_placement};
 use crate::model::{Model, NodeId, NodeKind};
 
 /// 部品表の1行 (品物1種類)
@@ -61,9 +61,11 @@ fn item_key(model: &Model, id: NodeId) -> Option<(String, String, String, [f64; 
     let node = model.get(id)?;
     let m = model.measure(id);
     let local = match &node.kind {
-        NodeKind::Assembly { .. } => return None,
+        // 標準部品は部品全体で1つの品物 (本体は数えない)
+        NodeKind::Assembly { .. } | NodeKind::StandardBody { .. } => return None,
         NodeKind::Box(part) => part.size,
         NodeKind::Imported { shape, .. } => (shape.stats.max - shape.stats.min).to_array(),
+        NodeKind::Standard(_) => standard_size(model, id),
     };
     let size = local.map(|v| (v * 1000.0).round() / 1000.0);
     Some(match &node.kind {
@@ -77,8 +79,45 @@ fn item_key(model: &Model, id: NodeId) -> Option<(String, String, String, [f64; 
             size,
             m.volume,
         ),
-        NodeKind::Assembly { .. } => return None,
+        // 種類と寸法パラメータが同じものを同じ品物とみなす
+        NodeKind::Standard(spec) => (
+            spec.kind.label().into(),
+            "標準部品".into(),
+            spec.kind
+                .param_specs()
+                .iter()
+                .zip(&spec.params.0)
+                .map(|(p, v)| format!("{} {}", p.label, format_length(*v)))
+                .collect::<Vec<_>>()
+                .join(" / "),
+            size,
+            m.volume,
+        ),
+        NodeKind::Assembly { .. } | NodeKind::StandardBody { .. } => return None,
     })
+}
+
+/// 標準部品の、部品の座標系での外接箱の大きさ (本体をまとめたもの)
+fn standard_size(model: &Model, id: NodeId) -> [f64; 3] {
+    model
+        .get(id)
+        .into_iter()
+        .flat_map(|node| &node.children)
+        .filter_map(|&child| {
+            let node = model.get(child)?;
+            let NodeKind::StandardBody { shape, .. } = &node.kind else {
+                return None;
+            };
+            Some(
+                Aabb {
+                    min: shape.stats.min,
+                    max: shape.stats.max,
+                }
+                .transformed(node.placement),
+            )
+        })
+        .reduce(Aabb::union)
+        .map_or([0.0; 3], |b| (b.max - b.min).to_array())
 }
 
 pub fn make_bom(model: &Model) -> Bom {
@@ -199,5 +238,20 @@ mod tests {
             bom.tree.iter().filter(|t| t.bom_number.is_some()).count(),
             10
         );
+    }
+
+    #[test]
+    fn standard_parts_are_counted_as_whole_parts() {
+        use crate::library::{self, PartKind};
+        use bevy::math::DVec3;
+        let mut model = Model::default();
+        library::add_standard(&mut model, PartKind::AirCylinder, DVec3::ZERO);
+        library::add_standard(&mut model, PartKind::AirCylinder, DVec3::X * 500.0);
+        let bom = make_bom(&model);
+        // 本体 (チューブ・ロッドなど) は数えず、同じ寸法のシリンダ2本で1行
+        assert_eq!(bom.rows.len(), 1);
+        assert_eq!(bom.rows[0].quantity, 2);
+        assert_eq!(bom.rows[0].kind, "標準部品");
+        assert!(bom.rows[0].size.iter().all(|&v| v > 0.0));
     }
 }

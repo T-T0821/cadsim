@@ -20,6 +20,7 @@
 - [カメラとビュー](camera.md)
 - [箱の作成と編集](boxes.md)
 - [円柱・押し出し・穴・ブーリアン](modeling.md)
+- [標準部品ライブラリ](parts-library.md)
 - [ギズモとスナップ](gizmo.md)
 - [形状の差し替え](replace-geometry.md)
 - [元に戻す・やり直し](undo.md)
@@ -53,7 +54,6 @@
 # 開発中の機能
 
 - [シーケンサー(PLC)](upcoming/sensors-plc.md)
-- [標準部品ライブラリ](upcoming/parts-library.md)
 
 ---
 

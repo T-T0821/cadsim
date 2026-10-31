@@ -9,6 +9,7 @@ pub mod conveyor;
 pub mod drawing;
 pub mod flow;
 pub mod gamify;
+pub mod library;
 pub mod line;
 pub mod math;
 pub mod model;

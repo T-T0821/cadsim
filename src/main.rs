@@ -21,6 +21,7 @@
 //! - `japanese_font` egui に埋め込みの日本語フォントを登録する
 //! - `math`        回転や行列の変換
 //! - `simulation`  干渉チェックと距離計測 (`SimBody` を付けた部品が対象)
+//! - `library`     標準部品 (シリンダ・コンベア・センサー・シーケンサーなど) のパレットと形状
 //! - `annotation`  3D 上の寸法 (点間距離・辺の長さ・面間距離) と注記
 //! - `drawing`     2D 図面 (上面図・正面図、寸法付き) を作る
 //! - `modeling`    円柱・押し出し・穴あけ・ブーリアン (truck の B-rep)
@@ -63,6 +64,7 @@ mod gizmo;
 mod history;
 mod interchange;
 mod japanese_font;
+mod library;
 mod line;
 mod math;
 mod model;
@@ -124,6 +126,7 @@ fn main() {
             (
                 flow::FlowPlugin,
                 conveyor::ConveyorPlugin,
+                library::LibraryPlugin,
                 bench::BenchPlugin,
             ),
             (safety::SafetyPlugin, floor::FloorPlugin, line::LinePlugin),
