@@ -28,6 +28,7 @@
 //! - `documents`   図面と部品表の書き出し (ダイアログ)
 //! - `site`        床に敷く平面図 (DXF / PDF / 画像) と縮尺合わせ
 //! - `formats`     平面図や図面などのファイル形式の読み書き (Bevy に依存しない)
+//! - `conveyor`    コンベアのワーク搬送とグリッパの把持・解放
 //! - `flow`        工程モデル (生成・工程・バッファ・排出) の早回しとスループット統計
 //! - `stress`      負荷テスト用の数千部品のシーン
 //! - `bench`       `--bench` で FPS を測って終了する
@@ -46,6 +47,7 @@ mod bench;
 mod bom;
 mod bvh;
 mod camera;
+mod conveyor;
 mod defeature;
 mod documents;
 mod drawing;
@@ -107,7 +109,11 @@ fn main() {
             simulation::SimulationPlugin,
             annotation::AnnotationPlugin,
             (motion::MotionPlugin, plc::PlcPlugin),
-            (flow::FlowPlugin, bench::BenchPlugin),
+            (
+                flow::FlowPlugin,
+                conveyor::ConveyorPlugin,
+                bench::BenchPlugin,
+            ),
             (safety::SafetyPlugin, floor::FloorPlugin),
             (
                 site::SitePlugin,
