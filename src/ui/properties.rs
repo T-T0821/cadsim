@@ -45,8 +45,10 @@ fn nothing_selected(ui: &mut egui::Ui, state: &mut UiState) {
         .default_open(true)
         .show(ui, |ui| {
             let mut size = state.model.new_box_size;
-            xyz_editor(ui, "寸法 (幅 / 高さ / 奥行)", &mut size, 0.1, Some(0.001));
-            state.model.new_box_size = size;
+            // 変わったときだけ書く (毎フレーム書くとモデルが変わった扱いになり、表示を計算し直す)
+            if xyz_editor(ui, "寸法 (幅 / 高さ / 奥行)", &mut size, 0.1, Some(0.001)) {
+                state.model.new_box_size = size;
+            }
             if ui.button("箱を追加").clicked() {
                 super::menu::add_box(state);
             }
@@ -85,11 +87,15 @@ fn selected_node(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
 fn general_section(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
     let unit = state.model.unit.clone();
     let path = state.model.path_label(id);
-    let Some(node) = state.model.get_mut(id) else {
+    let Some(node) = state.model.get(id) else {
         return;
     };
-    let before = (node.name.clone(), node.color);
-    ui.add(egui::TextEdit::singleline(&mut node.name).desired_width(f32::INFINITY));
+    // 写しを編集し、変わったときだけモデルに書き戻す
+    // (毎フレーム書くとモデルが変わった扱いになり、数千部品の表示を計算し直してしまう)
+    let mut name = node.name.clone();
+    let mut visible = node.visible;
+    let mut color = node.color;
+    ui.add(egui::TextEdit::singleline(&mut name).desired_width(f32::INFINITY));
     ui.add_space(4.0);
     egui::Grid::new("general")
         .num_columns(2)
@@ -108,34 +114,38 @@ fn general_section(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
             row(ui, "単位", unit);
 
             ui.weak("表示");
-            ui.checkbox(&mut node.visible, "表示する");
+            ui.checkbox(&mut visible, "表示する");
             ui.end_row();
 
             ui.weak("色");
             ui.horizontal(|ui| {
-                let mut rgb = node.color.unwrap_or(match &node.kind {
+                let mut rgb = color.unwrap_or(match &node.kind {
                     NodeKind::Imported { shape, .. } => {
                         shape.color.unwrap_or(crate::model::DEFAULT_PART_COLOR)
                     }
                     _ => crate::model::DEFAULT_PART_COLOR,
                 });
                 if ui.color_edit_button_rgb(&mut rgb).changed() {
-                    node.color = Some(rgb);
+                    color = Some(rgb);
                 }
-                if node.color.is_some() && ui.small_button("元に戻す").clicked() {
-                    node.color = None;
+                if color.is_some() && ui.small_button("元に戻す").clicked() {
+                    color = None;
                 }
             });
             ui.end_row();
         });
-    // 名前と色は履歴に載せる。変更前の値をいったん戻して覚えさせてから書き直す。
-    let edited = (node.name.clone(), node.color);
-    if edited != before {
-        (node.name, node.color) = before;
+    let named_or_colored = name != node.name || color != node.color;
+    let visibility_changed = visible != node.visible;
+    // 名前と色は履歴に載せる (変更前のモデルを覚えさせてから書く)
+    if named_or_colored {
         state.history.begin_edit(&state.model, id);
-        if let Some(node) = state.model.get_mut(id) {
-            (node.name, node.color) = edited;
-        }
+    }
+    if (named_or_colored || visibility_changed)
+        && let Some(node) = state.model.get_mut(id)
+    {
+        node.name = name;
+        node.visible = visible;
+        node.color = color;
     }
 }
 
