@@ -36,6 +36,7 @@ const PANEL_HEIGHT: f32 = 270.0;
 
 const PLAYHEAD_COLOR: egui::Color32 = egui::Color32::from_rgb(230, 70, 60);
 const WAVE_COLOR: egui::Color32 = egui::Color32::from_rgb(90, 170, 255);
+const VELOCITY_COLOR: egui::Color32 = egui::Color32::from_rgb(255, 150, 60);
 const ACTION_FILL: egui::Color32 = egui::Color32::from_rgba_premultiplied(60, 110, 170, 70);
 const SELECT_COLOR: egui::Color32 = egui::Color32::from_rgb(255, 170, 60);
 const SENSOR_ON_COLOR: egui::Color32 = egui::Color32::from_rgb(80, 200, 100);
@@ -55,6 +56,8 @@ pub struct ChartUiState {
     pub(super) selected_robot: Option<u32>,
     /// パネルをツールバーだけに畳んでいる
     collapsed: bool,
+    /// 各行に速度のグラフを重ねる
+    show_velocity: bool,
 }
 
 impl ChartUiState {
@@ -248,6 +251,8 @@ fn toolbar(
             play.playing = !play.playing;
         }
         ui.checkbox(&mut play.looping, "繰り返し");
+        ui.checkbox(&mut state.show_velocity, "速度")
+            .on_hover_text("各行に速度のグラフ (オレンジ) を重ねます");
         egui::ComboBox::from_id_salt("speed")
             .width(60.0)
             .selected_text(format!("x{}", play.speed))
@@ -590,6 +595,62 @@ fn new_action(actuator: &Actuator, target: f64) -> Action {
 }
 
 /// 値の表示範囲 (0 と全目標値を含む。ロボットの移動で決まった値も含める)
+/// 行の中に速度のグラフを重ねる (行の真ん中が 0、上下の端がいちばん速いとき)
+fn draw_velocity(
+    painter: &egui::Painter,
+    layout: &ChartLayout,
+    schedule: &Schedule,
+    actuator: &Actuator,
+    top: f32,
+    labels: &mut Vec<(egui::Pos2, String)>,
+) {
+    // シリンダは 0〜1 の値なので、ストロークを掛けて実際の速さにする
+    let scale = if actuator.kind == ActuatorKind::Cylinder {
+        actuator.stroke
+    } else {
+        1.0
+    };
+    let mut samples = Vec::new();
+    for span in &schedule.steps {
+        const SAMPLES: usize = 48;
+        for k in 0..=SAMPLES {
+            let t = span.start + (span.end - span.start) * k as f64 / SAMPLES as f64;
+            samples.push((t, schedule.velocity_at(actuator, t) * scale));
+        }
+    }
+    let peak = samples.iter().map(|(_, v)| v.abs()).fold(0.0, f64::max);
+    if peak <= 1e-9 {
+        return;
+    }
+    let middle = top + ROW_HEIGHT / 2.0;
+    let half = ROW_HEIGHT / 2.0 - 4.0;
+    let points: Vec<egui::Pos2> = samples
+        .iter()
+        .map(|&(t, v)| {
+            egui::pos2(
+                layout.time_to_x(schedule, t),
+                middle - (v / peak) as f32 * half,
+            )
+        })
+        .collect();
+    painter.add(egui::Shape::line(
+        points,
+        egui::Stroke::new(1.5, VELOCITY_COLOR),
+    ));
+    let unit = if actuator.kind == ActuatorKind::RotaryTable {
+        "°/s"
+    } else {
+        "/s"
+    };
+    labels.push((
+        egui::pos2(
+            layout.column_x(schedule.steps.len()) - 3.0,
+            top + ROW_HEIGHT - 14.0,
+        ),
+        format!("最大 {peak:.1} {unit}"),
+    ));
+}
+
 fn value_range(actuator: &Actuator, schedule: &Schedule) -> (f64, f64) {
     if actuator.kind == ActuatorKind::Cylinder {
         return (0.0, 1.0);
@@ -785,6 +846,9 @@ fn draw_chart(
                 points,
                 egui::Stroke::new(2.0, WAVE_COLOR),
             ));
+        }
+        if state.show_velocity {
+            draw_velocity(painter, layout, schedule, actuator, top, &mut labels);
         }
         for (pos, text) in labels {
             let galley = painter.layout_no_wrap(text, small.clone(), text_color);
@@ -1528,6 +1592,7 @@ fn actuator_editor(
             .and_then(|m| mount_candidates.iter().find(|(c, _)| *c == m))
             .map_or("(固定)".to_string(), |(_, name)| name.clone())
     };
+    let cams: Vec<(u32, String)> = chart.cams.iter().map(|c| (c.id, c.name.clone())).collect();
     let Some(actuator) = chart.actuator_mut(id) else {
         return;
     };
@@ -1586,14 +1651,50 @@ fn actuator_editor(
             }
 
             ui.label("加減速");
+            let current = match actuator.easing {
+                Easing::Cam(cam) => cams
+                    .iter()
+                    .find(|(c, _)| *c == cam)
+                    .map_or("電子カム".to_string(), |(_, name)| {
+                        format!("電子カム: {name}")
+                    }),
+                easing => easing.label().to_string(),
+            };
             egui::ComboBox::from_id_salt("easing")
-                .selected_text(actuator.easing.label())
+                .selected_text(current)
                 .show_ui(ui, |ui| {
-                    for easing in [Easing::Smooth, Easing::Linear] {
-                        ui.selectable_value(&mut actuator.easing, easing, easing.label());
+                    for easing in Easing::BASIC {
+                        let selected = actuator.easing.same_kind(easing);
+                        if ui.selectable_label(selected, easing.label()).clicked() && !selected {
+                            actuator.easing = easing;
+                        }
+                    }
+                    for (cam, name) in &cams {
+                        ui.selectable_value(
+                            &mut actuator.easing,
+                            Easing::Cam(*cam),
+                            format!("電子カム: {name}"),
+                        );
                     }
                 });
             ui.end_row();
+            if let Easing::Trapezoid { accel } = &mut actuator.easing {
+                ui.label("加速の割合");
+                let mut percent = *accel * 100.0;
+                if ui
+                    .add(
+                        egui::DragValue::new(&mut percent)
+                            .speed(0.5)
+                            .range(1.0..=50.0)
+                            .suffix(" %"),
+                    )
+                    .on_hover_text("動作時間のうち、加速 (と減速) にかける時間の割合")
+                    .changed()
+                {
+                    *accel = percent / 100.0;
+                }
+                ui.end_row();
+            }
 
             ui.label("標準動作時間");
             ui.add(
@@ -1684,4 +1785,125 @@ fn actuator_editor(
             state.selected_actuator = None;
         }
     });
+
+    if let Some(easing) = chart.actuator(id).map(|a| a.easing) {
+        ui.separator();
+        motion_profile(ui, chart, id, easing);
+    }
+}
+
+/// 加減速のパターンの位置・速度のグラフと、電子カム表の編集
+fn motion_profile(ui: &mut egui::Ui, chart: &mut TimingChart, id: u32, easing: Easing) {
+    ui.horizontal(|ui| {
+        ui.strong("動きのパターン");
+        ui.colored_label(WAVE_COLOR, "━ 位置");
+        ui.colored_label(VELOCITY_COLOR, "━ 速度");
+    });
+    let cams = chart.cams.clone();
+    let (rect, _) = ui.allocate_exact_size(
+        egui::vec2(ui.available_width().min(260.0), 70.0),
+        egui::Sense::hover(),
+    );
+    let painter = ui.painter_at(rect);
+    painter.rect_filled(rect, 2.0, ui.visuals().extreme_bg_color);
+    const SAMPLES: usize = 80;
+    let position = |x: f64| easing.apply_with(x, &cams);
+    let velocities: Vec<f64> = (0..=SAMPLES)
+        .map(|k| super::profile::velocity(position, k as f64 / SAMPLES as f64))
+        .collect();
+    let peak = velocities.iter().map(|v| v.abs()).fold(1.0, f64::max);
+    let to_screen = |x: f64, y: f64| {
+        egui::pos2(
+            rect.left() + 4.0 + (x as f32) * (rect.width() - 8.0),
+            rect.bottom() - 4.0 - (y as f32) * (rect.height() - 8.0),
+        )
+    };
+    let positions: Vec<egui::Pos2> = (0..=SAMPLES)
+        .map(|k| {
+            let x = k as f64 / SAMPLES as f64;
+            to_screen(x, position(x))
+        })
+        .collect();
+    let speeds: Vec<egui::Pos2> = velocities
+        .iter()
+        .enumerate()
+        .map(|(k, v)| to_screen(k as f64 / SAMPLES as f64, v / peak))
+        .collect();
+    painter.add(egui::Shape::line(
+        positions,
+        egui::Stroke::new(2.0, WAVE_COLOR),
+    ));
+    painter.add(egui::Shape::line(
+        speeds,
+        egui::Stroke::new(1.5, VELOCITY_COLOR),
+    ));
+    ui.weak(format!("最高速度は平均の {:.2} 倍", peak));
+
+    let Easing::Cam(cam) = easing else {
+        if ui.button("+ 電子カム表を作る").clicked() {
+            let cam = chart.add_cam();
+            if let Some(a) = chart.actuator_mut(id) {
+                a.easing = Easing::Cam(cam);
+            }
+        }
+        return;
+    };
+    let Some(table) = chart.cam_mut(cam) else {
+        return;
+    };
+    ui.horizontal(|ui| {
+        ui.label("カム表の名前");
+        ui.text_edit_singleline(&mut table.name);
+    });
+    ui.weak("時間 % (動作時間に対して) と位置 % (移動量に対して) の点。始めと終わりの 0 % / 100 % は自動で通ります。");
+    let mut remove = None;
+    egui::Grid::new("cam_points").num_columns(3).show(ui, |ui| {
+        ui.label("時間");
+        ui.label("位置");
+        ui.end_row();
+        for (i, point) in table.points.iter_mut().enumerate() {
+            for v in point.iter_mut() {
+                let mut percent = *v * 100.0;
+                if ui
+                    .add(
+                        egui::DragValue::new(&mut percent)
+                            .speed(0.5)
+                            .range(0.0..=100.0)
+                            .suffix(" %"),
+                    )
+                    .changed()
+                {
+                    *v = percent / 100.0;
+                }
+            }
+            if ui.small_button("✕").clicked() {
+                remove = Some(i);
+            }
+            ui.end_row();
+        }
+    });
+    if let Some(i) = remove {
+        table.points.remove(i);
+    }
+    let mut delete = false;
+    ui.horizontal(|ui| {
+        if ui.button("+ 点を追加").clicked() {
+            // いちばん間の空いた 2 点の真ん中に足す
+            let knots = table.knots();
+            let gap = knots
+                .windows(2)
+                .max_by(|a, b| (a[1][0] - a[0][0]).total_cmp(&(b[1][0] - b[0][0])))
+                .map_or([0.5, 0.5], |w| {
+                    [(w[0][0] + w[1][0]) / 2.0, (w[0][1] + w[1][1]) / 2.0]
+                });
+            table.points.push(gap);
+            table.points.sort_by(|a, b| a[0].total_cmp(&b[0]));
+        }
+        if ui.button("カム表を削除").clicked() {
+            delete = true;
+        }
+    });
+    if delete {
+        chart.remove_cam(cam);
+    }
 }

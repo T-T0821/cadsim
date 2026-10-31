@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::interchange::{NodeTransform, Track};
 use crate::motion::chart::{
-    Interlock, MoveKind, Robot, RobotMove, RobotSpeed, Sensor, SensorKind, TeachPoint,
+    CamTable, Interlock, MoveKind, Robot, RobotMove, RobotSpeed, Sensor, SensorKind, TeachPoint,
 };
 use crate::motion::{Action, Actuator, ActuatorKind, Axis, Easing, Step, TimingChart};
 
@@ -29,6 +29,8 @@ pub struct ChartRecord {
     pub steps: Vec<StepRecord>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub robots: Vec<RobotRecord>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cams: Vec<CamRecord>,
 }
 
 /// ロボット (先端の関節 `tip` から載せ先をたどった関節の列) と教示点
@@ -132,10 +134,47 @@ pub enum AxisRecord {
     Z,
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
 pub enum EasingRecord {
     Linear,
     Smooth,
+    /// 台形加減速 (`accel` は加速にかける時間の割合)
+    Trapezoid {
+        accel: f64,
+    },
+    Cycloid,
+    /// 電子カム表の id
+    Cam(u32),
+}
+
+/// 電子カム表
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct CamRecord {
+    pub id: u32,
+    pub name: String,
+    /// (時間の進み具合, 位置の進み具合)。どちらも 0〜1。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub points: Vec<[f64; 2]>,
+}
+
+fn easing_record(easing: Easing) -> EasingRecord {
+    match easing {
+        Easing::Linear => EasingRecord::Linear,
+        Easing::Smooth => EasingRecord::Smooth,
+        Easing::Trapezoid { accel } => EasingRecord::Trapezoid { accel },
+        Easing::Cycloid => EasingRecord::Cycloid,
+        Easing::Cam(id) => EasingRecord::Cam(id),
+    }
+}
+
+fn easing_from(easing: EasingRecord) -> Easing {
+    match easing {
+        EasingRecord::Linear => Easing::Linear,
+        EasingRecord::Smooth => Easing::Smooth,
+        EasingRecord::Trapezoid { accel } => Easing::Trapezoid { accel },
+        EasingRecord::Cycloid => Easing::Cycloid,
+        EasingRecord::Cam(id) => Easing::Cam(id),
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -230,10 +269,7 @@ pub fn chart_to_record(
                 pivot: a.pivot,
                 mounted_on: a.mounted_on,
                 parts: a.parts.iter().filter_map(|&id| part_path(id)).collect(),
-                easing: match a.easing {
-                    Easing::Linear => EasingRecord::Linear,
-                    Easing::Smooth => EasingRecord::Smooth,
-                },
+                easing: easing_record(a.easing),
                 default_duration: a.default_duration,
                 limits: a.limits,
             })
@@ -317,6 +353,15 @@ pub fn chart_to_record(
                 accel_time: r.speed.accel_time,
             })
             .collect(),
+        cams: chart
+            .cams
+            .iter()
+            .map(|c| CamRecord {
+                id: c.id,
+                name: c.name.clone(),
+                points: c.points.clone(),
+            })
+            .collect(),
     }
 }
 
@@ -352,18 +397,32 @@ pub fn chart_from_record(
                 pivot: r.pivot,
                 mounted_on: r.mounted_on,
                 parts,
-                easing: match r.easing {
-                    EasingRecord::Linear => Easing::Linear,
-                    EasingRecord::Smooth => Easing::Smooth,
-                },
+                easing: easing_from(r.easing),
                 default_duration: r.default_duration,
                 limits: r.limits,
                 ..Actuator::new(r.id, kind)
             }
         })
         .collect();
-    let ids: Vec<u32> = actuators.iter().map(|a| a.id).collect();
+    let cams: Vec<CamTable> = record
+        .cams
+        .iter()
+        .map(|c| CamTable {
+            id: c.id,
+            name: c.name.clone(),
+            points: c.points.clone(),
+        })
+        .collect();
     let mut actuators = actuators;
+    // 消えたカム表を使っていたら S字加減速に戻す
+    for actuator in &mut actuators {
+        if let Easing::Cam(id) = actuator.easing
+            && !cams.iter().any(|c| c.id == id)
+        {
+            actuator.easing = Easing::Smooth;
+        }
+    }
+    let ids: Vec<u32> = actuators.iter().map(|a| a.id).collect();
     // 消えた親に載っている設定は外す (壊れたファイルで循環しないように)
     for actuator in &mut actuators {
         if actuator
@@ -473,10 +532,12 @@ pub fn chart_from_record(
         next_actuator_id: ids.iter().map(|id| id + 1).max().unwrap_or(1),
         next_sensor_id: sensor_ids.iter().map(|id| id + 1).max().unwrap_or(1),
         next_robot_id: robots.iter().map(|r| r.id + 1).max().unwrap_or(1),
+        next_cam_id: cams.iter().map(|c| c.id + 1).max().unwrap_or(1),
         actuators,
         sensors,
         steps,
         robots,
+        cams,
     };
     (chart, warnings)
 }
@@ -612,6 +673,8 @@ mod tests {
             c.easing = Easing::Linear;
         }
         chart.actuator_mut(table).unwrap().pivot = [1.0, 2.0, 3.0];
+        let cam = chart.add_cam();
+        chart.actuator_mut(table).unwrap().easing = Easing::Cam(cam);
         chart.actuator_mut(table).unwrap().limits = Some([-90.0, 180.0]);
         let robot = chart.add_robot(table);
         let point = {
