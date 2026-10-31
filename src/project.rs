@@ -1149,6 +1149,15 @@ mod tests {
     use crate::file_io::read_step;
     use crate::step_import::import_step;
 
+    /// 同梱のデモライン (tools/make_demo_line.py で生成) が今の形式で読めること
+    #[test]
+    fn demo_line_sample_parses() {
+        let text = include_str!("../samples/demo_line.cadsim");
+        let file = ProjectFile::from_json(text).expect("demo line should parse");
+        assert!(!file.nodes.is_empty());
+        assert!(file.chart.is_some());
+    }
+
     /// サンプルの STEP を取り込み、箱を1つ足して、いくつか編集したモデル
     fn sample_model() -> Model {
         let mut model = Model::default();
