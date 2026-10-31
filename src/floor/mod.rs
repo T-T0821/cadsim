@@ -11,22 +11,24 @@
 //! 作業者と AGV はタイミングチャートとは別の時計 ([`FloorClock`]) で動く。
 //! どちらも安全機器の検知の対象 (`SafetyIntruders`) に入り、AGV は安全停止中は止まる。
 
-mod agv_sim;
+pub(crate) mod agv_sim;
 pub mod geom;
-mod operator_plan;
+pub(crate) mod operator_plan;
 mod panel;
 mod sample;
 mod view;
 
 use std::collections::HashMap;
 
+use bevy::ecs::system::SystemParam;
 use bevy::math::{DVec2, DVec3};
 use bevy::prelude::*;
 use bevy_egui::EguiPrimaryContextPass;
 
 use crate::camera::pointer_in_3d_view;
+use crate::floor_record::{FloorLayout, FloorRecord};
 use crate::math::Aabb;
-use crate::safety::{Intruder, SafetyIntruders, SafetySet, SafetyState};
+use crate::safety::{Intruder, SafetyIntruders, SafetyLayoutRes, SafetySet, SafetyState};
 use agv_sim::{AgvGraph, AgvParams, AgvSim, FleetResult, Flow};
 use operator_plan::{Operator, OperatorPlan};
 
@@ -235,4 +237,60 @@ fn agv_corners(sim: &AgvSim, v: &agv_sim::Vehicle) -> [DVec2; 4] {
         p + dir * l + side * w,
         p - dir * l + side * w,
     ]
+}
+
+/// 保存・読み込みのための、床の配置 (安全機器・作業者・AGV) の読み取り
+#[derive(SystemParam)]
+pub struct FloorView<'w> {
+    safety: Res<'w, SafetyLayoutRes>,
+    operators: Res<'w, OperatorsRes>,
+    agv: Res<'w, AgvLayoutRes>,
+}
+
+impl FloorView<'_> {
+    pub fn record(&self) -> FloorRecord {
+        FloorRecord::capture(
+            &self.safety,
+            &self.operators.operators,
+            &self.agv.graph,
+            &self.agv.flows,
+            &self.agv.params,
+        )
+    }
+}
+
+/// 保存・読み込みのための、床の配置の読み書き
+#[derive(SystemParam)]
+pub struct FloorDoc<'w> {
+    safety: ResMut<'w, SafetyLayoutRes>,
+    safety_state: ResMut<'w, SafetyState>,
+    operators: ResMut<'w, OperatorsRes>,
+    agv: ResMut<'w, AgvLayoutRes>,
+    state: ResMut<'w, FloorState>,
+    clock: ResMut<'w, FloorClock>,
+}
+
+impl FloorDoc<'_> {
+    pub fn record(&self) -> FloorRecord {
+        FloorRecord::capture(
+            &self.safety,
+            &self.operators.operators,
+            &self.agv.graph,
+            &self.agv.flows,
+            &self.agv.params,
+        )
+    }
+
+    /// 開いた (または新規の) プロジェクトの配置に置き換え、時計と停止状態を最初に戻す
+    pub fn apply(&mut self, layout: FloorLayout) {
+        **self.safety = layout.safety;
+        self.safety_state.clear_runtime();
+        self.operators.next_id = layout.operators.iter().map(|o| o.id + 1).max().unwrap_or(1);
+        self.operators.operators = layout.operators;
+        self.agv.graph = layout.graph;
+        self.agv.flows = layout.flows;
+        self.agv.params = layout.params;
+        *self.state = FloorState::default();
+        *self.clock = FloorClock::default();
+    }
 }

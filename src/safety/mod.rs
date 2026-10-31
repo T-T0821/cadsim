@@ -12,7 +12,7 @@
 //! を出し、タイミングチャートの再生を止める。リセットするまで再生できない。
 
 mod check;
-mod device;
+pub(crate) mod device;
 mod panel;
 mod view;
 
@@ -119,6 +119,15 @@ impl SafetyState {
     /// 停止信号が出ているか (リセットするまで true のまま)
     pub fn is_stopped(&self) -> bool {
         self.monitor.is_stopped()
+    }
+
+    /// 停止・遮光・非常停止・選択を最初の状態に戻す (プロジェクトを開き直したとき)
+    pub fn clear_runtime(&mut self) {
+        *self = Self {
+            show_envelopes: self.show_envelopes,
+            detect_machine: self.detect_machine,
+            ..Self::default()
+        };
     }
 
     fn is_detecting(&self, device: u32) -> bool {

@@ -32,6 +32,7 @@
 //! - `stress`      負荷テスト用の数千部品のシーン
 //! - `bench`       `--bench` で FPS を測って終了する
 //! - `floor`       作業者と AGV (床の上を動くもの)、床の上の幾何計算
+//! - `floor_record` 安全機器・作業者・AGV の .cadsim での形
 //! - `safety`      安全機器 (ライトカーテン・エリアセンサ・安全柵・非常停止) と動作範囲
 
 // Windows のリリースビルドでは、起動時に黒いコンソール窓を出さない
@@ -47,6 +48,7 @@ mod documents;
 mod drawing;
 mod file_io;
 mod floor;
+mod floor_record;
 mod flow;
 mod formats;
 mod gizmo;
