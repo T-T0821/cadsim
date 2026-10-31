@@ -6,6 +6,7 @@ use std::collections::HashMap;
 
 use super::domain::io::{AddressPlan, IoTable, IoValues};
 use super::domain::io_csv::{self, CsvReport};
+use super::domain::log::PlcLog;
 use super::domain::plant::Plant;
 use super::domain::sequencer::StepSequencer;
 use crate::motion::TimingChart;
@@ -20,6 +21,8 @@ pub enum PlcMode {
     Simulated,
     /// 通信でつないだ外部の PLC
     External,
+    /// 記録した PLC のログ (CSV) を流す
+    LogReplay,
 }
 
 /// 外部の PLC との通信方式 (ポート)。
@@ -51,6 +54,8 @@ pub struct PlcSession {
     pub table: IoTable,
     pub io: IoValues,
     pub sequencer: StepSequencer,
+    /// 読み込んだ PLC のログと再生位置
+    pub log: Option<LogPlayer>,
     plant: Plant,
     /// 外部の PLC とつないでいる間だけ Some
     link: Option<Box<dyn PlcLink>>,
@@ -71,6 +76,10 @@ impl PlcSession {
         self.plant.reset();
         self.io = IoValues::default();
         self.sequencer = StepSequencer::new();
+        if let Some(player) = &mut self.log {
+            player.time = 0.0;
+            player.playing = false;
+        }
     }
 
     pub fn connect(&mut self, link: Box<dyn PlcLink>) {
@@ -120,9 +129,40 @@ impl PlcSession {
         Ok(report)
     }
 
+    /// PLC のログ (CSV) を読み込み、先頭から再生できるようにする
+    pub fn load_log(&mut self, text: &str) -> Result<&PlcLog, String> {
+        let log = PlcLog::parse(text, &self.table)?;
+        self.plant.reset();
+        self.io = IoValues::default();
+        Ok(&self.log.insert(LogPlayer::new(log)).log)
+    }
+
+    /// ログの再生位置を `time` 秒に移す。設備は先頭から動かし直して、その時刻の姿にする。
+    pub fn seek_log(&mut self, chart: &TimingChart, time: f64) {
+        const STEP: f64 = 0.01;
+        let Some(player) = &mut self.log else {
+            return;
+        };
+        player.time = time.clamp(0.0, player.log.duration());
+        let target = player.time;
+        self.plant.reset();
+        self.io = IoValues::default();
+        let mut t = 0.0;
+        while t < target {
+            let dt = STEP.min(target - t);
+            player.log.apply_at(t, &mut self.io);
+            self.plant.take_commands(chart, &self.io);
+            self.plant.advance(chart, dt);
+            t += dt;
+        }
+        self.plant.report(chart, &mut self.io);
+    }
+
     /// 1スキャン分を進め、アクチュエータの現在値 (id → 値) を返す。`dt` は前回からの秒数。
     pub fn scan(&mut self, chart: &TimingChart, dt: f64) -> &HashMap<u32, f64> {
         self.plant.report(chart, &mut self.io);
+        // 設備を動かす時間。ログ再生では再生速度を掛け、止めている間は動かさない。
+        let mut plant_dt = dt;
         match self.mode {
             PlcMode::Off => {}
             PlcMode::Simulated => self.sequencer.scan(chart, &mut self.io, dt),
@@ -131,15 +171,65 @@ impl PlcSession {
                     link.exchange(&self.table, &mut self.io);
                 }
             }
+            PlcMode::LogReplay => match &mut self.log {
+                Some(player) => {
+                    plant_dt = player.advance(dt);
+                    player.log.apply_at(player.time, &mut self.io);
+                }
+                None => plant_dt = 0.0,
+            },
         }
         self.plant.take_commands(chart, &self.io);
-        self.plant.advance(chart, dt);
+        self.plant.advance(chart, plant_dt);
         self.plant.values()
     }
 
     /// 模擬 PLC が運転中なら、実行中のステップ番号
     pub fn running_step(&self) -> Option<usize> {
         (self.mode == PlcMode::Simulated && self.sequencer.running).then_some(self.sequencer.step)
+    }
+}
+
+/// ログの再生位置と再生状態
+#[derive(Clone, Debug, PartialEq)]
+pub struct LogPlayer {
+    pub log: PlcLog,
+    /// ログの先頭からの秒数
+    pub time: f64,
+    pub playing: bool,
+    /// 再生速度の倍率
+    pub speed: f64,
+    pub looping: bool,
+}
+
+impl LogPlayer {
+    fn new(log: PlcLog) -> Self {
+        Self {
+            log,
+            time: 0.0,
+            playing: false,
+            speed: 1.0,
+            looping: false,
+        }
+    }
+
+    /// `dt` 秒ぶん再生位置を進め、設備を動かす時間を返す。最後まで行ったら止めるか先頭へ戻る。
+    fn advance(&mut self, dt: f64) -> f64 {
+        if !self.playing {
+            return 0.0;
+        }
+        let step = dt * self.speed;
+        self.time += step;
+        let end = self.log.duration();
+        if self.time >= end {
+            if self.looping && end > 0.0 {
+                self.time %= end;
+            } else {
+                self.time = end;
+                self.playing = false;
+            }
+        }
+        step
     }
 }
 
@@ -188,6 +278,37 @@ mod tests {
             session.scan(&chart, 0.02);
         }
         assert_eq!(session.scan(&chart, 0.02)[&id], 1.0);
+        assert!(session.io.bit(Point::CylinderExtended(id)));
+    }
+
+    #[test]
+    fn log_replay_moves_the_actuator_and_seeks() {
+        let (chart, id) = one_cylinder();
+        let mut session = PlcSession::default();
+        session.refresh_table(&chart);
+        session.set_mode(PlcMode::LogReplay);
+        let name = session
+            .table
+            .get(Point::CylinderExtend(id))
+            .unwrap()
+            .name
+            .clone();
+        session
+            .load_log(&format!("Time,{name}\n0,0\n0.1,1\n2.0,1\n"))
+            .unwrap();
+
+        // 止めている間は動かない
+        assert_eq!(session.scan(&chart, 0.5)[&id], 0.0);
+        session.log.as_mut().unwrap().playing = true;
+        for _ in 0..40 {
+            session.scan(&chart, 0.02);
+        }
+        assert_eq!(session.scan(&chart, 0.0)[&id], 1.0);
+
+        // 先頭近くへ戻すと、設備もその時刻の姿に戻る
+        session.seek_log(&chart, 0.05);
+        assert_eq!(session.scan(&chart, 0.0)[&id], 0.0);
+        session.seek_log(&chart, 1.0);
         assert!(session.io.bit(Point::CylinderExtended(id)));
     }
 
