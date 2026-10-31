@@ -15,7 +15,9 @@ pub mod signals;
 pub mod workpieces;
 
 pub use coupler::{AgvEvent, LineCommand, LineCoupler, Transit};
-pub use signals::{Direction, LineInputs, Signal, SignalSources, Value, line_signals};
+pub use signals::{
+    ConveyorCounts, Direction, LineInputs, Signal, SignalSources, Value, line_signals,
+};
 
 /// ラインを進めてよいか。安全停止中か、PLC の「運転」が OFF なら止める。
 pub fn may_run(safety_stopped: bool, inputs: &LineInputs) -> bool {
