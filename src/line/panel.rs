@@ -184,6 +184,14 @@ fn summary(ui: &mut egui::Ui, line: &LineState, run: &FlowRun, floor: &FloorStat
             ui.label("AGV が運んだワーク");
             ui.label(format!("{} 個", line.coupler.carried()));
             ui.end_row();
+            if let Some(c) = line.conveyor {
+                ui.label("コンベア");
+                ui.label(format!(
+                    "投入 {} 個 / 排出 {} 個 / 仕掛 {} 個",
+                    c.fed, c.discharged, c.in_process
+                ));
+                ui.end_row();
+            }
             if let Some(agv) = floor.agv_sim() {
                 ui.label("AGV");
                 ui.label(format!(
@@ -301,7 +309,7 @@ fn signals(
     safety: &SafetyState,
 ) {
     ui.label(
-        "工程・AGV・安全の状態を PLC の入力に、PLC の出力をラインの運転と投入許可に割り付ける表です。この表は「PLC 連携」の I/O 一覧の後ろにも並び、外部の PLC (Modbus TCP / OPC UA) とやりとりします。",
+        "工程・AGV・コンベア・安全の状態を PLC の入力に、PLC の出力をラインの運転と投入許可に割り付ける表です。この表は「PLC 連携」の I/O 一覧の後ろにも並び、外部の PLC (Modbus TCP / OPC UA) とやりとりします。",
     );
     if line.plc_drives_inputs {
         ui.colored_label(ON, "PLC → 設備 の信号は PLC が書いています");

@@ -20,7 +20,11 @@ use bevy::prelude::*;
 use bevy_egui::EguiPrimaryContextPass;
 
 use cadsim_core::flow::model::FlowModel;
-use cadsim_core::line::{LineCoupler, LineInputs, Signal, SignalSources, line_signals, may_run};
+use cadsim_core::line::{
+    ConveyorCounts, LineCoupler, LineInputs, Signal, SignalSources, line_signals, may_run,
+};
+
+use crate::conveyor::{ConveyorConfigRes, ConveyorSet, WorkState};
 
 use crate::floor::agv_sim::AgvSim;
 use crate::floor::{AgvLayoutRes, FloorClock, FloorState};
@@ -40,6 +44,7 @@ impl Plugin for LinePlugin {
                     advance_line.before(SafetySet::Intruders),
                     exchange_plc.before(MotionSet::Drive),
                     view::draw.after(advance_line),
+                    read_conveyor.after(ConveyorSet::Works),
                 ),
             )
             .add_systems(EguiPrimaryContextPass, panel::line_window);
@@ -69,6 +74,8 @@ pub struct LineState {
     halted: bool,
     /// PLC (外部の PLC かログ再生) が運転・投入許可を書いている
     plc_drives_inputs: bool,
+    /// コンベアのワークの数 (ワーク搬送の投入口がなければ None)。信号表と集計に使う。
+    conveyor: Option<ConveyorCounts>,
     /// 止めた理由など
     message: Option<String>,
 }
@@ -87,6 +94,7 @@ impl Default for LineState {
             chart_follows: true,
             halted: false,
             plc_drives_inputs: false,
+            conveyor: None,
             message: None,
         }
     }
@@ -258,8 +266,25 @@ fn current_signals(
         safety_stopped: safety.is_stopped(),
         agv_loaded,
         agv_waiting: line.coupler.waiting_for_agv(),
+        conveyor: line.conveyor,
     };
     line_signals(flow, sim, &sources, &line.inputs)
+}
+
+/// コンベアのワークの数を覚える (信号表は次のフレームの PLC とのやりとりで使う)
+fn read_conveyor(
+    mut line: ResMut<LineState>,
+    config: Res<ConveyorConfigRes>,
+    works: Res<WorkState>,
+) {
+    let counts = (!config.sources.is_empty()).then(|| ConveyorCounts {
+        fed: works.counts().total_fed(),
+        discharged: works.counts().total_discharged(),
+        in_process: works.in_process(),
+    });
+    if line.conveyor != counts {
+        line.bypass_change_detection().conveyor = counts;
+    }
 }
 
 /// 信号表を PLC 連携の I/O に載せ、PLC が書いた運転・投入許可をラインに写す
