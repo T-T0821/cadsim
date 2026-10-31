@@ -111,7 +111,8 @@ fn plan_joint(
             for &id in &ids {
                 let easing = chart.actuator(id).map_or(Easing::Linear, |a| a.easing);
                 let from = begin(id);
-                values.insert(id, from + (solution.values[&id] - from) * easing.apply(f));
+                let progress = easing.apply_with(f, &chart.cams);
+                values.insert(id, from + (solution.values[&id] - from) * progress);
             }
             sample(chart, robot, &values, true)
         })

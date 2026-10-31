@@ -30,9 +30,11 @@ pub mod chart;
 mod demo;
 mod export;
 mod kinematics;
+mod live_joints;
 mod melfa;
 mod path_interference;
 mod pose;
+mod profile;
 mod robot_path;
 mod robot_time;
 mod robot_ui;
@@ -41,6 +43,7 @@ mod sensor_view;
 mod targets;
 mod teach;
 mod ui;
+mod ur_ui;
 
 use std::collections::HashMap;
 
@@ -120,6 +123,8 @@ impl Plugin for MotionPlugin {
                     update_schedule,
                     advance_playback,
                     clear_jog_on_playback,
+                    // 実機 (UR) とつないでいる間は、受け取った角度をジョグの値にする
+                    ur_ui::follow_ur,
                     // PLC 連携中は時刻表ではなく PLC が位置を決める (MotionSet::Drive)
                     update_pose.run_if(not(plc_active)),
                 )

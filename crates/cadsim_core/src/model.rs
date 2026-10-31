@@ -38,6 +38,8 @@ pub struct Node {
     pub kind: NodeKind,
     /// 物理演算での振る舞い (部品だけが使う)
     pub physics: PartPhysics,
+    /// 部品スクリプト (Rhai)。PLC 連携の「部品スクリプト」モードで動く。
+    pub script: Option<String>,
 }
 
 #[derive(Clone)]
@@ -236,6 +238,7 @@ impl Model {
                 color: None,
                 kind,
                 physics: PartPhysics::default(),
+                script: None,
             },
         );
         match parent.and_then(|p| self.nodes.get_mut(&p)) {

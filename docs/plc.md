@@ -89,6 +89,10 @@ CSV で個別の番号・OPC UA ノード・ログ列名を決められる (保�
 - 文字コードは UTF-8 を先に試し、だめなら Shift_JIS ([encoding_rs](https://crates.io/crates/encoding_rs)) で読む(UI 層)。
 - 再生の操作はタイミングチャートの再生バーではなく「PLC連携」ウィンドウに置いている(チャートの時刻表とログの時刻は別物のため)。
 
+## 部品スクリプト
+
+「部品スクリプト」モードでは、模擬 PLC の代わりに部品に付けたスクリプトが出力を書く(`PlcSession::scan_with`)。設計は [scripting.md](scripting.md)。
+
 ## 通信方式を足すとき
 
 `usecase::PlcLink`(`exchange` と `status`)を実装したアダプターを作り、UI で接続時に `PlcSession::connect` に渡す。割り付け表・設備モデル・画面はそのまま使える。

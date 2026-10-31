@@ -184,6 +184,9 @@ pub struct NodeRecord {
     /// 物理演算での振る舞い。既定 (機構で動く) なら省く。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub physics: Option<PartPhysicsRecord>,
+    /// 部品スクリプト (Rhai のソース)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub script: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<NodeRecord>,
 }
@@ -378,6 +381,7 @@ fn node_record(model: &Model, id: NodeId, sources: &mut Vec<StepSource>) -> Opti
         color: node.color,
         kind,
         physics: PartPhysicsRecord::from_settings(&node.physics),
+        script: node.script.clone(),
         children: node
             .children
             .iter()
@@ -636,6 +640,7 @@ impl LoadedProject {
                 .as_ref()
                 .map(PartPhysicsRecord::to_settings)
                 .unwrap_or_default();
+            node.script = record.script.clone();
         }
         for child in &record.children {
             self.add_record(model, Some(id), child, warnings);
@@ -1112,7 +1117,9 @@ mod tests {
 
     #[test]
     fn round_trip_keeps_tree_placement_and_appearance() {
-        let model = sample_model();
+        let mut model = sample_model();
+        let root = model.roots[0];
+        model.get_mut(root).unwrap().script = Some("wait(1.0);".into());
         let file = ProjectFile::from_model(&model, None);
         let restored = reload(&file);
         assert_eq!(ProjectFile::from_model(&restored, None), file);
@@ -1123,6 +1130,10 @@ mod tests {
         let first = restored.get(root).unwrap().children[0];
         assert!(!restored.get(first).unwrap().visible);
         assert_eq!(restored.get(first).unwrap().color, Some([1.0, 0.5, 0.25]));
+        assert_eq!(
+            restored.get(root).unwrap().script.as_deref(),
+            Some("wait(1.0);")
+        );
     }
 
     #[test]
