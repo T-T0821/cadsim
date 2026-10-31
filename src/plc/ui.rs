@@ -6,6 +6,7 @@ use bevy_egui::{EguiContexts, egui};
 use super::Plc;
 use super::adapter::modbus::{ModbusClient, ModbusSettings};
 use super::domain::io::{AddressPlan, IoPoint};
+use super::domain::io_csv::CsvReport;
 use super::usecase::{LinkStatus, PlcMode, PlcSession};
 use crate::camera::ViewportRect;
 use crate::motion::{Playback, TimingChart};
@@ -41,7 +42,11 @@ pub fn plc_window(
                 }
             });
             ui.separator();
-            let Plc { session, modbus } = &mut *plc;
+            let Plc {
+                session,
+                modbus,
+                notice,
+            } = &mut *plc;
             match session.mode {
                 PlcMode::Off => {
                     ui.label("タイミングチャートの時刻表どおりに再生します。");
@@ -53,6 +58,7 @@ pub fn plc_window(
             if session.is_active() {
                 ui.separator();
                 address_plan_editor(ui, &mut session.plan);
+                io_csv_buttons(ui, &chart, session, notice);
                 io_monitor(ui, session);
             }
         });
@@ -172,7 +178,75 @@ fn address_plan_editor(ui: &mut egui::Ui, plan: &mut AddressPlan) {
                 row("入力ワード (保持レジスタ)", &mut plan.input_words);
             });
             ui.weak("出力 = PLC → 設備、入力 = 設備 → PLC。ワードは符号付き16ビットで、直動・回転とも 0.1 単位 (0.1 mm、0.1°)。");
+            if !plan.custom.is_empty() {
+                ui.horizontal(|ui| {
+                    ui.label(format!("CSV で個別に決めた信号: {} 件", plan.custom.len()));
+                    if ui.small_button("個別設定を消す").clicked() {
+                        plan.custom.clear();
+                    }
+                });
+            }
         });
+}
+
+/// I/O 対応表の CSV 書き出し・読み込みのボタンと、読み込み結果のお知らせ
+fn io_csv_buttons(
+    ui: &mut egui::Ui,
+    chart: &TimingChart,
+    plc: &mut PlcSession,
+    notice: &mut Option<String>,
+) {
+    ui.horizontal(|ui| {
+        if ui
+            .button("I/O 表を CSV に書き出し…")
+            .on_hover_text("Excel で番号・スケール・OPC UA ノードを編集して読み戻せます")
+            .clicked()
+            && let Some(path) = rfd::FileDialog::new()
+                .add_filter("CSV", &["csv"])
+                .set_file_name("io_table.csv")
+                .save_file()
+        {
+            *notice = Some(match std::fs::write(&path, plc.export_io_csv()) {
+                Ok(()) => format!("{} に書き出しました", path.display()),
+                Err(e) => format!("書き出せませんでした: {e}"),
+            });
+        }
+        if ui.button("CSV を読み込み…").clicked()
+            && let Some(path) = rfd::FileDialog::new()
+                .add_filter("CSV", &["csv"])
+                .pick_file()
+        {
+            *notice = Some(match std::fs::read(&path) {
+                Ok(bytes) => {
+                    let text = String::from_utf8_lossy(&bytes);
+                    match plc.import_io_csv(&text, chart) {
+                        Ok(report) => import_summary(&report),
+                        Err(e) => e,
+                    }
+                }
+                Err(e) => format!("読み込めませんでした: {e}"),
+            });
+        }
+    });
+    if let Some(text) = notice.clone() {
+        ui.horizontal(|ui| {
+            ui.label(text);
+            if ui.small_button("×").clicked() {
+                *notice = None;
+            }
+        });
+    }
+}
+
+fn import_summary(report: &CsvReport) -> String {
+    let mut text = format!("{} 件の信号に反映しました。", report.applied);
+    if !report.unknown.is_empty() {
+        text += &format!(" 一覧にない信号: {}。", report.unknown.join("、"));
+    }
+    for e in &report.errors {
+        text += &format!(" {e}。");
+    }
+    text
 }
 
 fn io_monitor(ui: &mut egui::Ui, plc: &mut PlcSession) {

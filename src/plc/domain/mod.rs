@@ -2,5 +2,6 @@
 //! Bevy・egui・通信ライブラリには依存しない。
 
 pub mod io;
+pub mod io_csv;
 pub mod plant;
 pub mod sequencer;
