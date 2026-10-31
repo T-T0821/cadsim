@@ -69,6 +69,7 @@ pub fn show_window(ctx: &egui::Context, state: &mut FlowUi, model: &Model, selec
     egui::Window::new("工程シミュレーション")
         .open(&mut open)
         .default_size([780.0, 520.0])
+        .default_pos([280.0, 120.0])
         .resizable(true)
         .show(ctx, |ui| {
             run_controls(ui, state);
@@ -279,14 +280,15 @@ fn line_tab(ui: &mut egui::Ui, state: &mut FlowUi, model: &Model, selection: &Se
         ui.label("試すときは「サンプル工程」を押してください。");
     }
 
-    let available = ui.available_height();
-    ui.horizontal_top(|ui| {
+    // 区切り線が下まで伸びないよう、一覧と設定欄の高さを決めておく
+    let size = Vec2::new(ui.available_width(), LIST_HEIGHT);
+    ui.allocate_ui_with_layout(size, egui::Layout::left_to_right(egui::Align::Min), |ui| {
         // 左: 要素の一覧
         ui.vertical(|ui| {
             ui.set_width(260.0);
             egui::ScrollArea::vertical()
                 .id_salt("flow_list")
-                .max_height(available - 90.0)
+                .max_height(LIST_HEIGHT)
                 .show(ui, |ui| element_list(ui, flow, run, ui_state));
         });
         ui.separator();
@@ -294,7 +296,7 @@ fn line_tab(ui: &mut egui::Ui, state: &mut FlowUi, model: &Model, selection: &Se
         ui.vertical(|ui| {
             egui::ScrollArea::vertical()
                 .id_salt("flow_detail")
-                .max_height(available - 90.0)
+                .max_height(LIST_HEIGHT)
                 .show(ui, |ui| {
                     match ui_state.selected.filter(|&id| flow.get(id).is_some()) {
                         Some(id) => element_editor(ui, flow, ui_state, id, model, selection),
@@ -783,6 +785,8 @@ fn color(rgb: [f32; 3]) -> Color32 {
     Color32::from_rgb(c(rgb[0]), c(rgb[1]), c(rgb[2]))
 }
 
+/// 工程タブの一覧と設定欄の高さ
+const LIST_HEIGHT: f32 = 300.0;
 const NAME_WIDTH: f32 = 110.0;
 const ROW_HEIGHT: f32 = 18.0;
 

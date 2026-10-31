@@ -10,7 +10,7 @@ use rust_xlsxwriter::{
     XlsxError,
 };
 
-use super::model::{ElementKind, FlowModel};
+use super::model::{ElementKind, FlowModel, KindTag};
 use super::sim::{Report, State};
 
 const SUMMARY: &str = "概要";
@@ -206,8 +206,11 @@ fn elements_sheet(
         let row = i as u32 + 1;
         sheet.write_string(row, 0, &e.name)?;
         sheet.write_string(row, 1, e.kind.label())?;
-        for (k, state) in State::ALL.into_iter().enumerate() {
-            sheet.write_number_with_format(row, 2 + k as u16, e.times.ratio(state), percent)?;
+        // 状態の割合は生成と工程だけ (バッファ・排出は空欄)
+        if matches!(e.kind, KindTag::Source | KindTag::Process) {
+            for (k, state) in State::ALL.into_iter().enumerate() {
+                sheet.write_number_with_format(row, 2 + k as u16, e.times.ratio(state), percent)?;
+            }
         }
         sheet.write_number(row, 6, e.count)?;
         sheet.write_number(row, 7, e.failures)?;
