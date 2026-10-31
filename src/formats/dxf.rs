@@ -424,7 +424,7 @@ pub fn write_drawing(drawing: &DxfDrawing) -> String {
         pair(3, description);
         pair(72, "65");
         pair(73, &pattern.len().to_string());
-        pair(40, &num(pattern.iter().map(|v| v.abs()).sum()));
+        pair(40, &num(pattern.iter().map(|v: &f64| v.abs()).sum::<f64>()));
         for v in pattern {
             pair(49, &num(*v));
         }

@@ -5,6 +5,7 @@
 
 pub mod dxf;
 pub mod pdf_plan;
+pub mod site_record;
 
 use std::path::Path;
 

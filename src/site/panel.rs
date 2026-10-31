@@ -50,9 +50,10 @@ pub fn site_panel(
                         ui.label("縮尺");
                         ui.horizontal(|ui| {
                             ui.label("図面の 1 =");
+                            let speed = underlay.scale * 0.005;
                             ui.add(
                                 egui::DragValue::new(&mut underlay.scale)
-                                    .speed(underlay.scale * 0.005)
+                                    .speed(speed)
                                     .range(1e-9..=1e9)
                                     .max_decimals(6),
                             );
