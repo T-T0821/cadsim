@@ -19,7 +19,9 @@ struct PreferencesRecord {
     // 以前の版が書いた "theme" (見た目の切り替え) は、知らない項目として読み飛ばす
     show_missions: Option<bool>,
     completed_missions: Vec<String>,
+    skipped_missions: Vec<String>,
     xp: u32,
+    welcomed: bool,
 }
 
 impl PreferencesRecord {
@@ -32,7 +34,14 @@ impl PreferencesRecord {
                 .into_iter()
                 .map(String::from)
                 .collect(),
+            skipped_missions: prefs
+                .progress
+                .skipped_keys()
+                .into_iter()
+                .map(String::from)
+                .collect(),
             xp: prefs.progress.xp(),
+            welcomed: prefs.welcomed,
         }
     }
 
@@ -42,7 +51,9 @@ impl PreferencesRecord {
             progress: Progress::restore(
                 self.completed_missions.iter().map(String::as_str),
                 self.xp,
-            ),
+            )
+            .with_skipped(self.skipped_missions.iter().map(String::as_str)),
+            welcomed: self.welcomed,
         }
     }
 }
@@ -97,8 +108,10 @@ mod tests {
     fn round_trip() {
         let mut prefs = Preferences {
             show_missions: false,
+            welcomed: true,
             ..Default::default()
         };
+        prefs.progress.skip(MissionId::RunFlow);
         prefs.progress.observe(&Observation::default());
         prefs.progress.observe(&Observation {
             selected: true,
@@ -108,6 +121,8 @@ mod tests {
         assert!(!back.show_missions);
         assert!(back.progress.is_done(MissionId::SelectPart));
         assert_eq!(back.progress.xp(), prefs.progress.xp());
+        assert!(back.progress.is_skipped(MissionId::RunFlow));
+        assert!(back.welcomed);
     }
 
     #[test]
@@ -122,6 +137,7 @@ mod tests {
             let prefs = from_json(json);
             assert!(prefs.show_missions);
             assert_eq!(prefs.progress.done_count(), 0);
+            assert!(!prefs.welcomed);
         }
     }
 

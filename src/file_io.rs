@@ -218,7 +218,7 @@ pub fn source_name(source: &StepSource) -> String {
 pub use cadsim_core::model::file_name;
 
 /// `cargo run -- 部品.step` (または `line.cadsim`) のように渡されたファイルを開く。
-/// 無ければサンプルを開く。`--stress 5000` なら負荷テスト用のシーンを開く
+/// 無ければデモラインを開いて動かす。`--stress 5000` なら負荷テスト用のシーンを開く
 /// (`--bench` は bench.rs、`--physics` は physics が読む)。
 fn open_command_line_file(mut jobs: ResMut<ImportJobs>, mut project: ResMut<ProjectState>) {
     let args = CommandLine::parse();
@@ -228,8 +228,12 @@ fn open_command_line_file(mut jobs: ResMut<ImportJobs>, mut project: ResMut<Proj
         jobs.open_stress(count);
     } else if let Some(path) = args.file {
         open_any(path, &mut jobs, &mut project);
-    } else {
+    } else if args.bench_secs.is_some() {
+        // 測る FPS を前と比べられるよう、ベンチマークは前と同じサンプルの STEP で測る
         jobs.open_sample();
+    } else {
+        // はじめて開いた人がすぐ動きを見られるよう、デモラインを開いて再生する
+        project.request(ProjectAction::OpenDemoLine { play: true });
     }
 }
 

@@ -154,6 +154,16 @@ fn group_caption(ui: &mut egui::Ui, group: ToolGroup) {
     });
 }
 
+/// レールのボタンの場所を egui のメモリに覚えておくときの鍵
+fn rail_button_id(tool: Tool) -> egui::Id {
+    egui::Id::new(("rail_button", tool))
+}
+
+/// 前のフレームでレールのボタンを描いた場所
+pub fn rail_button_rect(ctx: &egui::Context, tool: Tool) -> Option<egui::Rect> {
+    ctx.data(|d| d.get_temp(rail_button_id(tool)))
+}
+
 fn rail_button(ui: &mut egui::Ui, item: &RailItem) -> egui::Response {
     let sense = if item.enabled {
         egui::Sense::click()
@@ -161,6 +171,9 @@ fn rail_button(ui: &mut egui::Ui, item: &RailItem) -> egui::Response {
         egui::Sense::hover()
     };
     let (rect, response) = ui.allocate_exact_size(BUTTON_SIZE, sense);
+    // チュートリアルの矢印がこのボタンを指せるよう、置いた場所を覚えておく
+    ui.ctx()
+        .data_mut(|d| d.insert_temp(rail_button_id(item.tool), rect));
     let tool = item.tool;
     if ui.is_rect_visible(rect) {
         let painter = ui.painter();

@@ -65,7 +65,6 @@ impl HelpChat {
 
     /// 質問欄に文面を入れた状態で開く (送るのはユーザーが押してから)。
     /// ミッションカードなど、ほかの画面から「この操作を聞く」ときの入り口。
-    #[allow(dead_code)]
     pub fn ask(&mut self, question: impl Into<String>) {
         self.input = question.into();
         self.open = true;

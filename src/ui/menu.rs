@@ -67,6 +67,16 @@ fn file_menu(ui: &mut egui::Ui, state: &mut UiState) {
         }
         ui.menu_button("サンプルを開く", |ui| {
             if ui
+                .button("デモライン")
+                .on_hover_text("起動時に動いているデモのライン (ロボットセル・コンベア・安全機器・AGV) を開いて再生する")
+                .clicked()
+            {
+                state
+                    .project
+                    .request(ProjectAction::OpenDemoLine { play: true });
+                ui.close();
+            }
+            if ui
                 .button("組立品 (万力)")
                 .on_hover_text("7 部品の小さなアセンブリを取り込む")
                 .clicked()
@@ -565,6 +575,14 @@ fn help_menu(ui: &mut egui::Ui, state: &mut UiState) {
             });
         });
         ui.separator();
+        if ui
+            .button("ようこそ画面")
+            .on_hover_text("はじめに出る案内とチュートリアルの入口をもう一度開く")
+            .clicked()
+        {
+            state.tutorial.welcome_requested = true;
+            ui.close();
+        }
         if ui
             .button("ミッションを最初からやり直す")
             .on_hover_text("チュートリアルのミッションと経験値を最初に戻す")
