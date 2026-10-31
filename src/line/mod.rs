@@ -20,11 +20,13 @@ use bevy::prelude::*;
 use bevy_egui::EguiPrimaryContextPass;
 
 use cadsim_core::flow::model::FlowModel;
-use cadsim_core::line::{LineCoupler, LineInputs, may_run};
+use cadsim_core::line::{LineCoupler, LineInputs, Signal, SignalSources, line_signals, may_run};
 
+use crate::floor::agv_sim::AgvSim;
 use crate::floor::{AgvLayoutRes, FloorClock, FloorState};
 use crate::flow::{FlowRes, FlowRun};
-use crate::motion::Playback;
+use crate::motion::{MotionSet, Playback, TimingChart};
+use crate::plc::Plc;
 use crate::safety::{SafetySet, SafetyState};
 
 pub struct LinePlugin;
@@ -36,6 +38,7 @@ impl Plugin for LinePlugin {
                 Update,
                 (
                     advance_line.before(SafetySet::Intruders),
+                    exchange_plc.before(MotionSet::Drive),
                     view::draw.after(advance_line),
                 ),
             )
@@ -64,6 +67,8 @@ pub struct LineState {
     chart_follows: bool,
     /// 安全停止か運転 OFF で止まっている
     halted: bool,
+    /// PLC (外部の PLC かログ再生) が運転・投入許可を書いている
+    plc_drives_inputs: bool,
     /// 止めた理由など
     message: Option<String>,
 }
@@ -81,6 +86,7 @@ impl Default for LineState {
             inputs: LineInputs::default(),
             chart_follows: true,
             halted: false,
+            plc_drives_inputs: false,
             message: None,
         }
     }
@@ -220,5 +226,63 @@ fn advance_line(
     }
     if line.chart_follows && playback.speed != line.speed {
         playback.speed = line.speed;
+    }
+}
+
+/// 今の信号表 (工程・AGV・安全の状態と、運転・投入許可)
+fn current_signals(
+    line: &LineState,
+    flow: &FlowModel,
+    run: &FlowRun,
+    floor: &FloorState,
+    safety: &SafetyState,
+) -> Vec<Signal> {
+    let sim = run.sim.as_ref().filter(|s| s.is_linked());
+    let agv_loaded = floor
+        .agv_sim()
+        .map(|a| {
+            a.vehicles
+                .iter()
+                .map(|v| {
+                    AgvSim::is_loaded(v)
+                        && v.job
+                            .as_ref()
+                            .and_then(|j| j.tag)
+                            .is_some_and(|t| line.coupler.is_loaded(t))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let sources = SignalSources {
+        running: line.playing && !line.halted,
+        safety_stopped: safety.is_stopped(),
+        agv_loaded,
+        agv_waiting: line.coupler.waiting_for_agv(),
+    };
+    line_signals(flow, sim, &sources, &line.inputs)
+}
+
+/// 信号表を PLC 連携の I/O に載せ、PLC が書いた運転・投入許可をラインに写す
+fn exchange_plc(
+    mut line: ResMut<LineState>,
+    flow: Res<FlowRes>,
+    run: Res<FlowRun>,
+    floor: Res<FloorState>,
+    safety: Res<SafetyState>,
+    chart: Res<TimingChart>,
+    mut plc: ResMut<Plc>,
+) {
+    let signals = current_signals(&line, &flow, &run, &floor, &safety);
+    let (changed, outputs) = plc
+        .bypass_change_detection()
+        .exchange_line(&signals, &chart);
+    if changed {
+        plc.set_changed();
+    }
+    // 表示と判断のための値なので、変更を知らせない
+    let line = line.bypass_change_detection();
+    line.plc_drives_inputs = outputs.is_some();
+    for (name, on) in outputs.unwrap_or_default() {
+        line.inputs.set(&flow, &name, on);
     }
 }
