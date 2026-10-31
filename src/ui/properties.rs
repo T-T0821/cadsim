@@ -9,6 +9,7 @@ use crate::camera::CameraRequest;
 use crate::gizmo::snap_settings_ui;
 use crate::math::{euler_deg_to_quat, quat_to_euler_deg, split_placement};
 use crate::model::{NodeId, NodeKind};
+use crate::physics::{BeltDrive, BodyMode, ColliderShape, LocalAxis};
 
 pub fn show(root: &mut egui::Ui, state: &mut UiState) {
     egui::Panel::right("properties")
@@ -75,6 +76,11 @@ fn selected_node(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
             placement_editor(ui, state, id);
         }
     });
+    if state.model.get(id).is_some_and(|n| n.kind.is_part()) {
+        egui::CollapsingHeader::new("物理")
+            .default_open(false)
+            .show(ui, |ui| physics_section(ui, state, id));
+    }
     egui::CollapsingHeader::new("寸法 (外接箱)")
         .default_open(true)
         .show(ui, |ui| bounds_section(ui, state, id));
@@ -230,6 +236,101 @@ fn placement_editor(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
         );
     }
     ui.weak("ビューでは W / E キーのギズモでも動かせます");
+}
+
+/// 物理演算での振る舞い・当たり判定の形・摩擦などと、ベルトコンベアの設定
+fn physics_section(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
+    let Some(node) = state.model.get(id) else {
+        return;
+    };
+    let unit = state.model.unit.clone();
+    let before = node.physics;
+    let mut p = before;
+    egui::Grid::new("physics")
+        .num_columns(2)
+        .spacing([12.0, 4.0])
+        .show(ui, |ui| {
+            ui.weak("振る舞い");
+            egui::ComboBox::from_id_salt("physics_mode")
+                .selected_text(p.mode.label())
+                .show_ui(ui, |ui| {
+                    for mode in BodyMode::ALL {
+                        ui.selectable_value(&mut p.mode, mode, mode.label());
+                    }
+                });
+            ui.end_row();
+            if p.mode == BodyMode::Ignored {
+                return;
+            }
+            ui.weak("当たり判定");
+            egui::ComboBox::from_id_salt("physics_shape")
+                .selected_text(p.shape.label())
+                .show_ui(ui, |ui| {
+                    for shape in ColliderShape::ALL {
+                        ui.selectable_value(&mut p.shape, shape, shape.label());
+                    }
+                });
+            ui.end_row();
+            ui.weak("摩擦係数");
+            ui.add(
+                egui::DragValue::new(&mut p.friction)
+                    .speed(0.01)
+                    .range(0.0..=2.0),
+            );
+            ui.end_row();
+            ui.weak("反発係数");
+            ui.add(
+                egui::DragValue::new(&mut p.restitution)
+                    .speed(0.01)
+                    .range(0.0..=1.0),
+            );
+            ui.end_row();
+            if p.mode == BodyMode::Dynamic {
+                ui.weak("密度");
+                ui.add(
+                    egui::DragValue::new(&mut p.density)
+                        .speed(0.05)
+                        .range(0.01..=30.0)
+                        .suffix(" g/cm³"),
+                );
+                ui.end_row();
+            }
+        });
+    if p.mode != BodyMode::Ignored && p.mode != BodyMode::Dynamic {
+        let mut is_belt = p.belt.is_some();
+        ui.checkbox(&mut is_belt, "ベルトコンベア (上に載ったものを運ぶ)");
+        if is_belt != p.belt.is_some() {
+            p.belt = is_belt.then(BeltDrive::default);
+        }
+        if let Some(belt) = &mut p.belt {
+            ui.horizontal(|ui| {
+                ui.weak("向き");
+                for axis in LocalAxis::ALL {
+                    ui.selectable_value(&mut belt.axis, axis, axis.label());
+                }
+                ui.checkbox(&mut belt.reversed, "逆向き");
+            });
+            ui.horizontal(|ui| {
+                ui.weak("速度");
+                ui.add(
+                    egui::DragValue::new(&mut belt.speed)
+                        .speed(1.0)
+                        .range(0.0..=f64::MAX)
+                        .suffix(format!(" {unit}/s")),
+                );
+            });
+        }
+    }
+    if p.shape == ColliderShape::ConvexDecomposition {
+        ui.weak("凸分解は大きな部品だと開始に時間がかかります");
+    }
+    ui.weak("物理演算は 3D ビュー左下の「物理演算」パネルで開始します");
+    if p != before {
+        state.history.begin_edit(&state.model, id);
+        if let Some(node) = state.model.get_mut(id) {
+            node.physics = p;
+        }
+    }
 }
 
 fn bounds_section(ui: &mut egui::Ui, state: &UiState, id: NodeId) {

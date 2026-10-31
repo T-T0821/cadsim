@@ -34,6 +34,7 @@ use crate::math::{Aabb, to_transform};
 use crate::model::{Model, NodeId, NodeKind, Selection};
 use crate::motion::{MotionSet, SimulationPose};
 use crate::part_mesh::{PartMesh, shell_edges};
+use crate::physics::{PhysicsPose, PhysicsSet};
 use crate::simulation::{self, InterferenceCheck, Pose, SimBody, TriMesh, measure::not_measuring};
 
 /// 箱のテッセレーションの許容誤差 (モデル単位)
@@ -59,8 +60,8 @@ impl Plugin for ViewportPlugin {
                         .run_if(annotate_tool_off)
                         .run_if(crate::site::plan_tool_off),
                     rebuild_dirty_parts,
-                    // 動作シミュレーションの動きが決まってから配置を写す
-                    sync_views.after(MotionSet::Pose),
+                    // 動作シミュレーションと物理演算の動きが決まってから配置を写す
+                    sync_views.after(MotionSet::Pose).after(PhysicsSet::Step),
                     update_level_of_detail,
                     update_face_overlay,
                     draw_grid_and_bounds,
@@ -405,6 +406,7 @@ fn sync_views(
     settings: Res<ViewSettings>,
     check: Res<InterferenceCheck>,
     motion: Res<SimulationPose>,
+    physics: Res<PhysicsPose>,
     rebuilt: Res<ViewsRebuilt>,
     flow_colors: Res<FlowColors>,
     mut palette: ResMut<Palette>,
@@ -423,7 +425,8 @@ fn sync_views(
         || settings.is_changed()
         || check.is_changed()
         || motion.is_changed()
-        || flow_colors.is_changed();
+        || flow_colors.is_changed()
+        || physics.is_changed();
     if !changed && !rebuilt.0 {
         return;
     }
@@ -442,14 +445,15 @@ fn sync_views(
         } else {
             Highlight::None
         };
-        // 動作シミュレーションの再生中は、設計上の配置にアクチュエータの動きを重ねる
-        // (自分に割り当てがなければ、いちばん近い祖先の動き)
-        let moved = part
-            .path
-            .iter()
-            .rev()
-            .find_map(|id| motion.parts.get(id))
-            .map_or(part.world, |pose| pose.to_dmat4() * part.world);
+        // 物理演算で動いている部品は物理の位置に置く。動作シミュレーションの再生中は、
+        // 設計上の配置にアクチュエータの動きを重ねる (自分に割り当てがなければ、いちばん近い祖先の動き)
+        let moved = physics.parts.get(&part.id).copied().unwrap_or_else(|| {
+            part.path
+                .iter()
+                .rev()
+                .find_map(|id| motion.parts.get(id))
+                .map_or(part.world, |pose| pose.to_dmat4() * part.world)
+        });
         if let Some(bounds) = part.local_bounds.map(|b| b.transformed(part.world)) {
             if part.shown {
                 scene_bounds = Some(scene_bounds.map_or(bounds, |s| s.union(bounds)));

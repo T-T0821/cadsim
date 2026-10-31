@@ -1,0 +1,547 @@
+//! 物理演算: 重力・接触・摩擦でワークを動かす。ベルトコンベア、ケーブル・ホースの紐モデル。
+//!
+//! | ファイル | 層 | 役割 |
+//! | --- | --- | --- |
+//! | `cadsim_core::physics::settings` | ドメイン | 部品ごとの物理の設定 (動かない / 機構で動く / 物理で動く / 当たらない、当たり判定の形、ベルト) |
+//! | `cadsim_core::physics::cable` | ドメイン | ケーブル・ホースの紐モデルと、曲げ半径・長さ不足・接触の判定 |
+//! | `cadsim_core::physics::world` | ユースケース | 部品 → 剛体の変換、一定刻みでの進行、物理エンジンのポート `PhysicsEngine` |
+//! | `rapier.rs` | アダプター | ポートの Rapier 実装 (凸包・凸分解・メッシュの当たり判定、ベルトの接触フック)。Bevy に依存しない |
+//! | `records.rs` | アダプター | .cadsim に書く形。Bevy に依存しない |
+//! | `mod.rs` / `panel.rs` / `sample.rs` | UI | Bevy のシステム、「物理演算」パネル、サンプルライン |
+//!
+//! このファイルのシステムは「部品と動きを集める → ユースケースを呼ぶ → 姿勢を [`PhysicsPose`] に写す」だけ。
+//! 3D 表示 (viewport.rs) は [`displayed_matrix`] で、物理で動いた部品をその位置に描く。
+
+mod panel;
+mod rapier;
+mod records;
+mod sample;
+
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Instant;
+
+use bevy::math::{DMat4, DVec3};
+use bevy::prelude::*;
+use bevy_egui::EguiPrimaryContextPass;
+
+pub use cadsim_core::physics::cable::{Cable, CableAnchor, CableKind, CableReport};
+pub use cadsim_core::physics::settings::{
+    BeltDrive, BodyMode, ColliderShape, LocalAxis, PartPhysics,
+};
+pub use records::{CableRecord, PartPhysicsRecord};
+
+use cadsim_core::physics::cable::{CableState, Obstacle};
+use cadsim_core::physics::settings;
+use cadsim_core::physics::world::{
+    BodyKey, Iso, PartGeometry, PartInput, PhysicsEngine, PhysicsRun, STEP_DT, part_body,
+};
+use rapier::RapierEngine;
+
+use crate::camera::CameraRequest;
+use crate::file_io::CommandLine;
+use crate::math::euler_deg_to_quat;
+use crate::model::{Model, NodeId, NodeKind};
+use crate::motion::{ChartSchedule, MotionSet, Playback, SimulationPose, TimingChart};
+use crate::simulation::{InterferenceCheck, SimBody, TriMesh};
+
+pub struct PhysicsPlugin;
+
+impl Plugin for PhysicsPlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<PhysicsState>()
+            .init_resource::<PhysicsPose>()
+            .init_resource::<CableSim>()
+            .init_gizmo_group::<CableGizmos>()
+            .add_systems(Startup, (configure_cable_gizmos, start_from_command_line))
+            .add_systems(EguiPrimaryContextPass, panel::physics_panel)
+            // チャートを書き換えるので、時刻表を作り直す前に読み込む
+            .add_systems(Update, load_sample.before(MotionSet::Pose))
+            .add_systems(
+                Update,
+                (step_physics, step_cables)
+                    .chain()
+                    .in_set(PhysicsSet::Step)
+                    .after(MotionSet::Pose),
+            )
+            .add_systems(Update, draw_cables.after(PhysicsSet::Step));
+    }
+}
+
+/// 物理で動いた部品の位置が決まるシステムのまとまり。
+/// 表示や干渉チェックなど、動いた後の位置を使う処理は `.after(PhysicsSet::Step)` で登録する。
+#[derive(SystemSet, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum PhysicsSet {
+    Step,
+}
+
+/// 物理演算の実行状態
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum RunState {
+    /// 部品は設計位置 (物理の世界はない)
+    #[default]
+    Stopped,
+    Running,
+    Paused,
+}
+
+/// パネルのボタンから頼まれた操作
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RunRequest {
+    Start,
+    Pause,
+    Stop,
+}
+
+/// 物理の世界と、パネルに出す統計
+#[derive(Resource, Default)]
+pub struct PhysicsState {
+    pub state: RunState,
+    pub request: Option<RunRequest>,
+    /// パネルで「サンプルラインを読み込む」が押された
+    pub load_sample: bool,
+    /// サンプルラインを読み込んだら、そのまま物理演算を始める (`--physics`)
+    start_after_load: bool,
+    pub stats: Stats,
+    run: Option<World>,
+    /// タイミングチャートの停止 (先頭へ戻す) を見つけるため、前のフレームの再生状態を覚える
+    last_playback: (f64, bool),
+}
+
+/// 物理の世界1つ分
+struct World {
+    run: PhysicsRun<RapierEngine>,
+    /// 機構で動く部品 (毎刻み、動作シミュレーションの位置へ動かす)
+    mechanisms: Vec<NodeId>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct Stats {
+    /// 剛体の数 (うち物理で動くもの)
+    pub bodies: usize,
+    pub dynamic: usize,
+    /// 1 フレームの物理の計算時間 (ミリ秒, なめらかにした値)
+    pub frame_ms: f64,
+    /// 画面のフレームレート (なめらかにした値)
+    pub fps: f64,
+    /// 開始からの物理の時刻 (秒)
+    pub time: f64,
+    /// 当たり判定を作れなかった部品
+    pub skipped: Vec<String>,
+}
+
+/// 物理演算が止まっていて、部品が設計位置にあるとき true (ギズモでの編集はこのときだけ)
+pub fn physics_stopped(state: Res<PhysicsState>) -> bool {
+    state.state == RunState::Stopped
+}
+
+/// 物理で動いている部品のワールドでの配置
+#[derive(Resource, Default)]
+pub struct PhysicsPose {
+    pub parts: HashMap<NodeId, DMat4>,
+}
+
+/// 部品をいま表示する配置。物理で動いていればその位置、なければ設計位置に動作シミュレーションの動きを重ねる。
+pub fn displayed_matrix(
+    model: &Model,
+    motion: &SimulationPose,
+    physics: &PhysicsPose,
+    id: NodeId,
+) -> DMat4 {
+    if let Some(m) = physics.parts.get(&id) {
+        return *m;
+    }
+    let matrix = model.world_matrix(id);
+    match motion.pose_of(model, id) {
+        Some(moved) => moved.to_dmat4() * matrix,
+        None => matrix,
+    }
+}
+
+fn to_iso(m: DMat4) -> Iso {
+    let (_, rotation, translation) = m.to_scale_rotation_translation();
+    Iso::new(rotation, translation)
+}
+
+fn to_matrix(iso: Iso) -> DMat4 {
+    DMat4::from_rotation_translation(iso.rotation, iso.translation)
+}
+
+/// すべての部品 (アセンブリを除く)
+fn all_parts(model: &Model) -> Vec<NodeId> {
+    model
+        .roots
+        .iter()
+        .flat_map(|&root| model.subtree(root))
+        .filter(|&id| model.get(id).is_some_and(|n| n.kind.is_part()))
+        .collect()
+}
+
+/// 部品の形。箱はパラメータから、取り込んだ部品は表示用メッシュから。
+fn geometry<'a>(
+    model: &Model,
+    id: NodeId,
+    meshes: &'a HashMap<u32, Arc<TriMesh>>,
+) -> Option<PartGeometry<'a>> {
+    match &model.get(id)?.kind {
+        NodeKind::Box(part) => Some(PartGeometry::Box {
+            size: DVec3::from(part.size),
+            offset: Iso::new(
+                euler_deg_to_quat(part.rotation_deg),
+                DVec3::from(part.position),
+            ),
+        }),
+        NodeKind::Imported { .. } => Some(PartGeometry::Mesh(meshes.get(&id)?.triangles())),
+        NodeKind::Assembly { .. } => None,
+    }
+}
+
+/// 今のモデルから物理の世界を作る。非表示の部品は入れない。
+fn build_world(
+    model: &Model,
+    motion: &SimulationPose,
+    meshes: &HashMap<u32, Arc<TriMesh>>,
+) -> (World, Stats) {
+    let meters_per_unit = settings::meters_per_unit(&model.unit);
+    let mut engine = RapierEngine::new(settings::gravity(&model.unit), meters_per_unit);
+    let mut mechanisms = Vec::new();
+    let mut stats = Stats::default();
+    for id in all_parts(model) {
+        let Some(node) = model.get(id) else {
+            continue;
+        };
+        if !model.is_shown(id) || node.physics.mode == BodyMode::Ignored {
+            continue;
+        }
+        let Some(geometry) = geometry(model, id, meshes) else {
+            continue;
+        };
+        let matrix = match node.physics.mode {
+            BodyMode::Fixed => model.world_matrix(id),
+            _ => displayed_matrix(model, motion, &PhysicsPose::default(), id),
+        };
+        let input = PartInput {
+            settings: node.physics,
+            geometry,
+            pose: to_iso(matrix),
+            meters_per_unit,
+        };
+        match part_body(&input) {
+            Some(desc) if engine.add_body(BodyKey::Part(id), &desc) => {
+                stats.bodies += 1;
+                match node.physics.mode {
+                    BodyMode::Mechanism => mechanisms.push(id),
+                    BodyMode::Dynamic => stats.dynamic += 1,
+                    _ => {}
+                }
+            }
+            _ => stats.skipped.push(model.path_label(id)),
+        }
+    }
+    (
+        World {
+            run: PhysicsRun::new(engine),
+            mechanisms,
+        },
+        stats,
+    )
+}
+
+/// `cargo run --release -- --physics --bench 20` のように、起動してすぐサンプルラインを流す
+fn start_from_command_line(mut state: ResMut<PhysicsState>) {
+    if CommandLine::parse().physics {
+        state.load_sample = true;
+        state.start_after_load = true;
+    }
+}
+
+/// サンプルラインを読み込み、物理演算を止めて全体を表示する
+fn load_sample(
+    mut state: ResMut<PhysicsState>,
+    mut model: ResMut<Model>,
+    mut chart: ResMut<TimingChart>,
+    mut playback: ResMut<Playback>,
+    mut camera: MessageWriter<CameraRequest>,
+    mut interference: ResMut<InterferenceCheck>,
+) {
+    if !state.load_sample {
+        return;
+    }
+    state.load_sample = false;
+    state.state = RunState::Stopped;
+    if std::mem::take(&mut state.start_after_load) {
+        state.request = Some(RunRequest::Start);
+    }
+    sample::load_sample_line(&mut model, &mut chart);
+    *playback = Playback::default();
+    camera.write(CameraRequest::FitAll);
+    // 載っているだけのワークも「干渉」と数えられ、一覧が埋まって重くなる
+    interference.auto = false;
+}
+
+#[allow(clippy::too_many_arguments)]
+fn step_physics(
+    time: Res<Time>,
+    model: Res<Model>,
+    motion: Res<SimulationPose>,
+    schedule: Res<ChartSchedule>,
+    mut playback: ResMut<Playback>,
+    bodies: Query<&SimBody>,
+    mut state: ResMut<PhysicsState>,
+    mut pose: ResMut<PhysicsPose>,
+) {
+    let state = &mut *state;
+    let chart_runs = schedule.cycle_time > 0.0;
+
+    // タイミングチャートを先頭に戻したら、物理も設計位置に戻す
+    let now = (playback.time, playback.playing);
+    let rewound = chart_runs && now == (0.0, false) && state.last_playback != (0.0, false);
+    state.last_playback = now;
+
+    match state.request.take() {
+        Some(RunRequest::Start) => {
+            state.state = RunState::Running;
+            if chart_runs {
+                playback.playing = true;
+            }
+        }
+        Some(RunRequest::Pause) => {
+            state.state = RunState::Paused;
+            playback.playing = false;
+        }
+        Some(RunRequest::Stop) => {
+            state.state = RunState::Stopped;
+            playback.playing = false;
+            playback.time = 0.0;
+            state.last_playback = (0.0, false);
+        }
+        None if rewound && state.state != RunState::Stopped => state.state = RunState::Stopped,
+        None => {}
+    }
+
+    // 部品が消えたら (プロジェクトを開き直したなど) 作り直す
+    let stale = state.run.as_ref().is_some_and(|w| {
+        w.run
+            .engine
+            .dynamic_poses()
+            .iter()
+            .any(|(BodyKey::Part(id), _)| model.get(*id).is_none())
+    });
+    if state.state == RunState::Stopped || stale {
+        state.run = None;
+        if !pose.parts.is_empty() {
+            pose.parts.clear();
+        }
+        if stale {
+            state.state = RunState::Stopped;
+        }
+        return;
+    }
+
+    if state.run.is_none() {
+        let meshes = bodies.iter().map(|b| (b.id, b.mesh.clone())).collect();
+        let (world, stats) = build_world(&model, &motion, &meshes);
+        state.run = Some(world);
+        state.stats = stats;
+    }
+    // チャートで動かしているときは、チャートの一時停止に合わせて止める
+    let advancing = state.state == RunState::Running && (!chart_runs || playback.playing);
+    let Some(world) = state.run.as_mut() else {
+        return;
+    };
+    let frame = time.delta_secs_f64();
+    if frame > 0.0 {
+        state.stats.fps = smooth(state.stats.fps, 1.0 / frame);
+    }
+    if !advancing {
+        return;
+    }
+
+    let started = Instant::now();
+    let empty = PhysicsPose::default();
+    let targets: Vec<(BodyKey, Iso)> = world
+        .mechanisms
+        .iter()
+        .filter(|id| model.get(**id).is_some())
+        .map(|&id| {
+            (
+                BodyKey::Part(id),
+                to_iso(displayed_matrix(&model, &motion, &empty, id)),
+            )
+        })
+        .collect();
+    world.run.advance(frame * playback.speed, &targets);
+    pose.parts = world
+        .run
+        .engine
+        .dynamic_poses()
+        .into_iter()
+        .map(|(BodyKey::Part(id), iso)| (id, to_matrix(iso)))
+        .collect();
+    state.stats.time = world.run.time;
+    state.stats.frame_ms = smooth(
+        state.stats.frame_ms,
+        started.elapsed().as_secs_f64() * 1000.0,
+    );
+}
+
+/// 表示用の値をなめらかにする (指数移動平均)
+fn smooth(previous: f64, value: f64) -> f64 {
+    if previous == 0.0 {
+        value
+    } else {
+        previous * 0.9 + value * 0.1
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ケーブル・ホース
+// ---------------------------------------------------------------------------
+
+/// ケーブル・ホースの紐の状態と、調べた結果 (`model.cables` と同じ順)
+#[derive(Resource, Default)]
+pub struct CableSim {
+    states: Vec<CableState>,
+    pub reports: Vec<CableReport>,
+    accumulator: f64,
+}
+
+/// 紐が当たる箱 (表示中の部品の外接箱)
+fn obstacles(
+    model: &Model,
+    motion: &SimulationPose,
+    physics: &PhysicsPose,
+    meshes: &HashMap<u32, Arc<TriMesh>>,
+) -> Vec<Obstacle> {
+    all_parts(model)
+        .into_iter()
+        .filter(|&id| {
+            model.is_shown(id)
+                && model
+                    .get(id)
+                    .is_some_and(|n| n.physics.mode != BodyMode::Ignored)
+        })
+        .filter_map(|id| {
+            let (center, rotation, half) = match geometry(model, id, meshes)? {
+                PartGeometry::Box { size, offset } => {
+                    (offset.translation, offset.rotation, size / 2.0)
+                }
+                PartGeometry::Mesh(_) => {
+                    let aabb = meshes.get(&id)?.aabb();
+                    (
+                        (aabb.min + aabb.max) / 2.0,
+                        Default::default(),
+                        (aabb.max - aabb.min) / 2.0,
+                    )
+                }
+            };
+            let placed = to_iso(displayed_matrix(model, motion, physics, id));
+            Some(Obstacle {
+                node: id,
+                pose: Iso::new(placed.rotation * rotation, placed.apply(center)),
+                half,
+            })
+        })
+        .collect()
+}
+
+/// 紐の端のワールドでの位置
+fn anchor_point(
+    model: &Model,
+    motion: &SimulationPose,
+    physics: &PhysicsPose,
+    anchor: &CableAnchor,
+) -> Option<DVec3> {
+    match anchor.node {
+        Some(id) => {
+            model.get(id)?;
+            Some(displayed_matrix(model, motion, physics, id).transform_point3(anchor.local))
+        }
+        None => Some(anchor.local),
+    }
+}
+
+/// 紐は物理演算を止めていても毎フレーム進める (端を動かせば、その場で垂れ方が変わる)
+fn step_cables(
+    time: Res<Time>,
+    model: Res<Model>,
+    motion: Res<SimulationPose>,
+    physics: Res<PhysicsPose>,
+    bodies: Query<&SimBody>,
+    mut sim: ResMut<CableSim>,
+) {
+    let sim = &mut *sim;
+    if model.cables.is_empty() {
+        sim.states.clear();
+        sim.reports.clear();
+        return;
+    }
+    sim.accumulator = (sim.accumulator + time.delta_secs_f64()).min(STEP_DT * 4.0);
+    let meshes: HashMap<u32, Arc<TriMesh>> =
+        bodies.iter().map(|b| (b.id, b.mesh.clone())).collect();
+    let obstacles = obstacles(&model, &motion, &physics, &meshes);
+    let gravity = settings::gravity(&model.unit);
+    sim.states
+        .resize_with(model.cables.len(), CableState::default);
+    sim.reports
+        .resize_with(model.cables.len(), CableReport::default);
+    let steps = (sim.accumulator / STEP_DT).floor() as usize;
+    sim.accumulator -= steps as f64 * STEP_DT;
+    for (i, cable) in model.cables.iter().enumerate() {
+        let ends = (
+            anchor_point(&model, &motion, &physics, &cable.start),
+            anchor_point(&model, &motion, &physics, &cable.end),
+        );
+        let (Some(start), Some(end)) = ends else {
+            continue;
+        };
+        let state = &mut sim.states[i];
+        if state.points.is_empty() {
+            *state = CableState::new(cable, start, end);
+        }
+        for _ in 0..steps {
+            state.step(cable, start, end, &obstacles, gravity, STEP_DT);
+        }
+        sim.reports[i] = state.report(cable, &obstacles);
+    }
+}
+
+const CABLE_COLOR: Color = Color::srgb(0.15, 0.15, 0.15);
+const HOSE_COLOR: Color = Color::srgb(0.20, 0.55, 0.95);
+const WARNING_COLOR: Color = Color::srgb(1.0, 0.15, 0.15);
+
+/// ケーブル・ホースを描くギズモ。細い線だと見えにくいので太くする。
+#[derive(Default, Reflect, GizmoConfigGroup)]
+struct CableGizmos;
+
+fn configure_cable_gizmos(mut store: ResMut<GizmoConfigStore>) {
+    let (config, _) = store.config_mut::<CableGizmos>();
+    config.line.width = 5.0;
+}
+
+fn draw_cables(mut gizmos: Gizmos<CableGizmos>, model: Res<Model>, sim: Res<CableSim>) {
+    for ((cable, state), report) in model.cables.iter().zip(&sim.states).zip(&sim.reports) {
+        let base = match cable.kind {
+            CableKind::Cable => CABLE_COLOR,
+            CableKind::Hose => HOSE_COLOR,
+        };
+        let points: Vec<Vec3> = state.points.iter().map(|p| p.as_vec3()).collect();
+        if points.len() < 2 {
+            continue;
+        }
+        // 長さが足りなければ全体を、曲げすぎならその前後の区間を赤くする
+        for (i, pair) in points.windows(2).enumerate() {
+            let bent = report.over_bent.iter().any(|&b| b == i || b == i + 1);
+            let color = if report.is_taut() || bent {
+                WARNING_COLOR
+            } else {
+                base
+            };
+            gizmos.line(pair[0], pair[1], color);
+        }
+        let radius = (cable.diameter / 2.0) as f32;
+        for end in [points[0], points[points.len() - 1]] {
+            gizmos.sphere(Isometry3d::from_translation(end), radius * 1.5, base);
+        }
+    }
+}
