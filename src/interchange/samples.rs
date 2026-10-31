@@ -141,7 +141,7 @@ fn write_samples() {
         crate::motion::chart_animation(&chart, &schedule, &model, &index_of, &parents)
             .into_iter()
             .collect();
-    for ext in ["glb", "usda", "usdz"] {
+    for ext in ["glb", "usda", "usdz", "html"] {
         export_file(&scene, &out.join(format!("line_demo.{ext}")), &units).unwrap();
     }
 }

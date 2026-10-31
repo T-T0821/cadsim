@@ -41,6 +41,7 @@ src/                  アプリ本体 (Bevy + egui)
 │   ├── model_io.rs   Scene ⇔ Model の変換 (単位の換算、メッシュの稜線)
 │   ├── gltf.rs / obj.rs / stl.rs
 │   ├── usd.rs        OpenUSD (.usda / .usdc / .usdz)
+│   ├── web_viewer.rs Web ビューア (.html、GLB を埋め込んだ1ファイル。docs/web-viewer.md)
 │   └── samples.rs    サンプルファイルを作るテスト (手で実行)
 ├── animation.rs     取り込んだアニメーションの再生
 ├── project.rs       プロジェクトファイル (.cadsim) の保存と読み込み

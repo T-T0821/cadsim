@@ -41,6 +41,7 @@ impl Plugin for FileIoPlugin {
                 (
                     open_dialog_if_requested,
                     export_if_requested,
+                    open_in_browser_if_requested,
                     open_dropped_files,
                     receive_imports,
                 ),
@@ -87,6 +88,8 @@ pub struct ImportJobs {
     dialog_requested: bool,
     /// メニューで「書き出し」が押された
     export_requested: Option<ExportScope>,
+    /// メニューで「ブラウザ / VR で見る」が押された
+    browser_requested: bool,
     /// OBJ / STL の単位と上方向 (読み込みと書き出しの両方で使う)
     pub units: UnitOptions,
 }
@@ -101,6 +104,7 @@ impl Default for ImportJobs {
             messages: Vec::new(),
             dialog_requested: false,
             export_requested: None,
+            browser_requested: false,
             units: UnitOptions::default(),
         }
     }
@@ -113,6 +117,10 @@ impl ImportJobs {
 
     pub fn request_export(&mut self, scope: ExportScope) {
         self.export_requested = Some(scope);
+    }
+
+    pub fn request_browser_view(&mut self) {
+        self.browser_requested = true;
     }
 
     pub fn open_sample(&mut self) {
@@ -321,6 +329,56 @@ fn export_if_requested(
         }
     };
     jobs.messages.push(message);
+}
+
+/// モデル全体を Web ビューアにして一時フォルダに書き、既定のブラウザで開く。
+/// WebXR に対応したブラウザなら、そこから VR ヘッドセットで実寸で見られる。
+fn open_in_browser_if_requested(
+    mut jobs: ResMut<ImportJobs>,
+    model: Res<Model>,
+    animations: Res<Animations>,
+    chart: Res<TimingChart>,
+    schedule: Res<ChartSchedule>,
+) {
+    if !std::mem::take(&mut jobs.browser_requested) {
+        return;
+    }
+    let dir = std::env::temp_dir().join("cadsim_viewer");
+    let chart = Some((&*chart, &**schedule));
+    let result = std::fs::create_dir_all(&dir)
+        .map_err(|e| e.to_string())
+        .map(|()| dir.join("cadsim.html"))
+        .and_then(|path| {
+            export_model(&model, &[], &animations, chart, &path, &jobs.units)?;
+            open_with_default_app(&path)?;
+            Ok(path)
+        });
+    let message = match result {
+        Ok(path) => format!("ブラウザで開きました ({})", path.display()),
+        Err(err) => {
+            error!("{err}");
+            format!("ブラウザで開けませんでした: {err}")
+        }
+    };
+    jobs.messages.push(message);
+}
+
+/// OS の既定のアプリでファイルを開く
+fn open_with_default_app(path: &Path) -> Result<(), String> {
+    let mut command = if cfg!(target_os = "windows") {
+        let mut c = std::process::Command::new("cmd");
+        c.args(["/C", "start", ""]);
+        c
+    } else if cfg!(target_os = "macos") {
+        std::process::Command::new("open")
+    } else {
+        std::process::Command::new("xdg-open")
+    };
+    command
+        .arg(path)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 /// モデルをファイルに書き出す。`roots` が空ならモデル全体。拡張子が無ければ glb にする。
