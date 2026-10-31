@@ -3,6 +3,7 @@
 //! - `chart`: アクチュエータとステップのデータ、時刻表への変換 (Bevy 非依存)
 //! - `pose`: 時刻 t における部品の位置・姿勢 (f64 の剛体変換、順運動学)
 //! - `kinematics`: ロボット (関節の直列リンク) のヤコビアンと逆運動学
+//! - `robot_path`: ロボットの移動の経路 (関節補間・直線補間) と、途中の届かない点・特異点の判定
 //! - `sensor`: 光電・近接センサーの検知判定と、インターロック付きの時刻表 (Bevy 非依存)
 //! - `ui`: タイミングチャートの編集画面と再生コントロール
 //! - `targets`: モデルの部品を、センサーが検知する直方体に変換する (Bevy 非依存)
@@ -26,7 +27,9 @@ pub mod chart;
 mod demo;
 mod export;
 mod kinematics;
+mod path_interference;
 mod pose;
+mod robot_path;
 mod robot_ui;
 mod sensor;
 mod sensor_view;
@@ -123,7 +126,11 @@ impl Plugin for MotionPlugin {
                     .chain()
                     .in_set(MotionSet::Sensors),
             )
-            .add_systems(Update, robot_ui::draw_robots.after(MotionSet::Pose));
+            .add_systems(Update, robot_ui::draw_robots.after(MotionSet::Pose))
+            .add_systems(
+                Update,
+                robot_ui::check_path_interference.after(MotionSet::Pose),
+            );
     }
 }
 
