@@ -17,7 +17,7 @@
 //! `builder::transformed(&part.build_solid(), pose.to_truck_matrix())` で動いた後の
 //! B-rep を作って判定すればよい (動かない部品は `parts` に入っていない)。
 
-mod chart;
+pub mod chart;
 mod demo;
 mod export;
 mod pose;
