@@ -2457,6 +2457,7 @@ dependencies = [
  "cadsim_core",
  "cadsim_io",
  "e57",
+ "encoding_rs",
  "glam 0.33.12",
  "image",
  "krilla",

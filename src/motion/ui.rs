@@ -1,17 +1,22 @@
 //! タイミングチャートの編集画面と再生コントロール
 //!
-//! 画面下のウィンドウに、行 = アクチュエータ、列 = ステップのチャートを描く。
-//! 列の幅はステップごとに同じで、列の中では時間に比例して波形 (各アクチュエータの値) を描く。
+//! 画面下のウィンドウに、行 = アクチュエータ・センサー、列 = ステップのチャートを描く。
+//! 列の幅はステップごとに同じで、列の中では時間に比例して波形 (各アクチュエータの値、
+//! センサーの ON / OFF) を描く。インターロックの条件待ちの時間は列の左側に橙色で出る。
 //!
-//! - セルをクリック: そのステップ × アクチュエータを選び、右側で動作を編集
-//! - セルをダブルクリック: シリンダは 出 → 戻 → なし を切り替え、軸は動作を追加
+//! - セルをクリック: そのステップ × アクチュエータ (センサー) を選び、右側で動作 (開始条件) を編集
+//! - セルをダブルクリック: シリンダは 出 → 戻 → なし を切り替え、軸は動作を追加。
+//!   センサーは開始条件を ON 待ち → OFF 待ち → なし で切り替え
 //! - チャート上をドラッグ: 再生位置を動かす (スクラブ)
 
 use bevy::{ecs::system::SystemParam, prelude::*};
 use bevy_egui::egui;
 
-use super::chart::{Action, Actuator, ActuatorKind, Axis, Easing, Schedule, Step, TimingChart};
-use super::{ChartSchedule, Playback, demo};
+use super::chart::{
+    Action, Actuator, ActuatorKind, Axis, Easing, INTERLOCK_TIMEOUT, Schedule, Step, TimingChart,
+};
+use super::sensor::SensorKind;
+use super::{ChartSchedule, Playback, SensorStates, SensorTimeline, demo};
 use crate::camera::CameraRequest;
 use crate::conveyor::ConveyorConfigRes;
 use crate::model::{Model, NodeId, Selection};
@@ -21,19 +26,54 @@ const HEADER_HEIGHT: f32 = 34.0;
 const ROW_HEIGHT: f32 = 32.0;
 const MIN_COLUMN_WIDTH: f32 = 64.0;
 const PROPERTIES_WIDTH: f32 = 330.0;
-const PANEL_HEIGHT: f32 = 250.0;
+const PANEL_HEIGHT: f32 = 270.0;
 
 const PLAYHEAD_COLOR: egui::Color32 = egui::Color32::from_rgb(230, 70, 60);
 const WAVE_COLOR: egui::Color32 = egui::Color32::from_rgb(90, 170, 255);
 const ACTION_FILL: egui::Color32 = egui::Color32::from_rgba_premultiplied(60, 110, 170, 70);
 const SELECT_COLOR: egui::Color32 = egui::Color32::from_rgb(255, 170, 60);
+const SENSOR_ON_COLOR: egui::Color32 = egui::Color32::from_rgb(80, 200, 100);
+const WAIT_FILL: egui::Color32 = egui::Color32::from_rgba_premultiplied(120, 80, 20, 60);
+const INTERLOCK_COLOR: egui::Color32 = egui::Color32::from_rgb(240, 170, 60);
+const STOP_COLOR: egui::Color32 = egui::Color32::from_rgb(240, 80, 70);
 
 #[derive(Resource, Default)]
 pub struct ChartUiState {
     selected_actuator: Option<u32>,
+    selected_sensor: Option<u32>,
     selected_step: Option<usize>,
     /// パネルをツールバーだけに畳んでいる
     collapsed: bool,
+}
+
+impl ChartUiState {
+    /// チャートで選んでいるセンサー (3D ビューで強調する)
+    pub fn selected_sensor(&self) -> Option<u32> {
+        self.selected_sensor
+    }
+
+    fn select_actuator(&mut self, id: u32) {
+        self.selected_actuator = Some(id);
+        self.selected_sensor = None;
+    }
+
+    fn select_sensor(&mut self, id: u32) {
+        self.selected_sensor = Some(id);
+        self.selected_actuator = None;
+    }
+}
+
+/// チャートの1行: アクチュエータを上に、センサーを下に並べる
+#[derive(Clone, Copy, PartialEq)]
+enum Row {
+    Actuator(u32),
+    Sensor(u32),
+}
+
+fn rows(chart: &TimingChart) -> Vec<Row> {
+    let actuators = chart.actuators.iter().map(|a| Row::Actuator(a.id));
+    let sensors = chart.sensors.iter().map(|s| Row::Sensor(s.id));
+    actuators.chain(sensors).collect()
 }
 
 /// タイミングチャートのパネルが読み書きするもの一式
@@ -41,6 +81,8 @@ pub struct ChartUiState {
 pub struct MotionUi<'w> {
     chart: ResMut<'w, TimingChart>,
     schedule: Res<'w, ChartSchedule>,
+    timeline: Res<'w, SensorTimeline>,
+    sensor_states: Res<'w, SensorStates>,
     playback: ResMut<'w, Playback>,
     state: ResMut<'w, ChartUiState>,
     /// サンプル装置を読み込むときに、コンベアとグリッパも置き換える
@@ -85,7 +127,12 @@ pub fn show_panel(
                     .id_salt("timing_chart")
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
-                        chart_view(ui, &mut edited, schedule, &mut play, state);
+                        let view = ChartView {
+                            schedule,
+                            timeline: &motion.timeline,
+                            states: &motion.sensor_states,
+                        };
+                        chart_view(ui, &mut edited, &view, &mut play, state);
                     });
             });
             ui.separator();
@@ -178,7 +225,14 @@ fn toolbar(
         ui.menu_button("+ アクチュエータ", |ui| {
             for kind in ActuatorKind::ALL {
                 if ui.button(kind.label()).clicked() {
-                    state.selected_actuator = Some(chart.add_actuator(kind));
+                    state.select_actuator(chart.add_actuator(kind));
+                }
+            }
+        });
+        ui.menu_button("+ センサー", |ui| {
+            for kind in SensorKind::ALL {
+                if ui.button(kind.label()).clicked() {
+                    state.select_sensor(chart.add_sensor(kind));
                 }
             }
         });
@@ -194,7 +248,8 @@ fn toolbar(
         .filter(|a| schedule.final_value(a).abs() > 1e-9)
         .map(|a| a.name.as_str())
         .collect();
-    if !not_home.is_empty() {
+    interlock_status(ui, chart, schedule, play);
+    if !not_home.is_empty() && schedule.stop.is_none() {
         ui.colored_label(
             egui::Color32::from_rgb(240, 180, 60),
             format!(
@@ -206,9 +261,54 @@ fn toolbar(
     load_demo
 }
 
+/// インターロックの条件待ち・異常停止を知らせる
+fn interlock_status(ui: &mut egui::Ui, chart: &TimingChart, schedule: &Schedule, play: &Playback) {
+    let describe = |interlocks: &[super::chart::Interlock]| {
+        interlocks
+            .iter()
+            .map(|i| {
+                let name = chart
+                    .sensor(i.sensor)
+                    .map_or("(削除済み)", |s| s.name.as_str());
+                format!("{name} が {}", if i.on { "ON" } else { "OFF" })
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    if let Some(stop) = &schedule.stop {
+        let text = format!(
+            "⚠ S{} のインターロックが {INTERLOCK_TIMEOUT:.0} 秒たっても成立せず、異常停止します: {} にならない",
+            stop.step + 1,
+            describe(&stop.unmet)
+        );
+        ui.colored_label(STOP_COLOR, text);
+        return;
+    }
+    // 再生位置がちょうど条件待ちのところなら、何を待っているかを出す
+    let Some(index) = schedule.step_at(play.time) else {
+        return;
+    };
+    let (Some(span), Some(step)) = (schedule.steps.get(index), chart.steps.get(index)) else {
+        return;
+    };
+    if play.time < span.action_start {
+        ui.colored_label(
+            INTERLOCK_COLOR,
+            format!("S{} 条件待ち: {}", index + 1, describe(&step.interlocks)),
+        );
+    }
+}
+
 // ---------------------------------------------------------------------------
 // チャート本体
 // ---------------------------------------------------------------------------
+
+/// チャートを描くのに使う、再生前に計算済みのデータ
+struct ChartView<'a> {
+    schedule: &'a Schedule,
+    timeline: &'a SensorTimeline,
+    states: &'a SensorStates,
+}
 
 /// チャート上の座標と時刻の対応 (列 = ステップ、列の中は時間に比例)
 struct ChartLayout {
@@ -226,7 +326,8 @@ impl ChartLayout {
     }
 
     fn time_to_x(&self, schedule: &Schedule, t: f64) -> f32 {
-        let last = schedule.steps.len().saturating_sub(1);
+        // 異常停止したときは、止まったステップより後の列 (長さ 0) には進まない
+        let last = schedule.last_step().unwrap_or(0);
         for (i, span) in schedule.steps.iter().enumerate() {
             if t < span.end || i == last {
                 let length = span.end - span.start;
@@ -243,7 +344,7 @@ impl ChartLayout {
     }
 
     fn x_to_time(&self, schedule: &Schedule, x: f32) -> f64 {
-        let Some(last) = schedule.steps.len().checked_sub(1) else {
+        let Some(last) = schedule.last_step() else {
             return 0.0;
         };
         let column = (x - self.column_x(0)) / self.column_width;
@@ -263,10 +364,11 @@ impl ChartLayout {
 fn chart_view(
     ui: &mut egui::Ui,
     chart: &mut TimingChart,
-    schedule: &Schedule,
+    view: &ChartView,
     play: &mut Playback,
     state: &mut ChartUiState,
 ) {
+    let schedule = view.schedule;
     if chart.steps.is_empty() || chart.actuators.is_empty() {
         ui.label(
             "上のボタンでアクチュエータとステップを追加するか、「サンプル装置」を押してください。",
@@ -280,7 +382,7 @@ fn chart_view(
         ((ui.available_width() - NAME_WIDTH) / step_count as f32).max(MIN_COLUMN_WIDTH);
     let size = egui::vec2(
         NAME_WIDTH + column_width * step_count as f32,
-        HEADER_HEIGHT + ROW_HEIGHT * chart.actuators.len() as f32 + 2.0,
+        HEADER_HEIGHT + ROW_HEIGHT * rows(chart).len() as f32 + 2.0,
     );
     let (response, painter) = ui.allocate_painter(size, egui::Sense::click_and_drag());
     let layout = ChartLayout {
@@ -289,15 +391,7 @@ fn chart_view(
     };
 
     handle_chart_input(&response, &layout, chart, schedule, play, state);
-    draw_chart(
-        &painter,
-        &layout,
-        chart,
-        schedule,
-        play,
-        state,
-        ui.visuals(),
-    );
+    draw_chart(&painter, &layout, chart, view, play, state, ui.visuals());
 }
 
 fn handle_chart_input(
@@ -325,10 +419,9 @@ fn handle_chart_input(
 
     let step = layout.step_at_x(pos.x, chart.steps.len());
     let row = ((pos.y - layout.row_top(0)) / ROW_HEIGHT).floor();
-    let actuator = (row >= 0.0)
-        .then(|| chart.actuators.get(row as usize))
-        .flatten()
-        .map(|a| a.id);
+    let row = (row >= 0.0)
+        .then(|| rows(chart).get(row as usize).copied())
+        .flatten();
 
     if pos.y < layout.row_top(0) {
         // 見出しのクリック: そのステップを選び、ステップの開始へ移動
@@ -339,17 +432,32 @@ fn handle_chart_input(
         }
         return;
     }
-    if let Some(id) = actuator {
-        state.selected_actuator = Some(id);
+    match row {
+        Some(Row::Actuator(id)) => state.select_actuator(id),
+        Some(Row::Sensor(id)) => state.select_sensor(id),
+        None => {}
     }
     if in_steps {
         state.selected_step = step;
     }
-    if response.double_clicked()
-        && let (Some(step), Some(id)) = (step, actuator)
-    {
-        quick_toggle_action(chart, schedule, step, id);
+    if !response.double_clicked() {
+        return;
     }
+    match (step, row) {
+        (Some(step), Some(Row::Actuator(id))) => quick_toggle_action(chart, schedule, step, id),
+        (Some(step), Some(Row::Sensor(id))) => quick_toggle_interlock(&mut chart.steps[step], id),
+        _ => {}
+    }
+}
+
+/// センサーのセルのダブルクリック: 開始条件を ON 待ち → OFF 待ち → なし の順に切り替える
+fn quick_toggle_interlock(step: &mut Step, sensor: u32) {
+    let next = match step.interlock(sensor).map(|i| i.on) {
+        None => Some(true),
+        Some(true) => Some(false),
+        Some(false) => None,
+    };
+    step.set_interlock(sensor, next);
 }
 
 /// セルのダブルクリック: シリンダは 出 → 戻 → なし、軸は (なければ) 動作を追加
@@ -405,11 +513,12 @@ fn draw_chart(
     painter: &egui::Painter,
     layout: &ChartLayout,
     chart: &TimingChart,
-    schedule: &Schedule,
+    view: &ChartView,
     play: &Playback,
     state: &ChartUiState,
     visuals: &egui::Visuals,
 ) {
+    let schedule = view.schedule;
     let text_color = visuals.text_color();
     let weak = visuals.weak_text_color();
     let grid = egui::Stroke::new(1.0, visuals.widgets.noninteractive.bg_stroke.color);
@@ -417,7 +526,7 @@ fn draw_chart(
     let normal = egui::FontId::proportional(13.0);
     let left = layout.origin.x;
     let right = layout.column_x(chart.steps.len());
-    let bottom = layout.row_top(chart.actuators.len());
+    let bottom = layout.row_top(rows(chart).len());
     let current_step = schedule.step_at(play.time);
 
     // 見出し: ステップ番号と、そのステップにかかる時間
@@ -449,13 +558,33 @@ fn draw_chart(
             normal.clone(),
             text_color,
         );
+        // 条件待ちを含めた実際の時間。異常停止したステップとその後は印を出す
+        // (チャートを編集した直後は時刻表がまだ古いことがあるので get で引く)
+        let length = schedule
+            .steps
+            .get(i)
+            .map_or(0.0, |span| span.end - span.start);
+        let (time_text, time_color) = match &schedule.stop {
+            Some(stop) if stop.step == i => ("停止".to_string(), STOP_COLOR),
+            Some(stop) if stop.step < i => ("未実行".to_string(), weak),
+            _ => (format!("{length:.2}s"), weak),
+        };
         painter.text(
             egui::pos2(x + 4.0, layout.origin.y + 18.0),
             egui::Align2::LEFT_TOP,
-            format!("{:.2}s", step.duration()),
+            time_text,
             small.clone(),
-            weak,
+            time_color,
         );
+        if !step.interlocks.is_empty() {
+            painter.text(
+                egui::pos2(x + layout.column_width - 4.0, layout.origin.y + 2.0),
+                egui::Align2::RIGHT_TOP,
+                "条件",
+                small.clone(),
+                INTERLOCK_COLOR,
+            );
+        }
     }
 
     // 行: アクチュエータ名・現在値・動作の帯・波形
@@ -502,18 +631,24 @@ fn draw_chart(
                 egui::pos2(layout.column_x(i), top),
                 egui::pos2(layout.column_x(i) + layout.column_width, top + ROW_HEIGHT),
             );
+            // 異常停止で実行されない動作は帯を描かない (目標値の文字だけ出す)
+            let executed = schedule.stop.as_ref().is_none_or(|stop| i < stop.step);
+            let span = schedule.steps.get(i).filter(|_| executed);
             if let Some(action) = step.action(actuator.id) {
-                let span = schedule.steps[i];
-                let end_x = layout.time_to_x(schedule, span.start + action.duration);
-                let end_x = end_x.clamp(cell.min.x + 3.0, cell.max.x);
-                painter.rect_filled(
-                    egui::Rect::from_min_max(
-                        cell.min + egui::vec2(1.0, 2.0),
-                        egui::pos2(end_x - 1.0, cell.max.y - 2.0),
-                    ),
-                    2.0,
-                    ACTION_FILL,
-                );
+                if let Some(span) = span {
+                    // 条件待ちがあれば、帯は動作を始めた時刻から
+                    let start_x = layout.time_to_x(schedule, span.action_start);
+                    let end_x = layout.time_to_x(schedule, span.action_start + action.duration);
+                    let end_x = end_x.clamp(start_x + 3.0, cell.max.x);
+                    painter.rect_filled(
+                        egui::Rect::from_min_max(
+                            egui::pos2(start_x + 1.0, cell.min.y + 2.0),
+                            egui::pos2(end_x - 1.0, cell.max.y - 2.0),
+                        ),
+                        2.0,
+                        ACTION_FILL,
+                    );
+                }
                 // 目標値は波形の上に重ねるので、描くのは波形の後
                 labels.push((
                     egui::pos2(cell.max.x - 3.0, cell.min.y + 2.0),
@@ -566,6 +701,9 @@ fn draw_chart(
         );
     }
 
+    draw_sensor_rows(painter, layout, chart, view, state, visuals);
+    draw_waits_and_stop(painter, layout, schedule, bottom);
+
     // 縦の区切り線
     for i in 0..=chart.steps.len() {
         let x = layout.column_x(i);
@@ -602,6 +740,177 @@ fn draw_chart(
     }
 }
 
+/// センサーの行: 名前・現在の ON / OFF・波形・開始条件の印
+fn draw_sensor_rows(
+    painter: &egui::Painter,
+    layout: &ChartLayout,
+    chart: &TimingChart,
+    view: &ChartView,
+    state: &ChartUiState,
+    visuals: &egui::Visuals,
+) {
+    let schedule = view.schedule;
+    let text_color = visuals.text_color();
+    let weak = visuals.weak_text_color();
+    let grid = egui::Stroke::new(1.0, visuals.widgets.noninteractive.bg_stroke.color);
+    let small = egui::FontId::proportional(11.0);
+    let normal = egui::FontId::proportional(13.0);
+    let left = layout.origin.x;
+    let right = layout.column_x(chart.steps.len());
+
+    for (k, sensor) in chart.sensors.iter().enumerate() {
+        let row = chart.actuators.len() + k;
+        let top = layout.row_top(row);
+        let row_rect =
+            egui::Rect::from_min_max(egui::pos2(left, top), egui::pos2(right, top + ROW_HEIGHT));
+        if row % 2 == 1 {
+            painter.rect_filled(row_rect, 0.0, visuals.faint_bg_color);
+        }
+        if state.selected_sensor == Some(sensor.id) {
+            painter.rect_filled(
+                egui::Rect::from_min_max(
+                    row_rect.min,
+                    egui::pos2(left + NAME_WIDTH, row_rect.max.y),
+                ),
+                0.0,
+                visuals.selection.bg_fill.gamma_multiply(0.5),
+            );
+        }
+        painter.text(
+            egui::pos2(left + 4.0, top + 1.0),
+            egui::Align2::LEFT_TOP,
+            &sensor.name,
+            normal.clone(),
+            text_color,
+        );
+        let on = view.states.is_on(sensor.id);
+        let forced = match sensor.force {
+            Some(true) => " (強制ON)",
+            Some(false) => " (強制OFF)",
+            None => "",
+        };
+        painter.text(
+            egui::pos2(left + 4.0, top + 17.5),
+            egui::Align2::LEFT_TOP,
+            format!(
+                "{}  {}{forced}",
+                sensor.kind.label(),
+                if on { "ON" } else { "OFF" }
+            ),
+            small.clone(),
+            if on { SENSOR_ON_COLOR } else { weak },
+        );
+
+        // 波形: ON の区間を塗り、ON / OFF の2段で線を引く
+        let high = top + 7.0;
+        let low = top + ROW_HEIGHT - 6.0;
+        let samples = view.timeline.samples.get(&sensor.id);
+        let mut points: Vec<egui::Pos2> = Vec::new();
+        for &(t, on) in samples.into_iter().flatten() {
+            if t > schedule.cycle_time {
+                break;
+            }
+            let x = layout.time_to_x(schedule, t);
+            let y = if on { high } else { low };
+            if let Some(&last) = points.last()
+                && last.y != y
+            {
+                points.push(egui::pos2(x, last.y));
+            }
+            points.push(egui::pos2(x, y));
+        }
+        for pair in points.windows(2) {
+            if pair[0].y == high && pair[1].y == high && pair[1].x > pair[0].x {
+                painter.rect_filled(
+                    egui::Rect::from_min_max(pair[0], egui::pos2(pair[1].x, low)),
+                    0.0,
+                    SENSOR_ON_COLOR.gamma_multiply(0.25),
+                );
+            }
+        }
+        if points.len() >= 2 {
+            painter.add(egui::Shape::line(
+                points,
+                egui::Stroke::new(2.0, SENSOR_ON_COLOR),
+            ));
+        }
+
+        // 開始条件の印 (列の左端に「ON待」「OFF待」)
+        for (i, step) in chart.steps.iter().enumerate() {
+            let cell = egui::Rect::from_min_max(
+                egui::pos2(layout.column_x(i), top),
+                egui::pos2(layout.column_x(i) + layout.column_width, top + ROW_HEIGHT),
+            );
+            if let Some(interlock) = step.interlock(sensor.id) {
+                let text = if interlock.on { "ON待" } else { "OFF待" };
+                let galley =
+                    painter.layout_no_wrap(text.into(), small.clone(), egui::Color32::BLACK);
+                let rect = egui::Align2::LEFT_TOP
+                    .anchor_size(cell.min + egui::vec2(3.0, 2.0), galley.size())
+                    .expand(1.0);
+                painter.rect_filled(rect, 2.0, INTERLOCK_COLOR);
+                painter.galley(
+                    rect.min + egui::vec2(1.0, 1.0),
+                    galley,
+                    egui::Color32::BLACK,
+                );
+            }
+            if state.selected_step == Some(i) && state.selected_sensor == Some(sensor.id) {
+                painter.rect_stroke(
+                    cell.shrink(1.0),
+                    2.0,
+                    (1.5, SELECT_COLOR),
+                    egui::StrokeKind::Inside,
+                );
+            }
+        }
+        painter.line_segment(
+            [
+                egui::pos2(left, top + ROW_HEIGHT),
+                egui::pos2(right, top + ROW_HEIGHT),
+            ],
+            grid,
+        );
+    }
+}
+
+/// 条件待ちの時間 (列の左側) を橙色に、異常停止で実行されない列を灰色に塗る
+fn draw_waits_and_stop(
+    painter: &egui::Painter,
+    layout: &ChartLayout,
+    schedule: &Schedule,
+    bottom: f32,
+) {
+    let top = layout.row_top(0);
+    for (i, span) in schedule.steps.iter().enumerate() {
+        let skipped = schedule.stop.as_ref().is_some_and(|stop| i > stop.step);
+        if skipped {
+            let x = layout.column_x(i);
+            painter.rect_filled(
+                egui::Rect::from_min_max(
+                    egui::pos2(x, top),
+                    egui::pos2(x + layout.column_width, bottom),
+                ),
+                0.0,
+                egui::Color32::from_black_alpha(90),
+            );
+        } else if span.wait() > 0.0 {
+            let fill = if schedule.stop.as_ref().is_some_and(|stop| stop.step == i) {
+                STOP_COLOR.gamma_multiply(0.25)
+            } else {
+                WAIT_FILL
+            };
+            let x0 = layout.column_x(i);
+            let x1 = layout.time_to_x(schedule, span.action_start).max(x0 + 2.0);
+            painter.rect_filled(
+                egui::Rect::from_min_max(egui::pos2(x0, top), egui::pos2(x1, bottom)),
+                0.0,
+                fill,
+            );
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // 右側の設定欄
 // ---------------------------------------------------------------------------
@@ -624,9 +933,19 @@ fn properties(
     {
         state.selected_actuator = None;
     }
+    if state
+        .selected_sensor
+        .is_some_and(|id| chart.sensor(id).is_none())
+    {
+        state.selected_sensor = None;
+    }
 
     if let (Some(step), Some(id)) = (state.selected_step, state.selected_actuator) {
         cell_editor(ui, chart, schedule, step, id);
+        ui.separator();
+    }
+    if let (Some(step), Some(id)) = (state.selected_step, state.selected_sensor) {
+        interlock_editor(ui, chart, step, id);
         ui.separator();
     }
     if let Some(step) = state.selected_step {
@@ -636,9 +955,140 @@ fn properties(
     if let Some(id) = state.selected_actuator {
         actuator_editor(ui, chart, model, selection, id, state);
     }
-    if state.selected_step.is_none() && state.selected_actuator.is_none() {
-        ui.label("セルをクリックで編集。\nダブルクリック: シリンダは 出→戻→なし、\n軸は動作を追加。\nチャート上をドラッグで再生位置を移動。");
+    if let Some(id) = state.selected_sensor {
+        sensor_editor(ui, chart, id, state);
     }
+    if state.selected_step.is_none()
+        && state.selected_actuator.is_none()
+        && state.selected_sensor.is_none()
+    {
+        ui.label("セルをクリックで編集。\nダブルクリック: シリンダは 出→戻→なし、\n軸は動作を追加、センサーは開始条件を\nON待→OFF待→なし。\nチャート上をドラッグで再生位置を移動。");
+    }
+}
+
+/// 選択中のセル (ステップ × センサー) の開始条件
+fn interlock_editor(ui: &mut egui::Ui, chart: &mut TimingChart, step: usize, sensor: u32) {
+    let Some(name) = chart.sensor(sensor).map(|s| s.name.clone()) else {
+        return;
+    };
+    ui.strong(format!("S{} × {name}", step + 1));
+    let step = &mut chart.steps[step];
+    let mut condition = step.interlock(sensor).map(|i| i.on);
+    ui.label("開始条件 (インターロック)");
+    ui.horizontal(|ui| {
+        ui.selectable_value(&mut condition, None, "なし");
+        ui.selectable_value(&mut condition, Some(true), "ON を待つ");
+        ui.selectable_value(&mut condition, Some(false), "OFF を待つ");
+    });
+    if condition != step.interlock(sensor).map(|i| i.on) {
+        step.set_interlock(sensor, condition);
+    }
+    ui.weak(format!(
+        "前のステップの完了後、条件が成立するまで動作を始めません。\n{INTERLOCK_TIMEOUT:.0} 秒で成立しなければ異常停止します。"
+    ));
+}
+
+fn sensor_editor(ui: &mut egui::Ui, chart: &mut TimingChart, id: u32, state: &mut ChartUiState) {
+    let mounts: Vec<(u32, String)> = chart
+        .actuators
+        .iter()
+        .map(|a| (a.id, a.name.clone()))
+        .collect();
+    let mount_name = |mount: Option<u32>| {
+        mount
+            .and_then(|m| mounts.iter().find(|(c, _)| *c == m))
+            .map_or("(固定)".to_string(), |(_, name)| name.clone())
+    };
+    let Some(sensor) = chart.sensor_mut(id) else {
+        return;
+    };
+
+    ui.strong("センサー");
+    egui::Grid::new("sensor_editor")
+        .num_columns(2)
+        .show(ui, |ui| {
+            ui.label("名前");
+            ui.text_edit_singleline(&mut sensor.name);
+            ui.end_row();
+
+            ui.label("種類");
+            egui::ComboBox::from_id_salt("sensor_kind")
+                .selected_text(sensor.kind.label())
+                .show_ui(ui, |ui| {
+                    for kind in SensorKind::ALL {
+                        ui.selectable_value(&mut sensor.kind, kind, kind.label());
+                    }
+                });
+            ui.end_row();
+
+            ui.label(match sensor.kind {
+                SensorKind::Photoelectric => "投光位置 X/Y/Z",
+                SensorKind::Proximity => "検出面 X/Y/Z",
+            });
+            ui.horizontal(|ui| {
+                // 1ピクセルのドラッグで 0.5 (mm など) 動かす
+                for v in &mut sensor.position {
+                    ui.add(egui::DragValue::new(v).speed(0.5));
+                }
+            });
+            ui.end_row();
+
+            if sensor.kind == SensorKind::Photoelectric {
+                ui.label("光軸の向き");
+                ui.horizontal(|ui| {
+                    for axis in Axis::ALL {
+                        ui.selectable_value(&mut sensor.axis, axis, axis.label());
+                    }
+                    ui.checkbox(&mut sensor.reversed, "逆向き");
+                });
+                ui.end_row();
+            }
+
+            ui.label(match sensor.kind {
+                SensorKind::Photoelectric => "光軸の長さ",
+                SensorKind::Proximity => "検出距離",
+            });
+            ui.add(
+                egui::DragValue::new(&mut sensor.range)
+                    .speed(0.5)
+                    .range(0.0..=100_000.0),
+            );
+            ui.end_row();
+
+            ui.label("取り付け先");
+            egui::ComboBox::from_id_salt("sensor_mount")
+                .selected_text(mount_name(sensor.mounted_on))
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut sensor.mounted_on, None, "(固定)");
+                    for (candidate, name) in &mounts {
+                        ui.selectable_value(&mut sensor.mounted_on, Some(*candidate), name);
+                    }
+                });
+            ui.end_row();
+
+            ui.label("強制");
+            ui.horizontal(|ui| {
+                ui.selectable_value(&mut sensor.force, None, "自動");
+                ui.selectable_value(&mut sensor.force, Some(true), "ON");
+                ui.selectable_value(&mut sensor.force, Some(false), "OFF");
+            });
+            ui.end_row();
+        });
+    ui.weak("取り付け先と一緒に動きます。取り付け先が動かす部品は検知しません。");
+
+    ui.horizontal(|ui| {
+        let index = chart.sensors.iter().position(|s| s.id == id).unwrap_or(0);
+        if ui.button("▲ 上へ").clicked() && index > 0 {
+            chart.sensors.swap(index, index - 1);
+        }
+        if ui.button("▼ 下へ").clicked() && index + 1 < chart.sensors.len() {
+            chart.sensors.swap(index, index + 1);
+        }
+        if ui.button("センサーを削除").clicked() {
+            chart.remove_sensor(id);
+            state.selected_sensor = None;
+        }
+    });
 }
 
 /// 選択中のセル (ステップ × アクチュエータ) の動作

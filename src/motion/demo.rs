@@ -7,8 +7,15 @@
 //!
 //! 供給コンベアはストッパ付きで、流れてきたワークは終端 (ガントリーの真下) で詰まって並ぶ。
 //! 排出コンベアに置いたワークは Z 方向へ流れて消える。
+//!
+//! センサーとインターロック:
+//! - 近接センサー「リフタ上昇端」(X軸キャリッジに取り付け): リフタロッドが上がっていると ON。
+//!   X軸を動かすステップ (S5, S9) は、これが ON になるまで始めない。
+//! - 近接センサー「チャック閉確認」(リフタに取り付け): 可動爪が閉じていると ON。
+//!   掴んで上げるステップ (S4) は ON、離して上げるステップ (S8) は OFF になるまで始めない。
 
-use super::chart::{Action, ActuatorKind, Axis, Step, TimingChart};
+use super::chart::{Action, ActuatorKind, Axis, Interlock, Step, TimingChart};
+use super::sensor::SensorKind;
 use cadsim_core::conveyor::{BeltAxis, ConveyorConfig, ConveyorEnd};
 
 use crate::model::Model;
@@ -110,11 +117,37 @@ pub fn load_demo(model: &mut Model, chart: &mut TimingChart, conveyors: &mut Con
         a.default_duration = 0.2;
     }
 
+    let lifter_up = chart.add_sensor(SensorKind::Proximity);
+    {
+        let s = chart.sensor_mut(lifter_up).unwrap();
+        s.name = "リフタ上昇端".into();
+        // ロッドの横 (Z+ 側) に置く。ロッドが下がると上端が検出距離から外れる
+        s.position = [PICK_X * S, 2.9 * S, 0.2 * S];
+        s.range = 0.15 * S;
+        s.mounted_on = Some(x_axis);
+    }
+    let chuck_closed = chart.add_sensor(SensorKind::Proximity);
+    {
+        let s = chart.sensor_mut(chuck_closed).unwrap();
+        s.name = "チャック閉確認".into();
+        // 閉じた可動爪のすぐ外側 (X- 寄り・Z+ 側) に置く
+        s.position = [
+            (PICK_X + finger_gap - 0.04) * S,
+            (plate_bottom - 0.125) * S,
+            0.2 * S,
+        ];
+        s.range = 0.08 * S;
+        s.mounted_on = Some(lifter);
+    }
+    let wait_for = |sensor, on| vec![Interlock { sensor, on }];
+
     let step = |comment: &str, actions: Vec<Action>, dwell: f64| Step {
         comment: comment.into(),
         actions,
         dwell,
+        ..Default::default()
     };
+    let with_interlocks = |step: Step, interlocks| Step { interlocks, ..step };
     let act = |actuator, target, duration| Action {
         actuator,
         target,
@@ -125,16 +158,28 @@ pub fn load_demo(model: &mut Model, chart: &mut TimingChart, conveyors: &mut Con
         step("ワーク到着待ち", vec![], 2.0),
         step("下降", vec![act(lifter, 1.0, 0.4)], 0.0),
         step("チャック閉(把持)", vec![act(chuck, 1.0, 0.2)], 0.1),
-        step("上昇", vec![act(lifter, 0.0, 0.4)], 0.0),
-        step(
-            "排出コンベア上へ移動",
-            vec![act(x_axis, PLACE_TRAVEL * S, 1.0)],
-            0.0,
+        with_interlocks(
+            step("上昇", vec![act(lifter, 0.0, 0.4)], 0.0),
+            wait_for(chuck_closed, true),
+        ),
+        with_interlocks(
+            step(
+                "排出コンベア上へ移動",
+                vec![act(x_axis, PLACE_TRAVEL * S, 1.0)],
+                0.0,
+            ),
+            wait_for(lifter_up, true),
         ),
         step("下降", vec![act(lifter, 1.0, 0.4)], 0.0),
         step("チャック開(解放)", vec![act(chuck, 0.0, 0.2)], 0.1),
-        step("上昇", vec![act(lifter, 0.0, 0.4)], 0.0),
-        step("原点復帰", vec![act(x_axis, 0.0, 1.0)], 0.0),
+        with_interlocks(
+            step("上昇", vec![act(lifter, 0.0, 0.4)], 0.0),
+            wait_for(chuck_closed, false),
+        ),
+        with_interlocks(
+            step("原点復帰", vec![act(x_axis, 0.0, 1.0)], 0.0),
+            wait_for(lifter_up, true),
+        ),
     ];
 
     {

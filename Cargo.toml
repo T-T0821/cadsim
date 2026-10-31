@@ -36,6 +36,7 @@ rapier3d = "0.36"
 # PLC との OPC UA 通信 (クライアントのみ)。純 Rust
 async-opcua = { version = "0.19", default-features = false, features = ["client"] }
 tokio = { version = "1", features = ["rt", "time"] }
+encoding_rs = "0.8"
 
 [dev-dependencies]
 # テストで Modbus TCP サーバー (PLC の代わり) を立てる

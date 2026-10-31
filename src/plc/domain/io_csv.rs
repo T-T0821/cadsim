@@ -1,19 +1,27 @@
 //! I/O 対応表の CSV 書き出しと読み戻し
 //!
-//! 書き出した CSV を Excel などで編集し (番号・スケール・OPC UA ノードを PLC 側に合わせる)、
+//! 書き出した CSV を Excel などで編集し (番号・スケール・OPC UA ノード・ログの列名を PLC 側に合わせる)、
 //! 読み込むと各信号の個別設定 ([`PointSettings`]) になる。行は「信号」列の名前で突き合わせる。
 //!
 //! ```text
-//! 信号,向き,種類,番号,スケール,OPC UAノード
-//! リフタ.出,出力,コイル,0,,ns=2;s=Line.Lifter.Out
-//! X軸.指令位置,出力,保持レジスタ,0,0.1,
+//! 信号,向き,種類,番号,スケール,OPC UAノード,ログ列名
+//! リフタ.出,出力,コイル,0,,ns=2;s=Line.Lifter.Out,Y10
+//! X軸.指令位置,出力,保持レジスタ,0,0.1,,D100
 //! ```
 //!
-//! 番号・スケール・ノードが空の欄は自動の値に戻す。向きと種類は読むときには使わない (確認用)。
+//! 番号・スケール・ノード・ログ列名が空の欄は自動の値に戻す。古い CSV (ログ列名の列がない) も読める。向きと種類は読むときには使わない (確認用)。
 
 use super::io::{AddressPlan, IoTable, PointSettings};
 
-const HEADER: [&str; 6] = ["信号", "向き", "種類", "番号", "スケール", "OPC UAノード"];
+const HEADER: [&str; 7] = [
+    "信号",
+    "向き",
+    "種類",
+    "番号",
+    "スケール",
+    "OPC UAノード",
+    "ログ列名",
+];
 /// Excel が UTF-8 と判断できるよう先頭に付ける印 (BOM)
 const BOM: char = '\u{feff}';
 
@@ -40,6 +48,7 @@ pub fn to_csv(table: &IoTable) -> String {
             &p.address.to_string(),
             &scale,
             &p.node,
+            &p.log_column,
         ];
         let fields: Vec<String> = row.iter().map(|f| quote(f)).collect();
         text += &fields.join(",");
@@ -67,11 +76,12 @@ pub fn apply_csv(text: &str, table: &IoTable, plan: &mut AddressPlan) -> Result<
         .position(|r| r.first().is_some_and(|f| f.trim() == HEADER[0]))
         .ok_or("見出し行 (「信号」で始まる行) が見つかりません")?;
     let column = |name: &str| rows[header_at].iter().position(|f| f.trim() == name);
-    let (Some(name_col), number_col, scale_col, node_col) = (
+    let (Some(name_col), number_col, scale_col, node_col, log_col) = (
         column(HEADER[0]),
         column(HEADER[3]),
         column(HEADER[4]),
         column(HEADER[5]),
+        column(HEADER[6]),
     ) else {
         unreachable!("見出し行は「信号」列を含む");
     };
@@ -118,6 +128,7 @@ pub fn apply_csv(text: &str, table: &IoTable, plan: &mut AddressPlan) -> Result<
             // ビットにスケールはない
             scale: scale.filter(|_| io_point.point.is_word()),
             node: cell(node_col).to_string(),
+            log_column: cell(log_col).to_string(),
         };
         if settings == PointSettings::default() {
             plan.custom.remove(&io_point.point);
