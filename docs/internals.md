@@ -34,6 +34,7 @@
 
 ```text
 crates/cadsim_core/   Bevy に依存しないドメイン (cargo test -p cadsim_core で単体テスト)
+├── gamify.rs        ゲーム風 UI の中身: ミッションの判定・経験値とレベル・紙吹雪 (docs/playful-ui.md)
 ├── math.rs          回転・行列・外接箱の計算 (f64)
 ├── simulation/      干渉チェックの幾何計算 (geometry / mesh / interference / overlap)
 ├── drawing.rs       2D 図面: 投影・かくれ線・シルエット・寸法・図枠 (docs/drawing.md)
@@ -56,6 +57,7 @@ src/                  アプリ本体 (Bevy + egui)
 │   └── samples.rs    サンプルファイルを作るテスト (手で実行)
 ├── animation.rs     取り込んだアニメーションの再生
 ├── project.rs       プロジェクトファイル (.cadsim) の保存と読み込み
+├── preferences_file.rs 見た目とミッションの設定 (preferences.json) の読み書き (Bevy に依存しない)
 ├── viewport.rs      3D 表示: メッシュ作成、選択の強調、簡略表示 (LOD)、グリッド、クリック選択
 ├── part_mesh.rs     部品1つ分の表示用メッシュ (面をまとめたもの・面番号の表・簡略形状。Bevy に依存しない)
 ├── bvh.rs           外接箱の木 (BVH) とレイの当たり判定 (Bevy に依存しない)
@@ -103,6 +105,8 @@ src/                  アプリ本体 (Bevy + egui)
     ├── status.rs     ステータスバーと読み込み中の表示
     ├── animation.rs  アニメーションの再生パネル
     ├── modeling.rs   「モデリング」ウィンドウ (円柱・押し出し・穴あけ・ブーリアン)
+    ├── theme.rs      見た目 (ゲーム風 / シンプル) の配色と角丸
+    ├── playful.rs    ミッションカード・マスコット・お祝いと紙吹雪
     ├── view_cube.rs  ビューキューブと座標軸
     └── widgets.rs    数値入力などの小さな部品
 ```
