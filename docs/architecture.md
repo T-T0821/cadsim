@@ -66,7 +66,7 @@ crates/
 │                         ports (SceneReader / SceneWriter / ProjectStore などのトレイト)
 └── cadsim_io/            3. アダプター (Bevy なし)
     └── src/              step, interchange (gltf / obj / stl / usd), project_file (JSON),
-                          modbus, video, xlsx (工程シミュレーションの結果), rhai (部品スクリプトのエンジン)
+                          modbus, rtde (UR の関節角度の受信), video, xlsx (工程シミュレーションの結果), rhai (部品スクリプトのエンジン)
 ```
 
 ルートの `Cargo.toml` の `default-members` に全 crate を並べているので、引数なしの `cargo test` / `cargo clippy` でワークスペース全体を確かめられます。
@@ -110,6 +110,7 @@ crates/
 | 動画書き出し | `video`(撮る時刻・切り抜き・書き込み先のポート `VideoSink`) | `video::{encode, mp4}`(MP4 / GIF / PNG) | `recording.rs`(画面のキャプチャ・設定ウィンドウ) |
 | タイミングチャート・アニメーションの保存 | —(`motion::chart` は手順 2 で core へ) | `formats::chart_record` | `project.rs` |
 | 文書の変更を元に戻す履歴にまとめる | `usecase::edit_tracker`(前に確定した状態との比較) | — | `history.rs` の `TrackedDoc`(各プラグインで登録) |
+| 実機ロボット (UR) の関節角度の受信 | —(角度から関節の値への直し方 `motion::live_joints` は Bevy 非依存。`motion::chart` と一緒に手順 2 で core へ) | `cadsim_io::rtde`(RTDE の読み書きと通信スレッド) | `motion/ur_ui.rs` |
 | ライン連携 | `line::{coupler, signals, workpieces}`、`flow::sim` の連携の口 | — | `line/`(`stepper.rs` は Bevy 非依存。AGV のシミュレーションと一緒に手順 2 で core へ) |
 
 `formats/` と `bom.rs`・`modeling.rs`・`drawing/collect.rs` は Bevy に依存しない書き方にしてあり、`Model` が core に移ればそのまま移せます。
