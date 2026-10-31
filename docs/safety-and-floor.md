@@ -1,16 +1,16 @@
 # 安全機器・作業者・AGV の設計
 
-このドキュメントは `src/safety/` と `src/floor/` のしくみをまとめたものです。使い方は README の「できること」を見てください。
+このドキュメントは `src/safety/`・`src/floor/` と、計算を置いた `crates/cadsim_core/src/{safety,floor}/` のしくみをまとめたものです。使い方は README の「できること」を見てください。
 
 ## 1. ファイルと層
 
 | ファイル | 層 | 役割 |
 | --- | --- | --- |
-| `floor/geom.rs` | ドメイン | 床 (XZ 平面) の上の向き付き長方形 `Rect2`、長方形 + 高さの範囲 `Zone`、線分の距離 |
-| `safety/device.rs` | ドメイン | 安全機器のデータ、侵入の検知 `detect`、停止信号のラッチ `SafetyMonitor`、ISO 13855 の安全距離 |
-| `safety/check.rs` | ドメイン | 動作範囲 (危険源) の計算と、柵・ライトカーテンの距離の確認 |
-| `floor/operator_plan.rs` | ドメイン | 作業者の手順 → 時刻表・作業時間の内訳・歩行距離・経路 |
-| `floor/agv_sim.rs` | ドメイン | AGV の経路グラフ、配車、交差点の排他、車間、台数の比較 |
+| `cadsim_core/src/floor/geom.rs` | ドメイン | 床 (XZ 平面) の上の向き付き長方形 `Rect2`、長方形 + 高さの範囲 `Zone`、線分の距離 |
+| `cadsim_core/src/safety/device.rs` | ドメイン | 安全機器のデータ、侵入の検知 `detect`、停止信号のラッチ `SafetyMonitor`、ISO 13855 の安全距離 |
+| `safety/check.rs` | ドメイン | 動作範囲 (危険源) の計算と、柵・ライトカーテンの距離の確認 (タイミングチャートを使うので、チャートが core に移るまでアプリ側) |
+| `cadsim_core/src/floor/operator_plan.rs` | ドメイン | 作業者の手順 → 時刻表・作業時間の内訳・歩行距離・経路 |
+| `cadsim_core/src/floor/agv_sim.rs` | ドメイン | AGV の経路グラフ、配車、交差点の排他、車間、台数の比較 |
 | `safety/mod.rs`, `floor/mod.rs` | UI | Bevy のリソースとシステム。入力を集めてドメインの関数を呼ぶだけ |
 | `safety/view.rs`, `floor/view.rs` | UI | 3D 表示 (半透明のメッシュとギズモの線)、床のクリック |
 | `safety/panel.rs`, `floor/panel.rs` | UI | egui のパネル |

@@ -2,18 +2,14 @@
 //!
 //! | ファイル | 役割 |
 //! | --- | --- |
-//! | `geom.rs` | 床の上 (XZ) の長方形・距離の計算 (Bevy 非依存) |
-//! | `operator_plan.rs` | 作業者の手順 → 時刻表・作業時間・歩行距離・経路 (Bevy 非依存) |
-//! | `agv_sim.rs` | AGV の経路グラフ・配車・交差点の排他・台数比較 (Bevy 非依存) |
+//! | `cadsim_core::floor` | 床の上の長方形・距離 (geom)、作業者の時刻表 (operator_plan)、AGV の配車 (agv_sim) |
 //! | `view.rs` | 作業者・経路・AGV の 3D 表示と、床をクリックして点を置く操作 |
 //! | `panel.rs` | 「作業者・AGV」パネル |
 //!
 //! 作業者と AGV はタイミングチャートとは別の時計 ([`FloorClock`]) で動く。
 //! どちらも安全機器の検知の対象 (`SafetyIntruders`) に入り、AGV は安全停止中は止まる。
 
-pub(crate) mod agv_sim;
-pub mod geom;
-pub(crate) mod operator_plan;
+pub use cadsim_core::floor::{agv_sim, geom, operator_plan};
 mod panel;
 pub(crate) mod sample;
 mod view;
