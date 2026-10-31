@@ -79,3 +79,9 @@ crates/
 6. **UI 層を整理する。** 残った Bevy / egui のコードを `view` / `input` / `ui` に分ける。
 
 各段の終わりに、この文書の「目標のディレクトリ構成」と実際の構成の差を更新します。
+
+## 移行の進み具合
+
+| 場所 | 状態 |
+| --- | --- |
+| `src/flow/domain/` | ワーク搬送のドメイン。このフォルダのコードは Bevy・egui を使わず `glam` だけを使う。チャートの型(`TimingChart` など)は `motion` から借りているので、2. の段で `motion` の計算部分と一緒に `cadsim_core/src/domain/flow` へ移す |

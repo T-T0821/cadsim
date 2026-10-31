@@ -160,7 +160,9 @@ impl FlowSim {
             let size = DVec3::from_array(conveyor.work_size);
             let length = conveyor.along(size);
             let start_is_free = self.works.iter().all(|w| match w.place {
-                Place::Conveyor { conveyor: c, s } if c == conveyor.id => s >= length * (1.0 + QUEUE_GAP_RATIO),
+                Place::Conveyor { conveyor: c, s } if c == conveyor.id => {
+                    s >= length * (1.0 + QUEUE_GAP_RATIO)
+                }
                 _ => true,
             });
             if !start_is_free {

@@ -18,9 +18,9 @@ mod ui;
 
 use std::collections::HashMap;
 
-use glam::DVec3;
 use bevy::prelude::*;
 use bevy_egui::EguiPrimaryContextPass;
+use glam::DVec3;
 
 #[allow(unused_imports)] // FlowInputs などはセンサー・インターロックから使う
 pub use domain::{
