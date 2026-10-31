@@ -46,6 +46,7 @@ use crate::math::{euler_deg_to_quat, quat_to_euler_deg, split_placement};
 use crate::model::{BoxPart, Model, NodeId, NodeKind, Selection, StepSource};
 use crate::motion::{Playback, TimingChart};
 use crate::physics::{CableRecord, PartPhysicsRecord};
+use crate::plc::{Plc, PlcRecord};
 use crate::recording::is_recording;
 use crate::site::model::Site;
 use crate::step_import::{ImportNode, ImportedShape};
@@ -123,6 +124,9 @@ pub struct ProjectFile {
     /// glTF などから取り込んだアニメーション
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub animations: Vec<AnimationRecord>,
+    /// PLC 連携の設定 (I/O の割り付けと Modbus の接続先)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plc: Option<PlcRecord>,
 }
 
 /// プロジェクトに保存する設計データ一式 (モデル以外の文書も含む)
@@ -133,6 +137,7 @@ pub struct ProjectDocs<'a> {
     pub floor: FloorRecord,
     pub chart: &'a TimingChart,
     pub animations: &'a Animations,
+    pub plc: Option<PlcRecord>,
 }
 
 fn default_unit() -> String {
@@ -230,6 +235,7 @@ impl ProjectFile {
                 .collect(),
             chart: None,
             animations: Vec::new(),
+            plc: None,
         }
     }
 
@@ -251,6 +257,7 @@ impl ProjectFile {
             chart: (!chart.actuators.is_empty() || !chart.steps.is_empty())
                 .then(|| chart_to_record(chart, path_of)),
             animations: docs.animations.to_records(path_of),
+            plc: docs.plc.clone(),
             ..Self::from_model(model, base_dir)
         }
     }
@@ -741,19 +748,21 @@ impl ProjectState {
     }
 }
 
-/// タイミングチャートと取り込んだアニメーションの読み書き
+/// タイミングチャート・取り込んだアニメーション・PLC 連携の設定の読み書き
 #[derive(bevy::ecs::system::SystemParam)]
 pub struct MotionDoc<'w> {
     chart: ResMut<'w, TimingChart>,
     playback: ResMut<'w, Playback>,
     animations: ResMut<'w, Animations>,
+    plc: ResMut<'w, Plc>,
 }
 
 impl MotionDoc<'_> {
     /// 開いた (または新規の) プロジェクトのものに置き換え、再生位置を最初に戻す
-    fn replace(&mut self, chart: TimingChart, animations: Animations) {
+    fn replace(&mut self, chart: TimingChart, animations: Animations, plc: Option<&PlcRecord>) {
         *self.chart = chart;
         *self.animations = animations;
+        self.plc.restore(plc);
         let playback = &mut *self.playback;
         playback.time = 0.0;
         playback.playing = false;
@@ -797,6 +806,7 @@ fn run_project_actions(
                 floor: floor.record(),
                 chart: &motion.chart,
                 animations: &motion.animations,
+                plc: motion.plc.record(),
             }
         };
     }
@@ -837,7 +847,7 @@ fn run_project_actions(
                         "部品が見つからないアニメーションの動きが {missing} 件あったため読み飛ばしました"
                     ));
                 }
-                motion.replace(chart, animations);
+                motion.replace(chart, animations, loaded.file.plc.as_ref());
                 floor.apply(
                     loaded
                         .file
@@ -893,7 +903,7 @@ fn run_project_actions(
             flow.0 = FlowModel::default();
             flow_run.stop();
             floor.apply(FloorLayout::default());
-            motion.replace(TimingChart::default(), Animations::default());
+            motion.replace(TimingChart::default(), Animations::default(), None);
             history.clear();
             selection.clear();
             state.path = None;
@@ -985,6 +995,7 @@ fn update_window_title(
     floor: FloorView,
     chart: Res<TimingChart>,
     animations: Res<Animations>,
+    plc: Res<Plc>,
     mut window: Single<&mut Window, With<PrimaryWindow>>,
 ) {
     let docs = ProjectDocs {
@@ -994,6 +1005,7 @@ fn update_window_title(
         floor: floor.record(),
         chart: &chart,
         animations: &animations,
+        plc: plc.record(),
     };
     let unsaved = state.has_unsaved_changes(&docs);
     // 毎フレーム書くと変更検知が走り続けるので、変わったときだけ書く
@@ -1052,6 +1064,7 @@ mod tests {
                 floor: FloorRecord::default(),
                 chart: &self.chart,
                 animations: &self.animations,
+                plc: None,
             }
         }
     }

@@ -301,6 +301,7 @@ ID で部品を指している設定(アクチュエータなど)はそのまま
 | 安全機器・作業者・AGV | `floor/mod.rs` | 保存と同じ `FloorRecord`(動かしている間の状態は含まない) |
 | 平面図・点群 | `site/mod.rs` | `Site` の配置。図面・点の中身は `Arc` が同じものかだけを見る |
 | ケーブル・ホース | `physics/mod.rs` | `Model::cables` |
+| PLC の番号の割り付け | `plc/mod.rs` | `AddressPlan`(外部 PLC の接続先は履歴に載せない) |
 
 ```rust
 struct MoveStep { before: f64, after: f64 }
