@@ -92,3 +92,7 @@ GX Works 用 CSV は、命令リストの CSV の列 (ステップ番号・行�
 - チャートは `describe` の文章、ラダーは貼られたテキストのまま、ログは `log_events::summarize` で変化だけにして送る。
 - ログの変化は 3000 件まで送り、超えた分は送らないことを画面と問い合わせの両方に書く (黙って切らない)。
 - 送る材料は 40 万文字まで。超えたら分けてもらう。
+
+## 言葉でラインを組む
+
+文から設備の配置とタイミングチャートの下書きを作る。しくみは [line-compose.md](line-compose.md)。生成 AI の口はポート `LineDraftAi` (`cadsim_core::usecase::compose_line`) で、`cadsim_io::line_draft_json::LlmLineDrafter` が `LlmClient` で実装する。API キーがない・失敗したときは文のキーワードから作る。
