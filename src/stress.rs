@@ -11,6 +11,7 @@ use bevy::math::{DMat4, DVec3};
 use truck_meshalgo::prelude::*;
 use truck_modeling::{Solid, builder};
 
+use crate::part_mesh::shell_edges;
 use crate::step_import::{ImportNode, ImportedFile, ImportedShape, tessellation_tolerance};
 
 /// 1ユニットの部品数 (板1 + 脚4 + モーター1 + ローラー8 + ボルト16)
@@ -202,11 +203,7 @@ fn tessellate(solids: &[Solid], color: [f32; 3]) -> ImportedShape {
                 }
                 faces.push(poly);
             }
-            edges.extend(
-                shell
-                    .edge_iter()
-                    .map(|e| e.curve().iter().copied().collect()),
-            );
+            edges.extend(shell_edges(shell));
         }
     }
     ImportedShape::new(Vec::new(), faces, edges, Some(color))

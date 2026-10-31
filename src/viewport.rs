@@ -32,7 +32,7 @@ use crate::gizmo::gizmo_not_focused;
 use crate::math::{Aabb, to_transform};
 use crate::model::{Model, NodeId, NodeKind, Selection};
 use crate::motion::{MotionSet, SimulationPose};
-use crate::part_mesh::PartMesh;
+use crate::part_mesh::{PartMesh, shell_edges};
 use crate::simulation::{self, InterferenceCheck, Pose, SimBody, TriMesh, measure::not_measuring};
 
 /// 箱のテッセレーションの許容誤差 (モデル単位)
@@ -271,10 +271,7 @@ fn rebuild_dirty_parts(
             NodeKind::Box(part) => {
                 let meshed = part.build_solid().triangulation(BOX_TESSELLATION_TOL);
                 let shell = &meshed.boundaries()[0];
-                let edges: Vec<Vec<Point3>> = shell
-                    .edge_iter()
-                    .map(|edge| edge.curve().iter().copied().collect())
-                    .collect();
+                let edges = shell_edges(shell);
                 let faces: Vec<PolygonMesh> = shell
                     .face_iter()
                     .map(|face| {

@@ -9,6 +9,7 @@
 use bevy::math::Vec3;
 use std::collections::HashMap;
 use truck_meshalgo::prelude::*;
+use truck_topology::Shell;
 
 use crate::bvh::{Bounds, Bvh, ray_triangle};
 
@@ -173,6 +174,19 @@ impl PartMesh {
     }
 }
 
+/// テッセレーション済みのシェルの稜線 (ポリライン)。
+/// `Shell::edge_iter` は面ごとに稜線を返して隣り合う面で重複するので、圧縮形式から取る。
+pub fn shell_edges(
+    shell: &Shell<Point3, PolylineCurve<Point3>, Option<PolygonMesh>>,
+) -> Vec<Vec<Point3>> {
+    shell
+        .compress()
+        .edges
+        .into_iter()
+        .map(|edge| edge.curve.0)
+        .collect()
+}
+
 fn to_vec3(p: &Point3) -> Vec3 {
     Vec3::new(p.x as f32, p.y as f32, p.z as f32)
 }
@@ -201,11 +215,7 @@ mod tests {
                 poly
             })
             .collect();
-        let edges: Vec<Vec<Point3>> = shell
-            .edge_iter()
-            .map(|e| e.curve().iter().copied().collect())
-            .collect();
-        PartMesh::new(&faces, &edges)
+        PartMesh::new(&faces, &shell_edges(shell))
     }
 
     #[test]
