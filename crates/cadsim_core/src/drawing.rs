@@ -344,9 +344,7 @@ fn draw_view(
         meshes.iter().any(|m| m.ray_blocked(origin, toward, eps))
     };
     for part in &input.parts {
-        let mut polylines: Vec<Vec<DVec3>> = part
-            .edges
-            .iter()
+        let mut polylines: Vec<Vec<DVec3>> = sharp_edges(part, toward)
             .map(|e| e.iter().map(|&p| part.world.transform_point3(p)).collect())
             .collect();
         for face in &part.faces {
@@ -422,6 +420,42 @@ fn drop_covered_hidden_lines(sheet: &mut Sheet, scene_size: f64) {
     sheet.lines.retain(|(layer, a, b)| {
         *layer != Layer::Hidden || ![*a, a.lerp(*b, 0.5), *b].into_iter().all(on_outline)
     });
+}
+
+/// 面どうしが滑らかにつながる稜線 (円柱の継ぎ目など) を除いた稜線。
+/// 稜線の真ん中の線分を共有する2つの三角形の向きの差で見分ける。
+/// 滑らかでも、`toward` から見て輪郭になる (片側が表、片側が裏を向く) 稜線は残す。
+fn sharp_edges(part: &DrawingPart, toward: DVec3) -> impl Iterator<Item = &Vec<DVec3>> {
+    use std::collections::HashMap;
+    const SMOOTH_COS: f64 = 0.94; // 約 20°
+    let key = |p: DVec3| (p * 1e6).round().as_i64vec3().to_array();
+    let segment = move |a: DVec3, b: DVec3| {
+        let (ka, kb) = (key(a), key(b));
+        if ka <= kb { (ka, kb) } else { (kb, ka) }
+    };
+    let mut normals: HashMap<_, Vec<DVec3>> = HashMap::new();
+    for t in part.faces.iter().flatten() {
+        let n = (t[1] - t[0]).cross(t[2] - t[0]).normalize_or_zero();
+        for i in 0..3 {
+            normals
+                .entry(segment(t[i], t[(i + 1) % 3]))
+                .or_default()
+                .push(n);
+        }
+    }
+    part.edges.iter().filter(move |edge| {
+        if edge.len() < 2 {
+            return false;
+        }
+        let mid = (edge.len() - 1) / 2;
+        match normals
+            .get(&segment(edge[mid], edge[mid + 1]))
+            .map(Vec::as_slice)
+        {
+            Some([n1, n2]) => n1.dot(*n2) < SMOOTH_COS || n1.dot(toward) * n2.dot(toward) <= 0.0,
+            _ => true,
+        }
+    })
 }
 
 /// 曲面の輪郭: 面のメッシュの中で、表を向いた三角形と裏を向いた三角形の境の辺
@@ -863,5 +897,36 @@ mod tests {
         for l in lines {
             assert!((l[0].x.abs() - 1.0).abs() < 0.02);
         }
+    }
+
+    #[test]
+    fn smooth_seams_are_not_drawn() {
+        // 箱の稜線はすべて残る
+        let cube = box_part(DVec3::ZERO, DVec3::splat(2.0));
+        assert_eq!(sharp_edges(&cube, DVec3::Z).count(), cube.edges.len());
+        // 円柱の側面を2つの面に分けた継ぎ目 (奥の -Z 側) は、面が滑らかにつながるので正面からは描かない
+        let n = 24;
+        let p = |i: usize, y: f64| {
+            let a = std::f64::consts::TAU * i as f64 / n as f64;
+            DVec3::new(a.cos(), y, -a.sin())
+        };
+        let side = |range: std::ops::Range<usize>| {
+            range
+                .flat_map(|i| {
+                    [
+                        [p(i, 0.0), p(i + 1, 0.0), p(i + 1, 1.0)],
+                        [p(i, 0.0), p(i + 1, 1.0), p(i, 1.0)],
+                    ]
+                })
+                .collect::<Vec<_>>()
+        };
+        let cylinder = DrawingPart {
+            faces: vec![side(0..6), side(6..24)],
+            edges: vec![vec![p(6, 0.0), p(6, 1.0)]],
+            world: DMat4::IDENTITY,
+        };
+        assert_eq!(sharp_edges(&cylinder, DVec3::Z).count(), 0);
+        // 継ぎ目が真横に来る向きから見ると輪郭なので残す
+        assert_eq!(sharp_edges(&cylinder, DVec3::X).count(), 1);
     }
 }

@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use glam::{DMat4, DVec2, DVec3};
 use truck_meshalgo::prelude::*;
-use truck_modeling::{Solid, builder};
+use truck_modeling::{Solid, Wire, builder};
 
 use crate::history::ModelChange;
 use crate::math::euler_deg_to_quat;
@@ -91,9 +91,17 @@ pub fn cylinder(radius: f64, height: f64) -> Result<Solid, String> {
     if radius <= 0.0 || height <= 0.0 {
         return Err("半径と高さは 0 より大きくしてください".into());
     }
-    let v = builder::vertex(Point3::new(radius, 0.0, 0.0));
-    // 下から見て時計回り = 上 (+Y) から見て反時計回りの円。面は +Y を向く
-    let circle = builder::rsweep(&v, Point3::origin(), Vector3::unit_y(), Rad(-TAU));
+    // 4つの 1/4 円でつくる。X・Z の端に頂点が来るので、メッシュの外接箱が実寸どおりになる
+    let at = |angle: f64| Point3::new(radius * angle.cos(), 0.0, -radius * angle.sin());
+    let vertices: Vec<_> = (0..4)
+        .map(|i| builder::vertex(at(TAU * i as f64 / 4.0)))
+        .collect();
+    let circle: Wire = (0..4)
+        .map(|i| {
+            let transit = at(TAU * (i as f64 + 0.5) / 4.0);
+            builder::circle_arc(&vertices[i], &vertices[(i + 1) % 4], transit)
+        })
+        .collect();
     let disk =
         builder::try_attach_plane(&[circle]).map_err(|e| format!("円を作れません: {e:?}"))?;
     let disk = oriented(disk, Vector3::unit_y());
