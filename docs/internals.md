@@ -70,6 +70,8 @@ src/                  アプリ本体 (Bevy + egui)
 │   ├── xlsx.rs       Excel 書き出し
 │   ├── mod.rs        プラグイン、早送りの再生、3D の色分け (FlowColors)
 │   └── ui.rs         工程シミュレーションのウィンドウ
+├── safety/          安全機器・動作範囲・距離の確認 (詳しくは docs/safety-and-floor.md)
+├── floor/           作業者と AGV、床の上の幾何計算 (詳しくは docs/safety-and-floor.md)
 └── ui/
     ├── mod.rs        画面の割り付け (上 → 下 → 左 → 右 → 残りが 3D ビュー)
     ├── menu.rs       メニューバーとツールバー
@@ -190,6 +192,12 @@ egui のパネルを上・下・左・右の順に置き、残った領域を 3D
 - `SimulationPose::pose_of(&model, node)` は、部品自身か、いちばん近い祖先のアセンブリの動きを返す。
 - `viewport.rs` の `sync_views` が `.after(MotionSet::Pose)` で動きを部品の配置に重ね、表示用の `Transform` と干渉チェック用の `SimBody.pose` の両方に写すので、再生・スクラブ中も各時刻の位置で干渉チェックが走る。設計データ(`Model`)は書き換えない。
 - 書き出し(`motion/export.rs`)では、1サイクルを 1/30 秒ごとに標本化し、親と違う動きをするノードだけに「親から見た配置」のキーを作る(`(動き × 設計のワールド配置)` を親の同じ時刻のワールド配置で割る)。アセンブリに割り当てた動きは、シーンの親子関係で子孫に伝わる。
+
+### 安全機器・作業者・AGV(`safety/`, `floor/`)
+
+- 検知・ラッチ・安全距離・動作範囲・作業者の計画・AGV の配車はすべて Bevy に依存しない関数で、単体テストを付けている。
+- 侵入物は `safety::SafetyIntruders` に毎フレーム集める (可動部・作業者・AGV)。停止信号が出ると、タイミングチャートの再生と AGV が止まる。
+- 作業者と AGV はチャートとは別の時計 `floor::FloorClock` で動く。詳しくは [safety-and-floor.md](safety-and-floor.md)。
 
 ### 寸法と注記(`annotation.rs`)
 

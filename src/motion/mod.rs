@@ -27,11 +27,13 @@ use std::collections::HashMap;
 
 use bevy::prelude::*;
 
+#[cfg(test)]
+pub use chart::{Action, ActuatorKind, Axis, Step};
 pub use chart::{Schedule, TimingChart};
 #[cfg(test)]
 pub use demo::load_demo;
 pub use export::chart_animation;
-pub use pose::RigidPose;
+pub use pose::{RigidPose, part_poses};
 pub use ui::{MotionUi, show_panel};
 
 use crate::model::{Model, NodeId};
