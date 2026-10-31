@@ -10,6 +10,7 @@ use crate::gizmo::Tool;
 use crate::history::Request;
 use crate::interchange::{FORMATS, LENGTH_UNITS};
 use crate::project::ProjectAction;
+use crate::result_export::ResultKind;
 use cadsim_core::gamify::ThemeKind;
 
 pub fn show(root: &mut egui::Ui, state: &mut UiState) {
@@ -61,6 +62,7 @@ fn file_menu(ui: &mut egui::Ui, state: &mut UiState) {
         }
         ui.separator();
         export_menu(ui, state);
+        results_menu(ui, state);
         ui.separator();
         if ui
             .button("すべて閉じる")
@@ -148,6 +150,44 @@ fn export_menu(ui: &mut egui::Ui, state: &mut UiState) {
         }
         ui.separator();
         ui.checkbox(&mut units.z_up, "Z 軸が上 (オフにすると Y 軸が上)");
+    });
+}
+
+/// タイミングチャートと干渉チェックの結果を CSV に書き出す
+fn results_menu(ui: &mut egui::Ui, state: &mut UiState) {
+    ui.menu_button("シミュレーション結果 (CSV)", |ui| {
+        let enabled = !state.results.is_busy();
+        if ui
+            .add_enabled(enabled, egui::Button::new("サイクルタイム…"))
+            .on_hover_text("タイミングチャートのステップごとの開始・終了・所要時間")
+            .clicked()
+        {
+            state.results.request(ResultKind::CycleTime);
+            ui.close();
+        }
+        if ui
+            .add_enabled(enabled, egui::Button::new("干渉結果 (1サイクル分)…"))
+            .on_hover_text(
+                "チャートを最初から最後まで動かしながら干渉チェックし、干渉・接触・近接の時間帯を書き出す。\
+                 判定の設定はシミュレーションパネルのものを使う",
+            )
+            .clicked()
+        {
+            state.results.request(ResultKind::Interference);
+            ui.close();
+        }
+        ui.horizontal(|ui| {
+            ui.label("干渉チェックの間隔");
+            ui.add(
+                egui::DragValue::new(&mut state.results.sample_interval)
+                    .range(0.001..=1.0)
+                    .speed(0.001)
+                    .suffix(" 秒"),
+            );
+        });
+        if !enabled {
+            ui.weak("出力中…");
+        }
     });
 }
 
