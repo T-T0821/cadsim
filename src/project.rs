@@ -33,10 +33,12 @@ use crate::annotation::{AnnotationRecord, Annotations, node_at_path, node_path, 
 use crate::camera::CameraRequest;
 use crate::file_io::{ImportJobs, file_name, load_source, receive_imports, source_name};
 use crate::flow::{self, FlowRes, FlowRun, model::FlowModel, record::FlowRecord};
+use crate::formats::site_record::{CloudRecord, UnderlayRecord, load_site};
 use crate::history::History;
 use crate::interchange::UnitOptions;
 use crate::math::{euler_deg_to_quat, quat_to_euler_deg, split_placement};
 use crate::model::{BoxPart, Model, NodeId, NodeKind, Selection, StepSource};
+use crate::site::model::Site;
 use crate::step_import::{ImportNode, ImportedShape};
 
 /// ファイル形式のバージョン。古いファイルを開けなくなる変更をしたときだけ上げる。
@@ -90,6 +92,12 @@ pub struct ProjectFile {
     /// 3D 上の寸法と注記
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub annotations: Vec<AnnotationRecord>,
+    /// 床に敷いた平面図
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub underlays: Vec<UnderlayRecord>,
+    /// 読み込んだ点群
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub point_clouds: Vec<CloudRecord>,
     /// 工程モデル (工程シミュレーション)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub flow: Option<FlowRecord>,
@@ -107,6 +115,8 @@ pub enum StepFileRecord {
     Sample,
     /// プロジェクトファイルと同じフォルダ以下なら相対パス、それ以外は絶対パス
     File { path: String },
+    /// 作成メニューで作った形状。`solid` は truck の B-rep を JSON にしたもの
+    Modeled { name: String, solid: String },
     /// 負荷テスト用のシーン (開き直すと同じものを作り直す)
     Stress { parts: usize },
 }
@@ -174,6 +184,8 @@ impl ProjectFile {
                 .collect(),
             nodes,
             annotations: Vec::new(),
+            underlays: crate::formats::site_record::to_records(&model.site, base_dir),
+            point_clouds: crate::formats::site_record::cloud_records(&model.site, base_dir),
             flow: None,
         }
     }
@@ -324,6 +336,10 @@ impl StepFileRecord {
                 };
                 StepFileRecord::File { path }
             }
+            StepSource::Modeled(modeled) => StepFileRecord::Modeled {
+                name: modeled.name.clone(),
+                solid: modeled.json.clone(),
+            },
         }
     }
 
@@ -332,6 +348,13 @@ impl StepFileRecord {
             StepFileRecord::Sample => StepSource::Sample,
             &StepFileRecord::Stress { parts } => StepSource::Stress(parts),
             StepFileRecord::File { path } => StepSource::File(base_dir.join(path)),
+            StepFileRecord::Modeled { name, solid } => {
+                StepSource::Modeled(Arc::new(crate::modeling::ModeledSource {
+                    id: crate::step_import::next_shape_id(),
+                    name: name.clone(),
+                    json: solid.clone(),
+                }))
+            }
         }
     }
 }
@@ -414,6 +437,8 @@ pub struct LoadedProject {
     pub sources: Vec<StepSource>,
     /// STEP ごとの「製品名 → 形状」。読めなかった STEP は空。
     pub shapes: Vec<HashMap<String, Arc<ImportedShape>>>,
+    /// 平面図など。図面は元のファイルから読み直してある。
+    pub site: Site,
     pub warnings: Vec<String>,
 }
 
@@ -452,10 +477,18 @@ impl LoadedProject {
                 }
             })
             .collect();
+        let site = load_site(
+            &file.underlays,
+            &file.point_clouds,
+            base_dir,
+            crate::site::underlay::unit_in_mm(&file.unit),
+            &mut warnings,
+        );
         Self {
             file,
             sources,
             shapes,
+            site,
             warnings,
         }
     }
@@ -464,6 +497,7 @@ impl LoadedProject {
     pub fn apply_to(&self, model: &mut Model) -> Vec<String> {
         model.clear();
         model.unit = self.file.unit.clone();
+        model.site = self.site.clone();
         let mut warnings = self.warnings.clone();
         for record in &self.file.nodes {
             self.add_record(model, None, record, &mut warnings);
@@ -733,6 +767,7 @@ fn run_project_actions(
     match action {
         ProjectAction::New => {
             model.clear();
+            model.site = Site::default();
             *annotations = Annotations::default();
             flow.0 = FlowModel::default();
             flow_run.stop();

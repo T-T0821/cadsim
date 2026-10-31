@@ -87,3 +87,14 @@ crates/
 ### すでに層を分けて書いてあるもの
 
 - 工程シミュレーション: ドメイン(工程モデル・離散事象シミュレーション・色)は `cadsim_core::flow` に置いた。アプリの `src/flow/` のうち `record.rs`(.cadsim の形)と `xlsx.rs`(Excel 書き出し)は Bevy に依存しないアダプターで、`cadsim_io` を作る段でそのまま移す。`mod.rs`・`ui.rs` が UI 層。
+
+### 移行の途中で足した機能の置き場所
+
+| 機能 | ドメイン(`cadsim_core`) | アダプター(いまはアプリ側、手順 3 で `cadsim_io` へ) | UI(アプリ側) |
+| --- | --- | --- | --- |
+| 平面図の下敷き・点群 | `site::{underlay, pointcloud, model}` | `formats::{dxf, pdf_plan, pointcloud_read, site_record}` | `site/`(表示・パネル・縮尺合わせ) |
+| 2D 図面 | `drawing` | `formats::drawing_out` | `documents.rs` |
+| 部品表 | —(`Model` を読むので `bom.rs` はアプリ側。手順 4 で core へ) | `formats::bom_out` | `documents.rs` |
+| モデリング | —(`Model` と履歴を書き換えるので `modeling.rs` はアプリ側。手順 4 で core へ) | — | `ui/modeling.rs` |
+
+`formats/` と `bom.rs`・`modeling.rs`・`drawing/collect.rs` は Bevy に依存しない書き方にしてあり、`Model` が core に移ればそのまま移せます。

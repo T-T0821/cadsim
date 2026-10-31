@@ -56,7 +56,8 @@ impl Plugin for ViewportPlugin {
                         .run_if(pointer_in_3d_view)
                         .run_if(gizmo_not_focused)
                         .run_if(not_measuring)
-                        .run_if(annotate_tool_off),
+                        .run_if(annotate_tool_off)
+                        .run_if(crate::site::plan_tool_off),
                     rebuild_dirty_parts,
                     // 動作シミュレーションの動きが決まってから配置を写す
                     sync_views.after(MotionSet::Pose),

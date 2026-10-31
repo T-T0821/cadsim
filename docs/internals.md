@@ -20,7 +20,13 @@
 | tobj(OBJ の読み込み) | 4 |
 | stl_io(STL の読み書き) | 0.11 |
 | openusd(OpenUSD の読み書き。純 Rust) | 0.8 |
-| rust_xlsxwriter(工程シミュレーションの Excel 書き出し) | 0.102 |
+| truck-shapeops(ブーリアン演算) | 0.4 |
+| glam(f64 のベクトル・行列。bevy_math と同じ版) | 0.33 |
+| lopdf(PDF の平面図の読み込み) | 0.46 |
+| image(PNG / JPEG の平面図) | 0.25 |
+| e57(E57 の点群の読み込み) | 0.11 |
+| krilla(図面の PDF 書き出し) | 0.8 |
+| rust_xlsxwriter(部品表・工程シミュレーションの Excel 書き出し) | 0.102 |
 
 ## コードの構成
 
@@ -30,6 +36,8 @@
 crates/cadsim_core/   Bevy に依存しないドメイン (cargo test -p cadsim_core で単体テスト)
 ├── math.rs          回転・行列・外接箱の計算 (f64)
 ├── simulation/      干渉チェックの幾何計算 (geometry / mesh / interference / overlap)
+├── drawing.rs       2D 図面: 投影・かくれ線・シルエット・寸法・図枠 (docs/drawing.md)
+├── site/            平面図の下敷きの配置と縮尺合わせ、点群の間引き・LOD・干渉 (docs/site.md)
 └── flow/            工程モデル (model)、離散事象シミュレーションと集計 (sim)、状態・稼働率の色 (palette)
 src/                  アプリ本体 (Bevy + egui)
 ├── main.rs          アプリの組み立て (プラグインを並べるだけ)
@@ -65,6 +73,18 @@ src/                  アプリ本体 (Bevy + egui)
 ├── japanese_font.rs egui に日本語フォントを登録
 ├── simulation/      干渉チェックの配線・表示・パネルと距離計測 (詳しくは docs/simulation.md)
 ├── annotation.rs    3D 上の寸法と注記 (置く操作・描画・パネル・保存形式)
+├── modeling.rs      円柱・押し出し・穴あけ・ブーリアン (truck の B-rep。docs/modeling.md)
+├── drawing/         図面の材料をモデルから集める (計算は cadsim_core::drawing)
+├── bom.rs           部品表 (同じ部品をまとめて数える)
+├── documents.rs     図面・部品表の書き出しダイアログと保存
+├── site/            平面図・点群の読み込みの配線、3D 表示、「平面図・点群」パネル
+├── formats/         平面図・点群・図面・部品表のファイル形式 (Bevy に依存しない)
+│   ├── dxf.rs        DXF の読み込み (平面図) と書き出し (図面)
+│   ├── pdf_plan.rs   PDF の線と画像を平面図にする
+│   ├── pointcloud_read.rs PLY / LAS / E57 の読み込み
+│   ├── drawing_out.rs 図面の PDF / DXF
+│   ├── bom_out.rs    部品表の CSV / Excel
+│   └── site_record.rs .cadsim に書く平面図・点群の記録
 ├── flow/            工程シミュレーションの配線と画面 (計算は cadsim_core::flow。詳しくは docs/flow.md)
 │   ├── record.rs     .cadsim に書く形
 │   ├── xlsx.rs       Excel 書き出し
@@ -79,6 +99,7 @@ src/                  アプリ本体 (Bevy + egui)
     ├── properties.rs プロパティパネル
     ├── status.rs     ステータスバーと読み込み中の表示
     ├── animation.rs  アニメーションの再生パネル
+    ├── modeling.rs   「モデリング」ウィンドウ (円柱・押し出し・穴あけ・ブーリアン)
     ├── view_cube.rs  ビューキューブと座標軸
     └── widgets.rs    数値入力などの小さな部品
 ```
@@ -217,7 +238,7 @@ egui のパネルを上・下・左・右の順に置き、残った領域を 3D
 変更を済ませてから記録する方式です。モデルを書き換えたあと、その変更を戻すための `Command` を `History` に積みます。
 
 - モデルの変更は `ModelChange` で表します。中身は変更前と変更後のノードの写し(`Model::snapshot`、子孫ごと)です。取り込んだ形状は `Arc` で共有しているので、大きなアセンブリでも写すのは軽く済みます。
-- 履歴に載るもの: 箱の追加、STEP の読み込み、削除(Delete キー・ツリー・プロパティ)、すべて閉じる、ギズモでの移動・回転・拡大縮小、プロパティでの寸法・位置・回転・名前・色の変更。
+- 履歴に載るもの: 箱の追加、円柱・押し出しの追加、穴あけ・ブーリアン、STEP の読み込み、削除(Delete キー・ツリー・プロパティ)、すべて閉じる、ギズモでの移動・回転・拡大縮小、プロパティでの寸法・位置・回転・名前・色の変更。
 - 表示/非表示、選択、カメラは見た目の操作なので履歴に載せません。
 - ギズモや数値欄のドラッグは毎フレーム値が変わります。`History::begin_edit` が最初の状態だけを覚え、マウスを離した時点(数値を打ち込んだときは入力欄から抜けた時点)で1件にまとめます。
 - 新しく編集するとやり直しの履歴は消えます。履歴は最大 200 件です。

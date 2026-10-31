@@ -10,7 +10,7 @@ cadsim は、工場のライン設備を 3D で組み立てて動きを確かめ
 
 | 機能 | 状況 | 説明 |
 | --- | --- | --- |
-| STEP の取り込み(AP203 / AP214 / AP242) | 使える | [STEP ファイルを開く](step-import.md) |
+| STEP の取り込み(AP203 / AP214 / AP242) | 使える | [STEP ファイルを開く](step-import.md)、[各 CAD から STEP を書き出す](step-export.md) |
 | プロジェクトの保存と読み込み(.cadsim) | 使える | [プロジェクトの保存と読み込み](project.md) |
 | glTF / GLB・OBJ・STL・OpenUSD の取り込みと書き出し、アニメーション再生 | 使える | [glTF・OBJ・STL・USD の読み書き](interchange.md) |
 | HTML ビューアの書き出し(ブラウザ・スマホ・VR / AR で実寸表示) | 使える | [ブラウザ・スマホ・VR で見る](web-viewer.md) |
@@ -18,16 +18,20 @@ cadsim は、工場のライン設備を 3D で組み立てて動きを確かめ
 | プロパティ(配置・寸法・体積など) | 使える | [プロパティ](properties.md) |
 | Unity / Unreal と同じカメラ操作、標準ビュー、透視 / 平行投影 | 使える | [カメラとビュー](camera.md) |
 | 箱の作成と編集 | 使える | [箱の作成と編集](boxes.md) |
+| 円柱・押し出し・穴あけ・ブーリアン | 使える | [円柱・押し出し・穴・ブーリアン](modeling.md) |
 | 移動 / 回転 / 拡大縮小ギズモ、Ctrl スナップ | 使える | [ギズモとスナップ](gizmo.md) |
 | 元に戻す / やり直し | 使える | [元に戻す・やり直し](undo.md) |
 | 干渉チェック(干渉・接触・近接)と距離計測 | 使える | [干渉チェックと距離計測](simulation.md) |
 | 3D 上の寸法(点間距離・辺の長さ・面間距離)と注記 | 使える | [寸法と注記](annotations.md) |
+| 上面図・正面図の図面(PDF / DXF)と部品表(Excel / CSV) | 使える | [図面と部品表を書き出す](drawing.md) |
+| 平面図(DXF / PDF / 画像)を床に敷く、縮尺合わせ | 使える | [平面図を床に敷く](floor-plan.md) |
+| 点群(PLY / LAS / E57)の表示と干渉チェック | 使える | [点群を読み込む](point-cloud.md) |
 | タイミングチャートと動作シミュレーション | 使える | [タイミングチャート](timing-chart.md) |
 | Windows / Mac 向けのダウンロード版 | 使える | [インストールと起動](install.md) |
 | センサー・シーケンサー(PLC) | 予定 | [センサー・PLC](upcoming/sensors-plc.md) |
 | 関節とロボットの動き | 予定 | [関節とロボット](upcoming/robot.md) |
 | 標準部品ライブラリ | 予定 | [部品ライブラリ](upcoming/parts-library.md) |
-| CSV 出力 | 予定 | [CSV 出力](upcoming/csv.md) |
+| タイミングチャート・干渉チェックの結果の CSV 出力 | 予定 | [結果の CSV 出力](upcoming/csv.md) |
 
 「開発中」「予定」の章は、機能ができしだい中身を書き足していきます。
 

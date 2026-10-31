@@ -15,6 +15,8 @@ use bevy::{ecs::system::NonSendMarker, prelude::*};
 
 use crate::animation::Animations;
 use crate::camera::CameraRequest;
+use crate::formats::pointcloud_read::{CLOUD_EXTENSIONS, is_cloud_file};
+use crate::formats::{PLAN_EXTENSIONS, is_plan_file};
 use crate::history::History;
 use crate::interchange::{
     self, FORMATS, Scene, UnitOptions,
@@ -92,6 +94,8 @@ pub struct ImportJobs {
     browser_requested: bool,
     /// OBJ / STL の単位と上方向 (読み込みと書き出しの両方で使う)
     pub units: UnitOptions,
+    /// 平面図・点群として開くファイル (site が受け取って読む)
+    pub site_files: Vec<PathBuf>,
 }
 
 impl Default for ImportJobs {
@@ -106,6 +110,7 @@ impl Default for ImportJobs {
             export_requested: None,
             browser_requested: false,
             units: UnitOptions::default(),
+            site_files: Vec::new(),
         }
     }
 }
@@ -156,6 +161,9 @@ pub fn load_source(source: &StepSource, units: &UnitOptions) -> Result<Loaded, S
         StepSource::File(path) if !is_step(path) => {
             interchange::import_file(path, units).map(Loaded::Scene)
         }
+        StepSource::Modeled(modeled) => modeled
+            .to_imported()
+            .map(|file| Loaded::Step(Box::new(file))),
         &StepSource::Stress(parts) => Ok(Loaded::Step(Box::new(stress_scene(parts)))),
         _ => read_step(source)
             .and_then(|text| import_step(&text, &source_name(source)))
@@ -177,6 +185,7 @@ pub fn read_step(source: &StepSource) -> Result<String, String> {
         StepSource::File(path) => std::fs::read(path)
             .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
             .map_err(|e| format!("{} を開けませんでした: {e}", path.display())),
+        StepSource::Modeled(modeled) => Err(format!("{} は STEP ではありません", modeled.name)),
     }
 }
 
@@ -186,6 +195,7 @@ pub fn source_name(source: &StepSource) -> String {
         StepSource::Sample => SAMPLE_NAME.into(),
         StepSource::Stress(parts) => format!("負荷テスト ({parts} 部品)"),
         StepSource::File(path) => file_name(path),
+        StepSource::Modeled(modeled) => modeled.name.clone(),
     }
 }
 
@@ -247,6 +257,8 @@ fn parse_next<T: std::str::FromStr>(next: Option<PathBuf>) -> Option<T> {
 fn open_any(path: PathBuf, jobs: &mut ImportJobs, project: &mut ProjectState) {
     if is_project_file(&path) {
         project.request(ProjectAction::OpenPath(path));
+    } else if is_plan_file(&path) || is_cloud_file(&path) {
+        jobs.site_files.push(path);
     } else {
         jobs.open_path(path);
     }
@@ -268,6 +280,8 @@ fn open_dialog_if_requested(
             .filter(|f| f.import.is_some())
             .flat_map(|f| f.extensions.iter().copied()),
     );
+    all.extend(PLAN_EXTENSIONS);
+    all.extend(CLOUD_EXTENSIONS);
     let mut dialog = rfd::FileDialog::new()
         .set_title("開く")
         .add_filter("対応しているすべての形式", &with_upper_case(&all))
@@ -276,6 +290,11 @@ fn open_dialog_if_requested(
     for format in FORMATS.iter().filter(|f| f.import.is_some()) {
         dialog = dialog.add_filter(format.name, &with_upper_case(format.extensions));
     }
+    dialog = dialog.add_filter(
+        "平面図 (DXF / PDF / 画像)",
+        &with_upper_case(PLAN_EXTENSIONS),
+    );
+    dialog = dialog.add_filter("点群 (PLY / LAS / E57)", &with_upper_case(CLOUD_EXTENSIONS));
     let picked = dialog.add_filter("すべてのファイル", &["*"]).pick_file();
     if let Some(path) = picked {
         open_any(path, &mut jobs, &mut project);
