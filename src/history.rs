@@ -15,18 +15,21 @@
 //! タイミングチャート・工程モデル・床の配置・平面図のように、画面のあちこちで編集される文書は
 //! [`TrackedDoc`] を実装して `app.track_doc::<…>()` で登録する。編集する場所ごとに履歴を積む代わりに、
 //! マウスを離して入力欄からも抜けたときに前の状態と比べ、変わっていれば1件の履歴にする。
+//!
+//! 履歴の山・モデルの変更・ドラッグ中の編集のまとめ方は `cadsim_core::history` にあり、
+//! ここは `World` を相手にする部分 (Bevy のリソースの書き換え・システム) だけを持つ。
 
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass};
+use cadsim_core::history::{ModelEdits, UndoStack};
 use cadsim_core::usecase::edit_tracker::EditTracker;
 
-use crate::gizmo::transform_gizmo_system;
-use crate::model::{Model, Node, NodeId, NodeKind, Selection, Snapshot};
+pub use cadsim_core::history::{ModelChange, Request};
 
-/// 覚えておく履歴の上限
-const MAX_HISTORY: usize = 200;
+use crate::gizmo::transform_gizmo_system;
+use crate::model::{Model, NodeId, Selection};
 
 pub struct HistoryPlugin;
 
@@ -52,18 +55,11 @@ pub trait Command: Send + Sync + 'static {
     fn redo(&self, world: &mut World);
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Request {
-    Undo,
-    Redo,
-}
-
 #[derive(Resource, Default)]
 pub struct History {
-    undo_stack: Vec<Box<dyn Command>>,
-    redo_stack: Vec<Box<dyn Command>>,
+    stack: UndoStack<Box<dyn Command>>,
     /// ドラッグ中の編集 (編集前の写し)
-    pending: Option<Snapshot>,
+    edits: ModelEdits,
     /// メニューやショートカットから頼まれた操作。`apply_history_requests` が処理する。
     pub request: Option<Request>,
     /// 見張っている文書 (タイミングチャートなど)
@@ -75,22 +71,19 @@ pub struct History {
 impl History {
     /// 済ませた変更を履歴に積む。やり直しの履歴は捨てる。
     pub fn push(&mut self, command: impl Command) {
-        self.push_boxed(Box::new(command));
+        self.stack.push(Box::new(command));
     }
 
-    fn push_boxed(&mut self, command: Box<dyn Command>) {
-        self.redo_stack.clear();
-        self.undo_stack.push(command);
-        if self.undo_stack.len() > MAX_HISTORY {
-            self.undo_stack.remove(0);
+    fn push_model(&mut self, change: Option<ModelChange>) {
+        if let Some(change) = change {
+            self.push(change);
         }
     }
 
     /// 履歴を空にする (新規作成・開くとき)。見張っている文書は、次に見た状態から数え直す。
     pub fn clear(&mut self) {
-        self.undo_stack.clear();
-        self.redo_stack.clear();
-        self.pending = None;
+        self.stack.clear();
+        self.edits.clear();
         self.request = None;
         for tracker in &mut self.trackers {
             tracker.reset();
@@ -105,77 +98,48 @@ impl History {
             .filter_map(|t| t.poll(world))
             .collect();
         for change in changes {
-            self.push_boxed(change);
+            self.stack.push(change);
         }
     }
 
     pub fn undo_label(&self) -> Option<String> {
-        self.undo_stack.last().map(|c| c.label())
+        self.stack.next_undo().map(|c| c.label())
     }
 
     pub fn redo_label(&self) -> Option<String> {
-        self.redo_stack.last().map(|c| c.label())
+        self.stack.next_redo().map(|c| c.label())
     }
 
     /// ノードを書き換える直前に呼ぶ。同じノードへの連続した編集は最初の状態だけを覚える。
     pub fn begin_edit(&mut self, model: &Model, id: NodeId) {
-        if self.pending.as_ref().is_some_and(|p| p.root == id) {
-            return;
-        }
-        self.finish_edit(model);
-        self.pending = model.snapshot(id);
+        let finished = self.edits.begin(model, id);
+        self.push_model(finished);
     }
 
     /// 覚えておいた編集を1件の履歴にする。値が変わっていなければ何も積まない。
     pub fn finish_edit(&mut self, model: &Model) {
-        let Some(before) = self.pending.take() else {
-            return;
-        };
-        let after = model.snapshot(before.root);
-        if after.as_ref().is_some_and(|a| same_snapshot(a, &before)) {
-            return;
-        }
-        let name = node_name(&before);
-        self.push(ModelChange {
-            label: format!("{name} を編集"),
-            changes: vec![(Some(before), after)],
-        });
+        let finished = self.edits.finish(model);
+        self.push_model(finished);
     }
 
     /// 追加したノードを履歴に積む (箱の追加、STEP の読み込み)
     pub fn record_added(&mut self, model: &Model, id: NodeId, label: String) {
         self.finish_edit(model);
-        self.push(ModelChange {
-            label,
-            changes: vec![(None, model.snapshot(id))],
-        });
+        self.push(ModelChange::added(model, id, label));
     }
 
     /// ノードを削除して履歴に積む
     pub fn remove(&mut self, model: &mut Model, id: NodeId) {
         self.finish_edit(model);
-        let Some(before) = model.snapshot(id) else {
-            return;
-        };
-        model.remove(id);
-        self.push(ModelChange {
-            label: format!("{} を削除", node_name(&before)),
-            changes: vec![(Some(before), None)],
-        });
+        let change = ModelChange::remove(model, id);
+        self.push_model(change);
     }
 
     /// すべて閉じて履歴に積む
     pub fn clear_all(&mut self, model: &mut Model) {
         self.finish_edit(model);
-        let before = model.snapshot_all();
-        if before.is_empty() {
-            return;
-        }
-        model.clear();
-        self.push(ModelChange {
-            label: "すべて閉じる".into(),
-            changes: removals(before),
-        });
+        let change = ModelChange::clear_all(model);
+        self.push_model(change);
     }
 
     /// モデルを丸ごと作り直して履歴に積む (サンプル装置の読み込みなど)
@@ -186,67 +150,8 @@ impl History {
         rebuild: impl FnOnce(&mut Model),
     ) {
         self.finish_edit(model);
-        let before = model.snapshot_all();
-        rebuild(model);
-        let after = model.snapshot_all();
-        let mut changes = removals(before);
-        changes.extend(after.into_iter().map(|a| (None, Some(a))));
-        self.push(ModelChange { label, changes });
-    }
-}
-
-/// 最上位のノードをすべて消す変更。戻すときに元の並び順で戻るよう、後ろのノードから消す順に並べる
-/// (戻すときは逆順に、前のノードから元の位置へ差し込まれる)。
-fn removals(before: Vec<Snapshot>) -> Vec<(Option<Snapshot>, Option<Snapshot>)> {
-    before.into_iter().rev().map(|b| (Some(b), None)).collect()
-}
-
-impl History {}
-
-fn node_name(snapshot: &Snapshot) -> &str {
-    snapshot.nodes.first().map_or("", |(_, n)| n.name.as_str())
-}
-
-/// 編集で変わりうるところ (名前・配置・色・物理の設定・箱の寸法) が同じなら true。
-/// 表示/非表示は履歴に載せないので比べない。
-fn same_snapshot(a: &Snapshot, b: &Snapshot) -> bool {
-    let same_node = |x: &Node, y: &Node| {
-        x.name == y.name
-            && x.placement == y.placement
-            && x.color == y.color
-            && x.physics == y.physics
-            && x.script == y.script
-            && x.custom_part == y.custom_part
-            && x.children == y.children
-            && match (&x.kind, &y.kind) {
-                (NodeKind::Box(p), NodeKind::Box(q)) => p == q,
-                (NodeKind::Standard(p), NodeKind::Standard(q)) => p == q,
-                _ => true,
-            }
-    };
-    a.parent == b.parent
-        && a.index == b.index
-        && a.nodes.len() == b.nodes.len()
-        && a.nodes
-            .iter()
-            .zip(&b.nodes)
-            .all(|((i, x), (j, y))| i == j && same_node(x, y))
-}
-
-/// モデルの変更1回分。(変更前, 変更後) の組を並べたもの。
-/// 追加は変更前が None、削除は変更後が None。
-pub struct ModelChange {
-    pub label: String,
-    pub changes: Vec<(Option<Snapshot>, Option<Snapshot>)>,
-}
-
-/// `from` の状態を消して `to` の状態にする
-fn replace(model: &mut Model, from: &Option<Snapshot>, to: &Option<Snapshot>) {
-    if let Some(from) = from {
-        model.remove(from.root);
-    }
-    if let Some(to) = to {
-        model.restore(to);
+        let change = ModelChange::replace_all(model, label, rebuild);
+        self.push(change);
     }
 }
 
@@ -256,17 +161,11 @@ impl Command for ModelChange {
     }
 
     fn undo(&self, world: &mut World) {
-        let mut model = world.resource_mut::<Model>();
-        for (before, after) in self.changes.iter().rev() {
-            replace(&mut model, after, before);
-        }
+        ModelChange::undo(self, &mut world.resource_mut::<Model>());
     }
 
     fn redo(&self, world: &mut World) {
-        let mut model = world.resource_mut::<Model>();
-        for (before, after) in &self.changes {
-            replace(&mut model, before, after);
-        }
+        ModelChange::redo(self, &mut world.resource_mut::<Model>());
     }
 }
 
@@ -276,18 +175,14 @@ pub fn run(world: &mut World, request: Request) -> bool {
         history.finish_edit(world.resource::<Model>());
         history.record_tracked(world);
         let history = &mut *history;
-        let (from, to) = match request {
-            Request::Undo => (&mut history.undo_stack, &mut history.redo_stack),
-            Request::Redo => (&mut history.redo_stack, &mut history.undo_stack),
-        };
-        let Some(command) = from.pop() else {
+        let Some(command) = history.stack.take(request) else {
             return false;
         };
         match request {
             Request::Undo => command.undo(world),
             Request::Redo => command.redo(world),
         }
-        to.push(command);
+        history.stack.finish(request, command);
         // 戻した状態を「変更なし」として覚え直す (戻したこと自体を履歴に積まないように)
         for tracker in &mut history.trackers {
             tracker.sync(world);
@@ -328,7 +223,7 @@ fn finish_gesture_when_idle(
     if history.idle != idle {
         history.idle = idle;
     }
-    if idle && history.pending.is_some() {
+    if idle && history.edits.is_pending() {
         history.finish_edit(&model);
     }
     Ok(())
@@ -426,7 +321,7 @@ impl<D: TrackedDoc> Command for DocChange<D> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::StepSource;
+    use crate::model::{NodeKind, StepSource};
     use crate::step_import::import_step;
 
     fn world() -> World {
@@ -502,7 +397,7 @@ mod tests {
             }
             h.finish_edit(m);
         });
-        assert_eq!(world.resource::<History>().undo_stack.len(), 2);
+        assert_eq!(world.resource::<History>().stack.undo_len(), 2);
         assert!(run(&mut world, Request::Undo));
         assert_eq!(box_x(&world, id), Some(0.0));
         assert!(run(&mut world, Request::Redo));
@@ -517,7 +412,7 @@ mod tests {
             h.begin_edit(m, id);
             h.finish_edit(m);
         });
-        assert_eq!(world.resource::<History>().undo_stack.len(), 1);
+        assert_eq!(world.resource::<History>().stack.undo_len(), 1);
     }
 
     #[test]
@@ -543,7 +438,7 @@ mod tests {
             m.get_mut(id).unwrap().physics.mode = crate::physics::BodyMode::Dynamic;
             h.finish_edit(m);
         });
-        assert_eq!(world.resource::<History>().undo_stack.len(), 2);
+        assert_eq!(world.resource::<History>().stack.undo_len(), 2);
         assert!(run(&mut world, Request::Undo));
         let mode = world.resource::<Model>().get(id).unwrap().physics.mode;
         assert_eq!(mode, crate::physics::BodyMode::Mechanism);
@@ -635,14 +530,14 @@ mod tests {
         app.world_mut().resource_mut::<History>().idle = true;
         app.update();
         let history = app.world().resource::<History>();
-        assert_eq!(history.undo_stack.len(), 2);
+        assert_eq!(history.stack.undo_len(), 2);
         assert_eq!(history.undo_label().as_deref(), Some("数を編集"));
 
         request(&mut app, Request::Undo);
         assert_eq!(counter(&app), 1);
         // 戻したこと自体は履歴に積まない
         app.update();
-        assert_eq!(app.world().resource::<History>().redo_stack.len(), 1);
+        assert_eq!(app.world().resource::<History>().stack.redo_len(), 1);
         request(&mut app, Request::Undo);
         assert_eq!(counter(&app), 0);
         request(&mut app, Request::Redo);

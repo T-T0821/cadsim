@@ -11,6 +11,7 @@ pub mod custom_part;
 pub mod drawing;
 pub mod flow;
 pub mod gamify;
+pub mod history;
 pub mod library;
 pub mod line;
 pub mod line_draft;
