@@ -1422,6 +1422,21 @@ fn robot_cell_editor(
             ui.end_row();
         });
     if let Some(solved) = schedule.solved_move(step, id) {
+        let fastest = super::robot_time::min_move_time(chart, &robot, solved);
+        let duration = chart.steps[step].robot_move(id).map_or(0.0, |m| m.duration);
+        ui.horizontal(|ui| {
+            let text = format!("速度の上限での最短 {fastest:.2} s");
+            if fastest > duration + 1e-6 {
+                ui.colored_label(WARN_COLOR, format!("⚠ {text} (速すぎます)"));
+            } else {
+                ui.weak(text);
+            }
+            if ui.small_button("最短にする").clicked()
+                && let Some(m) = chart.steps[step].robot_move_mut(id)
+            {
+                m.duration = super::robot_time::round_up(fastest);
+            }
+        });
         if solved.ok() {
             ui.weak(match solved.kind {
                 MoveKind::Joint => "各関節を同時に動かして教示点へ移動します。",
