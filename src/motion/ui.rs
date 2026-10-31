@@ -18,6 +18,7 @@ use super::chart::{
 use super::sensor::SensorKind;
 use super::{ChartSchedule, Playback, SensorStates, SensorTimeline, demo};
 use crate::camera::CameraRequest;
+use crate::conveyor::ConveyorConfigRes;
 use crate::model::{Model, NodeId, Selection};
 
 const NAME_WIDTH: f32 = 150.0;
@@ -84,6 +85,8 @@ pub struct MotionUi<'w> {
     sensor_states: Res<'w, SensorStates>,
     playback: ResMut<'w, Playback>,
     state: ResMut<'w, ChartUiState>,
+    /// サンプル装置を読み込むときに、コンベアとグリッパも置き換える
+    conveyors: ResMut<'w, ConveyorConfigRes>,
 }
 
 /// 画面下のタイミングチャートのパネル。ステータスバーの上、左右のパネルより外側に置く。
@@ -146,7 +149,7 @@ pub fn show_panel(
     });
 
     if load_demo {
-        demo::load_demo(model, &mut edited);
+        demo::load_demo(model, &mut edited, &mut motion.conveyors);
         camera.write(CameraRequest::FitAll);
         play = Playback::default();
         *state = ChartUiState::default();

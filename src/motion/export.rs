@@ -99,21 +99,21 @@ mod tests {
     fn demo_cycle_becomes_keyframes() {
         let mut model = Model::default();
         let mut chart = TimingChart::default();
-        load_demo(&mut model, &mut chart);
+        load_demo(&mut model, &mut chart, &mut Default::default());
         let schedule = chart.schedule();
         let (scene, index_of) = model_to_scene(&model, &[]);
         let parents: Vec<_> = scene.nodes.iter().map(|n| n.parent).collect();
         let animation = chart_animation(&chart, &schedule, &model, &index_of, &parents).unwrap();
 
-        // 割り当てた部品 (キャリッジ・ロッド・グリッパ・テーブル・治具) だけにキーができる
+        // 割り当てた部品 (キャリッジ・ロッド・チャック本体・固定爪・可動爪) だけにキーができる
         let moving: Vec<&str> = animation
             .tracks
             .iter()
             .map(|t| scene.nodes[t.node].name.as_str())
             .collect();
         assert_eq!(moving.len(), 5, "{moving:?}");
-        assert!(moving.contains(&"グリッパ"));
-        assert!(!moving.contains(&"コンベア"));
+        assert!(moving.contains(&"チャック本体"));
+        assert!(!moving.contains(&"供給コンベア"));
         assert!((animation.duration() - schedule.cycle_time).abs() < 1e-9);
 
         // どの時刻でも、キーの姿勢 (メートル) がシミュレーションの位置と一致する

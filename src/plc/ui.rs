@@ -1,12 +1,14 @@
-//! 「PLC 連携」ウィンドウ: モードの切り替え、模擬 PLC の運転、Modbus の接続、I/O モニタ
+//! 「PLC 連携」ウィンドウ: モードの切り替え、模擬 PLC の運転、外部 PLC (Modbus TCP / OPC UA) の接続、I/O モニタ
 
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 
-use super::Plc;
 use super::adapter::modbus::{ModbusClient, ModbusSettings};
+use super::adapter::opcua::{OpcUaClient, OpcUaSettings};
 use super::domain::io::{AddressPlan, IoPoint};
-use super::usecase::{LinkStatus, PlcMode, PlcSession};
+use super::domain::io_csv::CsvReport;
+use super::usecase::{LinkStatus, PlcLink, PlcMode, PlcSession};
+use super::{Plc, Protocol};
 use crate::camera::ViewportRect;
 use crate::motion::{Playback, TimingChart};
 
@@ -36,23 +38,49 @@ pub fn plc_window(
         .default_open(false)
         .show(ctx, |ui| {
             ui.horizontal(|ui| {
-                for m in [PlcMode::Off, PlcMode::Simulated, PlcMode::External] {
+                for m in [
+                    PlcMode::Off,
+                    PlcMode::Simulated,
+                    PlcMode::External,
+                    PlcMode::LogReplay,
+                ] {
                     ui.radio_value(&mut mode, m, mode_label(m));
                 }
             });
             ui.separator();
-            let Plc { session, modbus } = &mut *plc;
+            let Plc {
+                session,
+                protocol,
+                modbus,
+                opcua,
+                notice,
+            } = &mut *plc;
             match session.mode {
                 PlcMode::Off => {
                     ui.label("タイミングチャートの時刻表どおりに再生します。");
                     ui.label("PLC の出力で動かすときは、上でモードを選んでください。");
                 }
                 PlcMode::Simulated => simulated_controls(ui, &chart, session),
-                PlcMode::External => modbus_controls(ui, session, modbus),
+                PlcMode::LogReplay => log_controls(ui, &chart, session, notice),
+                PlcMode::External => {
+                    ui.horizontal(|ui| {
+                        ui.label("通信方式");
+                        // つないでいる間は切り替えない
+                        ui.add_enabled_ui(!session.is_connected(), |ui| {
+                            ui.radio_value(protocol, Protocol::ModbusTcp, "Modbus TCP");
+                            ui.radio_value(protocol, Protocol::OpcUa, "OPC UA");
+                        });
+                    });
+                    match protocol {
+                        Protocol::ModbusTcp => modbus_controls(ui, session, modbus),
+                        Protocol::OpcUa => opcua_controls(ui, session, opcua),
+                    }
+                }
             }
             if session.is_active() {
                 ui.separator();
                 address_plan_editor(ui, &mut session.plan);
+                io_csv_buttons(ui, &chart, session, notice);
                 io_monitor(ui, session);
             }
         });
@@ -73,7 +101,8 @@ fn mode_label(mode: PlcMode) -> &'static str {
     match mode {
         PlcMode::Off => "オフ (チャート再生)",
         PlcMode::Simulated => "内蔵の模擬PLC",
-        PlcMode::External => "Modbus TCP",
+        PlcMode::External => "外部PLC",
+        PlcMode::LogReplay => "ログ再生",
     }
 }
 
@@ -113,6 +142,130 @@ fn simulated_controls(ui: &mut egui::Ui, chart: &TimingChart, plc: &mut PlcSessi
     }
 }
 
+fn log_controls(
+    ui: &mut egui::Ui,
+    chart: &TimingChart,
+    plc: &mut PlcSession,
+    notice: &mut Option<String>,
+) {
+    ui.label("実機で記録した PLC の出力 (GX LogViewer などの CSV) を時刻どおりに流し、設備を動かします。");
+    if ui
+        .button("ログ CSV を読み込み…")
+        .on_hover_text("列見出しは I/O 表の「ログ列名」(空なら信号名) と突き合わせます")
+        .clicked()
+        && let Some(path) = rfd::FileDialog::new()
+            .add_filter("CSV", &["csv", "txt"])
+            .pick_file()
+    {
+        *notice = Some(match std::fs::read(&path) {
+            Ok(bytes) => match plc.load_log(&decode_text(&bytes)) {
+                Ok(log) => {
+                    let mut text = format!(
+                        "{} 行・{:.1} 秒・{} 信号を読み込みました。",
+                        log.rows(),
+                        log.duration(),
+                        log.signals()
+                    );
+                    if !log.unused_columns.is_empty() {
+                        text += &format!(" 使わない列: {}。", log.unused_columns.join("、"));
+                    }
+                    text
+                }
+                Err(e) => e,
+            },
+            Err(e) => format!("読み込めませんでした: {e}"),
+        });
+    }
+
+    let mut seek = None;
+    let Some(player) = &mut plc.log else {
+        ui.weak("まだログを読み込んでいません。");
+        return;
+    };
+    ui.horizontal(|ui| {
+        if ui.button("⏮").on_hover_text("先頭へ").clicked() {
+            seek = Some(0.0);
+        }
+        let label = if player.playing {
+            "⏸ 一時停止"
+        } else {
+            "▶ 再生"
+        };
+        if ui.button(label).clicked() {
+            if !player.playing && player.time >= player.log.duration() {
+                seek = Some(0.0);
+            }
+            player.playing = !player.playing;
+        }
+        ui.checkbox(&mut player.looping, "繰り返し");
+        egui::ComboBox::from_id_salt("plc_log_speed")
+            .width(60.0)
+            .selected_text(format!("x{}", player.speed))
+            .show_ui(ui, |ui| {
+                for speed in [0.1, 0.25, 0.5, 1.0, 2.0, 5.0] {
+                    ui.selectable_value(&mut player.speed, speed, format!("x{speed}"));
+                }
+            });
+    });
+    let mut time = player.time;
+    let slider = egui::Slider::new(&mut time, 0.0..=player.log.duration())
+        .suffix(" s")
+        .fixed_decimals(2);
+    if ui.add(slider).changed() {
+        seek = Some(time);
+    }
+    if let Some(t) = seek {
+        plc.seek_log(chart, t);
+    }
+}
+
+/// ファイルの中身を文字列にする。UTF-8 でなければ Shift_JIS (日本語版 Windows のツールが書き出す CSV) とみなす。
+fn decode_text(bytes: &[u8]) -> String {
+    match std::str::from_utf8(bytes) {
+        Ok(text) => text.to_string(),
+        Err(_) => encoding_rs::SHIFT_JIS.decode(bytes).0.into_owned(),
+    }
+}
+
+fn opcua_controls(ui: &mut egui::Ui, plc: &mut PlcSession, settings: &mut OpcUaSettings) {
+    let connected = plc.is_connected();
+    ui.add_enabled_ui(!connected, |ui| {
+        egui::Grid::new("opcua_settings")
+            .num_columns(2)
+            .show(ui, |ui| {
+                ui.label("エンドポイント");
+                ui.text_edit_singleline(&mut settings.endpoint);
+                ui.end_row();
+                ui.label("通信周期");
+                ui.add(
+                    egui::DragValue::new(&mut settings.interval_ms)
+                        .range(10..=1000)
+                        .suffix(" ms"),
+                );
+                ui.end_row();
+            });
+    });
+    let with_node = plc
+        .table
+        .points
+        .iter()
+        .filter(|p| !p.node.is_empty())
+        .count();
+    let text = format!(
+        "OPC UA ノードを決めた信号: {with_node} / {}",
+        plc.table.points.len()
+    );
+    if with_node == 0 {
+        ui.colored_label(
+            WARN_COLOR,
+            text + "。I/O 表を CSV に書き出し、「OPC UAノード」列を埋めて読み込んでください。",
+        );
+    } else {
+        ui.label(text);
+    }
+    connect_row(ui, plc, || Box::new(OpcUaClient::start(settings.clone())));
+}
+
 fn modbus_controls(ui: &mut egui::Ui, plc: &mut PlcSession, settings: &mut ModbusSettings) {
     let connected = plc.is_connected();
     ui.add_enabled_ui(!connected, |ui| {
@@ -137,13 +290,18 @@ fn modbus_controls(ui: &mut egui::Ui, plc: &mut PlcSession, settings: &mut Modbu
                 ui.end_row();
             });
     });
+    connect_row(ui, plc, || Box::new(ModbusClient::start(settings.clone())));
+}
+
+/// 接続 / 切断のボタンと通信の状態
+fn connect_row(ui: &mut egui::Ui, plc: &mut PlcSession, start: impl FnOnce() -> Box<dyn PlcLink>) {
     ui.horizontal(|ui| {
-        if connected {
+        if plc.is_connected() {
             if ui.button("切断").clicked() {
                 plc.disconnect();
             }
         } else if ui.button("接続").clicked() {
-            plc.connect(Box::new(ModbusClient::start(settings.clone())));
+            plc.connect(start());
         }
         match plc.link_status() {
             LinkStatus::Disconnected => ui.label("未接続"),
@@ -172,7 +330,75 @@ fn address_plan_editor(ui: &mut egui::Ui, plan: &mut AddressPlan) {
                 row("入力ワード (保持レジスタ)", &mut plan.input_words);
             });
             ui.weak("出力 = PLC → 設備、入力 = 設備 → PLC。ワードは符号付き16ビットで、直動・回転とも 0.1 単位 (0.1 mm、0.1°)。");
+            if !plan.custom.is_empty() {
+                ui.horizontal(|ui| {
+                    ui.label(format!("CSV で個別に決めた信号: {} 件", plan.custom.len()));
+                    if ui.small_button("個別設定を消す").clicked() {
+                        plan.custom.clear();
+                    }
+                });
+            }
         });
+}
+
+/// I/O 対応表の CSV 書き出し・読み込みのボタンと、読み込み結果のお知らせ
+fn io_csv_buttons(
+    ui: &mut egui::Ui,
+    chart: &TimingChart,
+    plc: &mut PlcSession,
+    notice: &mut Option<String>,
+) {
+    ui.horizontal(|ui| {
+        if ui
+            .button("I/O 表を CSV に書き出し…")
+            .on_hover_text("Excel で番号・スケール・OPC UA ノードを編集して読み戻せます")
+            .clicked()
+            && let Some(path) = rfd::FileDialog::new()
+                .add_filter("CSV", &["csv"])
+                .set_file_name("io_table.csv")
+                .save_file()
+        {
+            *notice = Some(match std::fs::write(&path, plc.export_io_csv()) {
+                Ok(()) => format!("{} に書き出しました", path.display()),
+                Err(e) => format!("書き出せませんでした: {e}"),
+            });
+        }
+        if ui.button("CSV を読み込み…").clicked()
+            && let Some(path) = rfd::FileDialog::new()
+                .add_filter("CSV", &["csv"])
+                .pick_file()
+        {
+            *notice = Some(match std::fs::read(&path) {
+                Ok(bytes) => {
+                    let text = String::from_utf8_lossy(&bytes);
+                    match plc.import_io_csv(&text, chart) {
+                        Ok(report) => import_summary(&report),
+                        Err(e) => e,
+                    }
+                }
+                Err(e) => format!("読み込めませんでした: {e}"),
+            });
+        }
+    });
+    if let Some(text) = notice.clone() {
+        ui.horizontal(|ui| {
+            ui.label(text);
+            if ui.small_button("×").clicked() {
+                *notice = None;
+            }
+        });
+    }
+}
+
+fn import_summary(report: &CsvReport) -> String {
+    let mut text = format!("{} 件の信号に反映しました。", report.applied);
+    if !report.unknown.is_empty() {
+        text += &format!(" 一覧にない信号: {}。", report.unknown.join("、"));
+    }
+    for e in &report.errors {
+        text += &format!(" {e}。");
+    }
+    text
 }
 
 fn io_monitor(ui: &mut egui::Ui, plc: &mut PlcSession) {

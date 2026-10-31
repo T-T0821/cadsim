@@ -37,7 +37,7 @@ pub use chart::{Action, Actuator, ActuatorKind, Axis, Schedule, Step, TimingChar
 #[cfg(test)]
 pub use demo::load_demo;
 pub use export::chart_animation;
-pub use pose::{RigidPose, part_poses, part_poses_from_values};
+pub use pose::{RigidPose, actuator_poses, part_poses, part_poses_from_values};
 pub use ui::{MotionUi, show_panel};
 
 use crate::model::{Model, NodeId};
@@ -288,7 +288,7 @@ mod tests {
     fn demo() -> (Model, TimingChart) {
         let mut model = Model::default();
         let mut chart = TimingChart::default();
-        demo::load_demo(&mut model, &mut chart);
+        demo::load_demo(&mut model, &mut chart, &mut Default::default());
         (model, chart)
     }
 
@@ -304,12 +304,13 @@ mod tests {
         assert!(schedule.stop.is_none());
         assert!(schedule.steps.iter().all(|s| s.wait() == 0.0));
 
-        // 下降中はリフタ上昇端が OFF、テーブルを回すと治具確認が OFF になる
+        // [リフタ上昇端, チャック閉確認]: 下げるとリフタ上昇端が OFF、チャックを閉じると閉確認が ON
         let targets = design_targets(&model, &chart);
         let states = |t| sensor::sensor_states_at(&chart, &schedule, t, &targets, &[]);
-        assert_eq!(states(0.0), vec![true, true]);
-        assert_eq!(states(schedule.steps[0].end - 0.1), vec![false, true]);
-        assert_eq!(states(schedule.steps[5].end), vec![true, false]);
+        assert_eq!(states(0.0), vec![true, false]);
+        assert_eq!(states(schedule.steps[2].end), vec![false, true]);
+        assert_eq!(states(schedule.steps[3].end), vec![true, true]);
+        assert_eq!(states(schedule.steps[6].end), vec![false, false]);
     }
 
     #[test]
@@ -317,7 +318,7 @@ mod tests {
         let (model, mut chart) = demo();
         chart.sensors[0].force = Some(false);
         let schedule = schedule_of(&model, &chart);
-        // X軸を動かす S3 で止まる
-        assert_eq!(schedule.stop.map(|s| s.step), Some(2));
+        // X軸を動かす S5 で止まる
+        assert_eq!(schedule.stop.map(|s| s.step), Some(4));
     }
 }
