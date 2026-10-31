@@ -41,7 +41,7 @@ crates/cadsim_core/   Bevy に依存しないドメイン (cargo test -p cadsim_
 ├── simulation/      干渉チェックの幾何計算 (geometry / mesh / interference / overlap)
 ├── drawing.rs       2D 図面: 投影・かくれ線・シルエット・寸法・図枠 (docs/drawing.md)
 ├── site/            平面図の下敷きの配置と縮尺合わせ、点群の間引き・LOD・干渉 (docs/site.md)
-└── flow/            工程モデル (model)、離散事象シミュレーションと集計 (sim)、状態・稼働率の色 (palette)
+├── flow/            工程モデル (model)、離散事象シミュレーションと集計 (sim)、状態・稼働率の色 (palette)
 └── physics/         物理演算の設定・ケーブルの紐モデル・剛体の進め方 (settings / cable / world)
 crates/cadsim_io/     Bevy に依存しないアダプター (cargo test -p cadsim_io で単体テスト)
 └── interchange/     glTF / OBJ / STL などの読み書き (形式に依存しない中間表現 Scene を経由)

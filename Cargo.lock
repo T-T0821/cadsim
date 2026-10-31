@@ -2276,11 +2276,7 @@ dependencies = [
  "image",
  "krilla",
  "lopdf",
-<<<<<<< HEAD
-=======
- "openusd",
  "rapier3d",
->>>>>>> origin/main
  "rfd",
  "rust_xlsxwriter",
  "ruststep",
