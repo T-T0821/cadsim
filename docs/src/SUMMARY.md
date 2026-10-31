@@ -42,6 +42,7 @@
 - [工程・AGV・安全機器をつないでラインとして動かす](line.md)
 - [物理演算でワークを流す](physics.md)
 - [PLC で設備を動かす(仮想立ち上げ)](plc.md)
+- [部品ライブラリと自作部品](parts-library.md)
 - [部品スクリプト](scripting.md)
 - [シミュレーション結果の CSV 出力](csv-export.md)
 - [動きを動画にする](video-export.md)
@@ -53,7 +54,6 @@
 # 開発中の機能
 
 - [シーケンサー(PLC)](upcoming/sensors-plc.md)
-- [標準部品ライブラリ](upcoming/parts-library.md)
 
 ---
 

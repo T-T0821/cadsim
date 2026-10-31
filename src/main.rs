@@ -52,6 +52,7 @@ mod bom;
 mod bvh;
 mod camera;
 mod conveyor;
+mod custom_part;
 mod defeature;
 mod documents;
 mod drawing;
@@ -127,6 +128,7 @@ fn main() {
                 flow::FlowPlugin,
                 conveyor::ConveyorPlugin,
                 library::LibraryPlugin,
+                custom_part::CustomPartPlugin,
                 bench::BenchPlugin,
             ),
             (safety::SafetyPlugin, floor::FloorPlugin, line::LinePlugin),

@@ -19,7 +19,7 @@ mod ui;
 
 use bevy::prelude::*;
 
-pub use controller::ScriptController;
+pub use controller::{ScriptController, ScriptSource};
 pub use rhai_engine::API_HELP;
 pub use runner::ScriptState;
 pub use ui::{script_controls, script_section};
@@ -51,8 +51,9 @@ impl ScriptRun {
     }
 }
 
-/// スクリプトの付いたノード (部品・アセンブリ) を、ツリーの並び順に (id, 名前, ソース) で返す
-pub fn scripts_of(model: &Model) -> Vec<(crate::model::NodeId, String, String)> {
+/// スクリプトの付いたノード (部品・アセンブリ) を、ツリーの並び順に返す。
+/// 自作部品の中のスクリプトには、その部品の名前の頭 (例: "プッシャー 1/") を付けて返す。
+pub fn scripts_of(model: &Model) -> Vec<ScriptSource> {
     model
         .roots
         .iter()
@@ -60,7 +61,19 @@ pub fn scripts_of(model: &Model) -> Vec<(crate::model::NodeId, String, String)> 
         .filter_map(|id| {
             let node = model.get(id)?;
             let source = node.script.as_ref().filter(|s| !s.trim().is_empty())?;
-            Some((id, node.name.clone(), source.clone()))
+            let scope = model
+                .ancestors(id)
+                .into_iter()
+                .rev()
+                .find_map(|a| model.get(a)?.custom_part.as_ref())
+                .map(|c| c.prefix.clone())
+                .unwrap_or_default();
+            Some(ScriptSource {
+                node: id,
+                name: node.name.clone(),
+                scope,
+                source: source.clone(),
+            })
         })
         .collect()
 }
