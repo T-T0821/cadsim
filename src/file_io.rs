@@ -146,6 +146,9 @@ pub fn load_source(source: &StepSource, units: &UnitOptions) -> Result<Loaded, S
         StepSource::File(path) if !is_step(path) => {
             interchange::import_file(path, units).map(Loaded::Scene)
         }
+        StepSource::Modeled(modeled) => modeled
+            .to_imported()
+            .map(|file| Loaded::Step(Box::new(file))),
         _ => read_step(source)
             .and_then(|text| import_step(&text, &source_name(source)))
             .map(|file| Loaded::Step(Box::new(file))),
@@ -165,6 +168,7 @@ pub fn read_step(source: &StepSource) -> Result<String, String> {
         StepSource::File(path) => std::fs::read(path)
             .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
             .map_err(|e| format!("{} を開けませんでした: {e}", path.display())),
+        StepSource::Modeled(modeled) => Err(format!("{} は STEP ではありません", modeled.name)),
     }
 }
 
@@ -173,6 +177,7 @@ pub fn source_name(source: &StepSource) -> String {
     match source {
         StepSource::Sample => SAMPLE_NAME.into(),
         StepSource::File(path) => file_name(path),
+        StepSource::Modeled(modeled) => modeled.name.clone(),
     }
 }
 

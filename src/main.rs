@@ -21,6 +21,7 @@
 //! - `simulation`  干渉チェックと距離計測 (`SimBody` を付けた部品が対象)
 //! - `annotation`  3D 上の寸法 (点間距離・辺の長さ・面間距離) と注記
 //! - `drawing`     2D 図面 (上面図・正面図、寸法付き) を作る
+//! - `modeling`    円柱・押し出し・穴あけ・ブーリアン (truck の B-rep)
 //! - `bom`         部品表を作る
 //! - `documents`   図面と部品表の書き出し (ダイアログ)
 //! - `site`        床に敷く平面図 (DXF / PDF / 画像) と縮尺合わせ
@@ -42,6 +43,7 @@ mod history;
 mod interchange;
 mod japanese_font;
 mod math;
+mod modeling;
 mod model;
 mod motion;
 mod project;

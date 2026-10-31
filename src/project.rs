@@ -111,6 +111,8 @@ pub enum StepFileRecord {
     Sample,
     /// プロジェクトファイルと同じフォルダ以下なら相対パス、それ以外は絶対パス
     File { path: String },
+    /// 作成メニューで作った形状。`solid` は truck の B-rep を JSON にしたもの
+    Modeled { name: String, solid: String },
 }
 
 /// アセンブリの木の1ノード
@@ -312,6 +314,10 @@ impl StepFileRecord {
                 };
                 StepFileRecord::File { path }
             }
+            StepSource::Modeled(modeled) => StepFileRecord::Modeled {
+                name: modeled.name.clone(),
+                solid: modeled.json.clone(),
+            },
         }
     }
 
@@ -319,6 +325,13 @@ impl StepFileRecord {
         match self {
             StepFileRecord::Sample => StepSource::Sample,
             StepFileRecord::File { path } => StepSource::File(base_dir.join(path)),
+            StepFileRecord::Modeled { name, solid } => {
+                StepSource::Modeled(Arc::new(crate::modeling::ModeledSource {
+                    id: crate::step_import::next_shape_id(),
+                    name: name.clone(),
+                    json: solid.clone(),
+                }))
+            }
         }
     }
 }

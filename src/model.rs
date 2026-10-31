@@ -58,6 +58,8 @@ pub enum StepSource {
     /// アプリに埋め込みのサンプル
     Sample,
     File(PathBuf),
+    /// 作成メニュー (円柱・押し出し・穴・ブーリアン) で作った形状。B-rep をプロジェクトに埋め込む
+    Modeled(Arc<crate::modeling::ModeledSource>),
 }
 
 impl NodeKind {
