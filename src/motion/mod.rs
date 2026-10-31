@@ -7,6 +7,7 @@
 //! - `targets`: モデルの部品を、センサーが検知する直方体に変換する (Bevy 非依存)
 //! - `sensor_view`: 3D ビューにセンサーの光軸・検出範囲を描く
 //! - `demo`: 動作確認用のサンプル装置 (ピック & プレース)
+//! - `export`: 1サイクルの動きを書き出し用のアニメーション (glTF / USD) にする
 //!
 //! 設計データ (Model) は書き換えず、再生中の動きは [`SimulationPose`] に出す。
 //! 3D 表示 (viewport.rs) は部品の配置にこの動きを重ねて描く。
@@ -21,6 +22,7 @@
 
 mod chart;
 mod demo;
+mod export;
 mod pose;
 mod sensor;
 mod sensor_view;
@@ -32,6 +34,9 @@ use std::collections::HashMap;
 use bevy::prelude::*;
 
 pub use chart::{Schedule, TimingChart};
+#[cfg(test)]
+pub use demo::load_demo;
+pub use export::chart_animation;
 pub use pose::RigidPose;
 pub use ui::{MotionUi, show_panel};
 
