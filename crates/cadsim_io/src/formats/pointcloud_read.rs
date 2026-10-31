@@ -12,7 +12,7 @@ use std::path::Path;
 
 use glam::DVec3;
 
-use crate::site::pointcloud::{CloudSettings, Decimator, PointCloud};
+use cadsim_core::site::pointcloud::{CloudSettings, Decimator, PointCloud};
 
 /// 点群として読む拡張子
 pub const CLOUD_EXTENSIONS: &[&str] = &["ply", "las", "e57"];

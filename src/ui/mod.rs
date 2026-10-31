@@ -74,6 +74,7 @@ impl Plugin for UiPlugin {
                     playful::apply_theme,
                     draw_ui,
                     crate::library::palette_window,
+                    crate::custom_part::save_window,
                     crate::library::io_list_window,
                     crate::library::drop_on_viewport,
                     playful::draw_overlay,
@@ -115,6 +116,10 @@ pub struct UiState<'w> {
     pub recording: ResMut<'w, RecordSettings>,
     /// 標準部品の動作テストの値
     pub jog: ResMut<'w, crate::library::Jog>,
+    /// 「自作部品として保存」のウィンドウ
+    pub custom_dialog: ResMut<'w, crate::custom_part::SaveDialog>,
+    pub assistant: ResMut<'w, crate::assistant::AiAssistant>,
+    pub sequence_gen: ResMut<'w, crate::sequence_gen::SequenceGen>,
 }
 
 /// UI 専用のカメラ。3D カメラはパネルを除いた領域だけに描くので、

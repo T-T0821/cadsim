@@ -10,9 +10,9 @@ use serde::{Deserialize, Serialize};
 
 use super::pointcloud_read::read_cloud;
 use super::read_plan_file;
-use crate::site::model::Site;
-use crate::site::pointcloud::{CloudSettings, PlacedCloud};
-use crate::site::underlay::Underlay;
+use cadsim_core::site::model::Site;
+use cadsim_core::site::pointcloud::{CloudSettings, PlacedCloud};
+use cadsim_core::site::underlay::Underlay;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct UnderlayRecord {
@@ -161,7 +161,7 @@ pub fn load_site(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::site::underlay::PlanContent;
+    use cadsim_core::site::underlay::PlanContent;
 
     #[test]
     fn records_round_trip_through_files() {

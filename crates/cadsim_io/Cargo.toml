@@ -3,7 +3,7 @@ name = "cadsim_io"
 version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-description = "cadsim のアダプター層。STEP・3D ファイル形式の読み書き、UR RTDE の受信。Bevy・egui に依存しない"
+description = "cadsim のアダプター層。STEP・3D ファイル・図面・帳票・設定ファイルの読み書き、UR RTDE の受信。Bevy・egui に依存しない"
 
 [features]
 # アプリ側のテストからテスト用のシーン (interchange::test_util) を使う
@@ -11,7 +11,15 @@ test-util = []
 
 [dependencies]
 cadsim_core = { path = "../cadsim_core" }
-glam = "0.33"
+glam = { version = "0.33", features = ["serde"] }
+serde = { version = "1.0.229", features = ["derive"] }
+# 画像 (PNG / JPEG) の読み書き
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+# PDF の読み書き、Excel の書き出し、点群 (E57)
+lopdf = "0.46"
+krilla = "0.8"
+rust_xlsxwriter = "0.102"
+e57 = "0.11"
 # 3D ファイルの読み書き (glTF / GLB, OBJ, STL)。すべて純 Rust
 gltf = { version = "1.4", features = ["import", "names", "utils", "extras"] }
 serde_json = "1.0.154"
@@ -23,3 +31,5 @@ openusd = "0.8"
 truck-meshalgo = "0.4"
 truck-stepio = "0.3"
 truck-topology = "0.6"
+# 生成 AI (Claude API) への HTTPS の問い合わせ。純 Rust (rustls)
+ureq = "3"

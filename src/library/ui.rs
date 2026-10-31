@@ -12,6 +12,8 @@ use super::catalog::{Category, IoDir, Motion, PartKind, units_per_mm};
 use super::{Jog, add_standard, dir_to_world, io_capacity, io_table, local_to_world};
 use super::{rebuild_bodies, standard_nodes};
 use crate::camera::{OrbitCamera, ViewportRect};
+use crate::custom_part::{CustomDrag, CustomLibrary};
+use crate::file_io::ImportJobs;
 use crate::history::History;
 use crate::model::{Model, NodeId, NodeKind, Selection};
 use crate::ui::UiState;
@@ -46,6 +48,8 @@ pub fn palette_window(
     mut history: ResMut<History>,
     orbit: Res<OrbitCamera>,
     viewport: Res<ViewportRect>,
+    mut custom: ResMut<CustomLibrary>,
+    mut jobs: ResMut<ImportJobs>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
     let anchor = viewport
@@ -87,6 +91,7 @@ pub fn palette_window(
                         }
                     });
             }
+            crate::custom_part::palette_section(ui, &mut custom, &mut jobs, orbit.focus.as_dvec3());
             ui.separator();
             ui.checkbox(&mut state.show_io, "I/O 一覧を表示");
             ui.checkbox(&mut state.show_overlays, "光軸・搬送方向を表示");
@@ -148,11 +153,15 @@ pub fn drop_on_viewport(
     mut model: ResMut<Model>,
     mut selection: ResMut<Selection>,
     mut history: ResMut<History>,
+    custom: Res<CustomLibrary>,
+    mut jobs: ResMut<ImportJobs>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
-    let Some(kind) = egui::DragAndDrop::payload::<PartKind>(ctx) else {
+    let kind = egui::DragAndDrop::payload::<PartKind>(ctx);
+    let custom_part = egui::DragAndDrop::payload::<CustomDrag>(ctx);
+    if kind.is_none() && custom_part.is_none() {
         return Ok(());
-    };
+    }
     let Some(cursor) = window.cursor_position().filter(|&c| viewport.contains(c)) else {
         return Ok(());
     };
@@ -188,14 +197,18 @@ pub fn drop_on_viewport(
 
     if ctx.input(|i| i.pointer.any_released()) {
         egui::DragAndDrop::clear_payload(ctx);
-        let kind = *kind;
-        place(
-            &mut model,
-            &mut selection,
-            &mut history,
-            kind,
-            point.as_dvec3(),
-        );
+        if let Some(kind) = kind {
+            place(
+                &mut model,
+                &mut selection,
+                &mut history,
+                *kind,
+                point.as_dvec3(),
+            );
+        }
+        if let Some(CustomDrag(entry)) = custom_part.as_deref() {
+            custom.request_place(entry, &mut jobs, point.as_dvec3());
+        }
     }
     Ok(())
 }

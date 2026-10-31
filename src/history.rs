@@ -216,6 +216,7 @@ fn same_snapshot(a: &Snapshot, b: &Snapshot) -> bool {
             && x.color == y.color
             && x.physics == y.physics
             && x.script == y.script
+            && x.custom_part == y.custom_part
             && x.children == y.children
             && match (&x.kind, &y.kind) {
                 (NodeKind::Box(p), NodeKind::Box(q)) => p == q,

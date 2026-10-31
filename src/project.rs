@@ -33,6 +33,7 @@ use crate::animation::Animations;
 use crate::annotation::{AnnotationRecord, Annotations, node_at_path, node_path, to_records};
 use crate::camera::CameraRequest;
 use crate::conveyor::ConveyorConfigRes;
+use crate::custom_part::CustomInstanceRecord;
 use crate::file_io::{ImportJobs, file_name, load_source, receive_imports, source_name};
 use crate::floor::{FloorDoc, FloorView};
 use crate::floor_record::{FloorLayout, FloorRecord};
@@ -188,6 +189,9 @@ pub struct NodeRecord {
     /// 部品スクリプト (Rhai のソース)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub script: Option<String>,
+    /// 自作部品ライブラリから置いた部品なら、その部品名と公開パラメータ
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_part: Option<CustomInstanceRecord>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<NodeRecord>,
 }
@@ -256,6 +260,24 @@ impl ProjectFile {
             plc: None,
             conveyors: None,
         }
+    }
+
+    /// `id` 以下だけを書いたファイル (自作部品の保存に使う)。`id` が `nodes[0]` になり、
+    /// その配置はワールドでの回転だけを残して原点に置く (置くときに位置を決めるため)。
+    pub fn from_subtree(model: &Model, id: NodeId, base_dir: Option<&Path>) -> Option<Self> {
+        let mut sources = Vec::new();
+        let mut root = node_record(model, id, &mut sources)?;
+        let (_, rotation) = split_placement(model.world_matrix(id));
+        root.position = [0.0; 3];
+        root.rotation_deg = quat_to_euler_deg(rotation);
+        let mut file = Self::from_model(&Model::default(), base_dir);
+        file.unit = model.unit.clone();
+        file.step_files = sources
+            .iter()
+            .map(|s| StepFileRecord::from_source(s, base_dir))
+            .collect();
+        file.nodes = vec![root];
+        Some(file)
     }
 
     /// 今のモデルと、寸法・注記・工程モデル・床の配置・タイミングチャートなどからファイルの内容を作る
@@ -410,6 +432,10 @@ fn node_record(model: &Model, id: NodeId, sources: &mut Vec<StepSource>) -> Opti
         kind,
         physics: PartPhysicsRecord::from_settings(&node.physics),
         script: node.script.clone(),
+        custom_part: node
+            .custom_part
+            .as_ref()
+            .map(CustomInstanceRecord::from_instance),
         children: node
             .children
             .iter()
@@ -594,6 +620,23 @@ impl LoadedProject {
         }
     }
 
+    /// すでに読んだ中身から作る (自作部品の読み込み)。参照している STEP をすべて読むので重い。
+    pub fn from_file(file: ProjectFile, base_dir: &Path) -> Self {
+        Self::fetch_shapes(file, base_dir)
+    }
+
+    /// モデルを消さずに、ファイルの一番上のノードを最上位に加える。加えた一番上の id と注意を返す。
+    pub fn add_nodes(&self, model: &mut Model) -> (Vec<NodeId>, Vec<String>) {
+        let mut warnings = self.warnings.clone();
+        let mut roots = Vec::new();
+        for record in &self.file.nodes {
+            let before = model.roots.len();
+            self.add_record(model, None, record, &mut warnings);
+            roots.extend(model.roots.get(before).copied());
+        }
+        (roots, warnings)
+    }
+
     /// モデルの中身をこのプロジェクトで置き換える。形状が見つからなかった部品の注意を返す。
     pub fn apply_to(&self, model: &mut Model) -> Vec<String> {
         model.clear();
@@ -680,6 +723,10 @@ impl LoadedProject {
                 .map(PartPhysicsRecord::to_settings)
                 .unwrap_or_default();
             node.script = record.script.clone();
+            node.custom_part = record
+                .custom_part
+                .as_ref()
+                .map(CustomInstanceRecord::to_instance);
         }
         if matches!(record.kind, NodeKindRecord::Standard { .. }) {
             library::rebuild_bodies(model, id);

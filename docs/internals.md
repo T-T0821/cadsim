@@ -40,6 +40,7 @@
 ```text
 crates/cadsim_core/   Bevy に依存しないドメイン (cargo test -p cadsim_core で単体テスト)
 ├── animation.rs     ノードの配置と、取り込んだアニメーションのキー (Animation / Track)
+├── bom.rs           部品表: 同じ部品をまとめて数える、構成表
 ├── bvh.rs           外接箱の木 (BVH) とレイの当たり判定
 ├── part_mesh.rs     部品1つ分の表示用メッシュ (面をまとめたもの・面番号の表・簡略形状)
 ├── shape.rs         取り込んだ形状 (B-rep・面メッシュ・計測値) とアセンブリの木 (ImportNode)
@@ -55,6 +56,9 @@ crates/cadsim_core/   Bevy に依存しないドメイン (cargo test -p cadsim_
 └── physics/         物理演算の設定・ケーブルの紐モデル・剛体の進め方 (settings / cable / world)
 crates/cadsim_io/     Bevy に依存しないアダプター (cargo test -p cadsim_io で単体テスト)
 ├── step.rs          STEP → アセンブリの木と B-rep (形状の型は cadsim_core::shape)
+├── formats/         平面図 (DXF / PDF)・点群 (E57 など)・2D 図面と部品表の書き出し・.cadsim の現場とコンベヤの形
+├── flow/            工程シミュレーションの .cadsim の形 (record) と Excel 書き出し (xlsx)
+├── preferences_file.rs 見た目とミッションの設定 (preferences.json) の読み書き
 └── interchange/     glTF / OBJ / STL などの読み書き (形式に依存しない中間表現 Scene を経由)
     ├── mod.rs        Scene・Format・対応形式の一覧 FORMATS
     ├── gltf.rs / obj.rs / stl.rs
@@ -66,12 +70,11 @@ src/                  アプリ本体 (Bevy + egui)
 ├── model.rs         設計データ (cadsim_core::model) を Bevy の Resource で包む型と、選択状態
 ├── step_import.rs   cadsim_io::step を再公開する
 ├── file_io.rs       ダイアログ・ドラッグ&ドロップ・別スレッドでの読み込み・書き出し
-├── interchange/     cadsim_io::interchange を再公開し、モデルとの変換だけを持つ
-│   ├── model_io.rs   Scene ⇔ Model の変換 (単位の換算、メッシュの稜線)
+├── interchange/     cadsim_io::interchange を再公開する
 │   └── samples.rs    サンプルファイルを作るテスト (手で実行)
 ├── animation.rs     取り込んだアニメーションの再生
 ├── project.rs       プロジェクトファイル (.cadsim) の保存と読み込み
-├── preferences_file.rs 見た目とミッションの設定 (preferences.json) の読み書き (Bevy に依存しない)
+├── preferences_file.rs 設定ファイルの読み書き (cadsim_io::preferences_file の再公開)
 ├── viewport.rs      3D 表示: メッシュ作成、選択の強調、簡略表示 (LOD)、グリッド、クリック選択
 ├── part_mesh.rs / bvh.rs  cadsim_core の同名モジュールを再公開する
 ├── defeature.rs     小さな穴とフィレットを消した表示用メッシュを作る (Bevy に依存しない)
@@ -93,22 +96,17 @@ src/                  アプリ本体 (Bevy + egui)
 ├── simulation/      干渉チェックの配線・表示・パネルと距離計測 (詳しくは docs/simulation.md)
 ├── plc/             PLC 連携: domain / usecase / adapter (Modbus TCP) / UI (詳しくは docs/plc.md)
 ├── scripting/       部品スクリプト (Rhai): 実行・I/O へのつなぎ・エディタ (詳しくは docs/scripting.md)
+├── custom_part/     自作部品ライブラリ: 保存・一覧・配置・公開パラメータ (詳しくは docs/custom-parts.md)
+├── assistant/       生成 AI (Claude) の設定と、問い合わせを別スレッドで待つ口 (詳しくは docs/ai.md)
+├── sequence_gen/    説明文からチャートの下書き、チャートからラダーと I/O 表、動作の説明 (詳しくは docs/ai.md)
 ├── annotation.rs    3D 上の寸法と注記 (置く操作・描画・パネル・保存形式)
 ├── modeling.rs      円柱・押し出し・穴あけ・ブーリアン (truck の B-rep。docs/modeling.md)
 ├── drawing/         図面の材料をモデルから集める (計算は cadsim_core::drawing)
-├── bom.rs           部品表 (同じ部品をまとめて数える)
+├── bom.rs           部品表のテスト (計算は cadsim_core::bom)
 ├── documents.rs     図面・部品表の書き出しダイアログと保存
 ├── site/            平面図・点群の読み込みの配線、3D 表示、「平面図・点群」パネル
-├── formats/         平面図・点群・図面・部品表のファイル形式 (Bevy に依存しない)
-│   ├── dxf.rs        DXF の読み込み (平面図) と書き出し (図面)
-│   ├── pdf_plan.rs   PDF の線と画像を平面図にする
-│   ├── pointcloud_read.rs PLY / LAS / E57 の読み込み
-│   ├── drawing_out.rs 図面の PDF / DXF
-│   ├── bom_out.rs    部品表の CSV / Excel
-│   └── site_record.rs .cadsim に書く平面図・点群の記録
+├── formats/         タイミングチャートの保存形式 (chart_record)。ほかの形式は cadsim_io::formats
 ├── flow/            工程シミュレーションの配線と画面 (計算は cadsim_core::flow。詳しくは docs/flow.md)
-│   ├── record.rs     .cadsim に書く形
-│   ├── xlsx.rs       Excel 書き出し
 │   ├── mod.rs        プラグイン、早送りの再生、3D の色分け (FlowColors)
 │   └── ui.rs         工程シミュレーションのウィンドウ
 ├── safety/          安全機器・動作範囲・距離の確認 (詳しくは docs/safety-and-floor.md)

@@ -1,7 +1,7 @@
 //! 3D ファイルの読み書き (glTF / GLB, OBJ, STL など)
 //!
 //! 各形式はアプリのモデルを直接触らず、形式に依存しない中間表現 [`Scene`] とだけやり取りする。
-//! - 読み込み: ファイル → `Scene` → モデル (変換はアプリ側の `interchange::model_io`)
+//! - 読み込み: ファイル → `Scene` → モデル (変換は [`model_io`])
 //! - 書き出し: モデル → `Scene` → ファイル
 //!
 //! `Scene` は常にアプリの座標系 (メートル、Y 軸が上) で持つ。単位や上方向の違いは各形式の側で変換する。
@@ -15,6 +15,7 @@ pub use cadsim_core::animation::{Animation, NodeTransform, Track};
 use glam::{DAffine3, DVec3};
 
 pub mod gltf;
+pub mod model_io;
 pub mod obj;
 pub mod samples;
 pub mod stl;

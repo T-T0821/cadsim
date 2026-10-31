@@ -1,4 +1,4 @@
-//! 中間表現 [`Scene`] とアプリのモデル (アセンブリの木) の相互変換
+//! 中間表現 [`Scene`] と設計データ (アセンブリの木) の相互変換
 //!
 //! モデルの座標は「モデルの単位」(STEP なら mm など) なので、メートルの `Scene` と行き来するときに
 //! 位置とメッシュを拡大縮小する。回転と拡大縮小の比率はそのまま。
@@ -6,12 +6,12 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use bevy::math::{DAffine3, DMat4, DVec3};
+use glam::{DAffine3, DMat4, DVec3};
 use truck_meshalgo::prelude::*;
 
 use super::{Animation, NodeTransform, Scene, SceneNode, TriMesh};
-use crate::model::{Model, NodeId, NodeKind};
-use crate::step_import::{ImportNode, ImportedFile, ImportedShape};
+use cadsim_core::model::{Model, NodeId, NodeKind};
+use cadsim_core::shape::{ImportNode, ImportedFile, ImportedShape};
 
 /// 箱を書き出すときのテッセレーションの許容誤差 (モデル単位)
 const BOX_TESSELLATION_TOL: f64 = 0.005;
@@ -298,8 +298,8 @@ fn node_mesh(kind: &NodeKind) -> Option<TriMesh> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::StepSource;
-    use cadsim_io::interchange::test_util::sample_scene;
+    use crate::interchange::test_util::sample_scene;
+    use cadsim_core::model::StepSource;
 
     #[test]
     fn scene_round_trips_through_model() {

@@ -7,8 +7,10 @@ use serde::{Deserialize, Serialize};
 
 use cadsim_core::staffing::model::{AssignRule, Break, Shift, Skill, Staffing, Worker};
 
-use super::model::{AgvCall, Element, ElementKind, Energy, Failure, FlowModel, Labor, RunSettings};
-use super::scenario::Scenario;
+use cadsim_core::flow::model::{
+    AgvCall, Element, ElementKind, Energy, Failure, FlowModel, Labor, RunSettings,
+};
+use cadsim_core::flow::scenario::Scenario;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct FlowRecord {
@@ -451,8 +453,8 @@ fn model_from_record(
 
 #[cfg(test)]
 mod tests {
-    use super::super::model::sample_line;
     use super::*;
+    use cadsim_core::flow::model::sample_line;
 
     #[test]
     fn round_trip_keeps_the_line() {
@@ -472,7 +474,7 @@ mod tests {
     #[test]
     fn round_trip_keeps_the_staffing() {
         let mut model = sample_line();
-        super::super::model::apply_sample_staffing(&mut model);
+        cadsim_core::flow::model::apply_sample_staffing(&mut model);
         model.staffing.workers[2].absent = true;
         let record = to_record(&model, |_| None);
         let json = serde_json::to_string(&record).unwrap();
@@ -491,7 +493,7 @@ mod tests {
         if let ElementKind::Process { cycle_time, .. } = &mut model.elements[1].kind {
             *cycle_time = 20.0;
         }
-        super::super::model::apply_sample_staffing(&mut model);
+        cadsim_core::flow::model::apply_sample_staffing(&mut model);
         model.save_scenario("速くして人を置く");
         let record = to_record(&model, |id| (id == 42).then(|| vec![0, 3]));
         let json = serde_json::to_string(&record).unwrap();

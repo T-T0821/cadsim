@@ -5,13 +5,14 @@
 //! Bevy には依存しない。アプリ側は `Model` を Bevy の Resource で包み、表示は viewport.rs が後から追いかける。
 
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use glam::{DMat4, DVec3};
 use truck_meshalgo::prelude::{EuclideanSpace, Point3, Rad, Vector3};
 use truck_modeling::{Solid, builder};
 
+use crate::custom_part::CustomInstance;
 use crate::library::Spec;
 use crate::math::{Aabb, euler_deg_to_quat};
 use crate::physics::cable::Cable;
@@ -41,6 +42,8 @@ pub struct Node {
     pub physics: PartPhysics,
     /// 部品スクリプト (Rhai)。PLC 連携の「部品スクリプト」モードで動く。
     pub script: Option<String>,
+    /// 自作部品ライブラリから置いた部品の一番上なら、その部品名と公開パラメータ
+    pub custom_part: Option<CustomInstance>,
 }
 
 #[derive(Clone)]
@@ -77,6 +80,28 @@ pub enum StepSource {
     Modeled(Arc<ModeledSource>),
     /// 負荷テスト用のシーン (部品数)
     Stress(usize),
+}
+
+/// 埋め込みのサンプルのファイル名
+pub const SAMPLE_NAME: &str = "sample_assembly.step";
+
+impl StepSource {
+    /// 読み込み元の表示名。STEP のルートノードの名前や部品表の出どころになる。
+    pub fn display_name(&self) -> String {
+        match self {
+            StepSource::Sample => SAMPLE_NAME.into(),
+            StepSource::Stress(parts) => format!("負荷テスト ({parts} 部品)"),
+            StepSource::File(path) => file_name(path),
+            StepSource::Modeled(modeled) => modeled.name.clone(),
+        }
+    }
+}
+
+/// パスのファイル名 (無ければパス全体)
+pub fn file_name(path: &Path) -> String {
+    path.file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| path.display().to_string())
 }
 
 impl NodeKind {
@@ -252,6 +277,7 @@ impl Model {
                 kind,
                 physics: PartPhysics::default(),
                 script: None,
+                custom_part: None,
             },
         );
         match parent.and_then(|p| self.nodes.get_mut(&p)) {

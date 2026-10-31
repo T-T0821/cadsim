@@ -12,11 +12,10 @@
 //! このファイルは Bevy とのつなぎ: 工程モデルを包む Resource、早送りの再生、
 //! 3D の部品に塗る色 ([`FlowColors`]、viewport.rs が使う) を受け持つ。
 
-pub mod record;
+pub use cadsim_io::flow::{record, xlsx};
 mod scenario_ui;
 mod staff_ui;
 mod ui;
-pub mod xlsx;
 
 pub use cadsim_core::flow::{model, palette, scenario, sim};
 

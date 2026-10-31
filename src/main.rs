@@ -47,11 +47,13 @@
 
 mod animation;
 mod annotation;
+mod assistant;
 mod bench;
 mod bom;
 mod bvh;
 mod camera;
 mod conveyor;
+mod custom_part;
 mod defeature;
 mod documents;
 mod drawing;
@@ -79,6 +81,7 @@ mod recording;
 mod result_export;
 mod safety;
 mod scripting;
+mod sequence_gen;
 mod shortcuts;
 mod simulation;
 mod site;
@@ -127,6 +130,7 @@ fn main() {
                 flow::FlowPlugin,
                 conveyor::ConveyorPlugin,
                 library::LibraryPlugin,
+                custom_part::CustomPartPlugin,
                 bench::BenchPlugin,
             ),
             (safety::SafetyPlugin, floor::FloorPlugin, line::LinePlugin),
@@ -135,7 +139,11 @@ fn main() {
                 documents::DocumentsPlugin,
                 result_export::ResultExportPlugin,
             ),
-            physics::PhysicsPlugin,
+            (
+                physics::PhysicsPlugin,
+                assistant::AssistantPlugin,
+                sequence_gen::SequenceGenPlugin,
+            ),
         ))
         .run();
 }
