@@ -10,18 +10,24 @@ use super::domain::io_csv::CsvReport;
 use super::usecase::{LinkStatus, PlcLink, PlcMode, PlcSession};
 use super::{Plc, Protocol};
 use crate::camera::ViewportRect;
+use crate::model::{Model, Selection};
 use crate::motion::{Playback, TimingChart};
+use crate::scripting::{ScriptRun, script_controls};
 
 const OK_COLOR: egui::Color32 = egui::Color32::from_rgb(90, 200, 120);
 const WARN_COLOR: egui::Color32 = egui::Color32::from_rgb(240, 170, 60);
 const ON_COLOR: egui::Color32 = egui::Color32::from_rgb(60, 200, 90);
 
+#[allow(clippy::too_many_arguments)]
 pub fn plc_window(
     mut contexts: EguiContexts,
     chart: Res<TimingChart>,
     mut plc: ResMut<Plc>,
     mut playback: ResMut<Playback>,
     viewport: Res<ViewportRect>,
+    model: Res<Model>,
+    mut selection: ResMut<Selection>,
+    mut scripts: ResMut<ScriptRun>,
 ) -> Result {
     // 3D ビューの右上 (ビューキューブの下) に出す。ビューの場所が決まるまでは出さない。
     let Some(view) = viewport.rect else {
@@ -43,6 +49,7 @@ pub fn plc_window(
                     PlcMode::Simulated,
                     PlcMode::External,
                     PlcMode::LogReplay,
+                    PlcMode::Script,
                 ] {
                     ui.radio_value(&mut mode, m, mode_label(m));
                 }
@@ -62,6 +69,11 @@ pub fn plc_window(
                 }
                 PlcMode::Simulated => simulated_controls(ui, &chart, session),
                 PlcMode::LogReplay => log_controls(ui, &chart, session, notice),
+                PlcMode::Script => {
+                    if script_controls(ui, &model, &mut selection, &mut scripts) {
+                        session.reset_plant();
+                    }
+                }
                 PlcMode::External => {
                     ui.horizontal(|ui| {
                         ui.label("通信方式");
@@ -87,6 +99,7 @@ pub fn plc_window(
 
     if mode != plc.session.mode {
         plc.session.set_mode(mode);
+        scripts.stop();
         if mode == PlcMode::Off {
             // チャートの再生位置で部品の位置を計算し直させる
             playback.set_changed();
@@ -103,6 +116,7 @@ fn mode_label(mode: PlcMode) -> &'static str {
         PlcMode::Simulated => "内蔵の模擬PLC",
         PlcMode::External => "外部PLC",
         PlcMode::LogReplay => "ログ再生",
+        PlcMode::Script => "部品スクリプト",
     }
 }
 

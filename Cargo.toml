@@ -10,6 +10,8 @@ members = ["crates/cadsim_core", "crates/cadsim_io"]
 default-members = [".", "crates/cadsim_core", "crates/cadsim_io"]
 
 [dependencies]
+# 部品スクリプト (Rhai)。純 Rust
+rhai = "1.23"
 cadsim_core = { path = "crates/cadsim_core" }
 cadsim_io = { path = "crates/cadsim_io" }
 bevy = "0.20"

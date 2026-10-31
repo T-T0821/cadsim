@@ -41,6 +41,7 @@
 - [作業者と AGV を動かす](operator-agv.md)
 - [物理演算でワークを流す](physics.md)
 - [PLC で設備を動かす(仮想立ち上げ)](plc.md)
+- [部品スクリプト](scripting.md)
 - [シミュレーション結果の CSV 出力](csv-export.md)
 
 # 一覧
