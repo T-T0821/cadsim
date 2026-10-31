@@ -80,17 +80,33 @@ fn path_of(nodes: &[OutlineNode], mut i: usize) -> Vec<&str> {
     path
 }
 
+type Key = fn(&OutlineNode) -> Option<&str>;
+
+/// まだ決まっていないノードを、(キー, 部品か) ごとにまとめる
+fn group_free<'a>(
+    nodes: &'a [OutlineNode],
+    key: Key,
+    free: impl Fn(usize) -> bool,
+) -> HashMap<(&'a str, bool), Vec<usize>> {
+    let mut map: HashMap<(&str, bool), Vec<usize>> = HashMap::new();
+    for (i, node) in nodes.iter().enumerate().skip(1) {
+        if free(i)
+            && let Some(k) = key(node)
+        {
+            map.entry((k, node.is_part)).or_default().push(i);
+        }
+    }
+    map
+}
+
 /// 古い一覧と新しい一覧を対応づける。どちらも先頭 (番号 0) が一番上のノード。
 pub fn plan_remap(old: &[OutlineNode], new: &[OutlineNode]) -> RemapPlan {
     let mut old_to_new: Vec<Option<(usize, MatchReason)>> = vec![None; old.len()];
     let mut new_taken = vec![false; new.len()];
-    let mut take = |o: usize, n: usize, reason, old_to_new: &mut Vec<_>| {
-        old_to_new[o] = Some((n, reason));
-        new_taken[n] = true;
-    };
 
     if !old.is_empty() && !new.is_empty() {
-        take(0, 0, MatchReason::Root, &mut old_to_new);
+        old_to_new[0] = Some((0, MatchReason::Root));
+        new_taken[0] = true;
     }
 
     // 1. パスが同じ (同じパスが複数あれば、出てきた順に組にする)
@@ -103,30 +119,19 @@ pub fn plan_remap(old: &[OutlineNode], new: &[OutlineNode]) -> RemapPlan {
             && !list.is_empty()
         {
             let n = list.remove(0);
-            take(o, n, MatchReason::Path, &mut old_to_new);
+            old_to_new[o] = Some((n, MatchReason::Path));
+            new_taken[n] = true;
         }
     }
 
     // 2. 名前、3. 製品名が、残りの中で1つずつしかない
-    type Key = fn(&OutlineNode) -> Option<&str>;
     let keys: [(Key, MatchReason); 2] = [
         (|n| Some(n.name.as_str()), MatchReason::Name),
         (|n| n.product.as_deref(), MatchReason::Product),
     ];
     for (key, reason) in keys {
-        let count = |nodes: &[OutlineNode], free: &dyn Fn(usize) -> bool| {
-            let mut map: HashMap<(&str, bool), Vec<usize>> = HashMap::new();
-            for (i, node) in nodes.iter().enumerate().skip(1) {
-                if free(i)
-                    && let Some(k) = key(node)
-                {
-                    map.entry((k, node.is_part)).or_default().push(i);
-                }
-            }
-            map
-        };
-        let olds = count(old, &|i| old_to_new[i].is_none());
-        let news = count(new, &|i| !new_taken[i]);
+        let olds = group_free(old, key, |i| old_to_new[i].is_none());
+        let news = group_free(new, key, |i| !new_taken[i]);
         let mut pairs: Vec<(usize, usize)> = olds
             .iter()
             .filter_map(|(k, o)| match (o.as_slice(), news.get(k).map(Vec::as_slice)) {
@@ -136,7 +141,8 @@ pub fn plan_remap(old: &[OutlineNode], new: &[OutlineNode]) -> RemapPlan {
             .collect();
         pairs.sort();
         for (o, n) in pairs {
-            take(o, n, reason, &mut old_to_new);
+            old_to_new[o] = Some((n, reason));
+            new_taken[n] = true;
         }
     }
 
