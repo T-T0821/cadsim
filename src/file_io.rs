@@ -1,4 +1,7 @@
-//! ファイルを開く・書き出す: ダイアログ・ドラッグ&ドロップ・コマンドライン引数・サンプル
+//! ファイルを開く・書き出す: 別スレッドでの読み込み、モデルへの追加、形状の差し替え、書き出し
+//!
+//! どのファイルを開くか (ダイアログ・ドラッグ&ドロップ・起動時の引数) は `input::file_dialog` が集めて、
+//! [`ImportJobs`] に頼む。
 //!
 //! 読み込み (STEP のテッセレーションなど) は重いので別スレッドで行い、
 //! 終わったものを毎フレーム受け取ってモデルに加える。
@@ -11,19 +14,19 @@ use std::sync::{
     mpsc::{Receiver, Sender, channel},
 };
 
-use bevy::{ecs::system::NonSendMarker, prelude::*};
+use bevy::prelude::*;
 
 use crate::animation::Animations;
-use crate::formats::pointcloud_read::{CLOUD_EXTENSIONS, is_cloud_file};
-use crate::formats::{PLAN_EXTENSIONS, is_plan_file};
+use crate::formats::is_plan_file;
+use crate::formats::pointcloud_read::is_cloud_file;
 use crate::history::{History, ModelChange};
 use crate::interchange::{
-    self, FORMATS, Scene, UnitOptions,
+    self, Scene, UnitOptions,
     model_io::{model_to_scene, scene_to_import},
 };
 use crate::model::{Model, NodeId, Selection, StepSource};
 use crate::modeling::ModeledSourceExt;
-use crate::motion::{ChartSchedule, Schedule, TimingChart, chart_animation};
+use crate::motion::{Schedule, TimingChart, chart_animation};
 use crate::project::{ProjectAction, ProjectState, is_project_file};
 use crate::step_import::{ImportedFile, import_step};
 use crate::stress::stress_scene;
@@ -37,17 +40,7 @@ pub struct FileIoPlugin;
 impl Plugin for FileIoPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ImportJobs>()
-            .add_systems(Startup, open_command_line_file)
-            .add_systems(
-                Update,
-                (
-                    open_dialog_if_requested,
-                    export_if_requested,
-                    open_in_browser_if_requested,
-                    open_dropped_files,
-                    receive_imports,
-                ),
-            );
+            .add_systems(Update, receive_imports);
     }
 }
 
@@ -149,6 +142,28 @@ impl ImportJobs {
         self.browser_requested = true;
     }
 
+    /// 「開く」が押されていたら true を返して取り消す (ダイアログは input::file_dialog が出す)
+    pub fn take_dialog_request(&mut self) -> bool {
+        std::mem::take(&mut self.dialog_requested)
+    }
+
+    pub fn take_export_request(&mut self) -> Option<ExportScope> {
+        self.export_requested.take()
+    }
+
+    pub fn take_replace_request(&mut self) -> Option<NodeId> {
+        self.replace_requested.take()
+    }
+
+    pub fn take_browser_request(&mut self) -> bool {
+        std::mem::take(&mut self.browser_requested)
+    }
+
+    /// 選んだファイルの形状で `target` を差し替える (読み込みは別スレッド)
+    pub fn replace_from(&mut self, path: PathBuf, target: NodeId) {
+        self.spawn(StepSource::File(path), Some(target));
+    }
+
     pub fn open_sample(&mut self) {
         self.spawn(StepSource::Sample, None);
     }
@@ -217,85 +232,6 @@ pub fn source_name(source: &StepSource) -> String {
 
 pub use cadsim_core::model::file_name;
 
-/// `cargo run -- 部品.step` (または `line.cadsim`) のように渡されたファイルを開く。
-/// 無ければデモラインを開いて動かす。`--stress 5000` なら負荷テスト用のシーンを開く
-/// (`--bench` は bench.rs、`--physics` は physics が読む)。
-fn open_command_line_file(mut jobs: ResMut<ImportJobs>, mut project: ResMut<ProjectState>) {
-    let args = CommandLine::parse();
-    if args.physics {
-        // 物理演算のサンプルラインは physics が作る
-    } else if let Some(count) = args.stress {
-        jobs.open_stress(count);
-    } else if let Some(path) = args.file {
-        open_any(path, &mut jobs, &mut project);
-    } else if args.bench_secs.is_some() {
-        // 測る FPS を前と比べられるよう、ベンチマークは前と同じサンプルの STEP で測る
-        jobs.open_sample();
-    } else {
-        // はじめて開いた人がすぐ動きを見られるよう、デモラインを開いて再生する
-        project.request(ProjectAction::OpenDemoLine { play: true });
-    }
-}
-
-/// コマンドライン引数
-#[derive(Default, Debug, PartialEq)]
-pub struct CommandLine {
-    /// 開くファイル
-    pub file: Option<PathBuf>,
-    /// `--stress N`: 部品 N 個の負荷テスト用シーンを開く
-    pub stress: Option<usize>,
-    /// `--bench 秒`: カメラを回しながら FPS を測り、結果を出して終了する
-    pub bench_secs: Option<f32>,
-    /// `--physics`: 物理演算のサンプルライン (ワーク 100 個) を開き、物理演算を始める
-    pub physics: bool,
-    /// `--ui-check-run 手順書 --out 出力 --baseline 基準画像 [--update]`:
-    /// 手順書どおりに操作して画面を撮り、基準画像と比べて終了する (ui_check が使う)
-    pub ui_check: Option<UiCheckRun>,
-}
-
-/// 画面の自動確認を1つ流すときの指定
-#[derive(Default, Debug, PartialEq, Clone)]
-pub struct UiCheckRun {
-    pub scenario: PathBuf,
-    pub out: PathBuf,
-    pub baseline: PathBuf,
-    pub update: bool,
-}
-
-impl CommandLine {
-    pub fn parse() -> Self {
-        Self::from_args(std::env::args_os().skip(1).map(PathBuf::from))
-    }
-
-    fn from_args(args: impl IntoIterator<Item = PathBuf>) -> Self {
-        let mut out = Self::default();
-        let mut args = args.into_iter();
-        while let Some(arg) = args.next() {
-            match arg.to_str() {
-                Some("--stress") => out.stress = Some(parse_next(args.next()).unwrap_or(5000)),
-                Some("--bench") => out.bench_secs = Some(parse_next(args.next()).unwrap_or(10.0)),
-                Some("--physics") => out.physics = true,
-                Some("--ui-check-run") => {
-                    out.ui_check.get_or_insert_default().scenario = args.next().unwrap_or_default();
-                }
-                Some("--out") => {
-                    out.ui_check.get_or_insert_default().out = args.next().unwrap_or_default()
-                }
-                Some("--baseline") => {
-                    out.ui_check.get_or_insert_default().baseline = args.next().unwrap_or_default();
-                }
-                Some("--update") => out.ui_check.get_or_insert_default().update = true,
-                _ => out.file = Some(arg),
-            }
-        }
-        out
-    }
-}
-
-fn parse_next<T: std::str::FromStr>(next: Option<PathBuf>) -> Option<T> {
-    next.and_then(|n| n.to_str()?.parse().ok())
-}
-
 /// 拡張子を見て、プロジェクトなら開き直し、STEP なら今のモデルに取り込む
 pub fn open_any(path: PathBuf, jobs: &mut ImportJobs, project: &mut ProjectState) {
     if is_project_file(&path) {
@@ -305,158 +241,6 @@ pub fn open_any(path: PathBuf, jobs: &mut ImportJobs, project: &mut ProjectState
     } else {
         jobs.open_path(path);
     }
-}
-
-/// ファイル選択ダイアログ。macOS ではメインスレッドで出す必要があるので NonSendMarker を付ける。
-fn open_dialog_if_requested(
-    mut jobs: ResMut<ImportJobs>,
-    mut project: ResMut<ProjectState>,
-    _main_thread: NonSendMarker,
-) {
-    if let Some(target) = jobs.replace_requested.take() {
-        let mut all: Vec<&str> = vec!["step", "stp"];
-        all.extend(
-            FORMATS
-                .iter()
-                .filter(|f| f.import.is_some())
-                .flat_map(|f| f.extensions.iter().copied()),
-        );
-        let picked = rfd::FileDialog::new()
-            .set_title("差し替える形状を選ぶ")
-            .add_filter("対応しているすべての形式", &with_upper_case(&all))
-            .pick_file();
-        if let Some(path) = picked {
-            jobs.spawn(StepSource::File(path), Some(target));
-        }
-    }
-    if !std::mem::take(&mut jobs.dialog_requested) {
-        return;
-    }
-    let mut all: Vec<&str> = vec!["cadsim", "step", "stp"];
-    all.extend(
-        FORMATS
-            .iter()
-            .filter(|f| f.import.is_some())
-            .flat_map(|f| f.extensions.iter().copied()),
-    );
-    all.extend(PLAN_EXTENSIONS);
-    all.extend(CLOUD_EXTENSIONS);
-    let mut dialog = rfd::FileDialog::new()
-        .set_title("開く")
-        .add_filter("対応しているすべての形式", &with_upper_case(&all))
-        .add_filter("STEP", &with_upper_case(&["step", "stp"]))
-        .add_filter("プロジェクト", &["cadsim"]);
-    for format in FORMATS.iter().filter(|f| f.import.is_some()) {
-        dialog = dialog.add_filter(format.name, &with_upper_case(format.extensions));
-    }
-    dialog = dialog.add_filter(
-        "平面図 (DXF / PDF / 画像)",
-        &with_upper_case(PLAN_EXTENSIONS),
-    );
-    dialog = dialog.add_filter("点群 (PLY / LAS / E57)", &with_upper_case(CLOUD_EXTENSIONS));
-    let picked = dialog.add_filter("すべてのファイル", &["*"]).pick_file();
-    if let Some(path) = picked {
-        open_any(path, &mut jobs, &mut project);
-    }
-}
-
-/// 拡張子の大文字小文字を区別するシステムのために、大文字版も足す
-fn with_upper_case(extensions: &[&str]) -> Vec<String> {
-    extensions
-        .iter()
-        .flat_map(|e| [e.to_string(), e.to_ascii_uppercase()])
-        .collect()
-}
-
-/// 書き出し先を選ばせ、モデル (と取り込んだアニメーション) を書き出す
-fn export_if_requested(
-    mut jobs: ResMut<ImportJobs>,
-    model: Res<Model>,
-    selection: Res<Selection>,
-    animations: Res<Animations>,
-    chart: Res<TimingChart>,
-    schedule: Res<ChartSchedule>,
-    _main_thread: NonSendMarker,
-) {
-    let Some(scope) = jobs.export_requested.take() else {
-        return;
-    };
-    let roots: Vec<NodeId> = match (scope, selection.node) {
-        (ExportScope::Selection, Some(node)) => vec![node],
-        _ => Vec::new(),
-    };
-    let default_name = roots
-        .first()
-        .and_then(|&r| model.get(r))
-        .map_or("model".to_owned(), |n| n.name.clone());
-    let mut dialog = rfd::FileDialog::new()
-        .set_title("書き出し")
-        .set_file_name(format!("{default_name}.glb"));
-    for format in FORMATS.iter().filter(|f| f.export.is_some()) {
-        dialog = dialog.add_filter(format.name, format.extensions);
-    }
-    let Some(path) = dialog.save_file() else {
-        return;
-    };
-    let chart = Some((&*chart, &**schedule));
-    let message = match export_model(&model, &roots, &animations, chart, &path, &jobs.units) {
-        Ok(()) => format!("{} に書き出しました", file_name(&path)),
-        Err(err) => {
-            error!("{err}");
-            format!("書き出しに失敗しました: {err}")
-        }
-    };
-    jobs.messages.push(message);
-}
-
-/// モデル全体を Web ビューアにして一時フォルダに書き、既定のブラウザで開く。
-/// WebXR に対応したブラウザなら、そこから VR ヘッドセットで実寸で見られる。
-fn open_in_browser_if_requested(
-    mut jobs: ResMut<ImportJobs>,
-    model: Res<Model>,
-    animations: Res<Animations>,
-    chart: Res<TimingChart>,
-    schedule: Res<ChartSchedule>,
-) {
-    if !std::mem::take(&mut jobs.browser_requested) {
-        return;
-    }
-    let dir = std::env::temp_dir().join("cadsim_viewer");
-    let chart = Some((&*chart, &**schedule));
-    let result = std::fs::create_dir_all(&dir)
-        .map_err(|e| e.to_string())
-        .map(|()| dir.join("cadsim.html"))
-        .and_then(|path| {
-            export_model(&model, &[], &animations, chart, &path, &jobs.units)?;
-            open_with_default_app(&path)?;
-            Ok(path)
-        });
-    let message = match result {
-        Ok(path) => format!("ブラウザで開きました ({})", path.display()),
-        Err(err) => {
-            error!("{err}");
-            format!("ブラウザで開けませんでした: {err}")
-        }
-    };
-    jobs.messages.push(message);
-}
-
-/// OS の既定のアプリでファイルを開く
-fn open_with_default_app(path: &Path) -> Result<(), String> {
-    let mut command = if cfg!(target_os = "windows") {
-        let mut c = std::process::Command::new("cmd");
-        c.args(["/C", "start", ""]);
-        c
-    } else if cfg!(target_os = "macos") {
-        std::process::Command::new("open")
-    } else {
-        std::process::Command::new("xdg-open")
-    };
-    command
-        .arg(path)
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| e.to_string())
 }
 
 /// モデルをファイルに書き出す。`roots` が空ならモデル全体。拡張子が無ければ glb にする。
@@ -484,18 +268,6 @@ pub fn export_model(
         }
     }
     interchange::export_file(&scene, &path, units)
-}
-
-fn open_dropped_files(
-    mut drops: MessageReader<FileDragAndDrop>,
-    mut jobs: ResMut<ImportJobs>,
-    mut project: ResMut<ProjectState>,
-) {
-    for drop in drops.read() {
-        if let FileDragAndDrop::DroppedFile { path_buf, .. } = drop {
-            open_any(path_buf.clone(), &mut jobs, &mut project);
-        }
-    }
 }
 
 /// 読み込みが終わったファイルをモデルに加え、選択して全体が見えるようにする
@@ -608,36 +380,6 @@ fn replace_geometry(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn parse_command_line() {
-        let parse = |args: &[&str]| CommandLine::from_args(args.iter().map(PathBuf::from));
-        assert_eq!(parse(&[]), CommandLine::default());
-        assert_eq!(parse(&["a.step"]).file, Some(PathBuf::from("a.step")));
-        let bench = parse(&["--stress", "2000", "--bench", "5"]);
-        assert_eq!(bench.stress, Some(2000));
-        assert_eq!(bench.bench_secs, Some(5.0));
-        assert!(parse(&["--physics", "--bench", "20"]).physics);
-        let check = parse(&[
-            "--ui-check-run",
-            "a.scenario",
-            "--out",
-            "o",
-            "--baseline",
-            "b",
-            "--update",
-        ]);
-        assert_eq!(check.file, None);
-        assert_eq!(
-            check.ui_check,
-            Some(UiCheckRun {
-                scenario: "a.scenario".into(),
-                out: "o".into(),
-                baseline: "b".into(),
-                update: true,
-            })
-        );
-    }
 
     #[test]
     fn non_step_files_load_through_interchange() {

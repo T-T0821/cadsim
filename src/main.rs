@@ -6,17 +6,15 @@
 //! - `model`       設計データ (アセンブリの木, f64) と選択状態
 //! - `step_import` STEP ファイル → アセンブリの木と B-rep (Bevy に依存しない)
 //! - `interchange` glTF / OBJ / STL などの読み書き (形式に依存しない中間表現を経由)
-//! - `file_io`     ダイアログ・ドラッグ&ドロップ・別スレッドでの読み込み・書き出し
+//! - `file_io`     別スレッドでの読み込み・書き出し、形状の差し替え
 //! - `project`     プロジェクトファイル (.cadsim) の保存と読み込み
 //! - `animation`   ファイルから取り込んだアニメーションの再生
-//! - `viewport`    モデルを 3D 表示し、選択を強調する。クリックで選択
+//! - `view`        3D 表示: `viewport` (表示・選択の強調・クリック選択)、`camera`、`gizmo`、`recording` (動画書き出しの画面とキャプチャ)
+//! - `input`       入力: `shortcuts` (キー)、`file_dialog` (ダイアログ・ドラッグ&ドロップ)、`command_line` (起動時の引数)
 //! - `part_mesh`   部品1つ分の表示用メッシュ (面をまとめたもの・簡略形状)
 //! - `bvh`         クリック選択を速くする外接箱の木
-//! - `camera`      注視点を回るカメラ、標準ビュー、全体表示
-//! - `gizmo`       移動・回転・拡大縮小のギズモ
 //! - `history`     元に戻す・やり直し
 //! - `motion`      タイミングチャート (ステップ) の編集と動作シミュレーション
-//! - `shortcuts`   キーボードショートカット
 //! - `ui`          メニュー・ツリー・プロパティ・ステータスバー・ビューキューブ
 //! - `japanese_font` egui に埋め込みの日本語フォントを登録する
 //! - `math`        回転や行列の変換
@@ -40,7 +38,6 @@
 //! - `safety`      安全機器 (ライトカーテン・エリアセンサ・安全柵・非常停止) と動作範囲
 //! - `preferences_file` 見た目とミッションの設定の読み書き (中身は `cadsim_core::gamify`)
 //! - `physics`     物理演算 (重力・接触・摩擦、ベルトコンベア、ケーブル・ホース)
-//! - `recording`   動画書き出しの設定画面と画面のキャプチャ
 //! - `video`       動画のエンコード (MP4 / GIF / PNG。Bevy に依存しない)
 //! - `ui_check`    画面での動作確認の自動化 (`--ui-check`。手順書どおりに操作して画面を撮り、基準画像と比べる)
 
@@ -94,7 +91,6 @@ mod view;
 
 use bevy::{diagnostic::FrameTimeDiagnosticsPlugin, prelude::*};
 use bevy_egui::EguiPlugin;
-use input::shortcuts;
 use view::{camera, gizmo, recording, viewport};
 
 fn main() {
@@ -122,7 +118,7 @@ fn main() {
             viewport::ViewportPlugin,
             file_io::FileIoPlugin,
             project::ProjectPlugin,
-            shortcuts::ShortcutsPlugin,
+            input::InputPlugin,
             history::HistoryPlugin,
             ui::UiPlugin,
             simulation::SimulationPlugin,

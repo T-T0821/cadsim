@@ -75,7 +75,7 @@ src/                  アプリ本体 (Bevy + egui)
 ├── main.rs          アプリの組み立て (プラグインを並べるだけ)
 ├── model.rs         設計データ (cadsim_core::model) を Bevy の Resource で包む型と、選択状態
 ├── step_import.rs   cadsim_io::step を再公開する
-├── file_io.rs       ダイアログ・ドラッグ&ドロップ・別スレッドでの読み込み・書き出し
+├── file_io.rs       別スレッドでの読み込み・モデルへの追加・形状の差し替え・書き出し
 ├── interchange/     cadsim_io::interchange を再公開する
 │   └── samples.rs    サンプルファイルを作るテスト (手で実行)
 ├── animation.rs     取り込んだアニメーションの再生
@@ -96,8 +96,10 @@ src/                  アプリ本体 (Bevy + egui)
 │   ├── camera.rs     オービットカメラ、標準ビュー、全体表示、透視 / 平行投影
 │   ├── gizmo.rs      移動・回転・拡大縮小のギズモとスナップ
 │   └── recording.rs  動画の書き出し: 画面のキャプチャと設定ウィンドウ
-├── input/
-│   └── shortcuts.rs  キーボードショートカット
+├── input/           入力 (UI 層)
+│   ├── shortcuts.rs  キーボードショートカット
+│   ├── file_dialog.rs ファイルのダイアログ・ドラッグ&ドロップ・起動時に開くファイル
+│   └── command_line.rs コマンドライン引数
 ├── history.rs       元に戻す・やり直しの Bevy 側 (履歴の山とモデルの変更は cadsim_core::history)
 ├── math.rs          f64 の配置を Bevy の Transform にする (計算は cadsim_core::math)
 ├── japanese_font.rs egui に日本語フォントを登録

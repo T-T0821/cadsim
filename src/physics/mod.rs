@@ -36,8 +36,8 @@ use cadsim_core::physics::world::{
 };
 use rapier::RapierEngine;
 
-use crate::file_io::CommandLine;
 use crate::history::{History, TrackDocExt, TrackedDoc};
+use crate::input::command_line::CommandLine;
 use crate::math::euler_deg_to_quat;
 use crate::model::{Model, NodeId, NodeKind};
 use crate::motion::{ChartSchedule, MotionSet, Playback, SimulationPose, TimingChart};
