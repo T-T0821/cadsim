@@ -2485,18 +2485,26 @@ name = "cadsim_core"
 version = "0.1.0"
 dependencies = [
  "glam 0.33.12",
+ "truck-meshalgo",
+ "truck-modeling",
+ "truck-stepio",
+ "truck-topology",
 ]
 
 [[package]]
 name = "cadsim_io"
 version = "0.1.0"
 dependencies = [
+ "cadsim_core",
  "glam 0.33.12",
  "gltf",
  "openusd",
  "serde_json",
  "stl_io",
  "tobj",
+ "truck-meshalgo",
+ "truck-stepio",
+ "truck-topology",
 ]
 
 [[package]]
