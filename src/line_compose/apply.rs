@@ -1,44 +1,50 @@
 //! 下書きをモデル・タイミングチャート・ワーク搬送の設定に置く
 //!
 //! Bevy の ECS や egui には依存しない (`Model` と `TimingChart` を直接書き換える)。
-//! 設備はどれも箱で作り、1つのアセンブリ「ライン下書き: …」にまとめる。
+//! 設備は標準部品ライブラリの部品で作り、標準部品がない設備 (ロボットの腕・作業台) は箱で作る。
+//! すべて1つのアセンブリ「ライン下書き: …」にまとめる。
 //!
-//! - コンベア: 本体の箱。ワーク搬送のコンベアとしても登録する (+X に流れる)。
-//! - ロボット: 土台・腕・ハンドの箱。腕とハンドを回す回転テーブル「旋回」と、
-//!   ハンドを上下させるシリンダ「上下」をチャートに足す。取る・置くは
+//! - コンベア: 標準部品のベルトコンベア。ワーク搬送のコンベアとしても登録する (+X に流れる)。
+//! - ロボット: 土台と腕の箱、ハンドは下向きに付けた標準部品のエアチャック。腕とハンドを回す
+//!   回転テーブル「旋回」と、ハンドを上下させるシリンダ「上下」をチャートに足す。取る・置くは
 //!   「旋回 → 下降 → 上昇」の3ステップに展開する。最後に旋回したままなら「原点へ戻る」を足す。
-//! - シリンダ: 本体と押し板の箱。押し板を動かすシリンダをチャートに足す。
-//! - センサー: 柱の箱と、コンベアを横切る光電センサー。ワークがなくても再生が止まらないよう、
-//!   強制 ON にしておく。
+//! - シリンダ: 標準部品のエアシリンダをコンベアへ向けて置き、ロッドを動かすシリンダをチャートに足す。
+//! - センサー: 柱の箱の上に標準部品の光電センサーを置き、コンベアを横切る光電センサーを
+//!   チャートに足す。ワークがなくても再生が止まらないよう、強制 ON にしておく。
 //! - 作業台: 箱。
+//!
+//! 寸法は mm で考え、モデルの単位 (cm・m など) に直して置く。
 
 use std::collections::HashMap;
 
-use bevy::math::DMat4;
+use bevy::math::{DMat4, DQuat, DVec3};
 use cadsim_core::conveyor::ConveyorConfig;
-use cadsim_core::line_draft::layout::{Placed, work_point};
+use cadsim_core::library::catalog::{PartKind, Spec, body, units_per_mm};
+use cadsim_core::line_draft::layout::{CONVEYOR_WIDTH, Placed, work_point};
 use cadsim_core::line_draft::{EquipmentKind, Verb};
 use cadsim_core::usecase::compose_line::ComposedLine;
 
+use crate::library::{body_node, local_to_world, rebuild_bodies};
 use crate::model::{BoxPart, Model, NodeId, NodeKind};
 use crate::motion::TimingChart;
 use crate::motion::chart::{Action, ActuatorKind, Axis, Interlock, Sensor, SensorKind, Step};
 
-/// ロボットの腕の高さ (下面)
+/// ロボットの腕の高さ (下面, mm)
 const ARM_HEIGHT: f64 = 1000.0;
 const ARM_SECTION: [f64; 2] = [120.0, 140.0];
-const HAND_SIZE: [f64; 3] = [90.0, 150.0, 90.0];
+/// ハンドにするエアチャックの本体幅 (mm)
+const HAND_WIDTH: f64 = 80.0;
 /// 動く部品と、その土台・本体とのすき間 (干渉チェックで「接触」と出ないように少しあける)
 const GAP: f64 = 2.0;
+/// シリンダのストローク (mm)
+const CYLINDER_STROKE: f64 = 150.0;
 /// 原点へ戻すステップの時間 (秒)
 const HOME_SECONDS: f64 = 0.8;
 /// ロボットの取る・置くの時間の配分 (旋回・下降・上昇)
 const PICK_PHASES: [f64; 3] = [0.4, 0.3, 0.3];
 
-const COLOR_CONVEYOR: [f32; 3] = [0.35, 0.40, 0.48];
 const COLOR_ROBOT: [f32; 3] = [0.95, 0.55, 0.15];
-const COLOR_CYLINDER: [f32; 3] = [0.30, 0.55, 0.85];
-const COLOR_SENSOR: [f32; 3] = [0.90, 0.80, 0.20];
+const COLOR_SENSOR_POST: [f32; 3] = [0.55, 0.58, 0.62];
 const COLOR_TABLE: [f32; 3] = [0.62, 0.52, 0.40];
 
 /// 置いた結果
@@ -57,15 +63,28 @@ struct Rig {
     /// ロボットの旋回・上下 (アクチュエータの id)
     turn: Option<u32>,
     lift: Option<u32>,
-    /// ロボットの旋回の中心 (モデル座標)
-    pivot: [f64; 3],
+    /// ロボットの旋回の中心 [x, z] (mm)
+    pivot: [f64; 2],
     /// シリンダ
     cylinder: Option<u32>,
     /// センサー
     sensor: Option<u32>,
 }
 
-/// 下書きを置く。`offset` は床の上で全体をずらす量 [x, z]。
+/// 標準部品のパラメータを1つ書き換える (定義の範囲に収める)
+fn set_param(spec: &mut Spec, key: &str, value: f64) {
+    if let Some(i) = spec.kind.param_specs().iter().position(|s| s.key == key) {
+        spec.params.0[i] = value;
+    }
+    spec.clamp_params();
+}
+
+/// Y 軸まわりに回して、部品のローカル +X をワールドの `toward_z` (+1 / -1) の向きにする
+fn face_z(toward_z: f64) -> DQuat {
+    DQuat::from_rotation_y(-toward_z * std::f64::consts::FRAC_PI_2)
+}
+
+/// 下書きを置く。`offset` は床の上で全体をずらす量 [x, z] (モデルの単位)。
 /// チャートのステップは今あるステップの後ろに足す。
 pub fn apply(
     model: &mut Model,
@@ -75,13 +94,16 @@ pub fn apply(
     offset: [f64; 2],
 ) -> Applied {
     let draft = &line.draft;
+    // mm → モデルの単位
+    let k = units_per_mm(&model.unit);
+    let offset_mm = [offset[0] / k, offset[1] / k];
     let root = model.add_node(
         None,
         format!("ライン下書き: {}", draft.title),
         DMat4::IDENTITY,
         NodeKind::Assembly { product: None },
     );
-    let world = |p: &Placed| [p.center[0] + offset[0], p.center[1] + offset[1]];
+    let world = |p: &Placed| [p.center[0] + offset_mm[0], p.center[1] + offset_mm[1]];
     let mut applied = Applied {
         root,
         ..Default::default()
@@ -103,34 +125,42 @@ pub fn apply(
         *e = e.max(d);
     }
 
+    // 箱 (寸法・中心は mm)
+    let add_box = |model: &mut Model, name: String, size: [f64; 3], center: [f64; 3], color| {
+        let id = model.add_node(
+            Some(root),
+            name,
+            DMat4::IDENTITY,
+            NodeKind::Box(BoxPart {
+                size: size.map(|v| v * k),
+                position: center.map(|v| v * k),
+                rotation_deg: [0.0; 3],
+            }),
+        );
+        if let Some(node) = model.get_mut(id) {
+            node.color = Some(color);
+        }
+        id
+    };
+    // 標準部品 (位置は mm)。本体はパラメータから作る
+    let add_standard = |model: &mut Model, name: String, spec: Spec, at: [f64; 3], turn: DQuat| {
+        let placement = DMat4::from_rotation_translation(turn, DVec3::from(at) * k);
+        let id = model.add_node(Some(root), name, placement, NodeKind::Standard(spec));
+        rebuild_bodies(model, id);
+        id
+    };
+
     let mut rigs = vec![Rig::default(); draft.equipment.len()];
     for (i, (e, p)) in draft.equipment.iter().zip(&line.placed).enumerate() {
         let [x, z] = world(p);
-        let add_box = |model: &mut Model, name: String, size: [f64; 3], center: [f64; 3], color| {
-            let id = model.add_node(
-                Some(root),
-                name,
-                DMat4::IDENTITY,
-                NodeKind::Box(BoxPart {
-                    size,
-                    position: center,
-                    rotation_deg: [0.0; 3],
-                }),
-            );
-            if let Some(node) = model.get_mut(id) {
-                node.color = Some(color);
-            }
-            id
-        };
         match e.kind {
             EquipmentKind::Conveyor => {
-                let id = add_box(
-                    model,
-                    e.name.clone(),
-                    p.size,
-                    [x, p.size[1] / 2.0, z],
-                    COLOR_CONVEYOR,
-                );
+                let mut spec = Spec::new(PartKind::BeltConveyor);
+                set_param(&mut spec, "length", p.size[0]);
+                // ベルトの両側に 30 mm のフレームが付く
+                set_param(&mut spec, "width", p.size[2] - 60.0);
+                set_param(&mut spec, "height", p.size[1]);
+                let id = add_standard(model, e.name.clone(), spec, [x, 0.0, z], DQuat::IDENTITY);
                 let c = conveyors.add_conveyor();
                 c.name = e.name.clone();
                 c.part = Some(id);
@@ -154,101 +184,127 @@ pub fn apply(
                     COLOR_ROBOT,
                 );
                 let length = reach.get(&i).copied().unwrap_or(700.0).clamp(500.0, 1800.0);
+                let arm_length = length + HAND_WIDTH / 2.0;
                 let arm = add_box(
                     model,
                     format!("{} 腕", e.name),
-                    [length + HAND_SIZE[0] / 2.0, ARM_SECTION[0], ARM_SECTION[1]],
+                    [arm_length, ARM_SECTION[0], ARM_SECTION[1]],
                     [
-                        x + (length + HAND_SIZE[0] / 2.0) / 2.0,
+                        x + arm_length / 2.0,
                         ARM_HEIGHT + GAP + ARM_SECTION[0] / 2.0,
                         z,
                     ],
                     COLOR_ROBOT,
                 );
-                let hand = add_box(
+                // エアチャックを上下逆さにして腕の先に吊るす (爪が下を向く)
+                let mut grip = Spec::new(PartKind::Gripper);
+                set_param(&mut grip, "width", HAND_WIDTH);
+                let grip_height = HAND_WIDTH * 0.6 + HAND_WIDTH * 0.5;
+                let hand = add_standard(
                     model,
                     format!("{} ハンド", e.name),
-                    HAND_SIZE,
-                    [x + length, ARM_HEIGHT - HAND_SIZE[1] / 2.0, z],
-                    [0.25, 0.25, 0.28],
+                    grip,
+                    [x + length, ARM_HEIGHT, z],
+                    DQuat::from_rotation_x(std::f64::consts::PI),
                 );
-                let pivot = [x, 0.0, z];
                 let turn = chart.add_actuator(ActuatorKind::RotaryTable);
                 if let Some(a) = chart.actuator_mut(turn) {
                     a.name = format!("{} 旋回", e.name);
                     a.axis = Axis::Y;
-                    a.pivot = pivot;
+                    a.pivot = [x * k, 0.0, z * k];
                     a.parts = vec![arm, hand];
                 }
                 // ハンドの下面を搬送面 (作業台の天板) の少し上まで下ろす
-                let hand_bottom = ARM_HEIGHT - HAND_SIZE[1];
+                let hand_bottom = ARM_HEIGHT - grip_height;
                 let lift = chart.add_actuator(ActuatorKind::Cylinder);
                 if let Some(a) = chart.actuator_mut(lift) {
                     a.name = format!("{} 上下", e.name);
                     a.axis = Axis::Y;
                     a.reversed = true;
-                    a.stroke = (hand_bottom - (line_top(line) + 10.0)).max(20.0);
+                    a.stroke = (hand_bottom - (line_top(line) + 10.0)).max(20.0) * k;
                     a.mounted_on = Some(turn);
                     a.parts = vec![hand];
                 }
                 applied.actuators += 2;
                 rigs[i].turn = Some(turn);
                 rigs[i].lift = Some(lift);
-                rigs[i].pivot = pivot;
+                rigs[i].pivot = [x, z];
             }
             EquipmentKind::Cylinder => {
-                let y = cylinder_height(line, p);
-                add_box(model, e.name.clone(), p.size, [x, y, z], COLOR_CYLINDER);
-                // 押し板は本体のコンベア側の面に付ける
+                // コンベアの -Z 側なら +Z へ、+Z 側なら -Z へ押す。ロッドの先がコンベアの縁に来るよう置く
                 let toward = if p.on_far_side { -1.0 } else { 1.0 };
-                let plate_size = [100.0, 80.0, 30.0];
-                let plate = add_box(
+                let mut spec = Spec::new(PartKind::AirCylinder);
+                set_param(&mut spec, "stroke", CYLINDER_STROKE);
+                let bore = spec.get("bore");
+                let reach_len = 60.0 + bore + 25.0 + (bore * 0.19).max(3.0) * 2.5;
+                let edge = match p.attached_to {
+                    Some(c) => {
+                        let conveyor = &line.placed[c];
+                        conveyor.center[1] + offset_mm[1] - toward * (conveyor.size[2] / 2.0 + GAP)
+                    }
+                    None => z + toward * reach_len / 2.0,
+                };
+                let y = p.attached_to.map_or(0.0, |c| line.placed[c].top()) + 20.0;
+                let id = add_standard(
                     model,
-                    format!("{} 押し板", e.name),
-                    plate_size,
-                    [
-                        x,
-                        y,
-                        z + toward * (p.size[2] / 2.0 + GAP + plate_size[2] / 2.0),
-                    ],
-                    [0.75, 0.78, 0.82],
+                    e.name.clone(),
+                    spec,
+                    [x, y, edge - toward * reach_len],
+                    face_z(toward),
                 );
-                let id = chart.add_actuator(ActuatorKind::Cylinder);
-                if let Some(a) = chart.actuator_mut(id) {
+                let rods: Vec<NodeId> = [body::CYL_ROD, body::CYL_ROD_END]
+                    .into_iter()
+                    .filter_map(|b| body_node(model, id, b))
+                    .collect();
+                let actuator = chart.add_actuator(ActuatorKind::Cylinder);
+                if let Some(a) = chart.actuator_mut(actuator) {
                     a.name = e.name.clone();
                     a.axis = Axis::Z;
                     a.reversed = p.on_far_side;
-                    a.stroke = 150.0;
-                    a.parts = vec![plate];
+                    a.stroke = CYLINDER_STROKE * k;
+                    a.parts = rods;
                 }
                 applied.actuators += 1;
-                rigs[i].cylinder = Some(id);
+                rigs[i].cylinder = Some(actuator);
             }
             EquipmentKind::Sensor => {
+                // 光軸を付けたコンベアの搬送面の 50 mm 上に通す
+                let toward = if p.on_far_side { -1.0 } else { 1.0 };
+                let beam_y = p.attached_to.map_or(800.0, |c| line.placed[c].top() + 50.0);
+                // 光電センサーの光軸は本体の底から 25 mm の高さ
+                let base_y = beam_y - 25.0;
                 add_box(
                     model,
-                    e.name.clone(),
-                    p.size,
-                    [x, p.size[1] / 2.0, z],
-                    COLOR_SENSOR,
+                    format!("{} 柱", e.name),
+                    [p.size[0], base_y - GAP, p.size[2]],
+                    [x, (base_y - GAP) / 2.0, z],
+                    COLOR_SENSOR_POST,
                 );
                 let range = p
                     .attached_to
-                    .map_or(300.0, |c| line.placed[c].size[2] + 120.0);
-                let id = chart.add_sensor(SensorKind::Photoelectric);
-                if let Some(s) = chart.sensor_mut(id) {
+                    .map_or(300.0, |c| line.placed[c].size[2] + 120.0)
+                    .max(CONVEYOR_WIDTH / 4.0);
+                let mut spec = Spec::new(PartKind::PhotoSensor);
+                set_param(&mut spec, "range", range);
+                let sensing = spec.sensing();
+                let id = add_standard(model, e.name.clone(), spec, [x, base_y, z], face_z(toward));
+                let origin = sensing
+                    .map(|s| local_to_world(model, id, s.origin))
+                    .unwrap_or(DVec3::new(x, beam_y, z) * k);
+                let sensor = chart.add_sensor(SensorKind::Photoelectric);
+                if let Some(s) = chart.sensor_mut(sensor) {
                     *s = Sensor {
                         name: e.name.clone(),
-                        position: [x, p.size[1] - 50.0, z],
+                        position: origin.to_array(),
                         axis: Axis::Z,
                         reversed: p.on_far_side,
-                        range,
+                        range: range * k,
                         force: Some(true),
                         ..s.clone()
                     };
                 }
                 applied.sensors += 1;
-                rigs[i].sensor = Some(id);
+                rigs[i].sensor = Some(sensor);
             }
         }
     }
@@ -313,17 +369,17 @@ pub fn apply(
                 continue;
             };
             let mut point = work_point(&line.placed[t], draft.equipment[t].kind, a.verb);
-            point[0] += offset[0];
-            point[2] += offset[1];
-            let angle = (-(point[2] - rig.pivot[2]))
+            point[0] += offset_mm[0];
+            point[2] += offset_mm[1];
+            let angle = (-(point[2] - rig.pivot[1]))
                 .atan2(point[0] - rig.pivot[0])
                 .to_degrees();
             let targets = [(turn, angle), (lift, 1.0), (lift, 0.0)];
-            for (k, (actuator, target)) in targets.into_iter().enumerate() {
-                new_steps[k].actions.push(Action {
+            for (phase, (actuator, target)) in targets.into_iter().enumerate() {
+                new_steps[phase].actions.push(Action {
                     actuator,
                     target,
-                    duration: a.seconds * PICK_PHASES[k],
+                    duration: a.seconds * PICK_PHASES[phase],
                 });
             }
         }
@@ -385,12 +441,6 @@ fn line_top(line: &ComposedLine) -> f64 {
         .fold(0.0, f64::max)
 }
 
-/// シリンダの本体の中心の高さ: 付けたコンベアの搬送面の少し上
-fn cylinder_height(line: &ComposedLine, p: &Placed) -> f64 {
-    let base = p.attached_to.map_or(0.0, |c| line.placed[c].top());
-    base + p.size[1] / 2.0 + 20.0
-}
-
 /// 既存のものと重ならないよう、全体の右 (+X) に置くためのずらし量
 pub fn free_offset(model: &Model, line: &ComposedLine) -> [f64; 2] {
     let Some(bounds) = model.scene_bounds() else {
@@ -402,7 +452,8 @@ pub fn free_offset(model: &Model, line: &ComposedLine) -> [f64; 2] {
         .map(|p| p.center[0] - p.size[0] / 2.0)
         .fold(f64::INFINITY, f64::min);
     let min_x = if min_x.is_finite() { min_x } else { 0.0 };
-    [bounds.max.x + 1000.0 - min_x, 0.0]
+    let k = units_per_mm(&model.unit);
+    [bounds.max.x + (1000.0 - min_x) * k, 0.0]
 }
 
 #[cfg(test)]
@@ -450,6 +501,73 @@ mod tests {
         // スケジュールにできて、インターロックで止まらない (センサーは強制 ON)
         let schedule = chart.schedule();
         assert!(schedule.stop.is_none());
+
+        // コンベア・シリンダ・センサー・ハンドは標準部品
+        let standard: Vec<PartKind> = root
+            .children
+            .iter()
+            .filter_map(|&c| match &model.get(c).unwrap().kind {
+                NodeKind::Standard(spec) => Some(spec.kind),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            standard,
+            [
+                PartKind::BeltConveyor,
+                PartKind::BeltConveyor,
+                PartKind::Gripper,
+                PartKind::AirCylinder,
+                PartKind::PhotoSensor
+            ]
+        );
+        // ストッパはロッドの本体 (2つ) を動かす
+        let stopper = &chart.actuators[2];
+        assert_eq!(stopper.parts.len(), 2);
+        assert!(!stopper.reversed);
+        // センサーの光軸は製品コンベアの搬送面の 50 mm 上、+Z 側から -Z へ
+        let sensor = &chart.sensors[0];
+        assert!(
+            (sensor.position[1] - 800.0).abs() < 1e-6,
+            "{:?}",
+            sensor.position
+        );
+        assert!(sensor.position[2] > 0.0 && sensor.reversed);
+    }
+
+    #[test]
+    fn stopper_rod_reaches_the_conveyor_edge() {
+        let line = composed("コンベア1本、ストッパ1個");
+        let mut model = Model::default();
+        let mut chart = TimingChart::default();
+        let mut conveyors = ConveyorConfig::default();
+        let applied = apply(&mut model, &mut chart, &mut conveyors, &line, [0.0, 0.0]);
+        let root = model.get(applied.root).unwrap();
+        let cylinder = root.children[1];
+        let b = model.world_bounds(cylinder).unwrap();
+        // コンベアの -Z 側に置き、ロッドの先がコンベアの縁 (z = -幅/2) の手前にある
+        let edge = -CONVEYOR_WIDTH / 2.0;
+        assert!(b.max.z <= edge + 1e-6 && b.max.z > edge - 20.0, "{:?}", b);
+    }
+
+    #[test]
+    #[allow(clippy::field_reassign_with_default)]
+    fn sizes_follow_the_model_unit() {
+        let line = composed("コンベア1本、ロボット1台、センサー1個で移載");
+        let mut model = Model::default();
+        model.0.unit = "m".into();
+        let mut chart = TimingChart::default();
+        let mut conveyors = ConveyorConfig::default();
+        apply(&mut model, &mut chart, &mut conveyors, &line, [0.0, 0.0]);
+        let bounds = model.scene_bounds().unwrap();
+        // 2000 mm のコンベア → 約 2 m
+        assert!(
+            bounds.size().x > 1.5 && bounds.size().x < 4.0,
+            "{:?}",
+            bounds
+        );
+        assert!(chart.actuators[1].stroke < 1.0);
+        assert!(chart.sensors[0].position[1] < 1.0);
     }
 
     #[test]
