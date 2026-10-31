@@ -2209,6 +2209,7 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "bevy_egui",
+ "glam 0.33.12",
  "gltf",
  "openusd",
  "rfd",

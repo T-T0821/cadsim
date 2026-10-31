@@ -13,6 +13,7 @@ use bevy_egui::egui;
 use super::chart::{Action, Actuator, ActuatorKind, Axis, Easing, Schedule, Step, TimingChart};
 use super::{ChartSchedule, Playback, demo};
 use crate::camera::CameraRequest;
+use crate::flow::FlowConfigRes;
 use crate::model::{Model, NodeId, Selection};
 
 const NAME_WIDTH: f32 = 150.0;
@@ -42,6 +43,8 @@ pub struct MotionUi<'w> {
     schedule: Res<'w, ChartSchedule>,
     playback: ResMut<'w, Playback>,
     state: ResMut<'w, ChartUiState>,
+    /// サンプル装置を読み込むときに、コンベアとグリッパも置き換える
+    flow: ResMut<'w, FlowConfigRes>,
 }
 
 /// 画面下のタイミングチャートのパネル。ステータスバーの上、左右のパネルより外側に置く。
@@ -99,7 +102,7 @@ pub fn show_panel(
     });
 
     if load_demo {
-        demo::load_demo(model, &mut edited);
+        demo::load_demo(model, &mut edited, &mut motion.flow);
         camera.write(CameraRequest::FitAll);
         play = Playback::default();
         *state = ChartUiState::default();

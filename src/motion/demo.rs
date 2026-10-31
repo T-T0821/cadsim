@@ -1,21 +1,37 @@
-//! 動作確認用のサンプル装置: ガントリーのピック & プレース + 回転テーブル
+//! 動作確認用のサンプル装置: 供給コンベア → ガントリーのピック & プレース → 排出コンベア
 //!
 //! ```text
-//!  S1 リフタ下降(把持)  S2 リフタ上昇  S3 X軸 → テーブル上  S4 リフタ下降(置く)
-//!  S5 リフタ上昇        S6 X軸 → 原点 と テーブル 90° 割出し  S7 テーブル戻り
+//!  S1 ワーク到着待ち  S2 リフタ下降  S3 チャック閉(把持)  S4 リフタ上昇
+//!  S5 X軸 → 排出コンベア上  S6 リフタ下降  S7 チャック開(解放)  S8 リフタ上昇  S9 X軸 原点復帰
 //! ```
+//!
+//! 供給コンベアはストッパ付きで、流れてきたワークは終端 (ガントリーの真下) で詰まって並ぶ。
+//! 排出コンベアに置いたワークは Z 方向へ流れて消える。
 
 use super::chart::{Action, ActuatorKind, Axis, Step, TimingChart};
+use crate::flow::{ConveyorEnd, FlowConfig};
 use crate::model::Model;
 
-/// 寸法は mm。下の数値は 100 mm 単位で考えたものを掛けている。
+/// 寸法は mm。下の数値は 100 mm 単位で考えたものを `add` などで掛けている。
 const S: f64 = 100.0;
 
-/// モデルとチャートをサンプル装置に置き換える
-pub fn load_demo(model: &mut Model, chart: &mut TimingChart) {
+/// ガントリーの原点 (ワークを掴む位置) の X 座標
+const PICK_X: f64 = -0.5;
+/// 排出コンベアまでの X 軸の移動量
+const PLACE_TRAVEL: f64 = 4.0;
+/// ワークの寸法
+const WORK: [f64; 3] = [0.3, 0.3, 0.3];
+/// コンベアのベルト上面の高さ
+const BELT_TOP: f64 = 0.8;
+/// リフタのストローク
+const LIFT: f64 = 0.6;
+
+/// モデル・チャート・搬送設定をサンプル装置に置き換える
+pub fn load_demo(model: &mut Model, chart: &mut TimingChart, flow: &mut FlowConfig) {
     model.clear();
     model.unit = "mm".into();
     *chart = TimingChart::default();
+    *flow = FlowConfig::default();
 
     let mut add = |name: &str, size: [f64; 3], position: [f64; 3]| {
         let id = model.add_box(size.map(|v| v * S), position.map(|v| v * S));
@@ -24,14 +40,45 @@ pub fn load_demo(model: &mut Model, chart: &mut TimingChart) {
         }
         id
     };
-    add("ガントリー梁", [5.6, 0.2, 0.3], [1.5, 3.3, -0.45]);
-    add("コンベア", [1.6, 0.8, 1.2], [-0.5, 0.4, 0.0]);
-    add("テーブル架台", [1.0, 0.6, 1.0], [3.5, 0.3, 0.0]);
-    let carriage = add("X軸キャリッジ", [0.6, 0.3, 0.6], [-0.5, 3.3, 0.0]);
-    let rod = add("リフタロッド", [0.15, 1.55, 0.15], [-0.5, 2.375, 0.0]);
-    let gripper = add("グリッパ", [0.5, 0.2, 0.5], [-0.5, 1.5, 0.0]);
-    let table = add("回転テーブル", [1.4, 0.2, 1.4], [3.5, 0.7, 0.0]);
-    let fixture = add("治具", [0.6, 0.3, 0.25], [3.5, 0.95, 0.45]);
+    // 下げたときにチャックの下面がワークの上面に来る高さ (設計位置はそこから LIFT 上)
+    let plate_bottom = BELT_TOP + WORK[1] + LIFT;
+    let finger_gap = WORK[0] / 2.0 + 0.03;
+
+    add("ガントリー梁", [6.2, 0.2, 0.3], [1.5, 3.3, -0.45]);
+    let infeed = add(
+        "供給コンベア",
+        [3.0, BELT_TOP, 0.8],
+        [PICK_X - 1.35, BELT_TOP / 2.0, 0.0],
+    );
+    let outfeed = add(
+        "排出コンベア",
+        [0.8, BELT_TOP, 3.0],
+        [PICK_X + PLACE_TRAVEL, BELT_TOP / 2.0, 1.0],
+    );
+    let carriage = add("X軸キャリッジ", [0.6, 0.3, 0.6], [PICK_X, 3.3, 0.0]);
+    let rod_top = 3.15;
+    let rod_bottom = plate_bottom + 0.1;
+    let rod = add(
+        "リフタロッド",
+        [0.15, rod_top - rod_bottom, 0.15],
+        [PICK_X, (rod_top + rod_bottom) / 2.0, 0.0],
+    );
+    let plate = add(
+        "チャック本体",
+        [0.5, 0.1, 0.4],
+        [PICK_X, plate_bottom + 0.05, 0.0],
+    );
+    let fixed_finger = add(
+        "固定爪",
+        [0.06, 0.25, 0.3],
+        [PICK_X - finger_gap, plate_bottom - 0.125, 0.0],
+    );
+    // 可動爪は開いた位置で置き、チャックが閉じると -X に 0.1 動いてワークを挟む
+    let moving_finger = add(
+        "可動爪",
+        [0.06, 0.25, 0.3],
+        [PICK_X + finger_gap + 0.1, plate_bottom - 0.125, 0.0],
+    );
 
     let x_axis = chart.add_actuator(ActuatorKind::LinearAxis);
     {
@@ -46,17 +93,20 @@ pub fn load_demo(model: &mut Model, chart: &mut TimingChart) {
         a.name = "リフタ".into();
         a.axis = Axis::Y;
         a.reversed = true;
-        a.stroke = 0.6 * S;
+        a.stroke = LIFT * S;
         a.mounted_on = Some(x_axis);
-        a.parts = vec![rod, gripper];
+        a.parts = vec![rod, plate, fixed_finger];
     }
-    let rotary = chart.add_actuator(ActuatorKind::RotaryTable);
+    let chuck = chart.add_actuator(ActuatorKind::Cylinder);
     {
-        let a = chart.actuator_mut(rotary).unwrap();
-        a.name = "割出しテーブル".into();
-        a.axis = Axis::Y;
-        a.pivot = [3.5 * S, 0.0, 0.0];
-        a.parts = vec![table, fixture];
+        let a = chart.actuator_mut(chuck).unwrap();
+        a.name = "チャック".into();
+        a.axis = Axis::X;
+        a.reversed = true;
+        a.stroke = 0.1 * S;
+        a.mounted_on = Some(lifter);
+        a.parts = vec![moving_finger];
+        a.default_duration = 0.2;
     }
 
     let step = |comment: &str, actions: Vec<Action>, dwell: f64| Step {
@@ -70,16 +120,46 @@ pub fn load_demo(model: &mut Model, chart: &mut TimingChart) {
         duration,
     };
     chart.steps = vec![
-        step("下降(把持)", vec![act(lifter, 1.0, 0.4)], 0.2),
-        step("上昇", vec![act(lifter, 0.0, 0.4)], 0.0),
-        step("テーブル上へ移動", vec![act(x_axis, 4.0 * S, 1.0)], 0.0),
-        step("下降(置く)", vec![act(lifter, 1.0, 0.4)], 0.2),
+        // センサーで待ち合わせるまでの仮: 1個目のワークがストッパに届くまでの時間だけ待つ
+        step("ワーク到着待ち", vec![], 2.0),
+        step("下降", vec![act(lifter, 1.0, 0.4)], 0.0),
+        step("チャック閉(把持)", vec![act(chuck, 1.0, 0.2)], 0.1),
         step("上昇", vec![act(lifter, 0.0, 0.4)], 0.0),
         step(
-            "原点復帰 + 90°割出し",
-            vec![act(x_axis, 0.0, 1.0), act(rotary, 90.0, 0.8)],
+            "排出コンベア上へ移動",
+            vec![act(x_axis, PLACE_TRAVEL * S, 1.0)],
             0.0,
         ),
-        step("テーブル戻り", vec![act(rotary, 0.0, 0.8)], 0.0),
+        step("下降", vec![act(lifter, 1.0, 0.4)], 0.0),
+        step("チャック開(解放)", vec![act(chuck, 0.0, 0.2)], 0.1),
+        step("上昇", vec![act(lifter, 0.0, 0.4)], 0.0),
+        step("原点復帰", vec![act(x_axis, 0.0, 1.0)], 0.0),
     ];
+
+    {
+        let c = flow.add_conveyor();
+        c.name = "供給コンベア".into();
+        c.part = Some(infeed);
+        c.axis = Axis::X;
+        c.speed = 1.2 * S;
+        c.feed_interval = Some(5.0);
+        c.end = ConveyorEnd::Stopper;
+        c.work_size = WORK.map(|v| v * S);
+    }
+    {
+        let c = flow.add_conveyor();
+        c.name = "排出コンベア".into();
+        c.part = Some(outfeed);
+        c.axis = Axis::Z;
+        c.speed = 0.8 * S;
+        c.feed_interval = None;
+        c.end = ConveyorEnd::Discharge;
+    }
+    {
+        let g = flow.add_gripper();
+        g.name = "ガントリーチャック".into();
+        g.chuck = Some(chuck);
+        g.tcp = [PICK_X, BELT_TOP + WORK[1] / 2.0 + LIFT, 0.0].map(|v| v * S);
+        g.reach = 0.2 * S;
+    }
 }

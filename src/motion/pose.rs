@@ -54,7 +54,15 @@ impl RigidPose {
     }
 
     // 干渉チェックなど、動いた後の形状を扱う処理から使う
-    #[allow(dead_code)]
+    /// 逆変換
+    pub fn inverse(self) -> RigidPose {
+        let rotation = self.rotation.inverse();
+        RigidPose {
+            rotation,
+            translation: -(rotation * self.translation),
+        }
+    }
+
     pub fn transform_point(&self, p: DVec3) -> DVec3 {
         self.rotation * p + self.translation
     }

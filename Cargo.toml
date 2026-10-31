@@ -6,6 +6,8 @@ edition = "2024"
 [dependencies]
 bevy = "0.20"
 bevy_egui = "0.43"
+# f64 のベクトル・回転。Bevy の bevy::math と同じ型で、Bevy に依存しない層から使う
+glam = "0.33"
 # 3D ファイルの読み書き (glTF / GLB, OBJ, STL)。すべて純 Rust
 gltf = { version = "1.4", features = ["import", "names", "utils", "extras"] }
 rfd = "0.17.2"

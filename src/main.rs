@@ -14,6 +14,7 @@
 //! - `gizmo`       移動・回転・拡大縮小のギズモ
 //! - `history`     元に戻す・やり直し
 //! - `motion`      タイミングチャート (ステップ) の編集と動作シミュレーション
+//! - `flow`        コンベアによるワーク搬送と、グリッパによる把持・解放
 //! - `shortcuts`   キーボードショートカット
 //! - `ui`          メニュー・ツリー・プロパティ・ステータスバー・ビューキューブ
 //! - `japanese_font` egui に埋め込みの日本語フォントを登録する
@@ -28,6 +29,7 @@ mod animation;
 mod annotation;
 mod camera;
 mod file_io;
+mod flow;
 mod gizmo;
 mod history;
 mod interchange;
@@ -72,6 +74,7 @@ fn main() {
             simulation::SimulationPlugin,
             annotation::AnnotationPlugin,
             motion::MotionPlugin,
+            flow::FlowPlugin,
         ))
         .run();
 }
