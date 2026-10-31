@@ -1,0 +1,9 @@
+[book]
+title = "cadsim 操作マニュアル"
+authors = ["cadsim"]
+language = "ja"
+src = "src"
+
+[output.html]
+git-repository-url = "https://github.com/T-T0821/cadsim"
+edit-url-template = "https://github.com/T-T0821/cadsim/edit/main/docs/{path}"

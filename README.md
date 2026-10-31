@@ -5,6 +5,8 @@ STEP などの CAD データを読み込み、部品を動かしながら干渉�
 
 ![サンプルのアセンブリを開いたところ](docs/screenshots/01_overview.png)
 
+画面ごとの詳しい使い方は [操作マニュアル](docs/src/introduction.md)(画像付き)にまとめています。
+
 ## はじめかた
 
 ### ダウンロードして使う(Windows / Mac)
