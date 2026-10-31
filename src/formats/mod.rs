@@ -5,6 +5,7 @@
 //! Bevy にも egui にも依存しない。
 
 pub mod bom_out;
+pub mod chart_record;
 pub mod drawing_out;
 pub mod dxf;
 pub mod pdf_plan;

@@ -8,6 +8,9 @@ use std::collections::HashMap;
 use bevy::math::DMat4;
 use bevy::prelude::*;
 
+use crate::formats::chart_record::{
+    AnimationRecord, ClipData, animations_from_records, animations_to_records,
+};
 use crate::interchange::{Animation, Track, model_io::meters_per_unit};
 use crate::model::{Model, NodeId};
 
@@ -72,6 +75,47 @@ impl Animations {
                 });
             }
         }
+    }
+
+    /// プロジェクトファイルに書く形にする。`node_path` はノード ID を木の中の位置にする
+    pub fn to_records(
+        &self,
+        node_path: impl Fn(NodeId) -> Option<Vec<usize>>,
+    ) -> Vec<AnimationRecord> {
+        animations_to_records(
+            self.clips.iter().map(|clip| ClipData {
+                name: &clip.name,
+                tracks: clip.tracks.iter().map(|(id, t)| (*id, t)).collect(),
+            }),
+            node_path,
+        )
+    }
+
+    /// プロジェクトファイルから作り直す。2つ目は見つからなかったノードのトラックの数
+    pub fn from_records(
+        records: &[AnimationRecord],
+        find_node: impl Fn(&[usize]) -> Option<NodeId>,
+    ) -> (Self, usize) {
+        let (clips, missing) = animations_from_records(records, find_node);
+        let clips = clips
+            .into_iter()
+            .filter(|(_, tracks)| !tracks.is_empty())
+            .map(|(name, tracks)| Clip {
+                duration: tracks
+                    .iter()
+                    .filter_map(|(_, t)| t.keys.last().map(|k| k.0))
+                    .fold(0.0, f64::max),
+                name,
+                tracks,
+            })
+            .collect();
+        (
+            Self {
+                clips,
+                ..Default::default()
+            },
+            missing,
+        )
     }
 
     pub fn current_clip(&self) -> Option<&Clip> {

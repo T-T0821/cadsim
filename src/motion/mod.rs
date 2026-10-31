@@ -33,22 +33,44 @@ use std::collections::HashMap;
 
 use bevy::prelude::*;
 
-pub use chart::{Action, Actuator, ActuatorKind, Axis, Schedule, Step, TimingChart};
+pub use chart::{Action, Actuator, ActuatorKind, Axis, Easing, Schedule, Step, TimingChart};
 #[cfg(test)]
 pub use demo::load_demo;
 pub use export::chart_animation;
 pub use pose::{RigidPose, actuator_poses, part_poses, part_poses_from_values};
 pub use ui::{MotionUi, show_panel};
 
+use crate::history::{TrackDocExt, TrackedDoc};
 use crate::model::{Model, NodeId};
 use crate::plc::plc_active;
 use targets::{design_targets, extra_targets_at};
+
+/// タイミングチャートの編集を元に戻す履歴に載せる
+struct ChartDoc;
+
+impl TrackedDoc for ChartDoc {
+    type Value = TimingChart;
+    const LABEL: &'static str = "タイミングチャートを編集";
+
+    fn read(world: &World) -> TimingChart {
+        world.resource::<TimingChart>().clone()
+    }
+
+    fn write(world: &mut World, value: TimingChart) {
+        *world.resource_mut::<TimingChart>() = value;
+    }
+
+    fn same(a: &TimingChart, b: &TimingChart) -> bool {
+        a == b
+    }
+}
 
 pub struct MotionPlugin;
 
 impl Plugin for MotionPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<TimingChart>()
+            .track_doc::<ChartDoc>()
             .init_resource::<ChartSchedule>()
             .init_resource::<Playback>()
             .init_resource::<SimulationPose>()

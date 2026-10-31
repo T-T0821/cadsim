@@ -40,6 +40,7 @@ use rapier::RapierEngine;
 
 use crate::camera::CameraRequest;
 use crate::file_io::CommandLine;
+use crate::history::{History, TrackDocExt, TrackedDoc};
 use crate::math::euler_deg_to_quat;
 use crate::model::{Model, NodeId, NodeKind};
 use crate::motion::{ChartSchedule, MotionSet, Playback, SimulationPose, TimingChart};
@@ -50,6 +51,7 @@ pub struct PhysicsPlugin;
 impl Plugin for PhysicsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<PhysicsState>()
+            .track_doc::<CablesDoc>()
             .init_resource::<PhysicsPose>()
             .init_resource::<CableSim>()
             .init_gizmo_group::<CableGizmos>()
@@ -255,7 +257,28 @@ fn start_from_command_line(mut state: ResMut<PhysicsState>) {
     }
 }
 
+/// ケーブル・ホースの追加・削除・設定の変更を元に戻す履歴に載せる
+struct CablesDoc;
+
+impl TrackedDoc for CablesDoc {
+    type Value = Vec<Cable>;
+    const LABEL: &'static str = "ケーブル・ホースを編集";
+
+    fn read(world: &bevy::ecs::world::World) -> Vec<Cable> {
+        world.resource::<Model>().cables.clone()
+    }
+
+    fn write(world: &mut bevy::ecs::world::World, value: Vec<Cable>) {
+        world.resource_mut::<Model>().cables = value;
+    }
+
+    fn same(a: &Vec<Cable>, b: &Vec<Cable>) -> bool {
+        a == b
+    }
+}
+
 /// サンプルラインを読み込み、物理演算を止めて全体を表示する
+#[allow(clippy::too_many_arguments)]
 fn load_sample(
     mut state: ResMut<PhysicsState>,
     mut model: ResMut<Model>,
@@ -263,6 +286,7 @@ fn load_sample(
     mut playback: ResMut<Playback>,
     mut camera: MessageWriter<CameraRequest>,
     mut interference: ResMut<InterferenceCheck>,
+    mut history: ResMut<History>,
 ) {
     if !state.load_sample {
         return;
@@ -272,7 +296,12 @@ fn load_sample(
     if std::mem::take(&mut state.start_after_load) {
         state.request = Some(RunRequest::Start);
     }
-    sample::load_sample_line(&mut model, &mut chart);
+    // 部品の入れ替えは1件の履歴にする (チャートとケーブルは見張りがそれぞれ1件にする)
+    history.replace_all(
+        &mut model,
+        "サンプルラインを読み込み".into(),
+        |model| sample::load_sample_line(model, &mut chart),
+    );
     *playback = Playback::default();
     camera.write(CameraRequest::FitAll);
     // 載っているだけのワークも「干渉」と数えられ、一覧が埋まって重くなる

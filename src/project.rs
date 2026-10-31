@@ -29,17 +29,22 @@ use bevy::{
 use bevy_egui::egui;
 use serde::{Deserialize, Serialize};
 
+use crate::animation::Animations;
 use crate::annotation::{AnnotationRecord, Annotations, node_at_path, node_path, to_records};
 use crate::camera::CameraRequest;
 use crate::file_io::{ImportJobs, file_name, load_source, receive_imports, source_name};
 use crate::floor::{FloorDoc, FloorView};
 use crate::floor_record::{FloorLayout, FloorRecord};
 use crate::flow::{self, FlowRes, FlowRun, model::FlowModel, record::FlowRecord};
+use crate::formats::chart_record::{
+    AnimationRecord, ChartRecord, chart_from_record, chart_to_record,
+};
 use crate::formats::site_record::{CloudRecord, UnderlayRecord, load_site};
 use crate::history::History;
 use crate::interchange::UnitOptions;
 use crate::math::{euler_deg_to_quat, quat_to_euler_deg, split_placement};
 use crate::model::{BoxPart, Model, NodeId, NodeKind, Selection, StepSource};
+use crate::motion::{Playback, TimingChart};
 use crate::physics::{CableRecord, PartPhysicsRecord};
 use crate::recording::is_recording;
 use crate::site::model::Site;
@@ -112,6 +117,22 @@ pub struct ProjectFile {
     /// 部品の間に渡したケーブル・ホース
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub cables: Vec<CableRecord>,
+    /// タイミングチャート (アクチュエータとステップ)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chart: Option<ChartRecord>,
+    /// glTF などから取り込んだアニメーション
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub animations: Vec<AnimationRecord>,
+}
+
+/// プロジェクトに保存する設計データ一式 (モデル以外の文書も含む)
+pub struct ProjectDocs<'a> {
+    pub model: &'a Model,
+    pub annotations: &'a Annotations,
+    pub flow: &'a FlowModel,
+    pub floor: FloorRecord,
+    pub chart: &'a TimingChart,
+    pub animations: &'a Animations,
 }
 
 fn default_unit() -> String {
@@ -207,29 +228,29 @@ impl ProjectFile {
                 .iter()
                 .map(|c| CableRecord::from_cable(c, |id| node_path(model, id)))
                 .collect(),
+            chart: None,
+            animations: Vec::new(),
         }
     }
 
-    /// 今のモデルと寸法・注記・工程モデルからファイルの内容を作る
-    pub fn capture(
-        model: &Model,
-        annotations: &Annotations,
-        flow: &FlowModel,
-        floor: &FloorRecord,
-        base_dir: Option<&Path>,
-    ) -> Self {
+    /// 今のモデルと、寸法・注記・工程モデル・床の配置・タイミングチャートなどからファイルの内容を作る
+    pub fn capture(docs: &ProjectDocs, base_dir: Option<&Path>) -> Self {
+        let model = docs.model;
+        let path_of = |id: NodeId| {
+            model
+                .get(id)
+                .is_some()
+                .then(|| node_path(model, id))
+                .flatten()
+        };
+        let chart = docs.chart;
         Self {
-            floor: (!floor.is_empty()).then(|| floor.clone()),
-            annotations: to_records(annotations, model),
-            flow: (!flow.is_empty()).then(|| {
-                flow::record::to_record(flow, |id| {
-                    model
-                        .get(id)
-                        .is_some()
-                        .then(|| node_path(model, id))
-                        .flatten()
-                })
-            }),
+            floor: (!docs.floor.is_empty()).then(|| docs.floor.clone()),
+            annotations: to_records(docs.annotations, model),
+            flow: (!docs.flow.is_empty()).then(|| flow::record::to_record(docs.flow, path_of)),
+            chart: (!chart.actuators.is_empty() || !chart.steps.is_empty())
+                .then(|| chart_to_record(chart, path_of)),
+            animations: docs.animations.to_records(path_of),
             ..Self::from_model(model, base_dir)
         }
     }
@@ -674,14 +695,8 @@ impl ProjectState {
         self.requested = Some((action, false));
     }
 
-    pub fn has_unsaved_changes(
-        &self,
-        model: &Model,
-        annotations: &Annotations,
-        flow: &FlowModel,
-        floor: &FloorRecord,
-    ) -> bool {
-        self.saved != ProjectFile::capture(model, annotations, flow, floor, self.base_dir())
+    pub fn has_unsaved_changes(&self, docs: &ProjectDocs) -> bool {
+        self.saved != ProjectFile::capture(docs, self.base_dir())
     }
 
     /// ファイルに結びついているか (保存したか、ファイルから開いたか)
@@ -705,26 +720,13 @@ impl ProjectState {
         self.path.as_deref().and_then(Path::parent)
     }
 
-    fn mark_saved(
-        &mut self,
-        model: &Model,
-        annotations: &Annotations,
-        flow: &FlowModel,
-        floor: &FloorRecord,
-    ) {
-        self.saved = ProjectFile::capture(model, annotations, flow, floor, self.base_dir());
+    fn mark_saved(&mut self, docs: &ProjectDocs) {
+        self.saved = ProjectFile::capture(docs, self.base_dir());
     }
 
-    fn save(
-        &mut self,
-        path: PathBuf,
-        model: &Model,
-        annotations: &Annotations,
-        flow: &FlowModel,
-        floor: &FloorRecord,
-    ) -> Result<(), ProjectError> {
+    fn save(&mut self, path: PathBuf, docs: &ProjectDocs) -> Result<(), ProjectError> {
         let base_dir = path.parent().map(Path::to_path_buf);
-        let file = ProjectFile::capture(model, annotations, flow, floor, base_dir.as_deref());
+        let file = ProjectFile::capture(docs, base_dir.as_deref());
         std::fs::write(&path, file.to_json()).map_err(ProjectError::Io)?;
         self.path = Some(path);
         self.saved = file;
@@ -736,6 +738,25 @@ impl ProjectState {
             let result = LoadedProject::load(&path);
             (path, result)
         }));
+    }
+}
+
+/// タイミングチャートと取り込んだアニメーションの読み書き
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct MotionDoc<'w> {
+    chart: ResMut<'w, TimingChart>,
+    playback: ResMut<'w, Playback>,
+    animations: ResMut<'w, Animations>,
+}
+
+impl MotionDoc<'_> {
+    /// 開いた (または新規の) プロジェクトのものに置き換え、再生位置を最初に戻す
+    fn replace(&mut self, chart: TimingChart, animations: Animations) {
+        *self.chart = chart;
+        *self.animations = animations;
+        let playback = &mut *self.playback;
+        playback.time = 0.0;
+        playback.playing = false;
     }
 }
 
@@ -763,11 +784,25 @@ fn run_project_actions(
     mut jobs: ResMut<ImportJobs>,
     mut camera: MessageWriter<CameraRequest>,
     mut history: ResMut<History>,
+    mut motion: MotionDoc,
     _main_thread: NonSendMarker,
 ) {
+    // 保存・比較する設計データ一式 (呼ぶたびに今の値から作る)
+    macro_rules! docs {
+        () => {
+            ProjectDocs {
+                model: &model,
+                annotations: &annotations,
+                flow: &flow,
+                floor: floor.record(),
+                chart: &motion.chart,
+                animations: &motion.animations,
+            }
+        };
+    }
     let state = &mut *state;
     if state.startup {
-        state.mark_saved(&model, &annotations, &flow, &floor.record());
+        state.mark_saved(&docs!());
         state.startup = !jobs.loading.is_empty();
     }
 
@@ -790,6 +825,19 @@ fn run_project_actions(
                 flow.0 = restored_flow;
                 flow_run.stop();
                 warnings.extend(flow_warnings);
+                let find = |path: &[usize]| node_at_path(&model, path);
+                let (chart, chart_warnings) = match &loaded.file.chart {
+                    Some(record) => chart_from_record(record, find),
+                    None => (TimingChart::default(), Vec::new()),
+                };
+                warnings.extend(chart_warnings);
+                let (animations, missing) = Animations::from_records(&loaded.file.animations, find);
+                if missing > 0 {
+                    warnings.push(format!(
+                        "部品が見つからないアニメーションの動きが {missing} 件あったため読み飛ばしました"
+                    ));
+                }
+                motion.replace(chart, animations);
                 floor.apply(
                     loaded
                         .file
@@ -803,11 +851,11 @@ fn run_project_actions(
                         "部品が見つからない寸法・注記が {skipped} 件あったため読み飛ばしました"
                     ));
                 }
-                *history = History::default();
+                history.clear();
                 selection.clear();
                 camera.write(CameraRequest::FitAll);
                 state.path = Some(path);
-                state.mark_saved(&model, &annotations, &flow, &floor.record());
+                state.mark_saved(&docs!());
                 let mut message = format!("{name} を開きました");
                 if !warnings.is_empty() {
                     message += &format!("。注意が {} 件あります", warnings.len());
@@ -833,10 +881,7 @@ fn run_project_actions(
         jobs.messages.push("プロジェクトを読み込み中です".into());
         return;
     }
-    if action.discards_model()
-        && !confirmed
-        && state.has_unsaved_changes(&model, &annotations, &flow, &floor.record())
-    {
+    if action.discards_model() && !confirmed && state.has_unsaved_changes(&docs!()) {
         state.confirm_discard = Some(action);
         return;
     }
@@ -848,10 +893,11 @@ fn run_project_actions(
             flow.0 = FlowModel::default();
             flow_run.stop();
             floor.apply(FloorLayout::default());
-            *history = History::default();
+            motion.replace(TimingChart::default(), Animations::default());
+            history.clear();
             selection.clear();
             state.path = None;
-            state.mark_saved(&model, &annotations, &flow, &floor.record());
+            state.mark_saved(&docs!());
             jobs.messages.push("新しいプロジェクトを作りました".into());
         }
         ProjectAction::OpenPath(path) => {
@@ -875,7 +921,7 @@ fn run_project_actions(
             let Some(path) = path else {
                 return;
             };
-            match state.save(path.clone(), &model, &annotations, &flow, &floor.record()) {
+            match state.save(path.clone(), &docs!()) {
                 Ok(()) => jobs
                     .messages
                     .push(format!("{} を保存しました", file_name(&path))),
@@ -930,15 +976,26 @@ enum Choice {
 }
 
 /// ウィンドウのタイトルにファイル名と未保存の印 (*) を出す。
+#[allow(clippy::too_many_arguments)]
 fn update_window_title(
     mut state: ResMut<ProjectState>,
     model: Res<Model>,
     annotations: Res<Annotations>,
     flow: Res<FlowRes>,
     floor: FloorView,
+    chart: Res<TimingChart>,
+    animations: Res<Animations>,
     mut window: Single<&mut Window, With<PrimaryWindow>>,
 ) {
-    let unsaved = state.has_unsaved_changes(&model, &annotations, &flow, &floor.record());
+    let docs = ProjectDocs {
+        model: &model,
+        annotations: &annotations,
+        flow: &flow,
+        floor: floor.record(),
+        chart: &chart,
+        animations: &animations,
+    };
+    let unsaved = state.has_unsaved_changes(&docs);
     // 毎フレーム書くと変更検知が走り続けるので、変わったときだけ書く
     if state.unsaved != unsaved {
         state.unsaved = unsaved;
@@ -975,6 +1032,28 @@ mod tests {
             DVec3::new(10.0, 0.0, 5.0),
         );
         model
+    }
+
+    /// モデル以外は空の文書。テストで必要なものだけ書き換えて使う
+    #[derive(Default)]
+    struct Docs {
+        annotations: Annotations,
+        flow: FlowModel,
+        chart: TimingChart,
+        animations: Animations,
+    }
+
+    impl Docs {
+        fn of<'a>(&'a self, model: &'a Model) -> ProjectDocs<'a> {
+            ProjectDocs {
+                model,
+                annotations: &self.annotations,
+                flow: &self.flow,
+                floor: FloorRecord::default(),
+                chart: &self.chart,
+                animations: &self.animations,
+            }
+        }
     }
 
     fn reload(file: &ProjectFile) -> Model {
@@ -1094,47 +1173,27 @@ mod tests {
         let path = dir.join("line.cadsim");
         let model = sample_model();
         let mut state = ProjectState::default();
-        let none = Annotations::default();
-        state
-            .save(
-                path.clone(),
-                &model,
-                &none,
-                &FlowModel::default(),
-                &FloorRecord::default(),
-            )
-            .unwrap();
-        assert!(!state.has_unsaved_changes(
-            &model,
-            &none,
-            &FlowModel::default(),
-            &FloorRecord::default()
-        ));
+        let none = Docs::default();
+        state.save(path.clone(), &none.of(&model)).unwrap();
+        assert!(!state.has_unsaved_changes(&none.of(&model)));
         let loaded = LoadedProject::load(&path);
         std::fs::remove_dir_all(&dir).ok();
         let mut restored = Model::default();
         loaded.unwrap().apply_to(&mut restored);
-        assert!(!state.has_unsaved_changes(
-            &restored,
-            &none,
-            &FlowModel::default(),
-            &FloorRecord::default()
-        ));
+        assert!(!state.has_unsaved_changes(&none.of(&restored)));
     }
 
     #[test]
     fn flow_model_is_saved_with_the_project() {
         let model = sample_model();
         let part = model.roots[0];
-        let mut line = crate::flow::model::sample_line();
-        line.elements[1].part = Some(part);
-        let file = ProjectFile::capture(
-            &model,
-            &Annotations::default(),
-            &line,
-            &FloorRecord::default(),
-            None,
-        );
+        let mut docs = Docs {
+            flow: crate::flow::model::sample_line(),
+            ..Default::default()
+        };
+        docs.flow.elements[1].part = Some(part);
+        let line = &docs.flow;
+        let file = ProjectFile::capture(&docs.of(&model), None);
         let parsed = ProjectFile::from_json(&file.to_json()).unwrap();
         let restored = reload(&parsed);
         let (flow, warnings) = flow::record::from_record(parsed.flow.as_ref().unwrap(), |p| {
@@ -1145,13 +1204,7 @@ mod tests {
         assert_eq!(flow.elements[1].part, Some(restored.roots[0]));
         assert_eq!(flow.elements[2].kind, line.elements[2].kind);
         // 工程モデルが空なら書かない
-        let empty = ProjectFile::capture(
-            &model,
-            &Annotations::default(),
-            &FlowModel::default(),
-            &FloorRecord::default(),
-            None,
-        );
+        let empty = ProjectFile::capture(&Docs::default().of(&model), None);
         assert!(!empty.to_json().contains("\"flow\""));
     }
 
@@ -1160,43 +1213,97 @@ mod tests {
         use crate::annotation::{Anchor, AnnotationKind};
         let model = sample_model();
         let part = model.roots[1];
-        let mut annotations = Annotations::default();
-        annotations.add(AnnotationKind::Note {
+        let mut docs = Docs::default();
+        docs.annotations.add(AnnotationKind::Note {
             at: Anchor {
                 node: part,
                 local: [1.0, 1.0, 1.0],
             },
             text: "ストッパー位置\n要確認".into(),
         });
-        let file = ProjectFile::capture(
-            &model,
-            &annotations,
-            &FlowModel::default(),
-            &FloorRecord::default(),
-            None,
-        );
+        let file = ProjectFile::capture(&docs.of(&model), None);
         let json = file.to_json();
         assert!(json.contains("\"annotations\""), "{json}");
         let restored = reload(&file);
         let parsed = ProjectFile::from_json(&json).unwrap();
         let (reopened, skipped) = Annotations::from_records(&parsed.annotations, &restored);
         assert_eq!(skipped, 0);
-        assert_eq!(
-            ProjectFile::capture(
-                &restored,
-                &reopened,
-                &FlowModel::default(),
-                &FloorRecord::default(),
-                None
-            ),
-            file
-        );
+        let docs = Docs {
+            annotations: reopened,
+            ..Default::default()
+        };
+        assert_eq!(ProjectFile::capture(&docs.of(&restored), None), file);
         // 寸法・注記のない古いファイルもそのまま開ける
         assert!(
             !ProjectFile::from_model(&model, None)
                 .to_json()
                 .contains("annotations")
         );
+    }
+
+    #[test]
+    fn chart_and_animations_are_saved_with_the_project() {
+        use crate::interchange::{NodeTransform, Track};
+        use crate::motion::{Action, ActuatorKind, Step};
+        let model = sample_model();
+        let part = model.roots[1];
+        let mut docs = Docs::default();
+        let id = docs.chart.add_actuator(ActuatorKind::LinearAxis);
+        docs.chart.actuator_mut(id).unwrap().parts = vec![part];
+        docs.chart.steps.push(Step {
+            comment: "送る".into(),
+            actions: vec![Action {
+                actuator: id,
+                target: 120.0,
+                duration: 1.0,
+            }],
+            dwell: 0.5,
+        });
+        let key = |t: f64, y: f64| {
+            (
+                t,
+                NodeTransform {
+                    translation: DVec3::new(0.0, y, 0.0),
+                    ..Default::default()
+                },
+            )
+        };
+        docs.animations.clips.push(crate::animation::Clip {
+            name: "lift".into(),
+            tracks: vec![(
+                part,
+                Track {
+                    node: 0,
+                    keys: vec![key(0.0, 0.0), key(2.0, 50.0)],
+                },
+            )],
+            duration: 2.0,
+        });
+        let file = ProjectFile::capture(&docs.of(&model), None);
+        let json = file.to_json();
+        assert!(json.contains("\"chart\"") && json.contains("\"animations\""));
+
+        let parsed = ProjectFile::from_json(&json).unwrap();
+        let restored = reload(&parsed);
+        let find = |p: &[usize]| node_at_path(&restored, p);
+        let (chart, warnings) = chart_from_record(parsed.chart.as_ref().unwrap(), find);
+        assert!(warnings.is_empty());
+        assert_eq!(chart.actuators[0].parts, vec![restored.roots[1]]);
+        assert_eq!(chart.steps, docs.chart.steps);
+        let (animations, missing) = Animations::from_records(&parsed.animations, find);
+        assert_eq!(missing, 0);
+        assert_eq!(animations.clips[0].duration, 2.0);
+        assert_eq!(animations.clips[0].tracks[0].0, restored.roots[1]);
+        // 開き直した状態をもう一度保存しても同じ内容になる (未保存の印が付かない)
+        let reopened = Docs {
+            chart,
+            animations,
+            ..Default::default()
+        };
+        assert_eq!(ProjectFile::capture(&reopened.of(&restored), None), file);
+        // チャートもアニメーションもなければ書かない
+        let empty = ProjectFile::capture(&Docs::default().of(&model), None).to_json();
+        assert!(!empty.contains("\"chart\"") && !empty.contains("\"animations\""));
     }
 
     #[test]
