@@ -21,6 +21,7 @@
 mod animation;
 mod menu;
 mod properties;
+mod replace;
 mod status;
 mod tree;
 mod view_cube;
@@ -130,6 +131,7 @@ fn draw_ui(mut contexts: EguiContexts, mut state: UiState) -> Result {
     view_cube::show(&ctx, view, &mut state);
     status::show_notifications(&ctx, view, &mut state);
     animation::show(&ctx, view, &mut state);
+    replace::show(&ctx, &mut state);
     show_confirm_dialog(&ctx, &mut state.project);
 
     // パネルの上やビューキューブの上では 3D ビューのマウス操作をしない

@@ -32,7 +32,8 @@ struct Channel {
 
 impl Channel {
     fn call(&self, request: Request) -> RhaiResult<Reply> {
-        let stopped = || -> Box<EvalAltResult> { "シミュレーションが止まりました".into() };
+        let stopped =
+            || -> Box<EvalAltResult> { "シミュレーションが止まりました".into() };
         self.requests.send(request).map_err(|_| stopped())?;
         match self.replies.recv().map_err(|_| stopped())? {
             Reply::Error(e) => Err(e.into()),
@@ -129,7 +130,9 @@ fn register(engine: &mut Engine, ch: &Rc<Channel>) {
         c.call_unit(Request::MoveJoint(name.into(), target as f64))
     });
     let c = ch.clone();
-    engine.register_fn("wait", move |seconds: f64| c.call_unit(Request::Wait(seconds)));
+    engine.register_fn("wait", move |seconds: f64| {
+        c.call_unit(Request::Wait(seconds))
+    });
     let c = ch.clone();
     engine.register_fn("wait", move |seconds: i64| {
         c.call_unit(Request::Wait(seconds as f64))

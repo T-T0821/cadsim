@@ -15,7 +15,7 @@ use bevy::{ecs::system::NonSendMarker, prelude::*};
 
 use crate::animation::Animations;
 use crate::camera::CameraRequest;
-use crate::history::History;
+use crate::history::{History, ModelChange};
 use crate::interchange::{
     self, FORMATS, Scene, UnitOptions,
     model_io::{model_to_scene, scene_to_import},
@@ -62,8 +62,18 @@ impl Loaded {
     }
 }
 
-/// 読み込みの結果 (ファイル名, 読み込み元, 中身 or エラー文)
-type ImportResult = (String, StepSource, Result<Loaded, String>);
+/// 読み込みの結果 (ファイル名, 読み込み元, 形状を差し替えるノード, 中身 or エラー文)
+type ImportResult = (String, StepSource, Option<NodeId>, Result<Loaded, String>);
+
+/// 形状の差し替えの結果。対応がつかなかったものを画面に一覧で出す。
+pub struct ReplaceSummary {
+    pub title: String,
+    pub matched: usize,
+    /// 新しい形状に見つからず、古い形状のまま残した部品 (ツリーでのパス)
+    pub unmatched: Vec<(NodeId, String)>,
+    /// 新しく加わった部品
+    pub added: Vec<(NodeId, String)>,
+}
 
 /// 何を書き出すか
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -85,6 +95,10 @@ pub struct ImportJobs {
     dialog_requested: bool,
     /// メニューで「書き出し」が押された
     export_requested: Option<ExportScope>,
+    /// メニューで「形状を差し替え」が押された (差し替えるノード)
+    replace_requested: Option<NodeId>,
+    /// 直近の形状の差し替えの結果 (閉じるまで表示する)
+    pub replace_summary: Option<ReplaceSummary>,
     /// OBJ / STL の単位と上方向 (読み込みと書き出しの両方で使う)
     pub units: UnitOptions,
 }
@@ -99,6 +113,8 @@ impl Default for ImportJobs {
             messages: Vec::new(),
             dialog_requested: false,
             export_requested: None,
+            replace_requested: None,
+            replace_summary: None,
             units: UnitOptions::default(),
         }
     }
@@ -113,16 +129,21 @@ impl ImportJobs {
         self.export_requested = Some(scope);
     }
 
+    /// `target` の形状を、選んだファイルの形状に差し替える (動きの設定は残す)
+    pub fn request_replace(&mut self, target: NodeId) {
+        self.replace_requested = Some(target);
+    }
+
     pub fn open_sample(&mut self) {
-        self.spawn(StepSource::Sample);
+        self.spawn(StepSource::Sample, None);
     }
 
     pub fn open_path(&mut self, path: PathBuf) {
-        self.spawn(StepSource::File(path));
+        self.spawn(StepSource::File(path), None);
     }
 
-    /// 別スレッドで読み込む
-    fn spawn(&mut self, source: StepSource) {
+    /// 別スレッドで読み込む。`target` があれば、読んだ形状でそのノードを差し替える。
+    fn spawn(&mut self, source: StepSource, target: Option<NodeId>) {
         let name = source_name(&source);
         self.loading.push(name.clone());
         let sender = self.sender.clone();
@@ -130,7 +151,7 @@ impl ImportJobs {
         std::thread::spawn(move || {
             let result = load_source(&source, &units);
             // 受け取り側がいなくなっていたら (アプリ終了時) 何もしない
-            let _ = sender.send((name, source, result));
+            let _ = sender.send((name, source, target, result));
         });
     }
 }
@@ -201,6 +222,22 @@ fn open_dialog_if_requested(
     mut project: ResMut<ProjectState>,
     _main_thread: NonSendMarker,
 ) {
+    if let Some(target) = jobs.replace_requested.take() {
+        let mut all: Vec<&str> = vec!["step", "stp"];
+        all.extend(
+            FORMATS
+                .iter()
+                .filter(|f| f.import.is_some())
+                .flat_map(|f| f.extensions.iter().copied()),
+        );
+        let picked = rfd::FileDialog::new()
+            .set_title("差し替える形状を選ぶ")
+            .add_filter("対応しているすべての形式", &with_upper_case(&all))
+            .pick_file();
+        if let Some(path) = picked {
+            jobs.spawn(StepSource::File(path), Some(target));
+        }
+    }
     if !std::mem::take(&mut jobs.dialog_requested) {
         return;
     }
@@ -314,12 +351,24 @@ pub fn receive_imports(
         Ok(receiver) => receiver.try_iter().collect(),
         Err(_) => return,
     };
-    for (name, source, result) in finished {
+    for (name, source, target, result) in finished {
         if let Some(i) = jobs.loading.iter().position(|n| *n == name) {
             jobs.loading.remove(i);
         }
         // 単位の情報を持つシーンは、いまのモデルの単位に合わせて取り込む
         let result = result.map(|loaded| loaded.into_imported(&name, &model.unit));
+        if let Some(target) = target {
+            match result {
+                Ok(file) => {
+                    replace_geometry(&mut jobs, &mut model, &mut history, target, file, source)
+                }
+                Err(err) => {
+                    error!("{name}: {err}");
+                    jobs.messages.push(format!("{name}: {err}"));
+                }
+            }
+            continue;
+        }
         match result {
             Ok(file) => {
                 let warnings = file.warnings.len();
@@ -350,6 +399,50 @@ pub fn receive_imports(
             }
         }
     }
+}
+
+/// 読み込んだ形状で `target` 以下を差し替え、元に戻せるよう履歴に積む
+fn replace_geometry(
+    jobs: &mut ImportJobs,
+    model: &mut Model,
+    history: &mut History,
+    target: NodeId,
+    file: ImportedFile,
+    source: StepSource,
+) {
+    let Some(before) = model.snapshot(target) else {
+        jobs.messages
+            .push("差し替える部品が見つかりません (削除されたかもしれません)".into());
+        return;
+    };
+    let old_name = before.nodes[0].1.name.clone();
+    let file_name = source_name(&source);
+    let Some(report) = model.replace_geometry(target, file.root, source) else {
+        return;
+    };
+    let label = format!("{old_name} の形状を {file_name} に差し替え");
+    history.push(ModelChange {
+        label: label.clone(),
+        changes: vec![(Some(before), model.snapshot(target))],
+    });
+    let paths = |ids: &[NodeId]| -> Vec<(NodeId, String)> {
+        ids.iter().map(|&id| (id, model.path_label(id))).collect()
+    };
+    let mut message = format!("{label}ました (対応 {} 件", report.matched);
+    if !report.unmatched.is_empty() {
+        message += &format!("、見つからない {} 件", report.unmatched.len());
+    }
+    if !report.added.is_empty() {
+        message += &format!("、追加 {} 件", report.added.len());
+    }
+    message += ")";
+    jobs.messages.push(message);
+    jobs.replace_summary = Some(ReplaceSummary {
+        title: label,
+        matched: report.matched,
+        unmatched: paths(&report.unmatched),
+        added: paths(&report.added),
+    });
 }
 
 #[cfg(test)]

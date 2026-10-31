@@ -126,6 +126,19 @@ fn format_list() -> String {
 fn edit_menu(ui: &mut egui::Ui, state: &mut UiState) {
     ui.menu_button("編集", |ui| {
         undo_redo_buttons(ui, state);
+        ui.separator();
+        let target = state.selection.node;
+        if ui
+            .add_enabled(target.is_some(), egui::Button::new("形状を差し替え…"))
+            .on_hover_text(
+                "選んだ部品・アセンブリの形状を、設計変更後のファイルの形状に入れ替える。\n\
+                 名前と構造で部品を対応づけ、動きの設定はそのまま残す",
+            )
+            .clicked()
+            && let Some(target) = target
+        {
+            state.jobs.request_replace(target);
+        }
     });
 }
 

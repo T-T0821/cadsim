@@ -134,10 +134,12 @@ pub fn plan_remap(old: &[OutlineNode], new: &[OutlineNode]) -> RemapPlan {
         let news = group_free(new, key, |i| !new_taken[i]);
         let mut pairs: Vec<(usize, usize)> = olds
             .iter()
-            .filter_map(|(k, o)| match (o.as_slice(), news.get(k).map(Vec::as_slice)) {
-                ([o], Some([n])) => Some((*o, *n)),
-                _ => None,
-            })
+            .filter_map(
+                |(k, o)| match (o.as_slice(), news.get(k).map(Vec::as_slice)) {
+                    ([o], Some([n])) => Some((*o, *n)),
+                    _ => None,
+                },
+            )
             .collect();
         pairs.sort();
         for (o, n) in pairs {
