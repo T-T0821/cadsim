@@ -62,11 +62,12 @@ crates/
 │       │                 safety (安全機器・検知・安全距離), floor (作業者・AGV・床の幾何),
 │       │                 line (工程と AGV の受け渡し・PLC の信号表・ワークの位置)
 │       └── usecase/      document (開く・保存・取り込み・書き出し), edit, history,
-│                         report (シミュレーション結果の CSV), script (部品スクリプトの実行と ScriptHost ポート),
+│                         report (シミュレーション結果の CSV), llm (生成 AI のポート LlmClient), script (部品スクリプトの実行と ScriptHost ポート),
 │                         ports (SceneReader / SceneWriter / ProjectStore などのトレイト)
 └── cadsim_io/            3. アダプター (Bevy なし)
     └── src/              step, interchange (gltf / obj / stl / usd), project_file (JSON),
-                          modbus, rtde (UR の関節角度の受信), video, xlsx (工程シミュレーションの結果), rhai (部品スクリプトのエンジン)
+                          modbus, rtde (UR の関節角度の受信), video, xlsx (工程シミュレーションの結果), rhai (部品スクリプトのエンジン),
+                          claude (生成 AI の Claude API)
 ```
 
 ルートの `Cargo.toml` の `default-members` に全 crate を並べているので、引数なしの `cargo test` / `cargo clippy` でワークスペース全体を確かめられます。
@@ -113,6 +114,8 @@ crates/
 | タイミングチャート・アニメーションの保存 | —(`motion::chart` は手順 2 で core へ) | `formats::chart_record` | `project.rs` |
 | 文書の変更を元に戻す履歴にまとめる | `usecase::edit_tracker`(前に確定した状態との比較) | — | `history.rs` の `TrackedDoc`(各プラグインで登録) |
 | 実機ロボット (UR) の関節角度の受信 | —(角度から関節の値への直し方 `motion::live_joints` は Bevy 非依存。`motion::chart` と一緒に手順 2 で core へ) | `cadsim_io::rtde`(RTDE の読み書きと通信スレッド) | `motion/ur_ui.rs` |
+| 生成 AI の呼び出し | `usecase::llm`(ポート `LlmClient`) | `cadsim_io::claude`(Claude API) | `assistant/`(`settings_file.rs`・`job.rs` は Bevy 非依存) |
+| チャート・ラダーの自動生成 | —(`TimingChart` がアプリ側なので `sequence_gen/{spec, ladder, log_events, usecase}.rs` はアプリ側。Bevy 非依存で、チャートと一緒に手順 2 で core へ) | `sequence_gen/json.rs`(下書き ⇔ JSON) | `sequence_gen/{mod, ui}.rs` |
 | ライン連携 | `line::{coupler, signals, workpieces}`、`flow::sim` の連携の口 | — | `line/`(`stepper.rs` は Bevy 非依存。AGV のシミュレーションと一緒に手順 2 で core へ) |
 
 `formats::{bom_out, chart_record}` と `bom.rs`・`modeling.rs`・`drawing/collect.rs` は Bevy に依存しない書き方にしてあり、次の手順で core / io に移します。
