@@ -41,6 +41,8 @@ impl Plugin for PlcPlugin {
 pub struct Plc {
     session: PlcSession,
     modbus: adapter::modbus::ModbusSettings,
+    /// 画面に出すお知らせ (CSV の読み込み結果など)
+    notice: Option<String>,
 }
 
 /// PLC がアクチュエータを動かしているとき true。

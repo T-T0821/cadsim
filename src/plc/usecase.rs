@@ -5,6 +5,7 @@
 use std::collections::HashMap;
 
 use super::domain::io::{AddressPlan, IoTable, IoValues};
+use super::domain::io_csv::{self, CsvReport};
 use super::domain::plant::Plant;
 use super::domain::sequencer::StepSequencer;
 use crate::motion::TimingChart;
@@ -105,6 +106,18 @@ impl PlcSession {
             self.table = table;
         }
         changed
+    }
+
+    /// I/O 対応表を CSV にする (Excel で編集して読み戻せる)
+    pub fn export_io_csv(&self) -> String {
+        io_csv::to_csv(&self.table)
+    }
+
+    /// 編集した I/O 対応表の CSV を読み、番号・スケール・OPC UA ノードを信号ごとに反映する
+    pub fn import_io_csv(&mut self, text: &str, chart: &TimingChart) -> Result<CsvReport, String> {
+        let report = io_csv::apply_csv(text, &self.table, &mut self.plan)?;
+        self.refresh_table(chart);
+        Ok(report)
     }
 
     /// 1スキャン分を進め、アクチュエータの現在値 (id → 値) を返す。`dt` は前回からの秒数。
