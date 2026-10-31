@@ -6,7 +6,7 @@
 //!
 //! Bevy や truck には依存させず、単体テストできる純粋な関数だけを置く。
 
-use bevy::math::{DMat4, DQuat, DVec3};
+use glam::{DMat4, DQuat, DVec3};
 
 /// 3頂点の三角形。頂点の並びは反時計回りが表 (外向き法線) とする。
 pub type Triangle = [DVec3; 3];
