@@ -1,7 +1,7 @@
 # 関節とロボット
 
 タイミングチャートのアクチュエータ (回転テーブル・直動軸) を関節として扱い、
-直列につないだものをロボットとして教示点へ動かすしくみです。コードは `src/motion/` にあります。
+直列につないだものをロボットとして教示点へ動かすしくみです。計算は `crates/cadsim_core/src/motion/`、画面は `src/motion/` にあります。
 
 | ファイル | 層 | 内容 |
 | --- | --- | --- |
@@ -10,7 +10,7 @@
 | `kinematics.rs` | ドメイン | 関節の並び、TCP、ヤコビアン、逆運動学 |
 | `robot_ui.rs` | UI | ロボット画面 (ジョグ・教示点) と 3D ビューへの表示 |
 
-`chart.rs` / `pose.rs` / `kinematics.rs` は Bevy の型を使いません (ベクトルは `bevy::math` 経由の glam)。
+`chart.rs` / `pose.rs` / `kinematics.rs` は `crates/cadsim_core/src/motion/` にあり、Bevy に依存しません (ベクトルは glam)。
 [architecture.md](architecture.md) の移し方の 2 段目で `cadsim_core` の `domain::motion` に移します。
 
 ## データ

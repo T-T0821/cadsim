@@ -950,8 +950,9 @@ fn run_project_actions(
                 let find = |path: &[usize]| node_at_path(&model, path);
                 let (chart, chart_warnings) = match &loaded.file.chart {
                     Some(record) => chart_from_record(record, find),
-                    None => (TimingChart::default(), Vec::new()),
+                    None => Default::default(),
                 };
+                let chart = TimingChart(chart);
                 warnings.extend(chart_warnings);
                 let (animations, missing) = Animations::from_records(&loaded.file.animations, find);
                 if missing > 0 {
@@ -1486,7 +1487,7 @@ mod tests {
         assert_eq!(animations.clips[0].tracks[0].0, restored.roots[1]);
         // 開き直した状態をもう一度保存しても同じ内容になる (未保存の印が付かない)
         let reopened = Docs {
-            chart,
+            chart: TimingChart(chart),
             animations,
             conveyors,
             ..Default::default()

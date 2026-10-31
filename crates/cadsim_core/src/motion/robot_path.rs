@@ -12,7 +12,7 @@
 
 use std::collections::HashMap;
 
-use bevy::math::DVec3;
+use glam::DVec3;
 
 use super::chart::{Easing, MoveKind, Robot, TeachPoint, TimingChart};
 use super::kinematics;
@@ -232,7 +232,7 @@ fn slerp(a: DVec3, b: DVec3, t: f64) -> DVec3 {
         .cross(b)
         .try_normalize()
         .unwrap_or_else(|| a.any_orthonormal_vector());
-    bevy::math::DQuat::from_axis_angle(axis, angle * t) * a
+    glam::DQuat::from_axis_angle(axis, angle * t) * a
 }
 
 /// S 字の速度の付け方で、経路の進み具合が `s` になる時刻の比 (二分法で逆算する)

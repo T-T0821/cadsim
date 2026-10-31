@@ -7,7 +7,7 @@
 //!
 //! Bevy に依存しない純粋な計算だけを置く。
 
-use bevy::math::DVec3;
+use glam::DVec3;
 
 use super::device::{DeviceKind, SafetyDevice};
 use crate::floor::geom::Rect2;

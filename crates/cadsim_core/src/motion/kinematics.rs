@@ -10,7 +10,7 @@
 
 use std::collections::HashMap;
 
-use bevy::math::DVec3;
+use glam::DVec3;
 
 use super::chart::{ActuatorKind, Robot, TeachPoint, TimingChart};
 use super::pose::{self, RigidPose};

@@ -83,11 +83,11 @@ pub fn build(
     let (actuators, sensors) = attached(model, chart, root);
     let subtree: HashSet<NodeId> = model.subtree(root).into_iter().collect();
 
-    let mut sub = TimingChart {
+    let mut sub = TimingChart(cadsim_core::motion::TimingChart {
         next_actuator_id: chart.next_actuator_id,
         next_sensor_id: chart.next_sensor_id,
         ..Default::default()
-    };
+    });
     // 置いた自作部品をもう一度保存するときは、名前の頭 ("<部品名> 1/") を外す
     let prefix = model
         .get(root)

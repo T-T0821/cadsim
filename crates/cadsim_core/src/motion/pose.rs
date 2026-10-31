@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use bevy::math::{DMat4, DQuat, DVec3};
+use glam::{DMat4, DQuat, DVec3};
 use truck_modeling::Matrix4;
 
 use super::chart::Schedule;

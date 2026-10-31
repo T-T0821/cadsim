@@ -6,13 +6,14 @@
 
 use std::{collections::HashMap, sync::Arc};
 
-use bevy::math::DMat4;
+use glam::DMat4;
 
 use super::chart::{Schedule, TimingChart};
 use super::pose::{RigidPose, part_poses};
 use crate::simulation::{
-    Pose, TriMesh,
+    geometry::Pose,
     interference::{Body, CheckSettings, PairStatus, check_all},
+    mesh::TriMesh,
 };
 
 /// 調べる部品1つ
@@ -135,7 +136,7 @@ pub fn robot_path_interference(
 mod tests {
     use super::*;
     use crate::motion::chart::{ActuatorKind, Axis, MoveKind, RobotMove, Step};
-    use bevy::math::DVec3;
+    use glam::DVec3;
 
     /// 原点を中心にした、辺の長さ `size` の立方体
     fn cube(size: f64) -> Arc<TriMesh> {

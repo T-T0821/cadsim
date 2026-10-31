@@ -10,7 +10,7 @@
 
 use std::collections::HashMap;
 
-use bevy::math::{DQuat, DVec3};
+use glam::{DQuat, DVec3};
 
 use super::chart::{Axis, Interlock, Schedule, Step, TimingChart};
 use super::pose::{RigidPose, actuator_poses};

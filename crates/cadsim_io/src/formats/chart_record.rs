@@ -7,11 +7,11 @@
 use glam::{DQuat, DVec3};
 use serde::{Deserialize, Serialize};
 
-use crate::interchange::{NodeTransform, Track};
-use crate::motion::chart::{
+use cadsim_core::animation::{NodeTransform, Track};
+use cadsim_core::motion::chart::{
     CamTable, Interlock, MoveKind, Robot, RobotMove, RobotSpeed, Sensor, SensorKind, TeachPoint,
 };
-use crate::motion::{Action, Actuator, ActuatorKind, Axis, Easing, Step, TimingChart};
+use cadsim_core::motion::{Action, Actuator, ActuatorKind, Axis, Easing, Step, TimingChart};
 
 type NodePath = Vec<usize>;
 

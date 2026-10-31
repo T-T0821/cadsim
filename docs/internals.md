@@ -54,8 +54,9 @@ crates/cadsim_core/   Bevy に依存しないドメイン (cargo test -p cadsim_
 ├── simulation/      干渉チェックの幾何計算 (geometry / mesh / interference / overlap)
 ├── drawing.rs       2D 図面: 投影・かくれ線・シルエット・寸法・図枠 (docs/drawing.md)
 ├── site/            平面図の下敷きの配置と縮尺合わせ、点群の間引き・LOD・干渉 (docs/site.md)
+├── motion/          タイミングチャートと時刻表 (chart)、加減速とカム (profile)、姿勢 (pose)、ロボットの運動学・経路・時間、経路の干渉、センサー
 ├── floor/           床の上の長方形・距離 (geom)、作業者の時刻表 (operator_plan)、AGV の配車 (agv_sim)
-├── safety/          安全機器のデータ・侵入の検知・停止のラッチ・安全距離 (device)
+├── safety/          安全機器のデータ・侵入の検知・停止のラッチ・安全距離 (device)、動作範囲と距離の確認 (check)
 ├── flow/            工程モデル (model)、離散事象シミュレーションと集計 (sim)、状態・稼働率の色 (palette)
 └── physics/         物理演算の設定・ケーブルの紐モデル・剛体の進め方 (settings / cable / world)
 crates/cadsim_io/     Bevy に依存しないアダプター (cargo test -p cadsim_io で単体テスト)
@@ -89,8 +90,7 @@ src/                  アプリ本体 (Bevy + egui)
 ├── gizmo.rs         移動・回転・拡大縮小のギズモとスナップ
 ├── motion/          タイミングチャートと動作シミュレーション
 │   ├── mod.rs        プラグイン、再生状態、SimulationPose (干渉チェックとのつなぎ口)
-│   ├── chart.rs      アクチュエータ・ステップのデータと時刻表への変換 (Bevy に依存しない)
-│   ├── pose.rs       時刻 t のアクチュエータ・部品の動き (f64 の剛体変換)
+│   ├── chart.rs      TimingChart を Bevy の Resource で包む型 (データと計算は cadsim_core::motion)
 │   ├── ui.rs         タイミングチャートのパネル
 │   ├── export.rs     1サイクルの動きを書き出し用のアニメーションにする
 │   └── demo.rs       サンプル装置 (ピック & プレース)
@@ -110,7 +110,7 @@ src/                  アプリ本体 (Bevy + egui)
 ├── bom.rs           部品表のテスト (計算は cadsim_core::bom)
 ├── documents.rs     図面・部品表の書き出しダイアログと保存
 ├── site/            平面図・点群の読み込みの配線、3D 表示、「平面図・点群」パネル
-├── formats/         タイミングチャートの保存形式 (chart_record)。ほかの形式は cadsim_io::formats
+├── formats/         cadsim_io::formats を再公開する
 ├── flow/            工程シミュレーションの配線と画面 (計算は cadsim_core::flow。詳しくは docs/flow.md)
 │   ├── mod.rs        プラグイン、早送りの再生、3D の色分け (FlowColors)
 │   └── ui.rs         工程シミュレーションのウィンドウ
@@ -242,14 +242,14 @@ egui のパネルを上・下・左・右の順に置き、残った領域を 3D
 - `viewport.rs` の `sync_views` が `.after(MotionSet::Pose)` で動きを部品の配置に重ね、表示用の `Transform` と干渉チェック用の `SimBody.pose` の両方に写すので、再生・スクラブ中も各時刻の位置で干渉チェックが走る。設計データ(`Model`)は書き換えない。
 - 書き出し(`motion/export.rs`)では、1サイクルを 1/30 秒ごとに標本化し、親と違う動きをするノードだけに「親から見た配置」のキーを作る(`(動き × 設計のワールド配置)` を親の同じ時刻のワールド配置で割る)。アセンブリに割り当てた動きは、シーンの親子関係で子孫に伝わる。
 
-### 加減速と電子カム(`motion/profile.rs`)
+### 加減速と電子カム(`cadsim_core/src/motion/profile.rs`)
 
 - 加減速は「時間の進み具合 x (0〜1) → 位置の進み具合 s (0〜1)」の関数(`Easing::apply_with`)。`Schedule::value_at` は動作ごとに、直前の値から目標値までをこの s で補間する。
 - 台形加減速は加速の割合 r で、速度 v = 1/(1-r) まで一定の加速度で加速し、同じ時間で減速する。サイクロイドは s = x - sin(2πx)/2π。
 - 電子カム表は (時間, 位置) の点に始点 (0, 0) と終点 (1, 1) を足し、PCHIP(Fritsch–Carlson の傾きで決める区分 3 次エルミート補間)でつなぐ。単調な区間は単調のままで、点の間で行き過ぎない。表は `TimingChart::cams` にあり、`Schedule` を作るときに写して値を読むのに使う。
 - 速度のグラフは `Schedule::velocity_at`(位置の中心差分)。シリンダは 0〜1 の値なのでストロークを掛けて表示する。
 
-### センサーとインターロック(`motion/sensor.rs`, `motion/targets.rs`)
+### センサーとインターロック(`cadsim_core/src/motion/sensor.rs`, `motion/targets.rs`)
 
 - `sensor.rs` と `targets.rs` は Bevy に依存しない計算だけのモジュールで、単体テストを持つ。Bevy のシステム(`mod.rs`)と描画(`sensor_view.rs`)・パネル(`ui.rs`)はそれを呼ぶだけ。
 - 検知対象は向きつきの直方体(`TargetBox`)。`targets.rs` が部品を直方体にする(箱はそのまま、取り込んだ部品は部品座標系の外接箱)。アクチュエータに割り当てた部品(またはその祖先のアセンブリ)には、そのアクチュエータの動きを付ける。
