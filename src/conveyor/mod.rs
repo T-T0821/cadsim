@@ -26,6 +26,7 @@ use cadsim_core::conveyor::{
 };
 use glam::DVec3;
 
+use crate::history::{TrackDocExt, TrackedDoc};
 use crate::model::{Model, NodeId};
 use crate::motion::{
     ActuatorKind, ChartSchedule, MotionSet, Playback, RigidPose, Schedule, TimingChart,
@@ -37,6 +38,7 @@ pub struct ConveyorPlugin;
 impl Plugin for ConveyorPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ConveyorConfigRes>()
+            .track_doc::<ConveyorDoc>()
             .init_resource::<WorkState>()
             .init_resource::<ConveyorClock>()
             .init_resource::<WorkMaterials>()
@@ -62,6 +64,26 @@ pub enum ConveyorSet {
 /// ワーク搬送の設定 (ドメインの [`ConveyorConfig`] を Resource として包む)
 #[derive(Resource, Default, Deref, DerefMut)]
 pub struct ConveyorConfigRes(pub ConveyorConfig);
+
+/// コンベアとグリッパの設定の編集を元に戻す履歴に載せる
+struct ConveyorDoc;
+
+impl TrackedDoc for ConveyorDoc {
+    type Value = ConveyorConfig;
+    const LABEL: &'static str = "コンベア・グリッパを編集";
+
+    fn read(world: &World) -> ConveyorConfig {
+        world.resource::<ConveyorConfigRes>().0.clone()
+    }
+
+    fn write(world: &mut World, value: ConveyorConfig) {
+        world.resource_mut::<ConveyorConfigRes>().0 = value;
+    }
+
+    fn same(a: &ConveyorConfig, b: &ConveyorConfig) -> bool {
+        a == b
+    }
+}
 
 /// いま表示しているワークの状態
 #[derive(Resource, Default)]

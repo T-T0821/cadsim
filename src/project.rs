@@ -32,6 +32,7 @@ use serde::{Deserialize, Serialize};
 use crate::animation::Animations;
 use crate::annotation::{AnnotationRecord, Annotations, node_at_path, node_path, to_records};
 use crate::camera::CameraRequest;
+use crate::conveyor::ConveyorConfigRes;
 use crate::file_io::{ImportJobs, file_name, load_source, receive_imports, source_name};
 use crate::floor::{FloorDoc, FloorView};
 use crate::floor_record::{FloorLayout, FloorRecord};
@@ -39,6 +40,7 @@ use crate::flow::{self, FlowRes, FlowRun, model::FlowModel, record::FlowRecord};
 use crate::formats::chart_record::{
     AnimationRecord, ChartRecord, chart_from_record, chart_to_record,
 };
+use crate::formats::conveyor_record::{self, ConveyorsRecord};
 use crate::formats::site_record::{CloudRecord, UnderlayRecord, load_site};
 use crate::history::History;
 use crate::interchange::UnitOptions;
@@ -50,6 +52,7 @@ use crate::plc::{Plc, PlcRecord};
 use crate::recording::is_recording;
 use crate::site::model::Site;
 use crate::step_import::{ImportNode, ImportedShape};
+use cadsim_core::conveyor::ConveyorConfig;
 
 /// ファイル形式のバージョン。古いファイルを開けなくなる変更をしたときだけ上げる。
 pub const FORMAT_VERSION: u32 = 1;
@@ -124,9 +127,12 @@ pub struct ProjectFile {
     /// glTF などから取り込んだアニメーション
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub animations: Vec<AnimationRecord>,
-    /// PLC 連携の設定 (I/O の割り付けと Modbus の接続先)
+    /// PLC 連携の設定 (I/O の割り付けと外部 PLC の接続先)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plc: Option<PlcRecord>,
+    /// コンベアのワーク搬送とグリッパの設定
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conveyors: Option<ConveyorsRecord>,
 }
 
 /// プロジェクトに保存する設計データ一式 (モデル以外の文書も含む)
@@ -138,6 +144,7 @@ pub struct ProjectDocs<'a> {
     pub chart: &'a TimingChart,
     pub animations: &'a Animations,
     pub plc: Option<PlcRecord>,
+    pub conveyors: &'a ConveyorConfig,
 }
 
 fn default_unit() -> String {
@@ -236,6 +243,7 @@ impl ProjectFile {
             chart: None,
             animations: Vec::new(),
             plc: None,
+            conveyors: None,
         }
     }
 
@@ -258,6 +266,7 @@ impl ProjectFile {
                 .then(|| chart_to_record(chart, path_of)),
             animations: docs.animations.to_records(path_of),
             plc: docs.plc.clone(),
+            conveyors: conveyor_record::to_record(docs.conveyors, path_of),
             ..Self::from_model(model, base_dir)
         }
     }
@@ -755,12 +764,20 @@ pub struct MotionDoc<'w> {
     playback: ResMut<'w, Playback>,
     animations: ResMut<'w, Animations>,
     plc: ResMut<'w, Plc>,
+    conveyors: ResMut<'w, ConveyorConfigRes>,
 }
 
 impl MotionDoc<'_> {
     /// 開いた (または新規の) プロジェクトのものに置き換え、再生位置を最初に戻す
-    fn replace(&mut self, chart: TimingChart, animations: Animations, plc: Option<&PlcRecord>) {
+    fn replace(
+        &mut self,
+        chart: TimingChart,
+        animations: Animations,
+        plc: Option<&PlcRecord>,
+        conveyors: ConveyorConfig,
+    ) {
         *self.chart = chart;
+        self.conveyors.0 = conveyors;
         *self.animations = animations;
         self.plc.restore(plc);
         let playback = &mut *self.playback;
@@ -807,6 +824,7 @@ fn run_project_actions(
                 chart: &motion.chart,
                 animations: &motion.animations,
                 plc: motion.plc.record(),
+                conveyors: &motion.conveyors,
             }
         };
     }
@@ -847,7 +865,10 @@ fn run_project_actions(
                         "部品が見つからないアニメーションの動きが {missing} 件あったため読み飛ばしました"
                     ));
                 }
-                motion.replace(chart, animations, loaded.file.plc.as_ref());
+                let (conveyors, conveyor_warnings) =
+                    conveyor_record::from_record(loaded.file.conveyors.as_ref(), find);
+                warnings.extend(conveyor_warnings);
+                motion.replace(chart, animations, loaded.file.plc.as_ref(), conveyors);
                 floor.apply(
                     loaded
                         .file
@@ -903,7 +924,12 @@ fn run_project_actions(
             flow.0 = FlowModel::default();
             flow_run.stop();
             floor.apply(FloorLayout::default());
-            motion.replace(TimingChart::default(), Animations::default(), None);
+            motion.replace(
+                TimingChart::default(),
+                Animations::default(),
+                None,
+                ConveyorConfig::default(),
+            );
             history.clear();
             selection.clear();
             state.path = None;
@@ -996,6 +1022,7 @@ fn update_window_title(
     chart: Res<TimingChart>,
     animations: Res<Animations>,
     plc: Res<Plc>,
+    conveyors: Res<ConveyorConfigRes>,
     mut window: Single<&mut Window, With<PrimaryWindow>>,
 ) {
     let docs = ProjectDocs {
@@ -1006,6 +1033,7 @@ fn update_window_title(
         chart: &chart,
         animations: &animations,
         plc: plc.record(),
+        conveyors: &conveyors,
     };
     let unsaved = state.has_unsaved_changes(&docs);
     // 毎フレーム書くと変更検知が走り続けるので、変わったときだけ書く
@@ -1053,6 +1081,7 @@ mod tests {
         flow: FlowModel,
         chart: TimingChart,
         animations: Animations,
+        conveyors: ConveyorConfig,
     }
 
     impl Docs {
@@ -1065,6 +1094,7 @@ mod tests {
                 chart: &self.chart,
                 animations: &self.animations,
                 plc: None,
+                conveyors: &self.conveyors,
             }
         }
     }
@@ -1271,7 +1301,9 @@ mod tests {
                 duration: 1.0,
             }],
             dwell: 0.5,
+            ..Default::default()
         });
+        docs.conveyors.add_conveyor().part = Some(part);
         let key = |t: f64, y: f64| {
             (
                 t,
@@ -1303,6 +1335,9 @@ mod tests {
         assert!(warnings.is_empty());
         assert_eq!(chart.actuators[0].parts, vec![restored.roots[1]]);
         assert_eq!(chart.steps, docs.chart.steps);
+        let (conveyors, warnings) = conveyor_record::from_record(parsed.conveyors.as_ref(), find);
+        assert!(warnings.is_empty());
+        assert_eq!(conveyors.conveyors[0].part, Some(restored.roots[1]));
         let (animations, missing) = Animations::from_records(&parsed.animations, find);
         assert_eq!(missing, 0);
         assert_eq!(animations.clips[0].duration, 2.0);
@@ -1311,6 +1346,7 @@ mod tests {
         let reopened = Docs {
             chart,
             animations,
+            conveyors,
             ..Default::default()
         };
         assert_eq!(ProjectFile::capture(&reopened.of(&restored), None), file);

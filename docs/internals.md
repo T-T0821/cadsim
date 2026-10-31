@@ -296,7 +296,8 @@ ID で部品を指している設定(アクチュエータなど)はそのまま
 
 | 見張る文書 | 登録している場所 | 比べるもの |
 | --- | --- | --- |
-| タイミングチャート | `motion/mod.rs` | `TimingChart` |
+| タイミングチャート | `motion/mod.rs` | `TimingChart`(センサーの強制 ON / OFF は比べず、戻しても今の状態を残す) |
+| コンベア・グリッパ | `conveyor/mod.rs` | `ConveyorConfig` |
 | 工程モデル | `flow/mod.rs` | `FlowModel`(戻すと回した結果は捨てる) |
 | 安全機器・作業者・AGV | `floor/mod.rs` | 保存と同じ `FloorRecord`(動かしている間の状態は含まない) |
 | 平面図・点群 | `site/mod.rs` | `Site` の配置。図面・点の中身は `Arc` が同じものかだけを見る |

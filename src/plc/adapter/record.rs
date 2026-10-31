@@ -67,6 +67,9 @@ pub struct PointRecord {
     /// OPC UA のノード ID
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub node: String,
+    /// PLC のログ CSV でこの信号が入っている列の見出し
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub log_column: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -131,6 +134,7 @@ pub fn to_record(settings: &PlcSettings) -> Option<PlcRecord> {
                 address: s.address,
                 scale: s.scale,
                 node: s.node.clone(),
+                log_column: s.log_column.clone(),
             }
         })
         .collect();
@@ -168,6 +172,7 @@ pub fn from_record(record: Option<&PlcRecord>) -> PlcSettings {
                         address: p.address,
                         scale: p.scale,
                         node: p.node.clone(),
+                        log_column: p.log_column.clone(),
                     },
                 )
             })
@@ -219,6 +224,7 @@ mod tests {
                 address: Some(40),
                 scale: Some(0.01),
                 node: "ns=2;s=X.Target".into(),
+                log_column: "D100".into(),
             },
         );
         plan.custom.insert(

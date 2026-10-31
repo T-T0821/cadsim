@@ -56,12 +56,31 @@ impl TrackedDoc for ChartDoc {
         world.resource::<TimingChart>().clone()
     }
 
-    fn write(world: &mut World, value: TimingChart) {
-        *world.resource_mut::<TimingChart>() = value;
+    fn write(world: &mut World, mut value: TimingChart) {
+        let mut chart = world.resource_mut::<TimingChart>();
+        // センサーの強制 ON / OFF は動作確認用なので、戻さずに今の状態を残す
+        for sensor in &mut value.sensors {
+            sensor.force = chart
+                .sensors
+                .iter()
+                .find(|s| s.id == sensor.id)
+                .and_then(|s| s.force);
+        }
+        *chart = value;
     }
 
     fn same(a: &TimingChart, b: &TimingChart) -> bool {
-        a == b
+        // 強制 ON / OFF の切り替えは履歴に載せない
+        a.actuators == b.actuators
+            && a.steps == b.steps
+            && a.next_actuator_id == b.next_actuator_id
+            && a.next_sensor_id == b.next_sensor_id
+            && a.sensors.len() == b.sensors.len()
+            && a.sensors.iter().zip(&b.sensors).all(|(x, y)| {
+                let mut y = y.clone();
+                y.force = x.force;
+                *x == y
+            })
     }
 }
 

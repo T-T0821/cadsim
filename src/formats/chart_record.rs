@@ -8,6 +8,7 @@ use glam::{DQuat, DVec3};
 use serde::{Deserialize, Serialize};
 
 use crate::interchange::{NodeTransform, Track};
+use crate::motion::chart::{Interlock, Sensor, SensorKind};
 use crate::motion::{Action, Actuator, ActuatorKind, Axis, Easing, Step, TimingChart};
 
 type NodePath = Vec<usize>;
@@ -21,7 +22,37 @@ pub struct ChartRecord {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub actuators: Vec<ActuatorRecord>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sensors: Vec<SensorRecord>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub steps: Vec<StepRecord>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SensorKindRecord {
+    Photoelectric,
+    Proximity,
+}
+
+/// センサー。強制 ON / OFF は動作確認用なので書かない。
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct SensorRecord {
+    pub id: u32,
+    pub name: String,
+    pub kind: SensorKindRecord,
+    pub position: [f64; 3],
+    pub axis: AxisRecord,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub reversed: bool,
+    pub range: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mounted_on: Option<u32>,
+}
+
+/// ステップの開始条件: センサー `sensor` が `on` になっていること
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct InterlockRecord {
+    pub sensor: u32,
+    pub on: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -73,6 +104,8 @@ pub struct StepRecord {
     pub actions: Vec<ActionRecord>,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub dwell: f64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub interlocks: Vec<InterlockRecord>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -88,6 +121,22 @@ fn is_false(v: &bool) -> bool {
 
 fn is_zero(v: &f64) -> bool {
     *v == 0.0
+}
+
+fn axis_record(axis: Axis) -> AxisRecord {
+    match axis {
+        Axis::X => AxisRecord::X,
+        Axis::Y => AxisRecord::Y,
+        Axis::Z => AxisRecord::Z,
+    }
+}
+
+fn axis_from(axis: AxisRecord) -> Axis {
+    match axis {
+        AxisRecord::X => Axis::X,
+        AxisRecord::Y => Axis::Y,
+        AxisRecord::Z => Axis::Z,
+    }
 }
 
 /// 保存する形にする。`part_path` はノード ID を木の中の位置にする (部品が消えていれば None)。
@@ -107,11 +156,7 @@ pub fn chart_to_record(
                     ActuatorKind::LinearAxis => ActuatorKindRecord::LinearAxis,
                     ActuatorKind::RotaryTable => ActuatorKindRecord::RotaryTable,
                 },
-                axis: match a.axis {
-                    Axis::X => AxisRecord::X,
-                    Axis::Y => AxisRecord::Y,
-                    Axis::Z => AxisRecord::Z,
-                },
+                axis: axis_record(a.axis),
                 reversed: a.reversed,
                 stroke: a.stroke,
                 pivot: a.pivot,
@@ -122,6 +167,23 @@ pub fn chart_to_record(
                     Easing::Smooth => EasingRecord::Smooth,
                 },
                 default_duration: a.default_duration,
+            })
+            .collect(),
+        sensors: chart
+            .sensors
+            .iter()
+            .map(|s| SensorRecord {
+                id: s.id,
+                name: s.name.clone(),
+                kind: match s.kind {
+                    SensorKind::Photoelectric => SensorKindRecord::Photoelectric,
+                    SensorKind::Proximity => SensorKindRecord::Proximity,
+                },
+                position: s.position,
+                axis: axis_record(s.axis),
+                reversed: s.reversed,
+                range: s.range,
+                mounted_on: s.mounted_on,
             })
             .collect(),
         steps: chart
@@ -139,6 +201,14 @@ pub fn chart_to_record(
                     })
                     .collect(),
                 dwell: s.dwell,
+                interlocks: s
+                    .interlocks
+                    .iter()
+                    .map(|i| InterlockRecord {
+                        sensor: i.sensor,
+                        on: i.on,
+                    })
+                    .collect(),
             })
             .collect(),
     }
@@ -170,11 +240,7 @@ pub fn chart_from_record(
             }
             Actuator {
                 name: r.name.clone(),
-                axis: match r.axis {
-                    AxisRecord::X => Axis::X,
-                    AxisRecord::Y => Axis::Y,
-                    AxisRecord::Z => Axis::Z,
-                },
+                axis: axis_from(r.axis),
                 reversed: r.reversed,
                 stroke: r.stroke,
                 pivot: r.pivot,
@@ -200,6 +266,27 @@ pub fn chart_from_record(
             actuator.mounted_on = None;
         }
     }
+    let sensors: Vec<Sensor> = record
+        .sensors
+        .iter()
+        .map(|r| {
+            let kind = match r.kind {
+                SensorKindRecord::Photoelectric => SensorKind::Photoelectric,
+                SensorKindRecord::Proximity => SensorKind::Proximity,
+            };
+            Sensor {
+                name: r.name.clone(),
+                position: r.position,
+                axis: axis_from(r.axis),
+                reversed: r.reversed,
+                range: r.range,
+                // 消えたアクチュエータに載っていたら外す
+                mounted_on: r.mounted_on.filter(|p| ids.contains(p)),
+                ..Sensor::new(r.id, kind)
+            }
+        })
+        .collect();
+    let sensor_ids: Vec<u32> = sensors.iter().map(|s| s.id).collect();
     let steps = record
         .steps
         .iter()
@@ -216,11 +303,22 @@ pub fn chart_from_record(
                 })
                 .collect(),
             dwell: s.dwell,
+            interlocks: s
+                .interlocks
+                .iter()
+                .filter(|i| sensor_ids.contains(&i.sensor))
+                .map(|i| Interlock {
+                    sensor: i.sensor,
+                    on: i.on,
+                })
+                .collect(),
         })
         .collect();
     let chart = TimingChart {
         next_actuator_id: ids.iter().map(|id| id + 1).max().unwrap_or(1),
+        next_sensor_id: sensor_ids.iter().map(|id| id + 1).max().unwrap_or(1),
         actuators,
+        sensors,
         steps,
     };
     (chart, warnings)
@@ -357,6 +455,12 @@ mod tests {
             c.easing = Easing::Linear;
         }
         chart.actuator_mut(table).unwrap().pivot = [1.0, 2.0, 3.0];
+        let sensor = chart.add_sensor(SensorKind::Proximity);
+        {
+            let s = chart.sensors.iter_mut().find(|s| s.id == sensor).unwrap();
+            s.mounted_on = Some(table);
+            s.position = [5.0, 6.0, 7.0];
+        }
         chart.steps = vec![
             Step {
                 comment: "回す".into(),
@@ -366,6 +470,7 @@ mod tests {
                     duration: 0.8,
                 }],
                 dwell: 0.2,
+                interlocks: vec![Interlock { sensor, on: true }],
             },
             Step {
                 comment: String::new(),
@@ -375,6 +480,7 @@ mod tests {
                     duration: 0.4,
                 }],
                 dwell: 0.0,
+                interlocks: Vec::new(),
             },
         ];
         chart
@@ -402,6 +508,7 @@ mod tests {
         let cylinder = &restored.actuators[0];
         assert_eq!(cylinder.parts, vec![10]);
         assert_eq!(cylinder.mounted_on, None);
+        assert_eq!(restored.sensors[0].mounted_on, None);
         // 消えたアクチュエータへの動作も消える
         assert!(restored.steps[0].actions.is_empty());
         assert_eq!(restored.steps[1].actions.len(), 1);
