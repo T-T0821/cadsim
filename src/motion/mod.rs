@@ -31,7 +31,7 @@ pub use chart::{Action, Actuator, ActuatorKind, Axis, Schedule, Step, TimingChar
 #[cfg(test)]
 pub use demo::load_demo;
 pub use export::chart_animation;
-pub use pose::{RigidPose, part_poses, part_poses_from_values};
+pub use pose::{RigidPose, actuator_poses, part_poses, part_poses_from_values};
 pub use ui::{MotionUi, show_panel};
 
 use crate::model::{Model, NodeId};
