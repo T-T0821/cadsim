@@ -147,12 +147,14 @@ impl PlcSession {
     }
 
     /// PLC が書いたライン連携の PLC → 設備 の信号 (名前, 値)。
-    /// 外部の PLC とつないでいるときと、ログを再生しているときだけ返す (内蔵の模擬 PLC は
+    /// 外部の PLC とつないでいるとき、ログを再生しているとき、部品スクリプトのときだけ返す (内蔵の模擬 PLC は
     /// ライン連携の信号を書かないので、そのときは画面での切り替えに任せる)。
     pub fn line_outputs(&self) -> Option<Vec<(String, bool)>> {
         let drives = match self.mode {
             PlcMode::External => self.link.is_some(),
             PlcMode::LogReplay => self.log.is_some(),
+            // 部品スクリプトは I/O 表の名前でライン連携の信号も書ける
+            PlcMode::Script => true,
             PlcMode::Off | PlcMode::Simulated => false,
         };
         drives.then(|| {
