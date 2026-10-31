@@ -66,7 +66,9 @@ impl Entity<'_> {
 /// DXF の文字列を読み、平面図にする
 pub fn read_plan(text: &str) -> Result<PlanContent, String> {
     if text.starts_with("AutoCAD Binary DXF") {
-        return Err("バイナリ形式の DXF には対応していません。ASCII 形式で保存し直してください".into());
+        return Err(
+            "バイナリ形式の DXF には対応していません。ASCII 形式で保存し直してください".into(),
+        );
     }
     let pairs = parse_pairs(text)?;
     let sections = split_sections(&pairs);
@@ -142,7 +144,8 @@ fn split_sections<'a, 'b>(pairs: &'b [Pair<'a>]) -> HashMap<String, &'b [Pair<'a
             let name = pairs[i + 1].value.trim().to_owned();
             let start = i + 2;
             let mut end = start;
-            while end < pairs.len() && !(pairs[end].code == 0 && pairs[end].value.trim() == "ENDSEC")
+            while end < pairs.len()
+                && !(pairs[end].code == 0 && pairs[end].value.trim() == "ENDSEC")
             {
                 end += 1;
             }
@@ -298,7 +301,11 @@ fn with_bulges(vertices: &[(DVec2, f64)], closed: bool) -> Vec<DVec2> {
             let normal = DVec2::new(-chord.y, chord.x).normalize_or_zero();
             let h = radius * (angle / 2.0).cos().abs();
             // 小さい弧 (|角| < π) では中心は進行方向の左 (bulge > 0) か右
-            let side = if angle.abs() < std::f64::consts::PI { 1.0 } else { -1.0 };
+            let side = if angle.abs() < std::f64::consts::PI {
+                1.0
+            } else {
+                -1.0
+            };
             let center = mid + normal * h * bulge.signum() * side;
             let start = (a - center).to_angle();
             let points = arc(center, radius, start, start + angle);
@@ -314,7 +321,9 @@ fn arc(center: DVec2, radius: f64, start: f64, end: f64) -> Vec<DVec2> {
     if radius <= 0.0 {
         return Vec::new();
     }
-    let steps = (((end - start).abs() / TAU) * CIRCLE_SEGMENTS).ceil().max(2.0) as usize;
+    let steps = (((end - start).abs() / TAU) * CIRCLE_SEGMENTS)
+        .ceil()
+        .max(2.0) as usize;
     (0..=steps)
         .map(|k| {
             let t = start + (end - start) * k as f64 / steps as f64;
@@ -532,7 +541,10 @@ mod tests {
         let line = &plan.polylines[0];
         assert!(line.len() > 10);
         for p in line {
-            assert!(((*p - DVec2::new(1.0, 0.0)).length() - 1.0).abs() < 1e-9, "{p}");
+            assert!(
+                ((*p - DVec2::new(1.0, 0.0)).length() - 1.0).abs() < 1e-9,
+                "{p}"
+            );
         }
         assert!((line.first().unwrap() - line.last().unwrap()).length() < 1e-9);
     }
@@ -547,7 +559,11 @@ mod tests {
         let plan = read_plan(&text).unwrap();
         let line = &plan.polylines[0];
         assert!((line[0] - DVec2::new(10.0, 5.0)).length() < 1e-9);
-        assert!((line[1] - DVec2::new(10.0, 7.0)).length() < 1e-9, "{}", line[1]);
+        assert!(
+            (line[1] - DVec2::new(10.0, 7.0)).length() < 1e-9,
+            "{}",
+            line[1]
+        );
     }
 
     #[test]

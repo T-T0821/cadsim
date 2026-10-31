@@ -92,8 +92,18 @@ impl Decimator {
         if self.points.is_empty() {
             return Err("点が1つもありませんでした".into());
         }
-        let min = self.points.iter().copied().reduce(DVec3::min).unwrap_or_default();
-        let max = self.points.iter().copied().reduce(DVec3::max).unwrap_or_default();
+        let min = self
+            .points
+            .iter()
+            .copied()
+            .reduce(DVec3::min)
+            .unwrap_or_default();
+        let max = self
+            .points
+            .iter()
+            .copied()
+            .reduce(DVec3::max)
+            .unwrap_or_default();
         let center = (min + max) / 2.0;
         let mut order: Vec<usize> = (0..self.points.len()).collect();
         shuffle(&mut order);
@@ -169,12 +179,10 @@ impl PointCloud {
     }
 
     fn build_index(&mut self) {
-        let (min, max) = self
-            .points
-            .iter()
-            .fold((Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)), |(lo, hi), p| {
-                (lo.min(*p), hi.max(*p))
-            });
+        let (min, max) = self.points.iter().fold(
+            (Vec3::splat(f32::MAX), Vec3::splat(f32::MIN)),
+            |(lo, hi), p| (lo.min(*p), hi.max(*p)),
+        );
         let size = (max - min).max(Vec3::splat(1e-6));
         // 床 (X, Z) を区画に分ける
         let tiles_wanted = (self.points.len() / POINTS_PER_TILE).max(1) as f32;
@@ -183,10 +191,12 @@ impl PointCloud {
         let nz = (tiles_wanted / nx as f32).ceil().clamp(1.0, 64.0) as usize;
         let mut buckets: Vec<Vec<u32>> = vec![Vec::new(); nx * nz];
         for (i, p) in self.points.iter().enumerate() {
-            let tx = (((p.x - min.x) / size.x) * nx as f32).floor().clamp(0.0, nx as f32 - 1.0)
-                as usize;
-            let tz = (((p.z - min.z) / size.z) * nz as f32).floor().clamp(0.0, nz as f32 - 1.0)
-                as usize;
+            let tx = (((p.x - min.x) / size.x) * nx as f32)
+                .floor()
+                .clamp(0.0, nx as f32 - 1.0) as usize;
+            let tz = (((p.z - min.z) / size.z) * nz as f32)
+                .floor()
+                .clamp(0.0, nz as f32 - 1.0) as usize;
             buckets[tz * nx + tx].push(i as u32);
         }
         self.tiles = buckets
@@ -361,9 +371,21 @@ pub fn check_body(
     // ワールドの箱を点群の座標系に写す (角を写して外接箱をとる)
     let corners = (0..8).map(|i| {
         let p = DVec3::new(
-            if i & 1 == 0 { world_box.min.x } else { world_box.max.x },
-            if i & 2 == 0 { world_box.min.y } else { world_box.max.y },
-            if i & 4 == 0 { world_box.min.z } else { world_box.max.z },
+            if i & 1 == 0 {
+                world_box.min.x
+            } else {
+                world_box.max.x
+            },
+            if i & 2 == 0 {
+                world_box.min.y
+            } else {
+                world_box.max.y
+            },
+            if i & 4 == 0 {
+                world_box.min.z
+            } else {
+                world_box.max.z
+            },
         );
         to_cloud.transform_point3(p).as_vec3()
     });
@@ -419,7 +441,10 @@ mod tests {
         let mut d = Decimator::new(spacing * 0.5, 1_000_000);
         for i in 0..n {
             for k in 0..n {
-                d.push(DVec3::new(i as f64 * spacing, 0.0, k as f64 * spacing), None);
+                d.push(
+                    DVec3::new(i as f64 * spacing, 0.0, k as f64 * spacing),
+                    None,
+                );
             }
         }
         d.finish().unwrap()
@@ -460,7 +485,10 @@ mod tests {
         let lo = Vec3::ZERO;
         let hi = Vec3::splat(10.0);
         assert_eq!(lod_level(lo, hi, Vec3::splat(5.0), 1.0), 0);
-        assert_eq!(lod_level(lo, hi, Vec3::new(1000.0, 0.0, 0.0), 1.0), LOD_LEVELS - 1);
+        assert_eq!(
+            lod_level(lo, hi, Vec3::new(1000.0, 0.0, 0.0), 1.0),
+            LOD_LEVELS - 1
+        );
         let near = lod_level(lo, hi, Vec3::new(40.0, 0.0, 0.0), 1.0);
         let far = lod_level(lo, hi, Vec3::new(80.0, 0.0, 0.0), 1.0);
         assert!(near <= far && far > 0);
@@ -471,12 +499,42 @@ mod tests {
         let h = size / 2.0;
         let v = |x: f64, y: f64, z: f64| center + DVec3::new(x * h.x, y * h.y, z * h.z);
         let quads = [
-            [v(-1., -1., 1.), v(1., -1., 1.), v(1., 1., 1.), v(-1., 1., 1.)],
-            [v(1., -1., -1.), v(-1., -1., -1.), v(-1., 1., -1.), v(1., 1., -1.)],
-            [v(-1., 1., 1.), v(1., 1., 1.), v(1., 1., -1.), v(-1., 1., -1.)],
-            [v(-1., -1., -1.), v(1., -1., -1.), v(1., -1., 1.), v(-1., -1., 1.)],
-            [v(1., -1., 1.), v(1., -1., -1.), v(1., 1., -1.), v(1., 1., 1.)],
-            [v(-1., -1., -1.), v(-1., -1., 1.), v(-1., 1., 1.), v(-1., 1., -1.)],
+            [
+                v(-1., -1., 1.),
+                v(1., -1., 1.),
+                v(1., 1., 1.),
+                v(-1., 1., 1.),
+            ],
+            [
+                v(1., -1., -1.),
+                v(-1., -1., -1.),
+                v(-1., 1., -1.),
+                v(1., 1., -1.),
+            ],
+            [
+                v(-1., 1., 1.),
+                v(1., 1., 1.),
+                v(1., 1., -1.),
+                v(-1., 1., -1.),
+            ],
+            [
+                v(-1., -1., -1.),
+                v(1., -1., -1.),
+                v(1., -1., 1.),
+                v(-1., -1., 1.),
+            ],
+            [
+                v(1., -1., 1.),
+                v(1., -1., -1.),
+                v(1., 1., -1.),
+                v(1., 1., 1.),
+            ],
+            [
+                v(-1., -1., -1.),
+                v(-1., -1., 1.),
+                v(-1., 1., 1.),
+                v(-1., 1., -1.),
+            ],
         ];
         TriMesh::new(
             quads
@@ -511,7 +569,11 @@ mod tests {
         let floating = Pose::from_matrix(DMat4::from_translation(DVec3::new(3.0, 80.0, 3.0)));
         let hit = check_body(&placed, 1, &mesh, &floating, 50.0).unwrap();
         assert_eq!(hit.inside, 0);
-        assert!((hit.distance().unwrap() - 30.0).abs() < 1e-3, "{:?}", hit.distance());
+        assert!(
+            (hit.distance().unwrap() - 30.0).abs() < 1e-3,
+            "{:?}",
+            hit.distance()
+        );
         // 警告距離より遠ければ何も返さない
         let far = Pose::from_matrix(DMat4::from_translation(DVec3::new(0.0, 500.0, 0.0)));
         assert!(check_body(&placed, 1, &mesh, &far, 50.0).is_none());

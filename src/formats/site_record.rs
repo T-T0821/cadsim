@@ -93,16 +93,14 @@ fn visible_by_default() -> bool {
 pub fn to_records(site: &Site, base_dir: Option<&Path>) -> Vec<UnderlayRecord> {
     site.underlays
         .iter()
-        .map(|u| {
-            UnderlayRecord {
-                path: path_record(&u.source, base_dir),
-                scale: u.scale,
-                origin: u.origin,
-                rotation_deg: u.rotation_deg,
-                elevation: u.elevation,
-                opacity: u.opacity,
-                visible: u.visible,
-            }
+        .map(|u| UnderlayRecord {
+            path: path_record(&u.source, base_dir),
+            scale: u.scale,
+            origin: u.origin,
+            rotation_deg: u.rotation_deg,
+            elevation: u.elevation,
+            opacity: u.opacity,
+            visible: u.visible,
         })
         .collect()
 }
@@ -169,7 +167,8 @@ mod tests {
     fn records_round_trip_through_files() {
         let dir = std::env::temp_dir().join(format!("cadsim_site_{}", std::process::id()));
         std::fs::create_dir_all(dir.join("plans")).unwrap();
-        let dxf = "0\nSECTION\n2\nENTITIES\n0\nLINE\n10\n0\n20\n0\n11\n1\n21\n1\n0\nENDSEC\n0\nEOF\n";
+        let dxf =
+            "0\nSECTION\n2\nENTITIES\n0\nLINE\n10\n0\n20\n0\n11\n1\n21\n1\n0\nENDSEC\n0\nEOF\n";
         std::fs::write(dir.join("plans/floor.dxf"), dxf).unwrap();
 
         let mut site = Site::default();

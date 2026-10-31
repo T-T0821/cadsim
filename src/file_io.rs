@@ -15,13 +15,13 @@ use bevy::{ecs::system::NonSendMarker, prelude::*};
 
 use crate::animation::Animations;
 use crate::camera::CameraRequest;
+use crate::formats::pointcloud_read::{CLOUD_EXTENSIONS, is_cloud_file};
+use crate::formats::{PLAN_EXTENSIONS, is_plan_file};
 use crate::history::History;
 use crate::interchange::{
     self, FORMATS, Scene, UnitOptions,
     model_io::{model_to_scene, scene_to_import},
 };
-use crate::formats::pointcloud_read::{CLOUD_EXTENSIONS, is_cloud_file};
-use crate::formats::{PLAN_EXTENSIONS, is_plan_file};
 use crate::model::{Model, NodeId, Selection, StepSource};
 use crate::project::{ProjectAction, ProjectState, is_project_file};
 use crate::step_import::{ImportedFile, import_step};
@@ -237,10 +237,7 @@ fn open_dialog_if_requested(
         "平面図 (DXF / PDF / 画像)",
         &with_upper_case(PLAN_EXTENSIONS),
     );
-    dialog = dialog.add_filter(
-        "点群 (PLY / LAS / E57)",
-        &with_upper_case(CLOUD_EXTENSIONS),
-    );
+    dialog = dialog.add_filter("点群 (PLY / LAS / E57)", &with_upper_case(CLOUD_EXTENSIONS));
     let picked = dialog.add_filter("すべてのファイル", &["*"]).pick_file();
     if let Some(path) = picked {
         open_any(path, &mut jobs, &mut project);

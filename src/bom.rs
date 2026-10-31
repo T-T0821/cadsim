@@ -67,13 +67,7 @@ fn item_key(model: &Model, id: NodeId) -> Option<(String, String, String, [f64; 
     };
     let size = local.map(|v| (v * 1000.0).round() / 1000.0);
     Some(match &node.kind {
-        NodeKind::Box(_) => (
-            "箱".into(),
-            "箱".into(),
-            String::new(),
-            size,
-            m.volume,
-        ),
+        NodeKind::Box(_) => ("箱".into(), "箱".into(), String::new(), size, m.volume),
         NodeKind::Imported {
             product, source, ..
         } => (
@@ -135,7 +129,9 @@ pub fn make_bom(model: &Model) -> Bom {
                 name: node.name.clone(),
                 kind: node.kind.label().into(),
                 bom_number: None,
-                position: translation.to_array().map(|v| (v * 1e6).round() / 1e6 + 0.0),
+                position: translation
+                    .to_array()
+                    .map(|v| (v * 1e6).round() / 1e6 + 0.0),
                 visible: model.is_shown(id),
             });
         }
@@ -194,7 +190,11 @@ mod tests {
             assert_eq!(row.number, i + 1);
         }
         // 構成表には全ノード。部品には番号が付く
-        assert!(bom.tree.iter().any(|t| t.level == 0 && t.bom_number.is_none()));
+        assert!(
+            bom.tree
+                .iter()
+                .any(|t| t.level == 0 && t.bom_number.is_none())
+        );
         assert_eq!(
             bom.tree.iter().filter(|t| t.bom_number.is_some()).count(),
             10

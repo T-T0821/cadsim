@@ -31,8 +31,8 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 mod animation;
-mod bom;
 mod annotation;
+mod bom;
 mod camera;
 mod documents;
 mod drawing;
@@ -43,8 +43,8 @@ mod history;
 mod interchange;
 mod japanese_font;
 mod math;
-mod modeling;
 mod model;
+mod modeling;
 mod motion;
 mod project;
 mod shortcuts;

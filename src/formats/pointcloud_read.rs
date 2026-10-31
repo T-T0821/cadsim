@@ -61,11 +61,14 @@ pub fn read_cloud(
         .and_then(|e| e.to_str())
         .unwrap_or("")
         .to_ascii_lowercase();
-    let open = || File::open(path).map_err(|e| format!("{} を開けませんでした: {e}", path.display()));
+    let open =
+        || File::open(path).map_err(|e| format!("{} を開けませんでした: {e}", path.display()));
     match ext.as_str() {
         "ply" => read_ply(BufReader::new(open()?), &mut push)?,
         "las" => read_las(BufReader::new(open()?), &mut push)?,
-        "laz" => return Err("LAZ (圧縮した LAS) は読めません。LAS に展開してから開いてください".into()),
+        "laz" => {
+            return Err("LAZ (圧縮した LAS) は読めません。LAS に展開してから開いてください".into());
+        }
         "e57" => read_e57(path, &mut push)?,
         _ => return Err("点群として読めない形式です".into()),
     }
@@ -309,8 +312,16 @@ fn read_las(mut reader: impl Read + Seek, push: &mut Sink) -> Result<(), String>
             count = count64;
         }
     }
-    let scale = [le_f64(&header, 131), le_f64(&header, 139), le_f64(&header, 147)];
-    let offset = [le_f64(&header, 155), le_f64(&header, 163), le_f64(&header, 171)];
+    let scale = [
+        le_f64(&header, 131),
+        le_f64(&header, 139),
+        le_f64(&header, 147),
+    ];
+    let offset = [
+        le_f64(&header, 155),
+        le_f64(&header, 163),
+        le_f64(&header, 171),
+    ];
     let rgb_at = match format {
         2 => Some(20),
         3 | 5 => Some(28),
@@ -340,7 +351,11 @@ fn read_las(mut reader: impl Read + Seek, push: &mut Sink) -> Result<(), String>
                 raw as f64 * scale[i] + offset[i]
             };
             let color = rgb_at.map(|at| {
-                let rgb = [le_u16(record, at), le_u16(record, at + 2), le_u16(record, at + 4)];
+                let rgb = [
+                    le_u16(record, at),
+                    le_u16(record, at + 2),
+                    le_u16(record, at + 4),
+                ];
                 let wide = *sixteen_bit.get_or_insert(rgb.iter().any(|&c| c > 255));
                 rgb.map(|c| if wide { (c >> 8) as u8 } else { c as u8 })
             });
@@ -369,9 +384,9 @@ fn read_e57(path: &Path, push: &mut Sink) -> Result<(), String> {
         for point in points {
             let Ok(point) = point else { continue };
             if let e57::CartesianCoordinate::Valid { x, y, z } = point.cartesian {
-                let color = point.color.map(|c| {
-                    [c.red, c.green, c.blue].map(|v| (v * 255.0).clamp(0.0, 255.0) as u8)
-                });
+                let color = point
+                    .color
+                    .map(|c| [c.red, c.green, c.blue].map(|v| (v * 255.0).clamp(0.0, 255.0) as u8));
                 push(x, y, z, color);
             }
         }
@@ -384,7 +399,9 @@ mod tests {
     use super::*;
     use std::io::Cursor;
 
-    fn collect(f: impl FnOnce(&mut Sink) -> Result<(), String>) -> Vec<(f64, f64, f64, Option<[u8; 3]>)> {
+    fn collect(
+        f: impl FnOnce(&mut Sink) -> Result<(), String>,
+    ) -> Vec<(f64, f64, f64, Option<[u8; 3]>)> {
         let mut out = Vec::new();
         let mut sink = |x, y, z, c| out.push((x, y, z, c));
         f(&mut sink).unwrap();
@@ -395,7 +412,13 @@ mod tests {
     fn ascii_ply() {
         let text = "ply\nformat ascii 1.0\nelement vertex 2\nproperty float x\nproperty float y\nproperty float z\nproperty uchar red\nproperty uchar green\nproperty uchar blue\nelement face 0\nproperty list uchar int vertex_indices\nend_header\n1 2 3 255 0 0\n4 5 6 0 255 0\n";
         let points = collect(|s| read_ply(Cursor::new(text), s));
-        assert_eq!(points, vec![(1.0, 2.0, 3.0, Some([255, 0, 0])), (4.0, 5.0, 6.0, Some([0, 255, 0]))]);
+        assert_eq!(
+            points,
+            vec![
+                (1.0, 2.0, 3.0, Some([255, 0, 0])),
+                (4.0, 5.0, 6.0, Some([0, 255, 0]))
+            ]
+        );
     }
 
     #[test]
@@ -405,7 +428,10 @@ mod tests {
             bytes.extend(v.to_le_bytes());
         }
         let points = collect(|s| read_ply(Cursor::new(bytes), s));
-        assert_eq!(points, vec![(1.5, -2.0, 3.0, None), (10.0, 20.0, 30.0, None)]);
+        assert_eq!(
+            points,
+            vec![(1.5, -2.0, 3.0, None), (10.0, 20.0, 30.0, None)]
+        );
     }
 
     /// 点の形式 2 (色付き) の LAS 1.2 を作る

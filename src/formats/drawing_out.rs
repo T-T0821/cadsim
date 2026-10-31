@@ -31,7 +31,15 @@ pub fn write_dxf(sheet: &Sheet, unit: &str) -> String {
         texts: sheet
             .texts
             .iter()
-            .map(|t| (t.layer.dxf_name(), t.at, t.height, t.angle_deg, t.text.clone()))
+            .map(|t| {
+                (
+                    t.layer.dxf_name(),
+                    t.at,
+                    t.height,
+                    t.angle_deg,
+                    t.text.clone(),
+                )
+            })
             .collect(),
         insunits: insunits_for(unit),
     };
@@ -54,11 +62,15 @@ pub fn write_pdf(sheet: &Sheet) -> Result<Vec<u8>, String> {
     // シートの実寸 → 用紙のポイント (PDF は上が y = 0)
     let to_page = |p: DVec2| {
         let mm = (p - sheet.frame_min) * sheet.unit_mm / sheet.scale;
-        Point::from_xy((mm.x * PT_PER_MM) as f32, (height - mm.y * PT_PER_MM) as f32)
+        Point::from_xy(
+            (mm.x * PT_PER_MM) as f32,
+            (height - mm.y * PT_PER_MM) as f32,
+        )
     };
 
     let mut document = Document::new();
-    let settings = PageSettings::from_wh(width as f32, height as f32).ok_or("用紙の大きさが不正です")?;
+    let settings =
+        PageSettings::from_wh(width as f32, height as f32).ok_or("用紙の大きさが不正です")?;
     let mut page = document.start_page_with(settings);
     let mut surface = page.surface();
 
@@ -89,7 +101,8 @@ pub fn write_pdf(sheet: &Sheet) -> Result<Vec<u8>, String> {
         surface.draw_path(&path);
     }
 
-    let font = Font::new(Arc::new(FONT_BYTES.to_vec()).into(), 0).ok_or("フォントを読めませんでした")?;
+    let font =
+        Font::new(Arc::new(FONT_BYTES.to_vec()).into(), 0).ok_or("フォントを読めませんでした")?;
     surface.set_stroke(None);
     surface.set_fill(Some(Fill {
         paint: rgb::Color::new(0, 0, 0).into(),
@@ -154,7 +167,10 @@ mod tests {
     fn dxf_has_dimensions_and_title() {
         let text = write_dxf(&sheet(), "mm");
         assert!(text.contains("DIM"));
-        assert!(text.contains("\n500\n") || text.contains("\n  1\n500\n"), "幅の寸法");
+        assert!(
+            text.contains("\n500\n") || text.contains("\n  1\n500\n"),
+            "幅の寸法"
+        );
         let plan = super::super::dxf::read_plan(&text).unwrap();
         assert!(plan.polylines.len() > 10);
     }

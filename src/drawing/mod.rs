@@ -206,7 +206,10 @@ pub fn make_sheet(input: &DrawingInput, options: &DrawingOptions) -> Sheet {
 
     // 正面図を下、上面図をその上に、X をそろえて並べる
     let mut cursor_y = 0.0;
-    let left = extents.iter().map(|(min, _)| min.x).fold(f64::MAX, f64::min);
+    let left = extents
+        .iter()
+        .map(|(min, _)| min.x)
+        .fold(f64::MAX, f64::min);
     let mut placed = Vec::new();
     for (&view, &(min, max)) in views.iter().zip(&extents) {
         let shift = DVec2::new(-left, cursor_y - min.y);
@@ -427,11 +430,16 @@ fn drop_covered_hidden_lines(sheet: &mut Sheet, scene_size: f64) {
 fn silhouette(face: &[[DVec3; 3]], world: DMat4, toward: DVec3) -> Vec<Vec<DVec3>> {
     use std::collections::HashMap;
     let key = |p: DVec3| (p * 1e6).round().as_i64vec3().to_array();
-    let mut edges: HashMap<([i64; 3], [i64; 3]), (DVec3, DVec3, f64)> = HashMap::new();
+    // 辺 (端点の丸めた座標) → 端点と、その辺を持つ三角形の向き
+    type EdgeKey = ([i64; 3], [i64; 3]);
+    let mut edges: HashMap<EdgeKey, (DVec3, DVec3, f64)> = HashMap::new();
     let mut out = Vec::new();
     for t in face {
         let w = t.map(|p| world.transform_point3(p));
-        let facing = (w[1] - w[0]).cross(w[2] - w[0]).normalize_or_zero().dot(toward);
+        let facing = (w[1] - w[0])
+            .cross(w[2] - w[0])
+            .normalize_or_zero()
+            .dot(toward);
         for (a, b) in [(w[0], w[1]), (w[1], w[2]), (w[2], w[0])] {
             let (ka, kb) = (key(a), key(b));
             let k = if ka <= kb { (ka, kb) } else { (kb, ka) };
@@ -476,8 +484,14 @@ fn annotate_view(
 
     let mut row = 1.0;
     if options.chain_dims && item_boxes.len() >= 2 {
-        let xs = chain_positions(item_boxes.iter().flat_map(|(a, b)| [a.x, b.x]), max.x - min.x);
-        let ys = chain_positions(item_boxes.iter().flat_map(|(a, b)| [a.y, b.y]), max.y - min.y);
+        let xs = chain_positions(
+            item_boxes.iter().flat_map(|(a, b)| [a.x, b.x]),
+            max.x - min.x,
+        );
+        let ys = chain_positions(
+            item_boxes.iter().flat_map(|(a, b)| [a.y, b.y]),
+            max.y - min.y,
+        );
         if xs.len() > 2 && xs.len() <= MAX_CHAIN {
             let y = min.y - mm(DIM_STEP_MM) * row;
             for w in xs.windows(2) {
@@ -556,12 +570,16 @@ fn dimension_h(
     _input: &DrawingInput,
 ) {
     let gap = text_h * 0.3;
-    sheet
-        .lines
-        .push((Layer::Dim, DVec2::new(x0, base_y - gap), DVec2::new(x0, y - gap)));
-    sheet
-        .lines
-        .push((Layer::Dim, DVec2::new(x1, base_y - gap), DVec2::new(x1, y - gap)));
+    sheet.lines.push((
+        Layer::Dim,
+        DVec2::new(x0, base_y - gap),
+        DVec2::new(x0, y - gap),
+    ));
+    sheet.lines.push((
+        Layer::Dim,
+        DVec2::new(x1, base_y - gap),
+        DVec2::new(x1, y - gap),
+    ));
     sheet
         .lines
         .push((Layer::Dim, DVec2::new(x0, y), DVec2::new(x1, y)));
@@ -589,12 +607,16 @@ fn dimension_v(
     _input: &DrawingInput,
 ) {
     let gap = text_h * 0.3;
-    sheet
-        .lines
-        .push((Layer::Dim, DVec2::new(base_x - gap, y0), DVec2::new(x - gap, y0)));
-    sheet
-        .lines
-        .push((Layer::Dim, DVec2::new(base_x - gap, y1), DVec2::new(x - gap, y1)));
+    sheet.lines.push((
+        Layer::Dim,
+        DVec2::new(base_x - gap, y0),
+        DVec2::new(x - gap, y0),
+    ));
+    sheet.lines.push((
+        Layer::Dim,
+        DVec2::new(base_x - gap, y1),
+        DVec2::new(x - gap, y1),
+    ));
     sheet
         .lines
         .push((Layer::Dim, DVec2::new(x, y0), DVec2::new(x, y1)));
@@ -615,12 +637,8 @@ fn dimension_v(
 fn arrow(sheet: &mut Sheet, tip: DVec2, dir: DVec2, text_h: f64) {
     let len = text_h * 0.9;
     let side = DVec2::new(-dir.y, dir.x) * len * 0.3;
-    sheet
-        .lines
-        .push((Layer::Dim, tip, tip + dir * len + side));
-    sheet
-        .lines
-        .push((Layer::Dim, tip, tip + dir * len - side));
+    sheet.lines.push((Layer::Dim, tip, tip + dir * len + side));
+    sheet.lines.push((Layer::Dim, tip, tip + dir * len - side));
 }
 
 fn rect(sheet: &mut Sheet, layer: Layer, min: DVec2, max: DVec2) {
@@ -647,9 +665,11 @@ fn title_block(
     let max = DVec2::new(frame_max.x, frame_min.y + mm(TITLE_HEIGHT_MM));
     rect(sheet, Layer::Frame, min, max);
     let mid_y = min.y + mm(TITLE_HEIGHT_MM / 2.0);
-    sheet
-        .lines
-        .push((Layer::Frame, DVec2::new(min.x, mid_y), DVec2::new(max.x, mid_y)));
+    sheet.lines.push((
+        Layer::Frame,
+        DVec2::new(min.x, mid_y),
+        DVec2::new(max.x, mid_y),
+    ));
     let cols = [0.0, 45.0, 80.0, 110.0];
     for c in &cols[1..] {
         let x = min.x + mm(*c);
@@ -693,12 +713,42 @@ mod tests {
         let h = s / 2.0;
         let v = |x: f64, y: f64, z: f64| c + DVec3::new(x * h.x, y * h.y, z * h.z);
         let quads = [
-            [v(-1., -1., 1.), v(1., -1., 1.), v(1., 1., 1.), v(-1., 1., 1.)],
-            [v(1., -1., -1.), v(-1., -1., -1.), v(-1., 1., -1.), v(1., 1., -1.)],
-            [v(-1., 1., 1.), v(1., 1., 1.), v(1., 1., -1.), v(-1., 1., -1.)],
-            [v(-1., -1., -1.), v(1., -1., -1.), v(1., -1., 1.), v(-1., -1., 1.)],
-            [v(1., -1., 1.), v(1., -1., -1.), v(1., 1., -1.), v(1., 1., 1.)],
-            [v(-1., -1., -1.), v(-1., -1., 1.), v(-1., 1., 1.), v(-1., 1., -1.)],
+            [
+                v(-1., -1., 1.),
+                v(1., -1., 1.),
+                v(1., 1., 1.),
+                v(-1., 1., 1.),
+            ],
+            [
+                v(1., -1., -1.),
+                v(-1., -1., -1.),
+                v(-1., 1., -1.),
+                v(1., 1., -1.),
+            ],
+            [
+                v(-1., 1., 1.),
+                v(1., 1., 1.),
+                v(1., 1., -1.),
+                v(-1., 1., -1.),
+            ],
+            [
+                v(-1., -1., -1.),
+                v(1., -1., -1.),
+                v(1., -1., 1.),
+                v(-1., -1., 1.),
+            ],
+            [
+                v(1., -1., 1.),
+                v(1., -1., -1.),
+                v(1., 1., -1.),
+                v(1., 1., 1.),
+            ],
+            [
+                v(-1., -1., -1.),
+                v(-1., -1., 1.),
+                v(-1., 1., 1.),
+                v(-1., 1., -1.),
+            ],
         ];
         let faces = quads
             .iter()
@@ -740,7 +790,10 @@ mod tests {
         assert_eq!(choose_scale(4000.0, 800.0, 2, 30.0), 20.0);
         assert_eq!(choose_scale(3000.0, 800.0, 2, 30.0), 10.0);
         assert_eq!(choose_scale(100.0, 50.0, 2, 30.0), 1.0);
-        assert_eq!(chain_positions([0.0, 100.0, 100.2, 300.0].into_iter(), 300.0), vec![0.0, 100.0, 300.0]);
+        assert_eq!(
+            chain_positions([0.0, 100.0, 100.2, 300.0].into_iter(), 300.0),
+            vec![0.0, 100.0, 300.0]
+        );
         assert_eq!(format_length(1200.0), "1200");
         assert_eq!(format_length(12.34), "12.3");
     }

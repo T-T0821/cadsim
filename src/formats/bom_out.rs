@@ -38,7 +38,11 @@ fn csv_field(value: &str) -> String {
 pub fn write_csv(bom: &Bom) -> String {
     let mut out = String::from('\u{FEFF}');
     let mut line = |fields: Vec<String>| {
-        out += &fields.iter().map(|f| csv_field(f)).collect::<Vec<_>>().join(",");
+        out += &fields
+            .iter()
+            .map(|f| csv_field(f))
+            .collect::<Vec<_>>()
+            .join(",");
         out += "\r\n";
     };
     line(bom_header(&bom.unit));
@@ -82,7 +86,9 @@ pub fn write_xlsx(bom: &Bom) -> Result<Vec<u8>, String> {
         }
         sheet.write_number(r, 7, row.quantity as f64).map_err(err)?;
         sheet.write_number(r, 8, row.volume).map_err(err)?;
-        sheet.write_string(r, 9, row.used_in.join(" / ")).map_err(err)?;
+        sheet
+            .write_string(r, 9, row.used_in.join(" / "))
+            .map_err(err)?;
     }
     let total_row = bom.rows.len() as u32 + 1;
     sheet
@@ -91,7 +97,10 @@ pub fn write_xlsx(bom: &Bom) -> Result<Vec<u8>, String> {
     sheet
         .write_number(total_row, 7, bom.total_parts() as f64)
         .map_err(err)?;
-    for (col, width) in [6, 28, 8, 22, 10, 10, 10, 6, 14, 30].into_iter().enumerate() {
+    for (col, width) in [6, 28, 8, 22, 10, 10, 10, 6, 14, 30]
+        .into_iter()
+        .enumerate()
+    {
         sheet.set_column_width(col as u16, width).map_err(err)?;
     }
 

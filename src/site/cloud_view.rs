@@ -14,7 +14,9 @@ use bevy::{
     tasks::{AsyncComputeTaskPool, Task, block_on, poll_once},
 };
 
-use super::pointcloud::{CloudHit, LOD_LEVELS, PlacedCloud, PointCloud, check_body, lod_fraction, lod_level};
+use super::pointcloud::{
+    CloudHit, LOD_LEVELS, PlacedCloud, PointCloud, check_body, lod_fraction, lod_level,
+};
 use crate::model::Model;
 use crate::simulation::view::SimulationGizmos;
 use crate::simulation::{Pose, SimBody, TriMesh};
@@ -114,7 +116,12 @@ pub fn sync_clouds(
             continue;
         };
         let level = camera.map_or(LOD_LEVELS - 1, |eye| {
-            lod_level(tile.min, tile.max, to_local.transform_point3(eye), display.detail)
+            lod_level(
+                tile.min,
+                tile.max,
+                to_local.transform_point3(eye),
+                display.detail,
+            )
         });
         let want = if level == lod.level {
             Visibility::Inherited
@@ -304,16 +311,22 @@ pub fn run_cloud_check(
         }
         // 干渉している部品を先に、次に近い順
         hits.sort_by(|a, b| {
-            b.1.inside
-                .cmp(&a.1.inside)
-                .then(a.1.distance().unwrap_or(f64::MAX).total_cmp(&b.1.distance().unwrap_or(f64::MAX)))
+            b.1.inside.cmp(&a.1.inside).then(
+                a.1.distance()
+                    .unwrap_or(f64::MAX)
+                    .total_cmp(&b.1.distance().unwrap_or(f64::MAX)),
+            )
         });
         hits
     }));
 }
 
 /// 干渉している点 (赤) と、いちばん近い点までの線 (黄) を描く
-pub fn draw_cloud_hits(mut gizmos: Gizmos<SimulationGizmos>, check: Res<CloudCheck>, model: Res<Model>) {
+pub fn draw_cloud_hits(
+    mut gizmos: Gizmos<SimulationGizmos>,
+    check: Res<CloudCheck>,
+    model: Res<Model>,
+) {
     let size = (check.warning * 0.05).max(1e-6) as f32;
     for (index, hit) in &check.hits {
         if !model.site.clouds.get(*index).is_some_and(|c| c.visible) {
@@ -321,8 +334,16 @@ pub fn draw_cloud_hits(mut gizmos: Gizmos<SimulationGizmos>, check: Res<CloudChe
         }
         for p in &hit.inside_samples {
             let p = p.as_vec3();
-            gizmos.line(p - Vec3::X * size, p + Vec3::X * size, Color::srgb(1.0, 0.15, 0.15));
-            gizmos.line(p - Vec3::Z * size, p + Vec3::Z * size, Color::srgb(1.0, 0.15, 0.15));
+            gizmos.line(
+                p - Vec3::X * size,
+                p + Vec3::X * size,
+                Color::srgb(1.0, 0.15, 0.15),
+            );
+            gizmos.line(
+                p - Vec3::Z * size,
+                p + Vec3::Z * size,
+                Color::srgb(1.0, 0.15, 0.15),
+            );
         }
         if hit.inside == 0
             && let Some((a, b)) = hit.closest

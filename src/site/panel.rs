@@ -93,7 +93,9 @@ pub fn site_panel(
                         calibration_ui(ui, tool, underlay, &unit);
                     } else if ui
                         .button("📏 縮尺合わせ")
-                        .on_hover_text("図面上の2点をクリックし、その実際の距離を入れて縮尺を合わせる")
+                        .on_hover_text(
+                            "図面上の2点をクリックし、その実際の距離を入れて縮尺を合わせる",
+                        )
                         .clicked()
                     {
                         tool.start(index);

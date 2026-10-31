@@ -178,8 +178,8 @@ pub fn save_drawing(
     options: &DrawingOptions,
     path: &Path,
 ) -> Result<(), String> {
-    let input = drawing_input(model, title.to_owned(), today())
-        .ok_or("表示中の部品がありません")?;
+    let input =
+        drawing_input(model, title.to_owned(), today()).ok_or("表示中の部品がありません")?;
     let sheet = make_sheet(&input, options);
     let bytes = match extension(path).as_str() {
         "dxf" => drawing_out::write_dxf(&sheet, &model.unit).into_bytes(),
@@ -228,13 +228,27 @@ mod tests {
         let mut model = Model::default();
         model.add_box([1000.0, 500.0, 600.0], [0.0, 250.0, 0.0]);
         for name in ["a.pdf", "a.dxf"] {
-            save_drawing(&model, "テスト", &DrawingOptions::default(), &dir.join(name)).unwrap();
+            save_drawing(
+                &model,
+                "テスト",
+                &DrawingOptions::default(),
+                &dir.join(name),
+            )
+            .unwrap();
         }
         for name in ["b.xlsx", "b.csv"] {
             save_bom(&model, &dir.join(name)).unwrap();
         }
-        assert!(std::fs::read(dir.join("a.pdf")).unwrap().starts_with(b"%PDF"));
-        assert!(std::fs::read_to_string(dir.join("b.csv")).unwrap().contains("箱"));
+        assert!(
+            std::fs::read(dir.join("a.pdf"))
+                .unwrap()
+                .starts_with(b"%PDF")
+        );
+        assert!(
+            std::fs::read_to_string(dir.join("b.csv"))
+                .unwrap()
+                .contains("箱")
+        );
         std::fs::remove_dir_all(&dir).ok();
         assert!(save_bom(&Model::default(), &dir.join("c.csv")).is_err());
     }

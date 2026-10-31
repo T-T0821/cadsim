@@ -93,7 +93,13 @@ struct Walker<'a> {
 }
 
 impl Walker<'_> {
-    fn run(&mut self, content: &[u8], base: DAffine2, resources: Option<&Dictionary>, depth: usize) {
+    fn run(
+        &mut self,
+        content: &[u8],
+        base: DAffine2,
+        resources: Option<&Dictionary>,
+        depth: usize,
+    ) {
         let Ok(content) = Content::decode(content) else {
             return;
         };
@@ -108,7 +114,9 @@ impl Walker<'_> {
             match op.operator.as_str() {
                 "q" => stack.push(ctm),
                 "Q" => ctm = stack.pop().unwrap_or(base),
-                "cm" => ctm *= DAffine2::from_cols_array(&[at(0), at(1), at(2), at(3), at(4), at(5)]),
+                "cm" => {
+                    ctm *= DAffine2::from_cols_array(&[at(0), at(1), at(2), at(3), at(4), at(5)])
+                }
                 "m" => path.push(vec![pt(0)]),
                 "l" => {
                     let p = pt(0);
@@ -220,10 +228,18 @@ impl Walker<'_> {
                 self.run(&data, ctm * matrix, own.as_ref(), depth + 1);
             }
             Some(b"Image") => {
-                let corners = [DVec2::ZERO, DVec2::X, DVec2::ONE, DVec2::Y]
-                    .map(|c| ctm.transform_point2(c));
-                let min = corners.iter().copied().reduce(DVec2::min).unwrap_or_default();
-                let max = corners.iter().copied().reduce(DVec2::max).unwrap_or_default();
+                let corners =
+                    [DVec2::ZERO, DVec2::X, DVec2::ONE, DVec2::Y].map(|c| ctm.transform_point2(c));
+                let min = corners
+                    .iter()
+                    .copied()
+                    .reduce(DVec2::min)
+                    .unwrap_or_default();
+                let max = corners
+                    .iter()
+                    .copied()
+                    .reduce(DVec2::max)
+                    .unwrap_or_default();
                 let area = (max - min).x * (max - min).y;
                 if self.image.as_ref().is_some_and(|(a, _)| *a >= area) {
                     return;
@@ -265,7 +281,11 @@ fn decode_image(doc: &Document, stream: &lopdf::Stream) -> Option<(u32, u32, Vec
     }
     let width = stream.dict.get(b"Width").map(number).ok()? as u32;
     let height = stream.dict.get(b"Height").map(number).ok()? as u32;
-    let bits = stream.dict.get(b"BitsPerComponent").map(number).unwrap_or(8.0);
+    let bits = stream
+        .dict
+        .get(b"BitsPerComponent")
+        .map(number)
+        .unwrap_or(8.0);
     if bits != 8.0 {
         return None;
     }

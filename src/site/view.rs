@@ -187,22 +187,25 @@ fn line_mesh(content: &PlanContent, center: DVec2) -> Option<Mesh> {
 fn image_quad(min: DVec2, max: DVec2) -> Mesh {
     let (x0, x1) = (min.x as f32, max.x as f32);
     let (z_bottom, z_top) = (-min.y as f32, -max.y as f32);
-    Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default())
-        .with_inserted_attribute(
-            Mesh::ATTRIBUTE_POSITION,
-            vec![
-                [x0, 0.0, z_top],
-                [x1, 0.0, z_top],
-                [x1, 0.0, z_bottom],
-                [x0, 0.0, z_bottom],
-            ],
-        )
-        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0, 1.0, 0.0]; 4])
-        .with_inserted_attribute(
-            Mesh::ATTRIBUTE_UV_0,
-            vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
-        )
-        .with_inserted_indices(Indices::U32(vec![0, 2, 1, 0, 3, 2]))
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    )
+    .with_inserted_attribute(
+        Mesh::ATTRIBUTE_POSITION,
+        vec![
+            [x0, 0.0, z_top],
+            [x1, 0.0, z_top],
+            [x1, 0.0, z_bottom],
+            [x0, 0.0, z_bottom],
+        ],
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0, 1.0, 0.0]; 4])
+    .with_inserted_attribute(
+        Mesh::ATTRIBUTE_UV_0,
+        vec![[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+    )
+    .with_inserted_indices(Indices::U32(vec![0, 2, 1, 0, 3, 2]))
 }
 
 fn to_texture(width: u32, height: u32, rgba: &[u8]) -> Image {
@@ -233,7 +236,11 @@ fn to_texture(width: u32, height: u32, rgba: &[u8]) -> Image {
 }
 
 /// 縮尺合わせの点と、カーソルの下の点を描く
-pub fn draw_plan_tool(mut gizmos: Gizmos<SimulationGizmos>, tool: Res<PlanTool>, model: Res<Model>) {
+pub fn draw_plan_tool(
+    mut gizmos: Gizmos<SimulationGizmos>,
+    tool: Res<PlanTool>,
+    model: Res<Model>,
+) {
     if tool.calibrating.is_none() {
         return;
     }

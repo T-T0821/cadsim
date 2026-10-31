@@ -3,6 +3,7 @@
 use bevy_egui::egui;
 
 use super::UiState;
+use super::modeling::Tab;
 use crate::camera::{CameraRequest, StandardView};
 use crate::file_io::ExportScope;
 use crate::gizmo::Tool;
@@ -205,6 +206,19 @@ fn create_menu(ui: &mut egui::Ui, state: &mut UiState) {
     ui.menu_button("作成", |ui| {
         if ui.button("箱を追加").clicked() {
             add_box(state);
+        }
+        ui.separator();
+        for tab in [Tab::Cylinder, Tab::Extrude, Tab::Hole, Tab::Boolean] {
+            let text = match tab {
+                Tab::Cylinder => "円柱を追加…",
+                Tab::Extrude => "押し出しで追加…",
+                Tab::Hole => "穴をあける…",
+                Tab::Boolean => "ブーリアン (和・差・積)…",
+            };
+            if ui.button(text).clicked() {
+                state.modeling.open_tab(tab);
+                ui.close();
+            }
         }
     });
 }

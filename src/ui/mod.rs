@@ -20,6 +20,7 @@
 
 mod animation;
 mod menu;
+pub mod modeling;
 mod properties;
 mod status;
 mod tree;
@@ -51,16 +52,18 @@ pub struct UiPlugin;
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, spawn_ui_camera).add_systems(
-            EguiPrimaryContextPass,
-            (
-                install_japanese_font,
-                draw_ui,
-                // 動作シミュレーションで部品が動いている間はギズモで編集しない
-                transform_gizmo_system.run_if(at_design_pose),
-            )
-                .chain(),
-        );
+        app.init_resource::<modeling::ModelingUi>()
+            .add_systems(Startup, spawn_ui_camera)
+            .add_systems(
+                EguiPrimaryContextPass,
+                (
+                    install_japanese_font,
+                    draw_ui,
+                    // 動作シミュレーションで部品が動いている間はギズモで編集しない
+                    transform_gizmo_system.run_if(at_design_pose),
+                )
+                    .chain(),
+            );
     }
 }
 
@@ -80,6 +83,7 @@ pub struct UiState<'w> {
     pub viewport: ResMut<'w, ViewportRect>,
     pub motion: MotionUi<'w>,
     pub documents: ResMut<'w, crate::documents::DocumentExport>,
+    pub modeling: ResMut<'w, modeling::ModelingUi>,
 }
 
 /// UI 専用のカメラ。3D カメラはパネルを除いた領域だけに描くので、
@@ -131,6 +135,7 @@ fn draw_ui(mut contexts: EguiContexts, mut state: UiState) -> Result {
     view_cube::show(&ctx, view, &mut state);
     status::show_notifications(&ctx, view, &mut state);
     animation::show(&ctx, view, &mut state);
+    modeling::show(&ctx, &mut state);
     show_confirm_dialog(&ctx, &mut state.project);
 
     // パネルの上やビューキューブの上では 3D ビューのマウス操作をしない

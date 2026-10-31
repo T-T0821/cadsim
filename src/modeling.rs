@@ -50,7 +50,8 @@ impl std::hash::Hash for ModeledSource {
 
 impl ModeledSource {
     pub fn new(name: String, solid: &Solid) -> Result<Self, String> {
-        let json = serde_json::to_string(solid).map_err(|e| format!("形状を保存できません: {e}"))?;
+        let json =
+            serde_json::to_string(solid).map_err(|e| format!("形状を保存できません: {e}"))?;
         Ok(Self {
             id: next_shape_id(),
             name,
@@ -92,7 +93,8 @@ pub fn cylinder(radius: f64, height: f64) -> Result<Solid, String> {
     let v = builder::vertex(Point3::new(radius, 0.0, 0.0));
     // 下から見て時計回り = 上 (+Y) から見て反時計回りの円。面は +Y を向く
     let circle = builder::rsweep(&v, Point3::origin(), Vector3::unit_y(), Rad(-TAU));
-    let disk = builder::try_attach_plane(&[circle]).map_err(|e| format!("円を作れません: {e:?}"))?;
+    let disk =
+        builder::try_attach_plane(&[circle]).map_err(|e| format!("円を作れません: {e:?}"))?;
     let disk = oriented(disk, Vector3::unit_y());
     Ok(builder::tsweep(&disk, Vector3::new(0.0, height, 0.0)))
 }
@@ -155,7 +157,10 @@ pub fn parse_outline(text: &str) -> Result<Vec<DVec2>, String> {
             let nums: Vec<f64> = pair
                 .split([',', ' ', '\t'])
                 .filter(|s| !s.is_empty())
-                .map(|s| s.parse::<f64>().map_err(|_| format!("数として読めません: {s}")))
+                .map(|s| {
+                    s.parse::<f64>()
+                        .map_err(|_| format!("数として読めません: {s}"))
+                })
                 .collect::<Result<_, _>>()?;
             match nums.as_slice() {
                 [x, y] => Ok(DVec2::new(*x, *y)),
@@ -210,7 +215,11 @@ pub fn shape_from_solid(solid: &Solid) -> ImportedShape {
             max = max.max(DVec3::new(p.x, p.y, p.z));
         }
     }
-    let size = if min.x <= max.x { (max - min).length() } else { 1.0 };
+    let size = if min.x <= max.x {
+        (max - min).length()
+    } else {
+        1.0
+    };
     let tol = (size * 0.0005).max(1e-6);
     let mut faces = Vec::new();
     let mut edges = Vec::new();
@@ -389,7 +398,11 @@ pub fn drill_hole(
     let (start, drill_dir, length) = if hole.depth == 0.0 {
         let lo = bounds.min.dot(dir) - margin;
         let hi = bounds.max.dot(dir) + margin;
-        (hole.center + dir * (lo - hole.center.dot(dir)), dir, hi - lo)
+        (
+            hole.center + dir * (lo - hole.center.dot(dir)),
+            dir,
+            hi - lo,
+        )
     } else if hole.depth > 0.0 {
         // + 側の入口から - 向きに掘る
         (hole.center + dir * margin, -dir, hole.depth + margin)
@@ -545,7 +558,13 @@ mod tests {
         let mut history = crate::history::History::default();
         let a = model.add_box([100.0, 100.0, 100.0], [0.0, 50.0, 0.0]);
         let cyl = cylinder(20.0, 160.0).unwrap();
-        let b = add_solid(&mut model, "円柱".into(), &cyl, DVec3::new(10.0, -30.0, 7.0)).unwrap();
+        let b = add_solid(
+            &mut model,
+            "円柱".into(),
+            &cyl,
+            DVec3::new(10.0, -30.0, 7.0),
+        )
+        .unwrap();
         apply_boolean(&mut model, &mut history, a, b, BooleanOp::Union).unwrap();
         assert!(model.get(b).is_none());
         let NodeKind::Imported { shape, source, .. } = &model.get(a).unwrap().kind else {
@@ -556,7 +575,9 @@ mod tests {
         let v = signed_volume(shape);
         assert!((v - (cube + outside)).abs() / cube < 0.02, "{v}");
         // 保存した JSON から同じ形を作り直せる
-        let StepSource::Modeled(source) = source else { panic!() };
+        let StepSource::Modeled(source) = source else {
+            panic!()
+        };
         let again = source.to_imported().unwrap();
         let shape2 = again.root.shape.unwrap();
         assert!((signed_volume(&shape2) - v).abs() < 1.0);

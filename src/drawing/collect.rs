@@ -25,8 +25,11 @@ fn polygon_triangles(poly: &PolygonMesh) -> Vec<[DVec3; 3]> {
         .collect()
 }
 
+/// 面ごとの三角形と、稜線の折れ線
+type PartGeometry = (Vec<Vec<[DVec3; 3]>>, Vec<Vec<DVec3>>);
+
 /// 部品の形状 (部品の座標系)
-fn part_geometry(kind: &NodeKind) -> Option<(Vec<Vec<[DVec3; 3]>>, Vec<Vec<DVec3>>)> {
+fn part_geometry(kind: &NodeKind) -> Option<PartGeometry> {
     match kind {
         NodeKind::Assembly { .. } => None,
         NodeKind::Box(part) => {
@@ -133,7 +136,11 @@ mod tests {
         let sheet = make_sheet(&input, &DrawingOptions::default());
         assert!(sheet.lines.iter().any(|l| l.0 == Layer::Outline));
         // 全体の幅 -500 〜 1700 = 2200
-        assert!(sheet.texts.iter().any(|t| t.text == "2200"), "{:?}", sheet.texts.iter().map(|t| &t.text).collect::<Vec<_>>());
+        assert!(
+            sheet.texts.iter().any(|t| t.text == "2200"),
+            "{:?}",
+            sheet.texts.iter().map(|t| &t.text).collect::<Vec<_>>()
+        );
         assert!(drawing_input(&Model::default(), String::new(), String::new()).is_none());
     }
 }

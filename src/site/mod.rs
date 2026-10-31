@@ -12,8 +12,8 @@
 //! ファイルの読み込みは `formats` (アダプター層)、保存は project.rs が受け持つ。
 //! ここは Bevy のシステムで「入力を集める → ドメインを呼ぶ → 表示に写す」だけをする。
 
-pub mod model;
 mod cloud_view;
+pub mod model;
 mod panel;
 pub mod pointcloud;
 pub mod underlay;
@@ -51,7 +51,9 @@ impl Plugin for SitePlugin {
                 (
                     start_loading,
                     receive_loaded,
-                    pick_plan_point.run_if(pointer_in_3d_view).run_if(plan_tool_on),
+                    pick_plan_point
+                        .run_if(pointer_in_3d_view)
+                        .run_if(plan_tool_on),
                     view::sync_underlays,
                     view::draw_plan_tool,
                     cloud_view::sync_clouds,

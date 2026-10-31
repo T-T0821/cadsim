@@ -37,11 +37,12 @@ pub struct PlanImage {
 impl PlanContent {
     /// 図面の座標での範囲 (min, max)。何もなければ None。
     pub fn bounds(&self) -> Option<(DVec2, DVec2)> {
-        let points = self.polylines.iter().flatten().copied().chain(
-            self.image
-                .iter()
-                .flat_map(|image| [image.min, image.max]),
-        );
+        let points = self
+            .polylines
+            .iter()
+            .flatten()
+            .copied()
+            .chain(self.image.iter().flat_map(|image| [image.min, image.max]));
         points.fold(None, |acc, p| match acc {
             None => Some((p, p)),
             Some((min, max)) => Some((min.min(p), max.max(p))),
@@ -97,11 +98,7 @@ impl Underlay {
     /// 図面の座標 → ワールド座標
     pub fn to_world(&self, p: DVec2) -> DVec3 {
         let r = DVec2::from_angle(self.rotation_deg.to_radians()).rotate(p * self.scale);
-        DVec3::new(
-            self.origin[0] + r.x,
-            self.elevation,
-            self.origin[1] - r.y,
-        )
+        DVec3::new(self.origin[0] + r.x, self.elevation, self.origin[1] - r.y)
     }
 
     /// ワールド座標 (高さは無視) → 図面の座標
@@ -113,13 +110,8 @@ impl Underlay {
     /// ワールドでの範囲 (X, Z の min / max)
     pub fn world_bounds(&self) -> Option<(DVec3, DVec3)> {
         let (min, max) = self.content.bounds()?;
-        let corners = [
-            min,
-            DVec2::new(max.x, min.y),
-            max,
-            DVec2::new(min.x, max.y),
-        ]
-        .map(|c| self.to_world(c));
+        let corners = [min, DVec2::new(max.x, min.y), max, DVec2::new(min.x, max.y)]
+            .map(|c| self.to_world(c));
         let lo = corners.iter().copied().reduce(DVec3::min)?;
         let hi = corners.iter().copied().reduce(DVec3::max)?;
         Some((lo, hi))
@@ -212,7 +204,10 @@ mod tests {
         assert_eq!(u.scale, 1000.0);
         let p = u.to_world(DVec2::new(10.0, 10.0));
         // 図面の上 (+v) はワールドの -Z
-        assert!((p - DVec3::new(10000.0, 0.0, -10000.0)).length() < 1e-9, "{p}");
+        assert!(
+            (p - DVec3::new(10000.0, 0.0, -10000.0)).length() < 1e-9,
+            "{p}"
+        );
         assert!((u.to_plan(p) - DVec2::new(10.0, 10.0)).length() < 1e-9);
     }
 
@@ -257,7 +252,9 @@ mod tests {
     #[test]
     fn bounds_cover_lines_and_image() {
         let mut content = PlanContent::default();
-        content.polylines.push(vec![DVec2::new(-1.0, 2.0), DVec2::new(3.0, 4.0)]);
+        content
+            .polylines
+            .push(vec![DVec2::new(-1.0, 2.0), DVec2::new(3.0, 4.0)]);
         content.image = Some(PlanImage {
             width: 1,
             height: 1,
