@@ -235,7 +235,9 @@ fn hole_tab(ui: &mut egui::Ui, state: &mut UiState) {
     });
     number(ui, "直径", &mut m.hole_diameter, &unit);
     number(ui, "深さ", &mut m.hole_depth, &unit);
-    ui.weak("深さ 0 で貫通。正の値は軸の + 側の面から、負の値は - 側の面から掘ります");
+    ui.weak(
+        "深さ 0 で貫通。深さを入れると中心を入口にして、正なら軸の - 向き、負なら + 向きに掘ります",
+    );
     if ui.button("穴をあける").clicked() {
         let hole = HoleSpec {
             center: DVec3::from(m.hole_center),
