@@ -8,5 +8,6 @@ pub mod flow;
 pub mod gamify;
 pub mod math;
 pub mod physics;
+pub mod remap;
 pub mod simulation;
 pub mod site;

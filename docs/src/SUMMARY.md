@@ -21,6 +21,7 @@
 - [箱の作成と編集](boxes.md)
 - [円柱・押し出し・穴・ブーリアン](modeling.md)
 - [ギズモとスナップ](gizmo.md)
+- [形状の差し替え](replace-geometry.md)
 - [元に戻す・やり直し](undo.md)
 - [干渉チェックと距離計測](simulation.md)
 - [寸法と注記](annotations.md)

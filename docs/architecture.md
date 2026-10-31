@@ -56,7 +56,7 @@ src/                      アプリ本体。assets/ の場所を変えないよ�
 crates/
 ├── cadsim_core/          1. ドメイン + 2. ユースケース (Bevy なし)
 │   └── src/
-│       ├── domain/       model, math, selection, simulation (幾何・干渉・計測),
+│       ├── domain/       model, math, selection, remap (形状の差し替えの対応づけ), simulation (幾何・干渉・計測),
 │       │                 motion (チャート・姿勢・運動学), plc (シーケンス・I/O 表), flow,
 │       │                 safety (安全機器・検知・安全距離), floor (作業者・AGV・床の幾何)
 │       └── usecase/      document (開く・保存・取り込み・書き出し), edit, history,
