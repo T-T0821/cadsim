@@ -11,6 +11,7 @@ use crate::modeling::{
     BooleanOp, HoleAxis, HoleSpec, add_solid, apply_boolean, cylinder, drill_hole, extrude,
     node_solid, parse_outline,
 };
+use cadsim_core::workspace::Tool;
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub enum Tab {
@@ -36,7 +37,6 @@ impl Tab {
 
 #[derive(bevy::prelude::Resource)]
 pub struct ModelingUi {
-    pub open: bool,
     pub tab: Tab,
     radius: f64,
     height: f64,
@@ -56,7 +56,6 @@ pub struct ModelingUi {
 impl Default for ModelingUi {
     fn default() -> Self {
         Self {
-            open: false,
             tab: Tab::Cylinder,
             radius: 50.0,
             height: 200.0,
@@ -75,19 +74,20 @@ impl Default for ModelingUi {
 }
 
 impl ModelingUi {
+    /// タブを選ぶ (ウィンドウを開くのは呼ぶ側が `Dock` で行う)
     pub fn open_tab(&mut self, tab: Tab) {
-        self.open = true;
         self.tab = tab;
         self.error = None;
     }
 }
 
 pub fn show(ctx: &egui::Context, state: &mut UiState) {
-    if !state.modeling.open {
+    let Some(window) = super::dock::workspace_window(Tool::Modeling, &state.dock, [320.0, 240.0])
+    else {
         return;
-    }
+    };
     let mut open = true;
-    egui::Window::new("モデリング")
+    window
         .open(&mut open)
         .resizable(false)
         .default_width(320.0)
@@ -114,7 +114,7 @@ pub fn show(ctx: &egui::Context, state: &mut UiState) {
             }
         });
     if !open {
-        state.modeling.open = false;
+        state.dock.set_open(Tool::Modeling, false);
     }
 }
 

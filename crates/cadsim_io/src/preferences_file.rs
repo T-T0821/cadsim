@@ -1,4 +1,4 @@
-//! 見た目とミッションの設定 ([`Preferences`]) を JSON ファイルに読み書きする
+//! ミッションの設定 ([`Preferences`]) を JSON ファイルに読み書きする
 //!
 //! 置き場所は OS ごとの設定フォルダ:
 //! - Windows: `%APPDATA%\cadsim\preferences.json`
@@ -11,13 +11,12 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use cadsim_core::gamify::{Preferences, Progress, ThemeKind};
+use cadsim_core::gamify::{Preferences, Progress};
 
 #[derive(Serialize, Deserialize, Default)]
 #[serde(default)]
 struct PreferencesRecord {
-    /// "playful" か "plain"
-    theme: String,
+    // 以前の版が書いた "theme" (見た目の切り替え) は、知らない項目として読み飛ばす
     show_missions: Option<bool>,
     completed_missions: Vec<String>,
     xp: u32,
@@ -26,11 +25,6 @@ struct PreferencesRecord {
 impl PreferencesRecord {
     fn from_prefs(prefs: &Preferences) -> Self {
         Self {
-            theme: match prefs.theme {
-                ThemeKind::Playful => "playful",
-                ThemeKind::Plain => "plain",
-            }
-            .into(),
             show_missions: Some(prefs.show_missions),
             completed_missions: prefs
                 .progress
@@ -44,10 +38,6 @@ impl PreferencesRecord {
 
     fn into_prefs(self) -> Preferences {
         Preferences {
-            theme: match self.theme.as_str() {
-                "plain" => ThemeKind::Plain,
-                _ => ThemeKind::Playful,
-            },
             show_missions: self.show_missions.unwrap_or(true),
             progress: Progress::restore(
                 self.completed_missions.iter().map(String::as_str),
@@ -106,7 +96,6 @@ mod tests {
     #[test]
     fn round_trip() {
         let mut prefs = Preferences {
-            theme: ThemeKind::Plain,
             show_missions: false,
             ..Default::default()
         };
@@ -116,17 +105,21 @@ mod tests {
             ..Default::default()
         });
         let back = from_json(&to_json(&prefs));
-        assert_eq!(back.theme, ThemeKind::Plain);
         assert!(!back.show_missions);
         assert!(back.progress.is_done(MissionId::SelectPart));
         assert_eq!(back.progress.xp(), prefs.progress.xp());
     }
 
     #[test]
+    fn old_theme_setting_is_ignored() {
+        let prefs = from_json(r#"{"theme": "plain", "show_missions": false, "xp": 0}"#);
+        assert!(!prefs.show_missions);
+    }
+
+    #[test]
     fn broken_or_empty_file_uses_defaults() {
-        for json in ["", "{", "{}", r#"{"theme": 3}"#] {
+        for json in ["", "{", "{}", r#"{"show_missions": 3}"#] {
             let prefs = from_json(json);
-            assert_eq!(prefs.theme, ThemeKind::Playful);
             assert!(prefs.show_missions);
             assert_eq!(prefs.progress.done_count(), 0);
         }
@@ -137,12 +130,12 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("cadsim-prefs-test-{}", std::process::id()));
         let path = dir.join("nested").join("preferences.json");
         let prefs = Preferences {
-            theme: ThemeKind::Plain,
+            show_missions: false,
             ..Default::default()
         };
         save(&path, &prefs).unwrap();
-        assert_eq!(load(&path).theme, ThemeKind::Plain);
+        assert!(!load(&path).show_missions);
         std::fs::remove_dir_all(&dir).unwrap();
-        assert_eq!(load(&path).theme, ThemeKind::Playful);
+        assert!(load(&path).show_missions);
     }
 }

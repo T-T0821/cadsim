@@ -59,8 +59,6 @@ enum SourceKind {
 /// 「チャート・ラダーの自動生成」ウィンドウの状態
 #[derive(Resource, Default)]
 pub struct SequenceGen {
-    /// ウィンドウを出しているか (メニューの「AI」から開く)
-    pub open: bool,
     tab: Tab,
     description: String,
     mode: ApplyMode,
@@ -76,10 +74,6 @@ pub struct SequenceGen {
 }
 
 impl SequenceGen {
-    pub fn toggle(&mut self) {
-        self.open = !self.open;
-    }
-
     /// 終わった問い合わせの結果を受け取る
     fn poll_jobs(&mut self) {
         if let Some(result) = self.generating.as_ref().and_then(LlmJob::poll) {

@@ -1,7 +1,9 @@
 //! ワーク搬送の編集画面 (3D ビュー右上、ビューキューブの下の「ワーク搬送」ウィンドウ)
 
+use crate::ui::dock::{self, Dock};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
+use cadsim_core::workspace::Tool;
 
 use cadsim_core::conveyor::{BeltAxis, ConveyorConfig, ConveyorEnd, Counts, Exit, SourceOutput};
 
@@ -13,6 +15,7 @@ use crate::motion::{ActuatorKind, TimingChart};
 /// 長さの入力の上限 (モデル単位)
 const MAX_LENGTH: f64 = 100_000.0;
 
+#[allow(clippy::too_many_arguments)]
 pub fn conveyor_window(
     mut contexts: EguiContexts,
     mut config: ResMut<ConveyorConfigRes>,
@@ -21,19 +24,18 @@ pub fn conveyor_window(
     chart: Res<TimingChart>,
     state: Res<WorkState>,
     viewport: Res<ViewportRect>,
+    mut dock: ResMut<Dock>,
 ) -> Result {
-    let Some(view) = viewport.rect else {
+    let Some(window) = dock::panel(Tool::Conveyor, &dock, viewport.rect) else {
         return Ok(());
     };
     // 編集はコピーに対して行い、変わったときだけ書き戻す (毎フレーム計算し直さないため)
     let mut edited = config.0.clone();
     let parts = PartPicker::new(&model, selection.node);
-    egui::Window::new("ワーク搬送")
-        // 3D ビューの右上、ビューキューブの下に浮かべる (左上は干渉チェックのパネル)
-        .pivot(egui::Align2::RIGHT_TOP)
-        .default_pos([view.max.x - 8.0, view.min.y + 170.0])
+    let mut open = true;
+    window
+        .open(&mut open)
         .default_width(290.0)
-        .collapsible(true)
         .show(contexts.ctx_mut()?, |ui| {
             counts_ui(ui, &edited, &state);
             ui.separator();
@@ -51,6 +53,9 @@ pub fn conveyor_window(
                     grippers_ui(ui, &mut edited, &chart);
                 });
         });
+    if !open {
+        dock.set_open(Tool::Conveyor, false);
+    }
     if edited != config.0 {
         config.0 = edited;
     }

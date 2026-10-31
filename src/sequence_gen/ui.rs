@@ -1,7 +1,9 @@
 //! 「チャート・ラダーの自動生成」ウィンドウ
 
+use crate::ui::dock::{self, Dock};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
+use cadsim_core::workspace::Tool;
 
 use super::ladder::{self, Direction};
 use super::log_events;
@@ -24,46 +26,43 @@ pub fn sequence_gen_window(
     mut state: ResMut<SequenceGen>,
     mut chart: ResMut<TimingChart>,
     mut ai: ResMut<AiAssistant>,
+    mut dock: ResMut<Dock>,
 ) -> Result {
     state.poll_jobs();
-    if !state.open {
+    let Some(window) = dock::workspace_window(Tool::SequenceGen, &dock, [560.0, 520.0]) else {
         return Ok(());
-    }
+    };
     let ctx = contexts.ctx_mut()?;
     if state.generating.is_some() || state.explaining.is_some() {
         // 経過秒数の表示を進め、終わったらすぐ受け取る
         ctx.request_repaint_after(std::time::Duration::from_millis(250));
     }
     let mut open = true;
-    egui::Window::new("チャート・ラダーの自動生成")
-        .open(&mut open)
-        .default_width(560.0)
-        .default_height(520.0)
-        .show(ctx, |ui| {
-            let state = &mut *state;
-            ui.horizontal(|ui| {
-                ui.selectable_value(&mut state.tab, Tab::Generate, "説明文から作る");
-                ui.selectable_value(&mut state.tab, Tab::Ladder, "ラダーを書き出す");
-                ui.selectable_value(&mut state.tab, Tab::Explain, "動作を説明させる");
-            });
-            ui.separator();
-            match state.tab {
-                Tab::Generate => generate_tab(ui, state, &mut chart, &mut ai),
-                Tab::Ladder => ladder_tab(ui, state, &chart),
-                Tab::Explain => explain_tab(ui, state, &chart, &mut ai),
-            }
-            if let Some(text) = state.notice.clone() {
-                ui.separator();
-                ui.horizontal_wrapped(|ui| {
-                    ui.label(text);
-                    if ui.small_button("×").clicked() {
-                        state.notice = None;
-                    }
-                });
-            }
+    window.open(&mut open).show(ctx, |ui| {
+        let state = &mut *state;
+        ui.horizontal(|ui| {
+            ui.selectable_value(&mut state.tab, Tab::Generate, "説明文から作る");
+            ui.selectable_value(&mut state.tab, Tab::Ladder, "ラダーを書き出す");
+            ui.selectable_value(&mut state.tab, Tab::Explain, "動作を説明させる");
         });
+        ui.separator();
+        match state.tab {
+            Tab::Generate => generate_tab(ui, state, &mut chart, &mut ai),
+            Tab::Ladder => ladder_tab(ui, state, &chart),
+            Tab::Explain => explain_tab(ui, state, &chart, &mut ai),
+        }
+        if let Some(text) = state.notice.clone() {
+            ui.separator();
+            ui.horizontal_wrapped(|ui| {
+                ui.label(text);
+                if ui.small_button("×").clicked() {
+                    state.notice = None;
+                }
+            });
+        }
+    });
     if !open {
-        state.open = false;
+        dock.set_open(Tool::SequenceGen, false);
     }
     Ok(())
 }

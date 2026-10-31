@@ -32,7 +32,7 @@ const HEADER_HEIGHT: f32 = 34.0;
 const ROW_HEIGHT: f32 = 32.0;
 const MIN_COLUMN_WIDTH: f32 = 64.0;
 const PROPERTIES_WIDTH: f32 = 330.0;
-const PANEL_HEIGHT: f32 = 270.0;
+const PANEL_HEIGHT: f32 = 220.0;
 
 const PLAYHEAD_COLOR: egui::Color32 = egui::Color32::from_rgb(230, 70, 60);
 const WAVE_COLOR: egui::Color32 = egui::Color32::from_rgb(90, 170, 255);

@@ -1,7 +1,9 @@
 //! 「作業者・AGV」パネル: 時計、作業者の手順と集計、AGV の経路・搬送の要求・台数比較
 
+use crate::ui::dock::{self, Dock};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
+use cadsim_core::workspace::Tool;
 
 use super::agv_sim::{Flow, compare_fleets};
 use super::operator_plan::OperatorTask;
@@ -12,6 +14,7 @@ use crate::ui::widgets::round_for_display;
 
 const RED: egui::Color32 = egui::Color32::from_rgb(230, 60, 60);
 
+#[allow(clippy::too_many_arguments)]
 pub fn floor_panel(
     mut contexts: EguiContexts,
     mut clock: ResMut<FloorClock>,
@@ -20,54 +23,56 @@ pub fn floor_panel(
     mut state: ResMut<FloorState>,
     safety: Res<SafetyState>,
     viewport: Res<ViewportRect>,
+    mut dock: ResMut<Dock>,
 ) -> Result {
-    // 3D ビューの右上、ビューキューブの下に浮かべる (右下は寸法・注記)
-    let corner = viewport.rect.map_or(egui::pos2(1000.0, 180.0), |r| {
-        egui::pos2(r.max.x - 8.0, r.min.y + 170.0)
+    let Some(window) = dock::panel(Tool::Floor, &dock, viewport.rect) else {
+        // パネルを閉じたら、置きかけの経路や歩く先もやめる (クリックで部品を選べるように戻す)
+        if state.tool != FloorTool::None {
+            state.tool = FloorTool::None;
+        }
+        return Ok(());
+    };
+    let mut open = true;
+    window.open(&mut open).show(contexts.ctx_mut()?, |ui| {
+        // 毎フレームの変更検知を避けるため、編集したときだけ変更を知らせる
+        let state = state.bypass_change_detection();
+        clock_section(ui, &mut clock, state, safety.is_stopped());
+        if ui
+            .button("サンプルを置く")
+            .on_hover_text("作業者 1人と、十字の通路を走る AGV のサンプル")
+            .clicked()
+        {
+            sample::load(&mut operators, &mut layout, state);
+            clock.time = 0.0;
+        }
+        egui::ScrollArea::vertical()
+            .max_height(320.0)
+            .show(ui, |ui| {
+                egui::CollapsingHeader::new("作業者")
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        if operator_section(
+                            ui,
+                            operators.bypass_change_detection(),
+                            state,
+                            clock.time,
+                        ) {
+                            operators.set_changed();
+                        }
+                    });
+                egui::CollapsingHeader::new("AGV")
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        if agv_section(ui, layout.bypass_change_detection(), state) {
+                            layout.set_changed();
+                            clock.time = 0.0;
+                        }
+                    });
+            });
     });
-    egui::Window::new("作業者・AGV")
-        .pivot(egui::Align2::RIGHT_TOP)
-        .fixed_pos(corner)
-        .resizable(false)
-        .collapsible(true)
-        .default_open(false)
-        .show(contexts.ctx_mut()?, |ui| {
-            // 毎フレームの変更検知を避けるため、編集したときだけ変更を知らせる
-            let state = state.bypass_change_detection();
-            clock_section(ui, &mut clock, state, safety.is_stopped());
-            if ui
-                .button("サンプルを置く")
-                .on_hover_text("作業者 1人と、十字の通路を走る AGV のサンプル")
-                .clicked()
-            {
-                sample::load(&mut operators, &mut layout, state);
-                clock.time = 0.0;
-            }
-            egui::ScrollArea::vertical()
-                .max_height(320.0)
-                .show(ui, |ui| {
-                    egui::CollapsingHeader::new("作業者")
-                        .default_open(true)
-                        .show(ui, |ui| {
-                            if operator_section(
-                                ui,
-                                operators.bypass_change_detection(),
-                                state,
-                                clock.time,
-                            ) {
-                                operators.set_changed();
-                            }
-                        });
-                    egui::CollapsingHeader::new("AGV")
-                        .default_open(true)
-                        .show(ui, |ui| {
-                            if agv_section(ui, layout.bypass_change_detection(), state) {
-                                layout.set_changed();
-                                clock.time = 0.0;
-                            }
-                        });
-                });
-        });
+    if !open {
+        dock.set_open(Tool::Floor, false);
+    }
     Ok(())
 }
 

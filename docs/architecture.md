@@ -63,7 +63,7 @@ crates/
 │       │                 line (工程と AGV の受け渡し・PLC の信号表・ワークの位置),
 │       │                 line_draft (言葉で組むラインの下書き・整え方・並べ方)
 │       └── usecase/      document (開く・保存・取り込み・書き出し), edit, history, compose_line (言葉でラインを組む),
-│                         report (シミュレーション結果の CSV), llm (生成 AI のポート LlmClient), script (部品スクリプトの実行と ScriptHost ポート),
+│                         report (シミュレーション結果の CSV), llm (生成 AI のポート LlmClient), help (使い方を AI に聞く), script (部品スクリプトの実行と ScriptHost ポート),
 │                         ports (SceneReader / SceneWriter / ProjectStore などのトレイト)
 └── cadsim_io/            3. アダプター (Bevy なし)
     └── src/              step, interchange (gltf / obj / stl / usd), project_file (JSON),
@@ -79,7 +79,7 @@ crates/
 1つの PR は1段だけにし、毎回 `cargo fmt` / `clippy` / `test` が通る状態でマージします。
 
 1. **ワークスペース化と純粋な計算を core へ。** ✅ ルートをワークスペースにして `cadsim_core` を作り、`math` と `simulation` の幾何・干渉の計算を移した。`bevy::math` は同じ版の `glam` に置き換え、アプリ側の `math` / `simulation` から再公開しているので呼び出し側は変わらない。
-   - ゲーム風 UI の判定(`gamify`)は最初から `cadsim_core` に置いた。設定ファイルの読み書きは `cadsim_io::preferences_file` に移した。
+   - ゲーム風 UI の判定(`gamify`)は最初から `cadsim_core` に置いた。道具の一覧と開け閉め(ツールレール)の `workspace` も `cadsim_core` に置き、UI 層の `ui::dock` が Resource に包む。設定ファイルの読み書きは `cadsim_io::preferences_file` に移した。
 2. **残りの純粋な計算を core へ。** 標準部品の `library/catalog.rs`(種類・パラメータ・I/O 点・動作)と `library/geometry.rs`(形状)はすでに Bevy に依存しないので、そのまま移せる。そのほか `motion` のチャート・姿勢・運動学、PLC のシーケンスなど。進行中の機能ブランチが触っているので、それらが入ってから移す。 🔶 タイミングチャートと動きの計算 (`motion::{chart, profile, pose, kinematics, robot_path, robot_time, path_interference, sensor}`) を `cadsim_core::motion` に移した。アプリ側の `motion::chart::TimingChart` は `#[derive(Resource, Deref, DerefMut)] struct TimingChart(cadsim_core::motion::TimingChart)` という包み型。
 3. **ファイル形式を io へ。** 🔶 `cadsim_io` を作り、3D ファイル形式の読み書き (`interchange` の Scene・glTF・OBJ・STL・USD・Web ビューア) を移した。アプリ側の `interchange` から再公開しているので呼び出し側は変わらない。`Scene` ⇔ `Model` の変換 (`model_io`) も、手順 4 で `Model` が core に移ったあと io へ移した。続いて STEP の読み込みを `cadsim_io::step` に移し、取り込んだ形状とアセンブリの木の型 (`ImportedShape` など) は `cadsim_core::shape`、表示用メッシュ (`part_mesh`)・BVH・アニメーションの型 (`Animation` など) は `cadsim_core` に移した (io → core の向き)。さらに平面図・点群・図面の形式 (`formats::{dxf, pdf_plan, pointcloud_read, site_record, drawing_out, conveyor_record}`)、工程シミュレーションの記録と Excel 書き出し (`flow::{record, xlsx}`)、設定ファイル (`preferences_file`) を `cadsim_io` に移した。アプリ側の `formats` / `flow` / `preferences_file` から再公開している。部品表の書き出し (`formats::bom_out`) も io。タイミングチャートとアニメーションの保存形式 (`formats::chart_record`) も io。`.cadsim` の JSON の構造体はまだアプリ側。
 4. **設計データを core へ。** 🔶 `Model` と `Node`・`NodeKind`・`BoxPart` などを `cadsim_core::model` に移した。アプリ側の `model::Model` は `#[derive(Resource, Deref, DerefMut)] struct Model(cadsim_core::model::Model)` という包み型で、`Res<Model>` やメソッド呼び出しはそのまま使える。標準部品の種類・パラメータ・形状 (`library::{catalog, geometry}`) と、モデリングで作った形状の出どころ `ModeledSource` も core に置き、JSON との変換は `cadsim_io::modeled` の `ModeledSourceExt` に置いた。`Selection` は画面の状態なので UI 層 (アプリ側) のまま。`Model` のテストはサンプルの STEP (io) を読むのでアプリ側に残した。部品表の計算 (`bom`) も core に移した (テストはサンプルの STEP を読むのでアプリ側)。読み込み元の表示名は `StepSource::display_name`。モデリング (円柱・押し出し・穴あけ・ブーリアン) も `cadsim_core::modeling` に移し、B-rep を JSON に詰める部分はポート `SolidStore` にして io (`JsonSolids`) が実装する。

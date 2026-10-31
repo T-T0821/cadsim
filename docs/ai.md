@@ -16,7 +16,7 @@
 
 1. 問い合わせの組み立てと返事の読み取りを Bevy に依存しないユースケースの関数にし、`&dyn LlmClient` を受け取る。テストは `ScriptedLlm` で決まった返事を返して書く。
 2. 画面からは `AiAssistant::client()` で呼び出し口を受け取り、`LlmJob::start` で別スレッドに投げ、毎フレーム `poll` で結果を見る。
-3. メニューの「AI」に項目を足す。
+3. 新しい道具なら `cadsim_core::workspace::Tool` に足す (ツールレールとメニューの「ツール」に並び、「AI に聞く」の説明にも入る)。
 
 ## Claude API への問い合わせ
 

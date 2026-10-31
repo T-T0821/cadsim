@@ -1,18 +1,20 @@
 //! 言葉でラインを組む (UI 層)
 //!
-//! 「ライン → 言葉でラインを組む…」で開くウィンドウ。文を入れて「下書きを作る」を押すと、
+//! ツールレールの「言葉で」(言葉でラインを組む) で開くウィンドウ。文を入れて「下書きを作る」を押すと、
 //! 別スレッドでユースケース [`compose_line`] を呼び、できた下書きを上から見た図と
 //! ステップの一覧で見せる。「モデルとチャートに置く」で [`apply::apply`] を呼んで反映する。
 //!
 //! - `apply.rs` … 下書きをモデル・タイミングチャート・ワーク搬送の設定に置く (Bevy 非依存)
 //!
-//! 生成 AI は「AI → AI の設定」の API キーがあるときだけ使い (共通の [`AiAssistant`])、
+//! 生成 AI は「ツール → AI の設定」の API キーがあるときだけ使い (共通の [`AiAssistant`])、
 //! なければ・失敗したら文のキーワードから作る。
 
 pub mod apply;
 
+use crate::ui::dock::{self, Dock};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
+use cadsim_core::workspace::Tool;
 
 use cadsim_core::line_draft::EquipmentKind;
 use cadsim_core::usecase::compose_line::{ComposedLine, LineDraftAi, compose_line};
@@ -45,7 +47,6 @@ const EXAMPLES: [&str; 3] = [
 /// 「言葉でラインを組む」ウィンドウの状態
 #[derive(Resource)]
 pub struct ComposeUi {
-    pub open: bool,
     text: String,
     /// 作っている最中の下書き (別スレッドで作る)
     job: Option<LlmJob<Result<ComposedLine, String>>>,
@@ -58,7 +59,6 @@ pub struct ComposeUi {
 impl Default for ComposeUi {
     fn default() -> Self {
         Self {
-            open: false,
             text: EXAMPLES[0].into(),
             job: None,
             result: None,
@@ -114,10 +114,11 @@ fn compose_window(
     mut history: ResMut<History>,
     mut selection: ResMut<Selection>,
     mut assistant: ResMut<AiAssistant>,
+    mut dock: ResMut<Dock>,
 ) -> Result {
-    if !state.open {
+    let Some(window) = dock::workspace_window(Tool::Compose, &dock, [520.0, 560.0]) else {
         return Ok(());
-    }
+    };
     let ctx = contexts.ctx_mut()?;
     let state = state.bypass_change_detection();
     state.poll();
@@ -127,11 +128,8 @@ fn compose_window(
 
     let mut open = true;
     let mut place = false;
-    egui::Window::new("言葉でラインを組む")
+    window
         .open(&mut open)
-        .default_size([520.0, 560.0])
-        .default_pos([360.0, 120.0])
-        .resizable(true)
         .show(ctx, |ui| {
             ui.label("作りたいラインを文で書いてください。設備の種類と台数、作業の内容を入れると下書きになります。");
             ui.add(
@@ -192,7 +190,7 @@ fn compose_window(
             }
         });
     if !open {
-        state.open = false;
+        dock.set_open(Tool::Compose, false);
     }
 
     if place && let Some(line) = state.result.take() {

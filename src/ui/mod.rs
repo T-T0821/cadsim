@@ -1,27 +1,29 @@
 //! 画面の UI (egui)
 //!
 //! ```text
-//! ┌──────────────────────────────────────────────┐
-//! │ メニュー / ツールバー                (menu.rs) │
-//! ├──────────┬────────────────────────┬──────────┤
-//! │ アセンブリ │                        │ プロパティ │
-//! │ ツリー     │       3D ビュー         │          │
-//! │ (tree.rs) │      ビューキューブ ┐    │(properties│
-//! │           │      (view_cube.rs) ┘   │   .rs)   │
-//! ├──────────┴────────────────────────┴──────────┤
-//! │ タイミングチャート          (motion/ui.rs)      │
-//! ├──────────────────────────────────────────────┤
-//! │ ステータスバー                     (status.rs) │
-//! └──────────────────────────────────────────────┘
+//! ┌────────────────────────────────────────────────────┐
+//! │ メニュー / ツールバー                      (menu.rs) │
+//! ├──┬──────────┬────────────────────────┬──────────┤
+//! │ツ│ アセンブリ │  道具のパネル           │ プロパティ │
+//! │ー│ ツリー     │       3D ビュー         │          │
+//! │ル│ (tree.rs) │      ビューキューブ ┐    │(properties│
+//! │レ│           │      (view_cube.rs) ┘   │   .rs)   │
+//! │ー├──────────┴────────────────────────┴──────────┤
+//! │ル│ タイミングチャート          (motion/ui.rs)      │
+//! ├──┴─────────────────────────────────────────────────┤
+//! │ ステータスバー                           (status.rs) │
+//! └────────────────────────────────────────────────────┘
 //! ```
 //!
+//! 左端のツールレール (dock.rs) で、干渉チェック・安全・PLC 連携などの道具のパネルを開け閉めする。
 //! 3D ビューの左下にはミッションカード、達成時は上にお祝いと紙吹雪を重ねる (playful.rs)。
-//! 見た目 (ゲーム風 / シンプル) は theme.rs。
+//! 配色と文字の大きさは theme.rs。
 //!
 //! egui のパネルは「外側から順に場所を取る」ので、1つのシステムの中で
 //! 上 → 下 → 左 → 右 の順に描き、残った領域を 3D ビューにする。
 
 mod animation;
+pub mod dock;
 mod menu;
 pub mod modeling;
 pub mod playful;
@@ -65,6 +67,7 @@ pub struct UiPlugin;
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<modeling::ModelingUi>()
+            .init_resource::<dock::Dock>()
             .add_plugins(playful::PlayfulPlugin)
             .add_systems(Startup, spawn_ui_camera)
             .add_systems(
@@ -107,8 +110,6 @@ pub struct UiState<'w> {
     pub documents: ResMut<'w, crate::documents::DocumentExport>,
     pub modeling: ResMut<'w, modeling::ModelingUi>,
     pub flow: FlowUi<'w>,
-    pub line: ResMut<'w, crate::line::LineState>,
-    pub compose: ResMut<'w, crate::line_compose::ComposeUi>,
     pub diagnostics: Res<'w, DiagnosticsStore>,
     pub render_stats: Res<'w, RenderStats>,
     pub playful: ResMut<'w, playful::PlayfulUi>,
@@ -120,7 +121,13 @@ pub struct UiState<'w> {
     /// 「自作部品として保存」のウィンドウ
     pub custom_dialog: ResMut<'w, crate::custom_part::SaveDialog>,
     pub assistant: ResMut<'w, crate::assistant::AiAssistant>,
-    pub sequence_gen: ResMut<'w, crate::sequence_gen::SequenceGen>,
+    /// 開いている道具
+    pub dock: ResMut<'w, dock::Dock>,
+    /// 「AI に聞く」
+    pub help: ResMut<'w, crate::assistant::help::HelpChat>,
+    /// ツールレールの印 (干渉の数・安全停止)
+    pub interference: Res<'w, crate::simulation::InterferenceCheck>,
+    pub safety: Res<'w, crate::safety::SafetyState>,
 }
 
 /// UI 専用のカメラ。3D カメラはパネルを除いた領域だけに描くので、
@@ -161,6 +168,7 @@ fn draw_ui(mut contexts: EguiContexts, mut state: UiState) -> Result {
 
     menu::show(&mut root, &mut state);
     status::show(&mut root, &mut state);
+    tool_rail(&mut root, &mut state);
     motion::show_panel(
         &mut root,
         &mut state.motion,
@@ -180,7 +188,13 @@ fn draw_ui(mut contexts: EguiContexts, mut state: UiState) -> Result {
     animation::show(&ctx, view, &mut state);
     replace::show(&ctx, &mut state);
     modeling::show(&ctx, &mut state);
-    flow::show_window(&ctx, &mut state.flow, &state.model, &state.selection);
+    flow::show_window(
+        &ctx,
+        &mut state.flow,
+        &state.model,
+        &state.selection,
+        &mut state.dock,
+    );
     show_confirm_dialog(&ctx, &mut state.project);
     if *state.settings == settings_before {
         state.settings.set_last_changed(settings_tick);
@@ -200,4 +214,41 @@ fn draw_ui(mut contexts: EguiContexts, mut state: UiState) -> Result {
         .memory(|m| m.focused())
         .is_some_and(|id| egui::TextEdit::load_state(&ctx, id).is_some());
     Ok(())
+}
+
+/// 左端のツールレール。押した道具のパネルを開け閉めする。
+fn tool_rail(root: &mut egui::Ui, state: &mut UiState) {
+    use cadsim_core::workspace::Tool;
+    use dock::{Badge, RailItem};
+
+    let interfering = state
+        .interference
+        .report
+        .pairs
+        .iter()
+        .filter(|p| {
+            matches!(
+                p.status,
+                crate::simulation::interference::PairStatus::Interfering { .. }
+            )
+        })
+        .count();
+    let has_site = !state.model.site.is_empty();
+    let items: Vec<RailItem> = Tool::ALL
+        .into_iter()
+        .map(|tool| RailItem {
+            tool,
+            open: state.dock.is_open(tool),
+            enabled: tool != Tool::Site || has_site,
+            badge: match tool {
+                Tool::Interference if interfering > 0 => Some(Badge::Count(interfering)),
+                Tool::Safety if state.safety.is_stopped() => Some(Badge::Alert),
+                _ => None,
+            },
+            disabled_reason: "平面図 (DXF / PDF / 画像) か点群を開くと使えます",
+        })
+        .collect();
+    if let Some(tool) = dock::rail(root, &items) {
+        state.dock.toggle(tool);
+    }
 }
