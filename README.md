@@ -5,6 +5,8 @@ STEP などの CAD データを読み込み、部品を動かしながら干渉�
 
 ![サンプルのアセンブリを開いたところ](docs/screenshots/01_overview.png)
 
+画面ごとの詳しい使い方は [操作マニュアル](docs/src/introduction.md)(画像付き)にまとめています。
+
 ## はじめかた
 
 ### ダウンロードして使う(Windows / Mac)
@@ -29,6 +31,7 @@ STEP などの CAD データを読み込み、部品を動かしながら干渉�
 cargo run                         # サンプルのアセンブリを開いて起動
 cargo run -- path/to/part.step    # STEP ファイルを開いて起動
 cargo run -- path/to/line.cadsim  # 保存したプロジェクトを開いて起動
+cargo run --release -- --stress 5000  # 部品 5000 個ほどの負荷テスト用シーンを開いて起動
 ```
 
 初回はビルドに数分かかります。Linux では先に `libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev` を入れてください。
@@ -112,12 +115,13 @@ cargo run -- path/to/line.cadsim  # 保存したプロジェクトを開いて�
 | --- | --- | --- | --- |
 | STEP(.step / .stp) | ○ | | 部品の構成・配置・色・単位 |
 | glTF / GLB | ○ | ○ | 階層・名前・色・アニメーション |
-| OpenUSD(.usda / .usdc / .usdz / .usd) | ○ | ○ | 階層・名前・色・アニメーション。Omniverse でそのまま再生できます |
+| OpenUSD(.usda / .usdc / .usdz / .usd) | ○ | ○ | 階層・名前・色・アニメーション(タイミングチャートの動きも)。Omniverse でそのまま再生できます |
 | OBJ | ○ | ○ | 部品ごとの形状と色 |
 | STL | ○ | ○ | 形状だけ |
 
 OBJ と STL には単位がないので、「ファイル → OBJ / STL の単位」で mm / cm / m / inch と上向きの軸を選んでから読み書きしてください(既定は mm・Y 軸が上)。
 アニメーション付きのファイルを開くと、ビューの下に「アニメーション」パネルが出て、再生・停止と、好きな時刻への移動ができます。
+タイミングチャートに動きがあるときは、その1サイクルも glTF / GLB と OpenUSD にアニメーションとして書き出されます(秒間 30 キー)。
 
 | glTF のアニメーションを再生 | 書き出しメニュー |
 | --- | --- |
@@ -133,9 +137,21 @@ OBJ と STL には単位がないので、「ファイル → OBJ / STL の単�
 ツールバーとメニューの「表示」で、稜線・グリッド・選択の外接箱・選択以外を半透明、を切り替えられます。
 部品の色はプロパティの「色」で変えられます。
 
+「表示 → 画面上で小さい部品を簡略表示」がオン(既定)のときは、遠くて小さく見える部品を粗い形で描き、ごく小さい部品は省きます。選んだ部品はいつも細かく描きます。どのくらい小さければ簡略にするかも同じメニューで変えられます。
+
 | 上面ビュー + 選択以外を半透明 | 大きなアセンブリ(公開サンプル as1) |
 | --- | --- |
 | ![上面ビューと半透明](docs/screenshots/04_top_view_ghost.png) | ![as1](docs/screenshots/05_as1_assembly.png) |
+
+### 大きなアセンブリを扱う
+
+数千〜1万部品のアセンブリでも、回転・ズーム・クリック選択・ツリーの操作が重くならないようにしています。
+
+- ステータスバーの右に FPS(1秒あたりの描画回数)と、いま描いている三角形の数が出ます。三角形の数にカーソルを乗せると、細かく描いている部品・簡略に描いている部品・小さくて省いた部品・画面の外の部品の数が出ます。
+- 重いと感じたら「表示」メニューで簡略表示のしきい値を上げるか、稜線を消してください。
+- 試すときは「ファイル → 負荷テスト用シーンを開く」で、1000 / 5000 / 10000 部品の設備の並びを開けます。
+
+![負荷テスト用シーン](docs/screenshots/15_stress_scene.png)
 
 ### 干渉チェックと距離計測
 
@@ -228,5 +244,6 @@ cargo test --locked
 | [docs/architecture.md](docs/architecture.md) | コードのレイヤー分けと依存の向き |
 | [docs/internals.md](docs/internals.md) | 使っているライブラリ、各機能のしくみ、サンプルとフォントの作り方 |
 | [docs/simulation.md](docs/simulation.md) | 干渉チェック・距離計測の設計 |
+| [docs/performance.md](docs/performance.md) | 大規模アセンブリを軽くするしくみと、負荷テスト・FPS の測り方 |
 | [docs/project-file.md](docs/project-file.md) | プロジェクトファイル(.cadsim)の形式 |
 | [docs/release.md](docs/release.md) | Windows / Mac 向けの配布パッケージと Release の作り方 |

@@ -21,8 +21,10 @@ use crate::interchange::{
     model_io::{model_to_scene, scene_to_import},
 };
 use crate::model::{Model, NodeId, Selection, StepSource};
+use crate::motion::{ChartSchedule, Schedule, TimingChart, chart_animation};
 use crate::project::{ProjectAction, ProjectState, is_project_file};
 use crate::step_import::{ImportedFile, import_step};
+use crate::stress::stress_scene;
 
 /// 起動時に開くファイルを指定しなかったときに使うサンプル
 const SAMPLE_STEP: &str = include_str!("../assets/sample_assembly.step");
@@ -142,6 +144,11 @@ impl ImportJobs {
         self.spawn(StepSource::File(path), None);
     }
 
+    /// 負荷テスト用に、部品が `part_count` 個ほどのシーンを作る
+    pub fn open_stress(&mut self, part_count: usize) {
+        self.spawn(StepSource::Stress(part_count), None);
+    }
+
     /// 別スレッドで読み込む。`target` があれば、読んだ形状でそのノードを差し替える。
     fn spawn(&mut self, source: StepSource, target: Option<NodeId>) {
         let name = source_name(&source);
@@ -162,6 +169,7 @@ pub fn load_source(source: &StepSource, units: &UnitOptions) -> Result<Loaded, S
         StepSource::File(path) if !is_step(path) => {
             interchange::import_file(path, units).map(Loaded::Scene)
         }
+        &StepSource::Stress(parts) => Ok(Loaded::Step(Box::new(stress_scene(parts)))),
         _ => read_step(source)
             .and_then(|text| import_step(&text, &source_name(source)))
             .map(|file| Loaded::Step(Box::new(file))),
@@ -178,6 +186,7 @@ fn is_step(path: &Path) -> bool {
 pub fn read_step(source: &StepSource) -> Result<String, String> {
     match source {
         StepSource::Sample => Ok(SAMPLE_STEP.to_owned()),
+        StepSource::Stress(_) => Err("負荷テスト用シーンは STEP ではありません".into()),
         StepSource::File(path) => std::fs::read(path)
             .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
             .map_err(|e| format!("{} を開けませんでした: {e}", path.display())),
@@ -188,6 +197,7 @@ pub fn read_step(source: &StepSource) -> Result<String, String> {
 pub fn source_name(source: &StepSource) -> String {
     match source {
         StepSource::Sample => SAMPLE_NAME.into(),
+        StepSource::Stress(parts) => format!("負荷テスト ({parts} 部品)"),
         StepSource::File(path) => file_name(path),
     }
 }
@@ -199,12 +209,51 @@ pub fn file_name(path: &Path) -> String {
 }
 
 /// `cargo run -- 部品.step` (または `line.cadsim`) のように渡されたファイルを開く。
-/// 無ければサンプルを開く。
+/// 無ければサンプルを開く。`--stress 5000` なら負荷テスト用のシーンを開く
+/// (`--bench` は bench.rs が読む)。
 fn open_command_line_file(mut jobs: ResMut<ImportJobs>, mut project: ResMut<ProjectState>) {
-    match std::env::args_os().nth(1) {
-        Some(path) => open_any(path.into(), &mut jobs, &mut project),
-        None => jobs.open_sample(),
+    let args = CommandLine::parse();
+    if let Some(count) = args.stress {
+        jobs.open_stress(count);
+    } else if let Some(path) = args.file {
+        open_any(path, &mut jobs, &mut project);
+    } else {
+        jobs.open_sample();
     }
+}
+
+/// コマンドライン引数
+#[derive(Default, Debug, PartialEq)]
+pub struct CommandLine {
+    /// 開くファイル
+    pub file: Option<PathBuf>,
+    /// `--stress N`: 部品 N 個の負荷テスト用シーンを開く
+    pub stress: Option<usize>,
+    /// `--bench 秒`: カメラを回しながら FPS を測り、結果を出して終了する
+    pub bench_secs: Option<f32>,
+}
+
+impl CommandLine {
+    pub fn parse() -> Self {
+        Self::from_args(std::env::args_os().skip(1).map(PathBuf::from))
+    }
+
+    fn from_args(args: impl IntoIterator<Item = PathBuf>) -> Self {
+        let mut out = Self::default();
+        let mut args = args.into_iter();
+        while let Some(arg) = args.next() {
+            match arg.to_str() {
+                Some("--stress") => out.stress = Some(parse_next(args.next()).unwrap_or(5000)),
+                Some("--bench") => out.bench_secs = Some(parse_next(args.next()).unwrap_or(10.0)),
+                _ => out.file = Some(arg),
+            }
+        }
+        out
+    }
+}
+
+fn parse_next<T: std::str::FromStr>(next: Option<PathBuf>) -> Option<T> {
+    next.and_then(|n| n.to_str()?.parse().ok())
 }
 
 /// 拡張子を見て、プロジェクトなら開き直し、STEP なら今のモデルに取り込む
@@ -276,6 +325,8 @@ fn export_if_requested(
     model: Res<Model>,
     selection: Res<Selection>,
     animations: Res<Animations>,
+    chart: Res<TimingChart>,
+    schedule: Res<ChartSchedule>,
     _main_thread: NonSendMarker,
 ) {
     let Some(scope) = jobs.export_requested.take() else {
@@ -298,7 +349,8 @@ fn export_if_requested(
     let Some(path) = dialog.save_file() else {
         return;
     };
-    let message = match export_model(&model, &roots, &animations, &path, &jobs.units) {
+    let chart = Some((&*chart, &**schedule));
+    let message = match export_model(&model, &roots, &animations, chart, &path, &jobs.units) {
         Ok(()) => format!("{} に書き出しました", file_name(&path)),
         Err(err) => {
             error!("{err}");
@@ -308,11 +360,13 @@ fn export_if_requested(
     jobs.messages.push(message);
 }
 
-/// モデルをファイルに書き出す。`roots` が空ならモデル全体。拡張子が無ければ glb にする
+/// モデルをファイルに書き出す。`roots` が空ならモデル全体。拡張子が無ければ glb にする。
+/// タイミングチャートに動きがあれば、その1サイクルもアニメーションとして書き出す
 pub fn export_model(
     model: &Model,
     roots: &[NodeId],
     animations: &Animations,
+    chart: Option<(&TimingChart, &Schedule)>,
     path: &Path,
     units: &UnitOptions,
 ) -> Result<(), String> {
@@ -323,6 +377,13 @@ pub fn export_model(
     };
     let (mut scene, index_of) = model_to_scene(model, roots);
     scene.animations = animations.to_scene(&index_of, &model.unit);
+    if let Some((chart, schedule)) = chart {
+        let parents: Vec<_> = scene.nodes.iter().map(|n| n.parent).collect();
+        // USD のタイムラインは1本なので、チャートの動きを先頭に置いて優先する
+        if let Some(motion) = chart_animation(chart, schedule, model, &index_of, &parents) {
+            scene.animations.insert(0, motion);
+        }
+    }
     interchange::export_file(&scene, &path, units)
 }
 
@@ -448,6 +509,16 @@ fn replace_geometry(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_command_line() {
+        let parse = |args: &[&str]| CommandLine::from_args(args.iter().map(PathBuf::from));
+        assert_eq!(parse(&[]), CommandLine::default());
+        assert_eq!(parse(&["a.step"]).file, Some(PathBuf::from("a.step")));
+        let bench = parse(&["--stress", "2000", "--bench", "5"]);
+        assert_eq!(bench.stress, Some(2000));
+        assert_eq!(bench.bench_secs, Some(5.0));
+    }
 
     #[test]
     fn non_step_files_load_through_interchange() {
