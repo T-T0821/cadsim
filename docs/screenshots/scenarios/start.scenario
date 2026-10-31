@@ -1,0 +1,18 @@
+# 起動直後: デモラインとようこそ画面、自由にさわる、アセンブリを選ぶ、ツールレール
+wait_loaded
+wait 90
+screenshot welcome
+click "自由にさわる"
+wait 30
+click "★ Lv."                  # ミッションカードを隠す
+scroll 760 420 4
+wait 90
+screenshot overview
+click "📁 ロボットセル"
+wait 420
+screenshot assembly_selected
+key esc
+click "干渉"
+click "安全"
+wait 420
+screenshot tool_rail

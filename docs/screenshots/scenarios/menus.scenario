@@ -1,0 +1,23 @@
+# 書き出しメニュー、モデリング、動画の書き出し
+wait_loaded
+click "自由にさわる"
+wait 30
+click "★ Lv."                  # ミッションカードを隠す
+scroll 760 420 4
+wait 420                         # ミッション達成の表示が消えるのを待つ
+click "ファイル"
+hover "書き出し"
+wait 30
+screenshot export_menu
+key esc
+key esc
+click "作成"
+click "円柱を追加…"
+wait 30
+screenshot modeling
+click "モデル"                    # ツールレールで閉じる
+click "ファイル"
+hover "書き出し"
+click "シミュレーションを動画で書き出し…"
+wait 30
+screenshot video

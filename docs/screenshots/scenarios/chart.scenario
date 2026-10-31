@@ -1,0 +1,15 @@
+# タイミングチャート: サンプル装置を再生、ワーク搬送
+wait_loaded
+click "空のプロジェクトから"
+wait_loaded
+wait 30
+click "★ Lv."                  # ミッションカードを隠す
+click "サンプル装置"
+wait 30
+click "▶ 再生"
+wait 420                         # ミッション達成の表示が消えるのを待つ
+screenshot playing
+click "搬送"
+wait 30
+wait 420                         # ミッション達成の表示が消えるのを待つ
+screenshot conveyor

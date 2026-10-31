@@ -1,0 +1,13 @@
+# PLC 連携: サンプル装置を内蔵の模擬 PLC で動かす
+wait_loaded
+click "空のプロジェクトから"
+wait_loaded
+wait 30
+click "★ Lv."                  # ミッションカードを隠す
+click "サンプル装置"
+click "PLC"
+click "内蔵の模擬PLC"
+wait 10
+click "▶ 運転"
+wait 420
+screenshot running

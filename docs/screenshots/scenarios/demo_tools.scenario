@@ -1,0 +1,10 @@
+# デモラインで道具を開く: 作業者・AGV
+wait_loaded
+click "自由にさわる"
+wait 30
+click "★ Lv."                  # ミッションカードを隠す
+scroll 760 420 4
+wait 60
+click "作業者"
+wait 420
+screenshot operator

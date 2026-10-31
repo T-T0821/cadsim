@@ -1,0 +1,15 @@
+# 工程シミュレーション
+wait_loaded
+click "空のプロジェクトから"
+wait_loaded
+wait 30
+click "★ Lv."                  # ミッションカードを隠す
+click "ファイル"
+hover "サンプルを開く"
+click "工程シミュレーションのサンプル"
+wait 10
+click "⏩ 最後まで"
+wait_loaded
+wait 30
+wait 420                         # ミッション達成の表示が消えるのを待つ
+screenshot result
