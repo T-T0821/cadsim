@@ -294,7 +294,8 @@ impl ProjectFile {
         Self {
             floor: (!docs.floor.is_empty()).then(|| docs.floor.clone()),
             annotations: to_records(docs.annotations, model),
-            flow: (!docs.flow.is_empty()).then(|| flow::record::to_record(docs.flow, path_of)),
+            flow: (!docs.flow.is_empty() || !docs.flow.scenarios.is_empty())
+                .then(|| flow::record::to_record(docs.flow, path_of)),
             chart: (!chart.actuators.is_empty() || !chart.steps.is_empty())
                 .then(|| chart_to_record(chart, path_of)),
             animations: docs.animations.to_records(path_of),

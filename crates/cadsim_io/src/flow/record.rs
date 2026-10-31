@@ -10,6 +10,7 @@ use cadsim_core::staffing::model::{AssignRule, Break, Shift, Skill, Staffing, Wo
 use cadsim_core::flow::model::{
     AgvCall, Element, ElementKind, Energy, Failure, FlowModel, Labor, RunSettings,
 };
+use cadsim_core::flow::scenario::Scenario;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct FlowRecord {
@@ -24,6 +25,16 @@ pub struct FlowRecord {
     /// 作業者の名簿とシフト (なければ書かない)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub staffing: Option<StaffingRecord>,
+    /// 比べるために取っておいた案 (なければ書かない)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scenarios: Vec<ScenarioRecord>,
+}
+
+/// 名前つきの設定の写し。中身は工程モデルと同じ形 (案の中に案は持たない)
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct ScenarioRecord {
+    pub name: String,
+    pub flow: FlowRecord,
 }
 
 fn default_seed() -> u64 {
@@ -268,6 +279,19 @@ pub enum KindRecord {
 
 /// 保存する形にする。`part_path` はノード ID を木の中の位置にする (部品が消えていれば None)。
 pub fn to_record(model: &FlowModel, part_path: impl Fn(u32) -> Option<Vec<usize>>) -> FlowRecord {
+    let mut record = model_record(model, &part_path);
+    record.scenarios = model
+        .scenarios
+        .iter()
+        .map(|s| ScenarioRecord {
+            name: s.name.clone(),
+            flow: model_record(&s.model, &part_path),
+        })
+        .collect();
+    record
+}
+
+fn model_record(model: &FlowModel, part_path: &dyn Fn(u32) -> Option<Vec<usize>>) -> FlowRecord {
     FlowRecord {
         duration: model.settings.duration,
         warmup: model.settings.warmup,
@@ -304,7 +328,7 @@ pub fn to_record(model: &FlowModel, part_path: impl Fn(u32) -> Option<Vec<usize>
                     ElementKind::Sink => KindRecord::Sink,
                 },
                 next: e.next.clone(),
-                part: e.part.and_then(&part_path),
+                part: e.part.and_then(part_path),
                 rated_kw: e.energy.rated_kw,
                 standby_kw: e.energy.standby_kw,
                 air_l_per_min: e.energy.air_l_per_min,
@@ -317,6 +341,7 @@ pub fn to_record(model: &FlowModel, part_path: impl Fn(u32) -> Option<Vec<usize>
             })
             .collect(),
         staffing: staffing_record(&model.staffing),
+        scenarios: Vec::new(),
     }
 }
 
@@ -325,6 +350,26 @@ pub fn to_record(model: &FlowModel, part_path: impl Fn(u32) -> Option<Vec<usize>
 pub fn from_record(
     record: &FlowRecord,
     find_part: impl Fn(&[usize]) -> Option<u32>,
+) -> (FlowModel, Vec<String>) {
+    let (mut model, mut warnings) = model_from_record(record, &find_part);
+    for s in &record.scenarios {
+        let (scenario, scenario_warnings) = model_from_record(&s.flow, &find_part);
+        warnings.extend(
+            scenario_warnings
+                .into_iter()
+                .map(|w| format!("案「{}」: {w}", s.name)),
+        );
+        model.scenarios.push(Scenario {
+            name: s.name.clone(),
+            model: scenario,
+        });
+    }
+    (model, warnings)
+}
+
+fn model_from_record(
+    record: &FlowRecord,
+    find_part: &dyn Fn(&[usize]) -> Option<u32>,
 ) -> (FlowModel, Vec<String>) {
     let mut model = FlowModel::default();
     model.settings = RunSettings {
@@ -438,6 +483,31 @@ mod tests {
         let (restored, warnings) = from_record(&parsed, |_| None);
         assert!(warnings.is_empty(), "{warnings:?}");
         assert_eq!(restored, model);
+    }
+
+    #[test]
+    fn round_trip_keeps_the_scenarios() {
+        let mut model = sample_line();
+        model.elements[1].part = Some(42);
+        model.save_scenario("今のまま");
+        if let ElementKind::Process { cycle_time, .. } = &mut model.elements[1].kind {
+            *cycle_time = 20.0;
+        }
+        cadsim_core::flow::model::apply_sample_staffing(&mut model);
+        model.save_scenario("速くして人を置く");
+        let record = to_record(&model, |id| (id == 42).then(|| vec![0, 3]));
+        let json = serde_json::to_string(&record).unwrap();
+        let parsed: FlowRecord = serde_json::from_str(&json).unwrap();
+        let (restored, warnings) = from_record(&parsed, |p| (p == [0, 3]).then_some(42));
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(restored, model);
+        assert_eq!(restored.scenarios[1].name, "速くして人を置く");
+        // 案の中の部品が見つからなければ、案の名前を付けて知らせる
+        let (_, warnings) = from_record(&parsed, |_| None);
+        assert!(
+            warnings.iter().any(|w| w.starts_with("案「今のまま」")),
+            "{warnings:?}"
+        );
     }
 
     #[test]

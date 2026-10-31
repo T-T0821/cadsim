@@ -23,6 +23,8 @@ pub struct FlowModel {
     pub settings: RunSettings,
     /// 作業者の名簿とシフト
     pub staffing: Staffing,
+    /// 名前を付けて取っておいた設定 (案)。比べるときに使う
+    pub scenarios: Vec<super::scenario::Scenario>,
     next_id: ElementId,
 }
 
@@ -32,6 +34,7 @@ impl Default for FlowModel {
             elements: Vec::new(),
             settings: RunSettings::default(),
             staffing: Staffing::default(),
+            scenarios: Vec::new(),
             next_id: 1,
         }
     }
@@ -188,6 +191,51 @@ impl ElementKind {
 impl FlowModel {
     pub fn is_empty(&self) -> bool {
         self.elements.is_empty()
+    }
+
+    /// 案を除いた設定 (工程・回す条件・名簿) が同じか。結果が古いかの判定に使う
+    pub fn same_setup(&self, other: &FlowModel) -> bool {
+        self.elements == other.elements
+            && self.settings == other.settings
+            && self.staffing == other.staffing
+    }
+
+    /// 案を除いた写し
+    pub fn without_scenarios(&self) -> FlowModel {
+        FlowModel {
+            elements: self.elements.clone(),
+            settings: self.settings,
+            staffing: self.staffing.clone(),
+            scenarios: Vec::new(),
+            next_id: self.next_id,
+        }
+    }
+
+    /// 今の設定を案として取っておく。名前が空なら「案1」のように付ける
+    pub fn save_scenario(&mut self, name: &str) {
+        let name = name.trim();
+        let name = if name.is_empty() {
+            format!("案{}", self.scenarios.len() + 1)
+        } else {
+            name.to_owned()
+        };
+        let model = self.without_scenarios();
+        self.scenarios
+            .push(super::scenario::Scenario { name, model });
+    }
+
+    /// 案を今の設定に読み込む (案の一覧はそのまま)
+    pub fn load_scenario(&mut self, index: usize) {
+        let Some(model) = self
+            .scenarios
+            .get(index)
+            .map(|s| s.model.without_scenarios())
+        else {
+            return;
+        };
+        let scenarios = std::mem::take(&mut self.scenarios);
+        *self = model;
+        self.scenarios = scenarios;
     }
 
     pub fn get(&self, id: ElementId) -> Option<&Element> {
@@ -591,6 +639,24 @@ mod tests {
         apply_sample_staffing(&mut staffed);
         assert!(staffed.problems().is_empty(), "{:?}", staffed.problems());
         assert_eq!(staffed.staffing.workers.len(), 3);
+    }
+
+    #[test]
+    fn scenarios_save_and_load_the_whole_setup() {
+        let mut m = sample_line();
+        m.save_scenario("");
+        assert_eq!(m.scenarios[0].name, "案1");
+        m.settings.duration = 3600.0;
+        m.staffing.add_worker();
+        assert!(!m.same_setup(&m.scenarios[0].model));
+        m.save_scenario("短い");
+        m.load_scenario(0);
+        assert_eq!(m.settings.duration, 8.0 * 3600.0);
+        assert!(m.staffing.workers.is_empty());
+        assert_eq!(m.scenarios.len(), 2);
+        assert!(m.same_setup(&m.scenarios[0].model));
+        // 案の中に案は入らない
+        assert!(m.scenarios.iter().all(|s| s.model.scenarios.is_empty()));
     }
 
     #[test]

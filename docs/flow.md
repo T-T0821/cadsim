@@ -11,11 +11,13 @@
 | `cadsim_core` の `flow/model.rs` | ドメイン | 工程モデル(`FlowModel` / `Element` / `ElementKind`)、追加・削除・並べ替え、回せない理由の検証、サンプルライン |
 | `cadsim_core` の `flow/sim.rs` | ドメイン | 離散事象シミュレーション(`Simulation`)と集計(`Report`) |
 | `cadsim_core` の `flow/palette.rs` | ドメイン | 状態・稼働率の色(3D ビュー・グラフ・Excel で共通) |
+| `cadsim_core` の `flow/scenario.rs` | ドメイン | 案(名前つきの設定の写し)と、種を変えた繰り返し実行・集計(`compare_scenarios`) |
 | `record.rs` | アダプター | `.cadsim` に書く形(serde)。部品は木の中の位置で指す |
 | `xlsx.rs` | アダプター | 結果の Excel 書き出し(`rust_xlsxwriter`) |
 | `mod.rs` | UI | `FlowRes`(モデルの包み)、`FlowRun`(実行中のシミュレーションと再生)、`FlowColors`(3D の部品に塗る色)、保存ダイアログ |
-| `ui.rs` | UI | ウィンドウ(工程・人員・結果・グラフのタブ) |
+| `ui.rs` | UI | ウィンドウ(工程・人員・案の比較・結果・グラフのタブ) |
 | `staff_ui.rs` | UI | 人員タブ([staffing.md](staffing.md)) |
+| `scenario_ui.rs` | UI | 案の比較タブ |
 
 3D の部品とは `Element::part`(ノード ID)だけでつながります。`viewport.rs` の `sync_views` は、`FlowColors::color_on_path`(自分か一番近い祖先の色)があれば部品の色の代わりに使います。選択・干渉の強調はそれより優先します。
 
@@ -74,6 +76,14 @@
 
 工程の設定を変えると結果が古くなるので、色分けを消し、ウィンドウに回し直すよう表示します。
 
+## 案の比較
+
+`FlowModel::scenarios` に `Scenario { name, model }` を並べます。`model` は工程・回す条件・名簿をまるごと写したもので、案の中には案を持ちません(`FlowModel::without_scenarios`)。`save_scenario` で今の設定を写して足し、`load_scenario` で案の設定を今の設定に戻します(案の一覧はそのまま残ります)。
+
+案は設定の一部ではないので、「結果が古いか」は案を除いて比べます(`FlowModel::same_setup`)。案を足したり名前を変えたりしても、▶ の結果や人数の比較は古くなりません。
+
+`compare_scenarios(cases, replications)` は、案ごとに種を `seed`, `seed + 1`, … とずらして `replications` 回(1〜100)回し、排出数・スループット・作業者の稼働率・人待ち・仕掛数・リードタイム・1 個あたりの電力量の平均・最小・最大(`Summary`)を出します。ボトルネックはいちばん多くの回でボトルネックだった工程です。どの案も同じ種の並びで回すので、案どうしの差は設定の差だけから来ます(共通乱数)。回せない案があれば、理由に案の名前を付けて返します。画面は「今の設定」と全部の案を渡し、排出数の平均がいちばん多い行(`ScenarioComparison::best`)を緑にします。
+
 ## Excel 書き出し
 
 `rust_xlsxwriter` で3枚(作業者がいれば4枚)のシートを書きます。
@@ -87,4 +97,4 @@
 
 - コンベア・ワーク搬送(3D のワーク)とつなぎ、工程を 3D の動きから作る
 - AGV を資源として入れる、ワークの種類ごとの行き先
-- 複数の種での繰り返し実行と信頼区間
+- 繰り返し実行の信頼区間(いまは平均と最小〜最大だけ)
