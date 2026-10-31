@@ -61,6 +61,19 @@ pub struct Element {
     pub part: Option<u32>,
     /// 消費電力とエア
     pub energy: Energy,
+    /// ライン連携で、送り出しを AGV に運ばせる。None ならすぐ下流へ送る。
+    /// 工程シミュレーションのウィンドウだけで回すときは使わない。
+    pub carrier: Option<AgvCall>,
+    /// ライン連携で、この工程が加工を始めるたびにタイミングチャートを頭から再生する
+    pub starts_chart: bool,
+}
+
+/// 送り出したワークを運ぶ AGV の搬送: `from` のステーションで積み、`to` で降ろす。
+/// 番号は AGV の経路の点の id。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AgvCall {
+    pub from: u32,
+    pub to: u32,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -189,6 +202,8 @@ impl FlowModel {
             next: Vec::new(),
             part: None,
             energy: Energy::default(),
+            carrier: None,
+            starts_chart: false,
         })
     }
 
@@ -310,7 +325,11 @@ impl FlowModel {
                         out.push(format!("{name}: 容量は 1 以上にしてください"));
                     }
                 }
-                ElementKind::Sink => {}
+                ElementKind::Sink => {
+                    if e.carrier.is_some() {
+                        out.push(format!("{name}: 「排出」は AGV で送り出せません"));
+                    }
+                }
             }
             let energy = [
                 e.energy.rated_kw,

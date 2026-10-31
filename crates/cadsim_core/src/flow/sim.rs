@@ -6,9 +6,13 @@
 //! 3D ビューで状態の色を見ながら早送りもできる。
 //!
 //! 乱数は種から決まる自前の SplitMix64 なので、同じ種なら必ず同じ結果になる。
+//!
+//! ライン連携 ([`Simulation::link`]) をすると、ワークの移動を [`FlowEvent`] として記録し、
+//! AGV で運ぶ要素は自分では送り出さずに運び手を待つ ([`Simulation::pick_up`] /
+//! [`Simulation::deliver`])。
 
 use std::cmp::Ordering;
-use std::collections::{BinaryHeap, VecDeque};
+use std::collections::{BTreeMap, BinaryHeap, VecDeque};
 
 use super::model::{ElementId, ElementKind, FlowModel, RunSettings};
 
@@ -202,6 +206,43 @@ impl Rng {
     }
 }
 
+/// ライン連携で記録する出来事
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum FlowEvent {
+    /// ワークが `from` から `to` へ移った。`carried` は AGV が運んで降ろしたもの。
+    Moved {
+        time: f64,
+        from: ElementId,
+        to: ElementId,
+        carried: bool,
+    },
+    /// AGV で送り出す要素に、運んでもらうワークが1個できた
+    CarrierNeeded { time: f64, element: ElementId },
+}
+
+/// AGV に積まれて運ばれている途中のワークの荷札
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct LoadId(pub u64);
+
+/// ライン連携の状態
+#[derive(Clone, Debug, Default)]
+struct Link {
+    /// 送り出しを外 (AGV) に任せる要素 (要素の並びの添字)
+    external: Vec<bool>,
+    /// 運び手を頼んだが、まだ積まれていない数
+    requested: Vec<usize>,
+    /// 運ばれている途中のワーク: 荷札 → (積んだ要素, ワーク)
+    transit: BTreeMap<LoadId, (usize, Work)>,
+    next_load: u64,
+    /// 降ろされたが、送り先が空かずにまだ入れていないワーク
+    deliveries: VecDeque<(usize, Work)>,
+    events: Vec<FlowEvent>,
+    /// 投入を止めている生成
+    held_sources: Vec<bool>,
+    /// 投入を止めている間に来た「出す時刻」(再開したらすぐ出す)
+    held_arrivals: Vec<bool>,
+}
+
 /// グラフ用に一定間隔で記録する値
 #[derive(Clone, Debug, PartialEq)]
 pub struct Sample {
@@ -237,6 +278,8 @@ pub struct Simulation {
     samples: Vec<Sample>,
     sample_interval: f64,
     next_sample: f64,
+    /// ライン連携 (しないときは None)
+    link: Option<Link>,
 }
 
 impl Simulation {
@@ -268,6 +311,7 @@ impl Simulation {
             samples: Vec::new(),
             sample_interval: settings.duration / SAMPLE_COUNT as f64,
             next_sample: 0.0,
+            link: None,
         };
         for i in 0..sim.runtime.len() {
             match sim.model.elements[i].kind {
@@ -336,6 +380,193 @@ impl Simulation {
         self.now
     }
 
+    // --- ライン連携 -------------------------------------------------------------
+
+    /// ライン連携を始める。以後ワークの移動を記録し、`external` の要素は
+    /// 送り出すワークができても自分では動かさず、[`FlowEvent::CarrierNeeded`] を出して
+    /// [`Simulation::pick_up`] を待つ。
+    pub fn link(&mut self, external: impl IntoIterator<Item = ElementId>) {
+        let n = self.runtime.len();
+        let mut link = Link {
+            external: vec![false; n],
+            requested: vec![0; n],
+            held_sources: vec![false; n],
+            held_arrivals: vec![false; n],
+            ..Link::default()
+        };
+        for id in external {
+            if let Some(i) = self.model.index_of(id)
+                && !matches!(self.model.elements[i].kind, ElementKind::Sink)
+            {
+                link.external[i] = true;
+            }
+        }
+        self.link = Some(link);
+        self.settle();
+    }
+
+    /// ライン連携しているか
+    pub fn is_linked(&self) -> bool {
+        self.link.is_some()
+    }
+
+    /// 前回からの出来事を取り出す (ライン連携していなければ空)
+    pub fn take_events(&mut self) -> Vec<FlowEvent> {
+        self.link
+            .as_mut()
+            .map(|l| std::mem::take(&mut l.events))
+            .unwrap_or_default()
+    }
+
+    /// AGV で送り出す要素から、ワークを1個積む。積めるワークがなければ None。
+    /// 空いた所には上流からすぐワークが入る。
+    pub fn pick_up(&mut self, element: ElementId) -> Option<LoadId> {
+        let i = self.model.index_of(element)?;
+        if !self.is_external(i) || self.outgoing_count(i) == 0 {
+            return None;
+        }
+        let work = self.take(i);
+        let link = self.link.as_mut().expect("linked");
+        link.requested[i] = link.requested[i].saturating_sub(1);
+        let id = LoadId(link.next_load);
+        link.next_load += 1;
+        link.transit.insert(id, (i, work));
+        self.settle();
+        Some(id)
+    }
+
+    /// 積んだワークを降ろし、積んだ要素の送り先へ入れる。送り先が空いていなければ
+    /// 空くまでその場で待つ。知らない荷札なら false。
+    pub fn deliver(&mut self, load: LoadId) -> bool {
+        let Some(link) = self.link.as_mut() else {
+            return false;
+        };
+        let Some(entry) = link.transit.remove(&load) else {
+            return false;
+        };
+        link.deliveries.push_back(entry);
+        self.settle();
+        true
+    }
+
+    /// 生成の投入を許す・止める (PLC の投入許可)。止めている間は次のワークを出さず、
+    /// 許したときに出す時刻を過ぎていればすぐ出す。ライン連携していなければ何もしない。
+    pub fn set_source_enabled(&mut self, element: ElementId, enabled: bool) {
+        let Some(i) = self.model.index_of(element) else {
+            return;
+        };
+        if !matches!(self.model.elements[i].kind, ElementKind::Source { .. }) {
+            return;
+        }
+        let Some(link) = self.link.as_mut() else {
+            return;
+        };
+        link.held_sources[i] = !enabled;
+        if enabled && std::mem::take(&mut link.held_arrivals[i]) {
+            self.schedule(self.now, i, EventKind::Arrival);
+        }
+    }
+
+    /// 生成の投入が許されているか
+    pub fn source_enabled(&self, element: ElementId) -> bool {
+        let Some(i) = self.model.index_of(element) else {
+            return false;
+        };
+        !self.link.as_ref().is_some_and(|l| l.held_sources[i])
+    }
+
+    /// これまでに排出したワークの数 (立ち上がりも含む)
+    pub fn output_total(&self) -> u32 {
+        self.output_total
+    }
+
+    /// ライン内のワーク数
+    pub fn wip(&self) -> usize {
+        self.wip
+    }
+
+    /// 運ばれている途中と、降ろされて送り先を待っているワークの数
+    pub fn in_transit(&self) -> usize {
+        self.link
+            .as_ref()
+            .map_or(0, |l| l.transit.len() + l.deliveries.len())
+    }
+
+    fn is_external(&self, i: usize) -> bool {
+        self.link.as_ref().is_some_and(|l| l.external[i])
+    }
+
+    /// 送り出せるワークの数
+    fn outgoing_count(&self, i: usize) -> usize {
+        let rt = &self.runtime[i];
+        match self.model.elements[i].kind {
+            ElementKind::Source { .. } => usize::from(rt.slot.is_some()),
+            ElementKind::Process { .. } => usize::from(rt.done),
+            ElementKind::Buffer { .. } => rt.queue.len(),
+            ElementKind::Sink => 0,
+        }
+    }
+
+    fn log(&mut self, event: FlowEvent) {
+        if let Some(link) = self.link.as_mut() {
+            link.events.push(event);
+        }
+    }
+
+    /// 降ろされたワークを、空いた送り先へ入れる。1個でも入れたら true。
+    fn place_deliveries(&mut self) -> bool {
+        let mut moved = false;
+        let mut k = 0;
+        while let Some(&(from, _)) = self.link.as_ref().and_then(|l| l.deliveries.get(k)) {
+            let target = self.next[from]
+                .iter()
+                .copied()
+                .find(|&t| self.can_accept(t));
+            let Some(target) = target else {
+                k += 1;
+                continue;
+            };
+            let (_, work) = self
+                .link
+                .as_mut()
+                .and_then(|l| l.deliveries.remove(k))
+                .expect("delivery exists");
+            self.accept(target, work);
+            self.log(FlowEvent::Moved {
+                time: self.now,
+                from: self.model.elements[from].id,
+                to: self.model.elements[target].id,
+                carried: true,
+            });
+            moved = true;
+        }
+        moved
+    }
+
+    /// AGV で送り出す要素に新しく送り出せるワークができていたら、運び手を頼む
+    fn request_carriers(&mut self) {
+        let Some(link) = self.link.as_ref() else {
+            return;
+        };
+        let mut needed = Vec::new();
+        for i in 0..self.runtime.len() {
+            if !link.external[i] {
+                continue;
+            }
+            let out = self.outgoing_count(i);
+            for _ in link.requested[i]..out {
+                needed.push(i);
+            }
+        }
+        for i in needed {
+            self.link.as_mut().expect("linked").requested[i] += 1;
+            self.log(FlowEvent::CarrierNeeded {
+                time: self.now,
+                element: self.model.elements[i].id,
+            });
+        }
+    }
+
     /// 最後まで回して結果を返す
     pub fn run(model: &FlowModel) -> Result<Report, Vec<String>> {
         let mut sim = Self::new(model)?;
@@ -359,6 +590,12 @@ impl Simulation {
         let i = event.element;
         match event.kind {
             EventKind::Arrival => {
+                if let Some(link) = self.link.as_mut()
+                    && link.held_sources[i]
+                {
+                    link.held_arrivals[i] = true;
+                    return;
+                }
                 self.runtime[i].slot = Some(Work { created: self.now });
                 self.runtime[i].created += 1;
                 // 下流に送れなければそのまま詰まり。送れたら settle で待ちに戻る。
@@ -412,9 +649,9 @@ impl Simulation {
     /// 送り出せるワークを、動かなくなるまで下流へ動かす
     fn settle(&mut self) {
         loop {
-            let mut moved = false;
+            let mut moved = self.place_deliveries();
             for i in 0..self.runtime.len() {
-                if !self.has_outgoing(i) {
+                if !self.has_outgoing(i) || self.is_external(i) {
                     continue;
                 }
                 let Some(target) = self.next[i].iter().copied().find(|&t| self.can_accept(t))
@@ -423,12 +660,21 @@ impl Simulation {
                 };
                 let work = self.take(i);
                 self.accept(target, work);
+                if self.link.is_some() {
+                    self.log(FlowEvent::Moved {
+                        time: self.now,
+                        from: self.model.elements[i].id,
+                        to: self.model.elements[target].id,
+                        carried: false,
+                    });
+                }
                 moved = true;
             }
             if !moved {
                 break;
             }
         }
+        self.request_carriers();
     }
 
     fn has_outgoing(&self, i: usize) -> bool {

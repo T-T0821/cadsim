@@ -58,7 +58,8 @@ crates/
 │   └── src/
 │       ├── domain/       model, math, selection, remap (形状の差し替えの対応づけ), simulation (幾何・干渉・計測),
 │       │                 motion (チャート・姿勢・運動学), plc (シーケンス・I/O 表), flow, conveyor,
-│       │                 safety (安全機器・検知・安全距離), floor (作業者・AGV・床の幾何)
+│       │                 safety (安全機器・検知・安全距離), floor (作業者・AGV・床の幾何),
+│       │                 line (工程と AGV の受け渡し・PLC の信号表・ワークの位置)
 │       └── usecase/      document (開く・保存・取り込み・書き出し), edit, history,
 │                         report (シミュレーション結果の CSV),
 │                         ports (SceneReader / SceneWriter / ProjectStore などのトレイト)
@@ -107,5 +108,6 @@ crates/
 | 動画書き出し | `video`(撮る時刻・切り抜き・書き込み先のポート `VideoSink`) | `video::{encode, mp4}`(MP4 / GIF / PNG) | `recording.rs`(画面のキャプチャ・設定ウィンドウ) |
 | タイミングチャート・アニメーションの保存 | —(`motion::chart` は手順 2 で core へ) | `formats::chart_record` | `project.rs` |
 | 文書の変更を元に戻す履歴にまとめる | `usecase::edit_tracker`(前に確定した状態との比較) | — | `history.rs` の `TrackedDoc`(各プラグインで登録) |
+| ライン連携 | `line::{coupler, signals, workpieces}`、`flow::sim` の連携の口 | — | `line/`(`stepper.rs` は Bevy 非依存。AGV のシミュレーションと一緒に手順 2 で core へ) |
 
 `formats/` と `bom.rs`・`modeling.rs`・`drawing/collect.rs` は Bevy に依存しない書き方にしてあり、`Model` が core に移ればそのまま移せます。
