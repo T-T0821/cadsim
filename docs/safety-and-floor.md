@@ -14,6 +14,7 @@
 | `safety/mod.rs`, `floor/mod.rs` | UI | Bevy のリソースとシステム。入力を集めてドメインの関数を呼ぶだけ |
 | `safety/view.rs`, `floor/view.rs` | UI | 3D 表示 (半透明のメッシュとギズモの線)、床のクリック |
 | `safety/panel.rs`, `floor/panel.rs` | UI | egui のパネル |
+| `floor_record.rs` | アダプター | .cadsim に書く形 (serde)。ドメインの型との写し替え |
 
 ドメインの型は Bevy の `Resource` を付けず、UI 層で包んでいます (`SafetyLayoutRes(SafetyLayout)` など)。
 長さは mm、時間は秒、上向きは +Y です。
@@ -87,6 +88,5 @@ T は秒で入れ、式の中では ms にしています。
 
 ## 5. まだないもの
 
-- プロジェクトファイル (.cadsim) への保存。安全機器・作業者・AGV の配置はまだ保存されません。
 - 工程モデル (スループット統計) や搬送ワークとのつなぎ込み。いまは AGV の要求を「一定間隔」で出しています。
 - PLC の入出力への割り付け (停止信号・非常停止・作業者の押すボタン)。
