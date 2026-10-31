@@ -6,7 +6,8 @@
 
 use bevy::prelude::*;
 
-use crate::file_io::{CommandLine, ImportJobs};
+use crate::file_io::ImportJobs;
+use crate::input::command_line::CommandLine;
 use crate::model::Model;
 use crate::view::camera::OrbitCamera;
 

@@ -39,7 +39,8 @@ use cadsim_core::ui_check::scenario::{self, Key, MouseButton as CheckButton};
 use cadsim_core::ui_check::widget::{self, Widget};
 use cadsim_io::ui_check as files;
 
-use crate::file_io::{CommandLine, ImportJobs, UiCheckRun, open_any};
+use crate::file_io::{ImportJobs, open_any};
+use crate::input::command_line::{CommandLine, UiCheckRun};
 use crate::project::ProjectState;
 use crate::simulation::InterferenceCheck;
 use crate::view::recording::Recorder;
