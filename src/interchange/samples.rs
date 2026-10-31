@@ -39,7 +39,7 @@ fn write_samples() {
     // タイミングチャートのサンプル装置を、1サイクルの動き付きで書き出す
     let mut model = Model::default();
     let mut chart = crate::motion::TimingChart::default();
-    crate::motion::load_demo(&mut model, &mut chart);
+    crate::motion::load_demo(&mut model, &mut chart, &mut Default::default());
     let schedule = chart.schedule();
     let (mut scene, index_of) = model_to_scene(&model, &[]);
     let parents: Vec<_> = scene.nodes.iter().map(|n| n.parent).collect();

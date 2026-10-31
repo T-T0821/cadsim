@@ -21,6 +21,7 @@
 - [箱の作成と編集](boxes.md)
 - [円柱・押し出し・穴・ブーリアン](modeling.md)
 - [ギズモとスナップ](gizmo.md)
+- [形状の差し替え](replace-geometry.md)
 - [元に戻す・やり直し](undo.md)
 - [干渉チェックと距離計測](simulation.md)
 - [寸法と注記](annotations.md)
@@ -28,6 +29,7 @@
 - [平面図を床に敷く](floor-plan.md)
 - [点群を読み込む](point-cloud.md)
 - [タイミングチャートと動作シミュレーション](timing-chart.md)
+- [シミュレーション結果の CSV 出力](csv-export.md)
 - [ショートカット一覧](shortcuts.md)
 
 # 開発中の機能
@@ -35,7 +37,6 @@
 - [センサー・シーケンサー(PLC)](upcoming/sensors-plc.md)
 - [関節とロボットの動き](upcoming/robot.md)
 - [標準部品ライブラリ](upcoming/parts-library.md)
-- [結果の CSV 出力](upcoming/csv.md)
 
 ---
 

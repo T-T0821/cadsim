@@ -10,6 +10,7 @@ use crate::gizmo::Tool;
 use crate::history::Request;
 use crate::interchange::{FORMATS, LENGTH_UNITS};
 use crate::project::ProjectAction;
+use crate::result_export::ResultKind;
 use cadsim_core::gamify::ThemeKind;
 
 pub fn show(root: &mut egui::Ui, state: &mut UiState) {
@@ -61,6 +62,7 @@ fn file_menu(ui: &mut egui::Ui, state: &mut UiState) {
         }
         ui.separator();
         export_menu(ui, state);
+        results_menu(ui, state);
         ui.separator();
         if ui
             .button("すべて閉じる")
@@ -151,6 +153,44 @@ fn export_menu(ui: &mut egui::Ui, state: &mut UiState) {
     });
 }
 
+/// タイミングチャートと干渉チェックの結果を CSV に書き出す
+fn results_menu(ui: &mut egui::Ui, state: &mut UiState) {
+    ui.menu_button("シミュレーション結果 (CSV)", |ui| {
+        let enabled = !state.results.is_busy();
+        if ui
+            .add_enabled(enabled, egui::Button::new("サイクルタイム…"))
+            .on_hover_text("タイミングチャートのステップごとの開始・終了・所要時間")
+            .clicked()
+        {
+            state.results.request(ResultKind::CycleTime);
+            ui.close();
+        }
+        if ui
+            .add_enabled(enabled, egui::Button::new("干渉結果 (1サイクル分)…"))
+            .on_hover_text(
+                "チャートを最初から最後まで動かしながら干渉チェックし、干渉・接触・近接の時間帯を書き出す。\
+                 判定の設定はシミュレーションパネルのものを使う",
+            )
+            .clicked()
+        {
+            state.results.request(ResultKind::Interference);
+            ui.close();
+        }
+        ui.horizontal(|ui| {
+            ui.label("干渉チェックの間隔");
+            ui.add(
+                egui::DragValue::new(&mut state.results.sample_interval)
+                    .range(0.001..=1.0)
+                    .speed(0.001)
+                    .suffix(" 秒"),
+            );
+        });
+        if !enabled {
+            ui.weak("出力中…");
+        }
+    });
+}
+
 fn format_list() -> String {
     FORMATS
         .iter()
@@ -162,6 +202,19 @@ fn format_list() -> String {
 fn edit_menu(ui: &mut egui::Ui, state: &mut UiState) {
     ui.menu_button("編集", |ui| {
         undo_redo_buttons(ui, state);
+        ui.separator();
+        let target = state.selection.node;
+        if ui
+            .add_enabled(target.is_some(), egui::Button::new("形状を差し替え…"))
+            .on_hover_text(
+                "選んだ部品・アセンブリの形状を、設計変更後のファイルの形状に入れ替える。\n\
+                 名前と構造で部品を対応づけ、動きの設定はそのまま残す",
+            )
+            .clicked()
+            && let Some(target) = target
+        {
+            state.jobs.request_replace(target);
+        }
     });
 }
 
@@ -225,6 +278,34 @@ fn view_menu(ui: &mut egui::Ui, state: &mut UiState) {
                 egui::Slider::new(&mut state.settings.hide_below_px, 0.0..=20.0)
                     .text("省略 (px 未満)"),
             );
+        });
+        ui.checkbox(&mut state.settings.defeature, "小さな穴とフィレットを省略")
+            .on_hover_text(
+                "取り込んだ部品の小さな穴を埋め、角の丸みを尖らせて三角形を減らす。\n\
+                 干渉チェックは元の形で行う",
+            );
+        ui.add_enabled_ui(state.settings.defeature, |ui| {
+            let unit = &state.model.unit;
+            ui.add(
+                egui::Slider::new(&mut state.settings.defeature_hole, 0.0..=100.0)
+                    .text(format!("穴の直径 ({unit} 以下)")),
+            );
+            ui.add(
+                egui::Slider::new(&mut state.settings.defeature_fillet, 0.0..=50.0)
+                    .text(format!("フィレットの半径 ({unit} 以下)")),
+            );
+            if state.settings.defeature {
+                let pending = state.defeaturing.pending();
+                let removed = state.defeaturing.removed();
+                ui.label(if pending > 0 {
+                    format!("計算中… (残り {pending} 形状)")
+                } else {
+                    format!(
+                        "穴 {} 個・フィレット {} 個を省略 (形状ごとに数える)",
+                        removed.holes, removed.fillets
+                    )
+                });
+            }
         });
         ui.separator();
         if ui.button("すべて表示").clicked() {
