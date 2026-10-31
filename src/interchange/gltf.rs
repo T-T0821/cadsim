@@ -317,14 +317,11 @@ pub fn export(scene: &Scene, path: &Path, _units: &UnitOptions) -> ExchangeResul
     let glb = path
         .extension()
         .is_some_and(|e| e.eq_ignore_ascii_case("glb"));
-    let mut writer = Writer::default();
-    let mut json = writer.build(scene);
-
     if glb {
-        json["buffers"] = json!([{ "byteLength": writer.bin.len() }]);
-        let bytes = to_glb(&json, &writer.bin);
-        std::fs::write(path, bytes).map_err(|e| io_error(path, e))
+        std::fs::write(path, to_glb_bytes(scene)).map_err(|e| io_error(path, e))
     } else {
+        let mut writer = Writer::default();
+        let mut json = writer.build(scene);
         let bin_path = path.with_extension("bin");
         let uri = bin_path
             .file_name()
@@ -335,6 +332,14 @@ pub fn export(scene: &Scene, path: &Path, _units: &UnitOptions) -> ExchangeResul
         std::fs::write(&bin_path, &writer.bin).map_err(|e| io_error(&bin_path, e))?;
         std::fs::write(path, text).map_err(|e| io_error(path, e))
     }
+}
+
+/// シーンを GLB (バイナリ1つにまとめた glTF) のバイト列にする
+pub fn to_glb_bytes(scene: &Scene) -> Vec<u8> {
+    let mut writer = Writer::default();
+    let mut json = writer.build(scene);
+    json["buffers"] = json!([{ "byteLength": writer.bin.len() }]);
+    to_glb(&json, &writer.bin)
 }
 
 /// バイナリバッファと bufferView / accessor を組み立てる

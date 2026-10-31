@@ -1,0 +1,842 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="generator" content="cadsim">
+<title>__CADSIM_TITLE__ - cadsim ビューア</title>
+<style>
+  :root {
+    --bg: #eef1f5;
+    --panel: rgba(255, 255, 255, 0.92);
+    --text: #1d2430;
+    --muted: #5b6577;
+    --accent: #2f6fd6;
+    --line: #d4dae3;
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
+    font: 14px/1.4 system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; display: block; }
+  .bar { position: fixed; left: 0; right: 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    padding: 8px max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left));
+    background: var(--panel); border-color: var(--line); border-style: solid; border-width: 0;
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+  header.bar { top: 0; border-bottom-width: 1px; padding-top: max(8px, env(safe-area-inset-top)); }
+  footer.bar { bottom: 0; border-top-width: 1px; padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+  h1 { font-size: 15px; margin: 0 auto 0 0; font-weight: 600; white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis; min-width: 0; flex: 1 1 120px; }
+  button, select { font: inherit; color: var(--text); background: #fff; border: 1px solid var(--line);
+    border-radius: 6px; padding: 6px 10px; min-height: 36px; cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  input[type=range] { flex: 1 1 160px; min-width: 100px; accent-color: var(--accent); }
+  #time { font-variant-numeric: tabular-nums; color: var(--muted); min-width: 92px; text-align: right; }
+  #info { position: fixed; left: 12px; top: 64px; max-width: calc(100% - 24px); padding: 6px 10px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 6px; display: none; }
+  #hint { position: fixed; right: 12px; top: 64px; color: var(--muted); font-size: 12px; text-align: right;
+    pointer-events: none; }
+  #error { position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    padding: 24px; text-align: center; background: var(--bg); }
+  [hidden] { display: none !important; }
+  @media (max-width: 520px) { #hint { display: none; } }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<header class="bar">
+  <h1 id="title">__CADSIM_TITLE__</h1>
+  <button id="fit" title="全体が見えるようにする">全体表示</button>
+  <button id="vr" class="primary" hidden title="VR ヘッドセットで実寸で見る">VR で見る</button>
+  <button id="ar" hidden title="カメラ越しに実寸で床に置く">AR で置く</button>
+</header>
+<div id="info"></div>
+<div id="hint">ドラッグ: 回転 / 右ドラッグ・2本指: 移動<br>ホイール・ピンチ: 拡大 / タップ: 部品名</div>
+<footer class="bar" id="player" hidden>
+  <button id="play" title="再生 / 一時停止">▶ 再生</button>
+  <input id="seek" type="range" min="0" max="1" step="0.001" value="0" aria-label="再生位置">
+  <span id="time">0.00 / 0.00 秒</span>
+  <select id="clip" aria-label="アニメーション"></select>
+  <select id="speed" aria-label="再生速度">
+    <option value="0.25">x0.25</option><option value="0.5">x0.5</option>
+    <option value="1" selected>x1</option><option value="2">x2</option>
+  </select>
+</footer>
+<div id="error"></div>
+<script id="cadsim-model" type="application/octet-stream">
+__CADSIM_MODEL__
+</script>
+<script>
+"use strict";
+// cadsim の Web ビューア。埋め込んだ GLB を WebGL で表示し、アニメーションを再生する。
+// WebXR に対応したブラウザ (VR ヘッドセット・スマホ) では実寸の VR / AR でも見られる。
+// 座標はメートル・Y 軸が上 (glTF と同じ)。
+
+// ---------------------------------------------------------------- 行列 (列優先の 4x4)
+const M4 = {
+  identity() { const m = new Float32Array(16); m[0] = m[5] = m[10] = m[15] = 1; return m; },
+  mul(a, b) {
+    const o = new Float32Array(16);
+    for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) {
+      let s = 0;
+      for (let k = 0; k < 4; k++) s += a[k * 4 + r] * b[c * 4 + k];
+      o[c * 4 + r] = s;
+    }
+    return o;
+  },
+  fromTRS(t, q, s) {
+    const [x, y, z, w] = q;
+    const xx = x * x, yy = y * y, zz = z * z, xy = x * y, xz = x * z, yz = y * z, wx = w * x, wy = w * y, wz = w * z;
+    return new Float32Array([
+      (1 - 2 * (yy + zz)) * s[0], 2 * (xy + wz) * s[0], 2 * (xz - wy) * s[0], 0,
+      2 * (xy - wz) * s[1], (1 - 2 * (xx + zz)) * s[1], 2 * (yz + wx) * s[1], 0,
+      2 * (xz + wy) * s[2], 2 * (yz - wx) * s[2], (1 - 2 * (xx + yy)) * s[2], 0,
+      t[0], t[1], t[2], 1]);
+  },
+  translation(x, y, z) { const m = M4.identity(); m[12] = x; m[13] = y; m[14] = z; return m; },
+  rotationY(a) {
+    const m = M4.identity(), c = Math.cos(a), s = Math.sin(a);
+    m[0] = c; m[2] = -s; m[8] = s; m[10] = c; return m;
+  },
+  invert(m) {
+    const inv = new Float32Array(16);
+    const [a00, a01, a02, a03, a10, a11, a12, a13, a20, a21, a22, a23, a30, a31, a32, a33] = m;
+    const b00 = a00 * a11 - a01 * a10, b01 = a00 * a12 - a02 * a10, b02 = a00 * a13 - a03 * a10;
+    const b03 = a01 * a12 - a02 * a11, b04 = a01 * a13 - a03 * a11, b05 = a02 * a13 - a03 * a12;
+    const b06 = a20 * a31 - a21 * a30, b07 = a20 * a32 - a22 * a30, b08 = a20 * a33 - a23 * a30;
+    const b09 = a21 * a32 - a22 * a31, b10 = a21 * a33 - a23 * a31, b11 = a22 * a33 - a23 * a32;
+    let det = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
+    if (!det) return M4.identity();
+    det = 1 / det;
+    inv[0] = (a11 * b11 - a12 * b10 + a13 * b09) * det;
+    inv[1] = (a02 * b10 - a01 * b11 - a03 * b09) * det;
+    inv[2] = (a31 * b05 - a32 * b04 + a33 * b03) * det;
+    inv[3] = (a22 * b04 - a21 * b05 - a23 * b03) * det;
+    inv[4] = (a12 * b08 - a10 * b11 - a13 * b07) * det;
+    inv[5] = (a00 * b11 - a02 * b08 + a03 * b07) * det;
+    inv[6] = (a32 * b02 - a30 * b05 - a33 * b01) * det;
+    inv[7] = (a20 * b05 - a22 * b02 + a23 * b01) * det;
+    inv[8] = (a10 * b10 - a11 * b08 + a13 * b06) * det;
+    inv[9] = (a01 * b08 - a00 * b10 - a03 * b06) * det;
+    inv[10] = (a30 * b04 - a31 * b02 + a33 * b00) * det;
+    inv[11] = (a21 * b02 - a20 * b04 - a23 * b00) * det;
+    inv[12] = (a11 * b07 - a10 * b09 - a12 * b06) * det;
+    inv[13] = (a00 * b09 - a01 * b07 + a02 * b06) * det;
+    inv[14] = (a31 * b01 - a30 * b03 - a32 * b00) * det;
+    inv[15] = (a20 * b03 - a21 * b01 + a22 * b00) * det;
+    return inv;
+  },
+  // 法線用の 3x3 (逆行列の転置)
+  normalMatrix(m) {
+    const i = M4.invert(m);
+    return new Float32Array([i[0], i[4], i[8], i[1], i[5], i[9], i[2], i[6], i[10]]);
+  },
+  perspective(fovy, aspect, near, far) {
+    const f = 1 / Math.tan(fovy / 2), m = new Float32Array(16);
+    m[0] = f / aspect; m[5] = f; m[10] = (far + near) / (near - far); m[11] = -1;
+    m[14] = 2 * far * near / (near - far);
+    return m;
+  },
+  lookAt(eye, target, up) {
+    let zx = eye[0] - target[0], zy = eye[1] - target[1], zz = eye[2] - target[2];
+    let l = Math.hypot(zx, zy, zz) || 1; zx /= l; zy /= l; zz /= l;
+    let xx = up[1] * zz - up[2] * zy, xy = up[2] * zx - up[0] * zz, xz = up[0] * zy - up[1] * zx;
+    l = Math.hypot(xx, xy, xz) || 1; xx /= l; xy /= l; xz /= l;
+    const yx = zy * xz - zz * xy, yy = zz * xx - zx * xz, yz = zx * xy - zy * xx;
+    return new Float32Array([
+      xx, yx, zx, 0, xy, yy, zy, 0, xz, yz, zz, 0,
+      -(xx * eye[0] + xy * eye[1] + xz * eye[2]),
+      -(yx * eye[0] + yy * eye[1] + yz * eye[2]),
+      -(zx * eye[0] + zy * eye[1] + zz * eye[2]), 1]);
+  },
+  point(m, p) {
+    return [m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12],
+            m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13],
+            m[2] * p[0] + m[6] * p[1] + m[10] * p[2] + m[14]];
+  },
+  vector(m, v) {
+    return [m[0] * v[0] + m[4] * v[1] + m[8] * v[2],
+            m[1] * v[0] + m[5] * v[1] + m[9] * v[2],
+            m[2] * v[0] + m[6] * v[1] + m[10] * v[2]];
+  },
+};
+
+function slerp(a, b, t) {
+  let [bx, by, bz, bw] = b;
+  let d = a[0] * bx + a[1] * by + a[2] * bz + a[3] * bw;
+  if (d < 0) { d = -d; bx = -bx; by = -by; bz = -bz; bw = -bw; }
+  let s0 = 1 - t, s1 = t;
+  if (d < 0.9995) {
+    const th = Math.acos(d), sn = Math.sin(th);
+    s0 = Math.sin((1 - t) * th) / sn; s1 = Math.sin(t * th) / sn;
+  }
+  const q = [s0 * a[0] + s1 * bx, s0 * a[1] + s1 * by, s0 * a[2] + s1 * bz, s0 * a[3] + s1 * bw];
+  const l = Math.hypot(...q) || 1;
+  return q.map((v) => v / l);
+}
+
+// ---------------------------------------------------------------- GLB の読み込み
+function base64ToBytes(text) {
+  const bin = atob(text.replace(/\s+/g, ""));
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+function parseGlb(bytes) {
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (dv.getUint32(0, true) !== 0x46546c67) throw new Error("GLB ではありません");
+  let offset = 12, json = null, bin = new Uint8Array(0);
+  while (offset + 8 <= bytes.byteLength) {
+    const length = dv.getUint32(offset, true), type = dv.getUint32(offset + 4, true);
+    const chunk = bytes.subarray(offset + 8, offset + 8 + length);
+    if (type === 0x4e4f534a) json = JSON.parse(new TextDecoder().decode(chunk));
+    else if (type === 0x004e4942) bin = chunk;
+    offset += 8 + length;
+  }
+  if (!json) throw new Error("GLB に JSON がありません");
+  return { json, bin };
+}
+
+const COMPONENTS = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT4: 16 };
+const ARRAYS = { 5120: Int8Array, 5121: Uint8Array, 5122: Int16Array, 5123: Uint16Array, 5125: Uint32Array, 5126: Float32Array };
+
+function readAccessor(gltf, index) {
+  const a = gltf.json.accessors[index];
+  const Ctor = ARRAYS[a.componentType], n = COMPONENTS[a.type];
+  const out = new Ctor(a.count * n);
+  if (a.bufferView === undefined) return out;
+  const view = gltf.json.bufferViews[a.bufferView];
+  const size = Ctor.BYTES_PER_ELEMENT;
+  const stride = view.byteStride || n * size;
+  const start = (view.byteOffset || 0) + (a.byteOffset || 0);
+  const dv = new DataView(gltf.bin.buffer, gltf.bin.byteOffset, gltf.bin.byteLength);
+  const get = { 1: "getInt8", 2: "getInt16", 4: "getUint32" };
+  for (let i = 0; i < a.count; i++) for (let k = 0; k < n; k++) {
+    const at = start + i * stride + k * size;
+    let v;
+    if (Ctor === Float32Array) v = dv.getFloat32(at, true);
+    else if (Ctor === Uint8Array) v = dv.getUint8(at);
+    else if (Ctor === Uint16Array) v = dv.getUint16(at, true);
+    else if (Ctor === Int16Array) v = dv.getInt16(at, true);
+    else v = dv[get[size]](at, true);
+    out[i * n + k] = v;
+  }
+  return out;
+}
+
+const SRGB = (c) => (c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(c, 1 / 2.4) - 0.055);
+
+// 三角形を角ごとの頂点に展開し、折れ角 30° 以内の面だけで法線をなめらかにする。
+// 稜線 (面が折れている辺と縁) も線分として返す。
+function buildGeometry(pos, idx) {
+  const triCount = idx.length / 3;
+  const quantum = 1e-6;
+  const weld = new Map(), ids = new Uint32Array(pos.length / 3);
+  for (let i = 0; i < ids.length; i++) {
+    const key = Math.round(pos[i * 3] / quantum) + "," + Math.round(pos[i * 3 + 1] / quantum) + "," + Math.round(pos[i * 3 + 2] / quantum);
+    let id = weld.get(key);
+    if (id === undefined) { id = weld.size; weld.set(key, id); }
+    ids[i] = id;
+  }
+  const fn = new Float32Array(triCount * 3);
+  const facesOf = new Map();
+  for (let t = 0; t < triCount; t++) {
+    const [a, b, c] = [idx[t * 3], idx[t * 3 + 1], idx[t * 3 + 2]];
+    const ux = pos[b * 3] - pos[a * 3], uy = pos[b * 3 + 1] - pos[a * 3 + 1], uz = pos[b * 3 + 2] - pos[a * 3 + 2];
+    const vx = pos[c * 3] - pos[a * 3], vy = pos[c * 3 + 1] - pos[a * 3 + 1], vz = pos[c * 3 + 2] - pos[a * 3 + 2];
+    let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const l = Math.hypot(nx, ny, nz) || 1;
+    fn[t * 3] = nx / l; fn[t * 3 + 1] = ny / l; fn[t * 3 + 2] = nz / l;
+    for (const v of [a, b, c]) {
+      const w = ids[v];
+      let list = facesOf.get(w);
+      if (!list) facesOf.set(w, list = []);
+      list.push(t);
+    }
+  }
+  const cosLimit = Math.cos(30 * Math.PI / 180);
+  const dot = (s, t) => fn[s * 3] * fn[t * 3] + fn[s * 3 + 1] * fn[t * 3 + 1] + fn[s * 3 + 2] * fn[t * 3 + 2];
+  const positions = new Float32Array(triCount * 9), normals = new Float32Array(triCount * 9);
+  const edges = new Map();
+  for (let t = 0; t < triCount; t++) {
+    for (let k = 0; k < 3; k++) {
+      const v = idx[t * 3 + k], o = t * 9 + k * 3;
+      positions[o] = pos[v * 3]; positions[o + 1] = pos[v * 3 + 1]; positions[o + 2] = pos[v * 3 + 2];
+      let nx = 0, ny = 0, nz = 0;
+      for (const s of facesOf.get(ids[v])) {
+        if (dot(s, t) >= cosLimit) { nx += fn[s * 3]; ny += fn[s * 3 + 1]; nz += fn[s * 3 + 2]; }
+      }
+      const l = Math.hypot(nx, ny, nz) || 1;
+      normals[o] = nx / l; normals[o + 1] = ny / l; normals[o + 2] = nz / l;
+      const a = ids[v], b = ids[idx[t * 3 + (k + 1) % 3]];
+      if (a === b) continue;
+      const key = a < b ? a + "," + b : b + "," + a;
+      let e = edges.get(key);
+      if (!e) edges.set(key, e = { v0: v, v1: idx[t * 3 + (k + 1) % 3], faces: [] });
+      e.faces.push(t);
+    }
+  }
+  const lines = [];
+  for (const e of edges.values()) {
+    const f = e.faces;
+    if (f.length === 2 && dot(f[0], f[1]) >= cosLimit) continue;
+    lines.push(pos[e.v0 * 3], pos[e.v0 * 3 + 1], pos[e.v0 * 3 + 2], pos[e.v1 * 3], pos[e.v1 * 3 + 1], pos[e.v1 * 3 + 2]);
+  }
+  return { positions, normals, lines: new Float32Array(lines) };
+}
+
+// ---------------------------------------------------------------- シーン
+function loadScene(gltf) {
+  const j = gltf.json;
+  const nodes = (j.nodes || []).map((n, i) => ({
+    index: i,
+    name: n.name || "ノード " + i,
+    children: n.children || [],
+    parent: -1,
+    matrix: n.matrix ? new Float32Array(n.matrix) : null,
+    rest: { t: n.translation || [0, 0, 0], r: n.rotation || [0, 0, 0, 1], s: n.scale || [1, 1, 1] },
+    pose: null,
+    world: M4.identity(),
+    mesh: n.mesh,
+  }));
+  for (const n of nodes) for (const c of n.children) nodes[c].parent = n.index;
+  for (const n of nodes) n.pose = { t: [...n.rest.t], r: [...n.rest.r], s: [...n.rest.s] };
+  const sceneRoots = j.scenes ? j.scenes[j.scene || 0].nodes : nodes.filter((n) => n.parent < 0).map((n) => n.index);
+
+  const meshes = (j.meshes || []).map((m) => m.primitives.filter((p) => (p.mode ?? 4) === 4).map((p) => {
+    const pos = readAccessor(gltf, p.attributes.POSITION);
+    let idx;
+    if (p.indices !== undefined) idx = readAccessor(gltf, p.indices);
+    else { idx = new Uint32Array(pos.length / 3); idx.forEach((_, i) => (idx[i] = i)); }
+    const mat = p.material !== undefined ? j.materials[p.material] : null;
+    const base = mat?.pbrMetallicRoughness?.baseColorFactor || [0.45, 0.5, 0.58, 1];
+    const geo = buildGeometry(pos, idx);
+    return { ...geo, color: base.slice(0, 3), indexed: { pos, idx } };
+  }));
+
+  const clips = (j.animations || []).map((a, i) => {
+    const channels = a.channels.map((c) => {
+      const s = a.samplers[c.sampler];
+      return {
+        node: c.target.node, path: c.target.path,
+        times: readAccessor(gltf, s.input), values: readAccessor(gltf, s.output),
+        step: s.interpolation === "STEP",
+      };
+    }).filter((c) => c.node !== undefined && ["translation", "rotation", "scale"].includes(c.path));
+    const duration = channels.reduce((d, c) => Math.max(d, c.times[c.times.length - 1] || 0), 0);
+    return { name: a.name || "アニメーション " + (i + 1), channels, duration };
+  }).filter((c) => c.channels.length);
+  return { nodes, roots: sceneRoots, meshes, clips };
+}
+
+function sampleChannel(c, time) {
+  const n = c.path === "rotation" ? 4 : 3, times = c.times;
+  const value = (i) => Array.from(c.values.subarray(i * n, i * n + n));
+  if (time <= times[0]) return value(0);
+  if (time >= times[times.length - 1]) return value(times.length - 1);
+  let lo = 0, hi = times.length - 1;
+  while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (times[mid] <= time) lo = mid; else hi = mid; }
+  const a = value(lo), b = value(hi);
+  if (c.step) return a;
+  const t = (time - times[lo]) / (times[hi] - times[lo] || 1);
+  if (n === 4) return slerp(a, b, t);
+  return a.map((v, k) => v + (b[k] - v) * t);
+}
+
+function applyClip(scene, clip, time) {
+  for (const n of scene.nodes) n.pose = { t: [...n.rest.t], r: [...n.rest.r], s: [...n.rest.s] };
+  if (!clip) return;
+  for (const c of clip.channels) {
+    const key = { translation: "t", rotation: "r", scale: "s" }[c.path];
+    scene.nodes[c.node].pose[key] = sampleChannel(c, time);
+  }
+}
+
+function updateWorld(scene) {
+  const visit = (i, parent) => {
+    const n = scene.nodes[i];
+    const local = n.matrix || M4.fromTRS(n.pose.t, n.pose.r, n.pose.s);
+    n.world = M4.mul(parent, local);
+    for (const c of n.children) visit(c, n.world);
+  };
+  for (const r of scene.roots) visit(r, M4.identity());
+}
+
+function sceneBounds(scene) {
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  for (const n of scene.nodes) {
+    if (n.mesh === undefined) continue;
+    for (const prim of scene.meshes[n.mesh]) {
+      const p = prim.indexed.pos;
+      for (let i = 0; i < p.length; i += 3) {
+        const w = M4.point(n.world, [p[i], p[i + 1], p[i + 2]]);
+        for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], w[k]); hi[k] = Math.max(hi[k], w[k]); }
+      }
+    }
+  }
+  if (lo[0] > hi[0]) return { lo: [-1, 0, -1], hi: [1, 1, 1] };
+  return { lo, hi };
+}
+
+// ---------------------------------------------------------------- 描画
+const canvas = document.getElementById("view");
+const glOptions = { antialias: true, alpha: true, xrCompatible: true };
+const gl = canvas.getContext("webgl2", glOptions) || canvas.getContext("webgl", glOptions);
+
+const VS = `
+attribute vec3 position; attribute vec3 normal;
+uniform mat4 model; uniform mat4 viewProj; uniform mat3 normalMat;
+varying vec3 vNormal;
+void main() { vNormal = normalize(normalMat * normal); gl_Position = viewProj * model * vec4(position, 1.0); }`;
+const FS = `
+precision mediump float;
+uniform vec3 color; uniform vec3 highlight; varying vec3 vNormal;
+void main() {
+  vec3 n = normalize(vNormal);
+  if (!gl_FrontFacing) n = -n;
+  vec3 key = normalize(vec3(0.45, 0.85, 0.35)), fill = normalize(vec3(-0.6, 0.3, -0.5));
+  float light = 0.32 + 0.55 * max(dot(n, key), 0.0) + 0.22 * max(dot(n, fill), 0.0) + 0.08 * (n.y * 0.5 + 0.5);
+  vec3 c = mix(color, highlight, step(0.0, highlight.r) * 0.55) * light;
+  gl_FragColor = vec4(pow(c, vec3(1.0 / 2.2)), 1.0);
+}`;
+const LINE_VS = `
+attribute vec3 position; uniform mat4 model; uniform mat4 viewProj;
+void main() { gl_Position = viewProj * model * vec4(position, 1.0); }`;
+const LINE_FS = `
+precision mediump float; uniform vec4 color;
+void main() { gl_FragColor = color; }`;
+
+function program(vs, fs) {
+  const p = gl.createProgram();
+  for (const [type, src] of [[gl.VERTEX_SHADER, vs], [gl.FRAGMENT_SHADER, fs]]) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    gl.attachShader(p, s);
+  }
+  gl.bindAttribLocation(p, 0, "position");
+  gl.bindAttribLocation(p, 1, "normal");
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u = {};
+  for (let i = 0; i < gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS); i++) {
+    const name = gl.getActiveUniform(p, i).name;
+    u[name] = gl.getUniformLocation(p, name);
+  }
+  return { p, u };
+}
+
+function buffer(data) {
+  const b = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, b);
+  gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+  return b;
+}
+
+let shaded, lines, scene, bounds, grid;
+const state = { clip: 0, time: 0, playing: false, speed: 1, selected: -1 };
+const camera = { target: [0, 0, 0], distance: 5, yaw: 0.6, pitch: 0.45, fovy: 45 * Math.PI / 180 };
+
+function upload() {
+  for (const mesh of scene.meshes) for (const prim of mesh) {
+    prim.vbo = buffer(prim.positions); prim.nbo = buffer(prim.normals);
+    prim.count = prim.positions.length / 3;
+    prim.lbo = buffer(prim.lines); prim.lineCount = prim.lines.length / 3;
+  }
+}
+
+// 床 (模型の下面) に、大きさに合ったきりのいい間隔の格子を引く
+function makeGrid() {
+  const size = Math.max(bounds.hi[0] - bounds.lo[0], bounds.hi[2] - bounds.lo[2], 1e-3);
+  const step = Math.pow(10, Math.floor(Math.log10(size / 4)));
+  const half = Math.ceil(size * 0.75 / step) * step;
+  const cx = Math.round((bounds.lo[0] + bounds.hi[0]) / 2 / step) * step;
+  const cz = Math.round((bounds.lo[2] + bounds.hi[2]) / 2 / step) * step;
+  const y = bounds.lo[1], v = [];
+  for (let x = -half; x <= half + 1e-9; x += step) v.push(cx + x, y, cz - half, cx + x, y, cz + half);
+  for (let z = -half; z <= half + 1e-9; z += step) v.push(cx - half, y, cz + z, cx + half, y, cz + z);
+  const data = new Float32Array(v);
+  return { vbo: buffer(data), count: data.length / 3 };
+}
+
+function drawScene(viewProj, rig, withGrid) {
+  gl.enable(gl.DEPTH_TEST);
+  gl.useProgram(shaded.p);
+  gl.uniformMatrix4fv(shaded.u.viewProj, false, viewProj);
+  gl.enable(gl.POLYGON_OFFSET_FILL);
+  gl.polygonOffset(1, 1);
+  gl.disableVertexAttribArray(1);
+  gl.enableVertexAttribArray(0);
+  for (const n of scene.nodes) {
+    if (n.mesh === undefined) continue;
+    const model = M4.mul(rig, n.world);
+    gl.uniformMatrix4fv(shaded.u.model, false, model);
+    gl.uniformMatrix3fv(shaded.u.normalMat, false, M4.normalMatrix(model));
+    gl.uniform3fv(shaded.u.highlight, isSelected(n) ? [1.0, 0.55, 0.1] : [-1, -1, -1]);
+    for (const prim of scene.meshes[n.mesh]) {
+      gl.uniform3fv(shaded.u.color, prim.color);
+      gl.bindBuffer(gl.ARRAY_BUFFER, prim.vbo);
+      gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, prim.nbo);
+      gl.enableVertexAttribArray(1);
+      gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
+      gl.drawArrays(gl.TRIANGLES, 0, prim.count);
+    }
+  }
+  gl.disable(gl.POLYGON_OFFSET_FILL);
+  gl.disableVertexAttribArray(1);
+  gl.useProgram(lines.p);
+  gl.uniformMatrix4fv(lines.u.viewProj, false, viewProj);
+  gl.uniform4fv(lines.u.color, [0.12, 0.14, 0.18, 1]);
+  for (const n of scene.nodes) {
+    if (n.mesh === undefined) continue;
+    gl.uniformMatrix4fv(lines.u.model, false, M4.mul(rig, n.world));
+    for (const prim of scene.meshes[n.mesh]) {
+      if (!prim.lineCount) continue;
+      gl.bindBuffer(gl.ARRAY_BUFFER, prim.lbo);
+      gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+      gl.drawArrays(gl.LINES, 0, prim.lineCount);
+    }
+  }
+  if (withGrid) {
+    gl.uniformMatrix4fv(lines.u.model, false, rig);
+    gl.uniform4fv(lines.u.color, [0.55, 0.6, 0.68, 1]);
+    gl.bindBuffer(gl.ARRAY_BUFFER, grid.vbo);
+    gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+    gl.drawArrays(gl.LINES, 0, grid.count);
+  }
+}
+
+function isSelected(n) {
+  for (let i = n.index; i >= 0; i = scene.nodes[i].parent) if (i === state.selected) return true;
+  return false;
+}
+
+function cameraEye() {
+  const cp = Math.cos(camera.pitch);
+  return [camera.target[0] + camera.distance * cp * Math.sin(camera.yaw),
+          camera.target[1] + camera.distance * Math.sin(camera.pitch),
+          camera.target[2] + camera.distance * cp * Math.cos(camera.yaw)];
+}
+
+function screenViewProj() {
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  const size = Math.hypot(...bounds.hi.map((v, k) => v - bounds.lo[k]));
+  const near = Math.max(camera.distance * 0.01, 1e-4), far = camera.distance + size * 4;
+  const proj = M4.perspective(camera.fovy, w / Math.max(h, 1), near, far);
+  return M4.mul(proj, M4.lookAt(cameraEye(), camera.target, [0, 1, 0]));
+}
+
+function fitView() {
+  updateWorld(scene);
+  bounds = sceneBounds(scene);
+  camera.target = bounds.lo.map((v, k) => (v + bounds.hi[k]) / 2);
+  const radius = Math.max(Math.hypot(...bounds.hi.map((v, k) => v - bounds.lo[k])) / 2, 1e-3);
+  const aspect = canvas.clientWidth / Math.max(canvas.clientHeight, 1);
+  const fov = Math.min(camera.fovy, 2 * Math.atan(Math.tan(camera.fovy / 2) * aspect));
+  camera.distance = radius / Math.sin(fov / 2) * 1.25;
+  camera.yaw = 0.6; camera.pitch = 0.45;
+}
+
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.round(canvas.clientWidth * dpr), h = Math.round(canvas.clientHeight * dpr);
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+}
+
+// ---------------------------------------------------------------- 再生
+const ui = {
+  player: document.getElementById("player"), play: document.getElementById("play"),
+  seek: document.getElementById("seek"), time: document.getElementById("time"),
+  clip: document.getElementById("clip"), speed: document.getElementById("speed"),
+  info: document.getElementById("info"),
+};
+
+function currentClip() { return scene.clips[state.clip]; }
+
+function advance(dt) {
+  const clip = currentClip();
+  if (clip && state.playing && clip.duration > 0) {
+    state.time = (state.time + dt * state.speed) % clip.duration;
+  }
+  applyClip(scene, clip, state.time);
+  updateWorld(scene);
+  if (clip) {
+    ui.seek.value = clip.duration > 0 ? state.time / clip.duration : 0;
+    ui.time.textContent = state.time.toFixed(2) + " / " + clip.duration.toFixed(2) + " 秒";
+  }
+}
+
+function setPlaying(playing) {
+  state.playing = playing && !!currentClip();
+  ui.play.textContent = state.playing ? "⏸ 停止" : "▶ 再生";
+}
+
+function setupPlayer() {
+  if (!scene.clips.length) return;
+  ui.player.hidden = false;
+  scene.clips.forEach((c, i) => ui.clip.add(new Option(c.name, i)));
+  ui.clip.hidden = scene.clips.length < 2;
+  ui.play.onclick = () => setPlaying(!state.playing);
+  ui.seek.oninput = () => { state.time = ui.seek.value * (currentClip()?.duration || 0); };
+  ui.clip.onchange = () => { state.clip = Number(ui.clip.value); state.time = 0; };
+  ui.speed.onchange = () => { state.speed = Number(ui.speed.value); };
+  setPlaying(true);
+}
+
+// ---------------------------------------------------------------- 部品の選択 (タップ)
+function pick(clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
+  const x = (clientX - rect.left) / rect.width * 2 - 1, y = 1 - (clientY - rect.top) / rect.height * 2;
+  const inv = M4.invert(screenViewProj());
+  const unproject = (z) => {
+    const p = [x, y, z, 1], o = [0, 0, 0, 0];
+    for (let r = 0; r < 4; r++) for (let k = 0; k < 4; k++) o[r] += inv[k * 4 + r] * p[k];
+    return [o[0] / o[3], o[1] / o[3], o[2] / o[3]];
+  };
+  const a = unproject(-1), b = unproject(1);
+  let best = Infinity, hit = -1;
+  for (const n of scene.nodes) {
+    if (n.mesh === undefined) continue;
+    const toLocal = M4.invert(n.world);
+    const o = M4.point(toLocal, a), e = M4.point(toLocal, b);
+    const d = [e[0] - o[0], e[1] - o[1], e[2] - o[2]];
+    for (const prim of scene.meshes[n.mesh]) {
+      const p = prim.positions;
+      for (let i = 0; i < p.length; i += 9) {
+        const t = rayTriangle(o, d, p, i);
+        if (t >= 0 && t < best) { best = t; hit = n.index; }
+      }
+    }
+  }
+  return hit;
+}
+
+// Möller-Trumbore。当たればレイの媒介変数 (0〜1) を、外れれば -1 を返す
+function rayTriangle(o, d, p, i) {
+  const e1 = [p[i + 3] - p[i], p[i + 4] - p[i + 1], p[i + 5] - p[i + 2]];
+  const e2 = [p[i + 6] - p[i], p[i + 7] - p[i + 1], p[i + 8] - p[i + 2]];
+  const h = [d[1] * e2[2] - d[2] * e2[1], d[2] * e2[0] - d[0] * e2[2], d[0] * e2[1] - d[1] * e2[0]];
+  const det = e1[0] * h[0] + e1[1] * h[1] + e1[2] * h[2];
+  if (Math.abs(det) < 1e-12) return -1;
+  const f = 1 / det, s = [o[0] - p[i], o[1] - p[i + 1], o[2] - p[i + 2]];
+  const u = f * (s[0] * h[0] + s[1] * h[1] + s[2] * h[2]);
+  if (u < 0 || u > 1) return -1;
+  const q = [s[1] * e1[2] - s[2] * e1[1], s[2] * e1[0] - s[0] * e1[2], s[0] * e1[1] - s[1] * e1[0]];
+  const v = f * (d[0] * q[0] + d[1] * q[1] + d[2] * q[2]);
+  if (v < 0 || u + v > 1) return -1;
+  const t = f * (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]);
+  return t >= 0 && t <= 1 ? t : -1;
+}
+
+function showSelection() {
+  if (state.selected < 0) { ui.info.style.display = "none"; return; }
+  const names = [];
+  for (let i = state.selected; i >= 0; i = scene.nodes[i].parent) names.unshift(scene.nodes[i].name);
+  ui.info.textContent = names.join(" / ");
+  ui.info.style.display = "block";
+}
+
+// ---------------------------------------------------------------- 視点の操作 (マウス・タッチ)
+const pointers = new Map();
+let gesture = null;
+
+function pan(dx, dy) {
+  const scale = 2 * camera.distance * Math.tan(camera.fovy / 2) / Math.max(canvas.clientHeight, 1);
+  const right = [Math.cos(camera.yaw), 0, -Math.sin(camera.yaw)];
+  const up = [-Math.sin(camera.pitch) * Math.sin(camera.yaw), Math.cos(camera.pitch), -Math.sin(camera.pitch) * Math.cos(camera.yaw)];
+  for (let k = 0; k < 3; k++) camera.target[k] += (-dx * right[k] + dy * up[k]) * scale;
+}
+
+function zoom(factor) {
+  camera.distance = Math.min(Math.max(camera.distance * factor, 1e-3), 1e5);
+}
+
+canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+canvas.addEventListener("pointerdown", (e) => {
+  canvas.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  gesture = { moved: 0, button: e.button, shift: e.shiftKey, start: [e.clientX, e.clientY] };
+});
+canvas.addEventListener("pointermove", (e) => {
+  const prev = pointers.get(e.pointerId);
+  if (!prev || !gesture) return;
+  const pts = [...pointers.values()];
+  if (pts.length === 2) {
+    const other = pts.find((p) => p !== prev);
+    const before = Math.hypot(prev.x - other.x, prev.y - other.y);
+    const after = Math.hypot(e.clientX - other.x, e.clientY - other.y);
+    if (before > 0 && after > 0) zoom(before / after);
+    pan((e.clientX - prev.x) / 2, (e.clientY - prev.y) / 2);
+  } else {
+    const dx = e.clientX - prev.x, dy = e.clientY - prev.y;
+    if (gesture.button === 2 || gesture.button === 1 || gesture.shift) pan(dx, dy);
+    else {
+      camera.yaw -= dx * 0.008;
+      camera.pitch = Math.min(Math.max(camera.pitch + dy * 0.008, -1.55), 1.55);
+    }
+  }
+  gesture.moved += Math.abs(e.clientX - prev.x) + Math.abs(e.clientY - prev.y);
+  prev.x = e.clientX; prev.y = e.clientY;
+});
+const pointerEnd = (e) => {
+  if (!pointers.delete(e.pointerId)) return;
+  if (gesture && pointers.size === 0) {
+    if (gesture.moved < 6 && gesture.button === 0) {
+      state.selected = pick(e.clientX, e.clientY);
+      showSelection();
+    }
+    gesture = null;
+  }
+};
+canvas.addEventListener("pointerup", pointerEnd);
+canvas.addEventListener("pointercancel", pointerEnd);
+canvas.addEventListener("wheel", (e) => { e.preventDefault(); zoom(Math.exp(e.deltaY * 0.001)); }, { passive: false });
+canvas.addEventListener("dblclick", fitView);
+document.getElementById("fit").onclick = fitView;
+
+// ---------------------------------------------------------------- 画面での描画ループ
+let last = 0;
+function frame(now) {
+  const dt = last ? Math.min((now - last) / 1000, 0.1) : 0;
+  last = now;
+  if (!xr.session) {
+    advance(dt);
+    resize();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    drawScene(screenViewProj(), M4.identity(), true);
+    requestAnimationFrame(frame);
+  }
+}
+
+// ---------------------------------------------------------------- VR / AR (WebXR、実寸)
+// 模型はメートルのまま (1 m = 1 m) で表示する。床 (模型の下面) を現実の床にそろえ、
+// 模型の手前の端が利用者の 1 m 前に来るように置く。
+// 左スティックで歩き、右スティックで 30° ずつ向きを変える。
+const xr = { session: null, space: null, rig: null, mode: "", turnReady: true, last: 0 };
+
+async function setupXR() {
+  if (!navigator.xr) return;
+  for (const [mode, id] of [["immersive-vr", "vr"], ["immersive-ar", "ar"]]) {
+    try {
+      if (await navigator.xr.isSessionSupported(mode)) {
+        const button = document.getElementById(id);
+        button.hidden = false;
+        button.onclick = () => startXR(mode).catch((err) => alertInfo("VR / AR を始められませんでした: " + err.message));
+      }
+    } catch (_) { /* 対応していないブラウザ */ }
+  }
+}
+
+function alertInfo(text) {
+  ui.info.textContent = text;
+  ui.info.style.display = "block";
+}
+
+async function startXR(mode) {
+  const session = await navigator.xr.requestSession(mode, { optionalFeatures: ["local-floor", "bounded-floor"] });
+  if (gl.makeXRCompatible) await gl.makeXRCompatible();
+  session.updateRenderState({ baseLayer: new XRWebGLLayer(session, gl) });
+  let space, floor = 0;
+  try { space = await session.requestReferenceSpace("local-floor"); }
+  catch (_) {
+    // "local" しか使えないときは起動時の目の位置が原点なので、床を 1.6 m 下に置く
+    space = await session.requestReferenceSpace("local");
+    floor = -1.6;
+  }
+  updateWorld(scene);
+  const b = sceneBounds(scene);
+  const cx = (b.lo[0] + b.hi[0]) / 2;
+  xr.rig = M4.translation(-cx, floor - b.lo[1], -b.hi[2] - 1.0);
+  xr.session = session; xr.space = space; xr.mode = mode; xr.last = 0;
+  session.addEventListener("end", () => {
+    xr.session = null;
+    last = 0;
+    requestAnimationFrame(frame);
+  });
+  session.requestAnimationFrame(xrFrame);
+}
+
+function xrFrame(now, frameXR) {
+  const session = frameXR.session;
+  session.requestAnimationFrame(xrFrame);
+  const dt = xr.last ? Math.min((now - xr.last) / 1000, 0.1) : 0;
+  xr.last = now;
+  advance(dt);
+  const pose = frameXR.getViewerPose(xr.space);
+  if (!pose) return;
+  locomotion(session, pose, dt);
+  const layer = session.renderState.baseLayer;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, layer.framebuffer);
+  if (xr.mode === "immersive-ar") gl.clearColor(0, 0, 0, 0);
+  else gl.clearColor(0.86, 0.89, 0.93, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  for (const view of pose.views) {
+    const vp = layer.getViewport(view);
+    gl.viewport(vp.x, vp.y, vp.width, vp.height);
+    const viewProj = M4.mul(view.projectionMatrix, view.transform.inverse.matrix);
+    drawScene(viewProj, xr.rig, xr.mode !== "immersive-ar");
+  }
+}
+
+function locomotion(session, pose, dt) {
+  const head = pose.transform.position;
+  const forward = M4.vector(pose.transform.matrix, [0, 0, -1]);
+  const fl = Math.hypot(forward[0], forward[2]) || 1;
+  const fx = forward[0] / fl, fz = forward[2] / fl;
+  for (const source of session.inputSources) {
+    const pad = source.gamepad;
+    if (!pad || pad.axes.length < 2) continue;
+    const ax = pad.axes.length >= 4 ? pad.axes[2] : pad.axes[0];
+    const ay = pad.axes.length >= 4 ? pad.axes[3] : pad.axes[1];
+    if (source.handedness === "right") {
+      // 右スティック: 左右に倒すと 30° ずつ向きを変える
+      if (Math.abs(ax) > 0.7 && xr.turnReady) {
+        const angle = (ax > 0 ? -1 : 1) * Math.PI / 6;
+        const turn = M4.mul(M4.translation(head.x, 0, head.z), M4.mul(M4.rotationY(-angle), M4.translation(-head.x, 0, -head.z)));
+        xr.rig = M4.mul(turn, xr.rig);
+        xr.turnReady = false;
+      } else if (Math.abs(ax) < 0.3) xr.turnReady = true;
+    } else {
+      // 左スティック: 見ている向きを前として歩く (1.5 m/s)
+      const dead = (v) => (Math.abs(v) < 0.15 ? 0 : v);
+      const speed = 1.5 * dt;
+      const mx = (dead(-ay) * fx + dead(ax) * -fz) * speed;
+      const mz = (dead(-ay) * fz + dead(ax) * fx) * speed;
+      if (mx || mz) xr.rig = M4.mul(M4.translation(-mx, 0, -mz), xr.rig);
+    }
+  }
+}
+
+// ---------------------------------------------------------------- 起動
+function start() {
+  if (!gl) throw new Error("このブラウザは WebGL に対応していません");
+  shaded = program(VS, FS);
+  lines = program(LINE_VS, LINE_FS);
+  const text = document.getElementById("cadsim-model").textContent;
+  scene = loadScene(parseGlb(base64ToBytes(text)));
+  upload();
+  setupPlayer();
+  advance(0);
+  fitView();
+  grid = makeGrid();
+  setupXR();
+  requestAnimationFrame(frame);
+  window.cadsimViewer = { scene, state, camera, fitView };
+}
+
+try { start(); }
+catch (err) {
+  const box = document.getElementById("error");
+  box.textContent = "表示できませんでした: " + err.message;
+  box.style.display = "flex";
+  console.error(err);
+}
+</script>
+</body>
+</html>
