@@ -52,6 +52,7 @@ use crate::history::History;
 use crate::japanese_font::install_japanese_font;
 use crate::model::{Model, Selection};
 use crate::motion::{self, MotionUi, at_design_pose};
+use crate::physics::physics_stopped;
 use crate::project::{ProjectState, show_confirm_dialog};
 use crate::viewport::{RenderStats, ViewSettings};
 
@@ -69,8 +70,10 @@ impl Plugin for UiPlugin {
                     playful::apply_theme,
                     draw_ui,
                     playful::draw_overlay,
-                    // 動作シミュレーションで部品が動いている間はギズモで編集しない
-                    transform_gizmo_system.run_if(at_design_pose),
+                    // 動作シミュレーション・物理演算で部品が動いている間はギズモで編集しない
+                    transform_gizmo_system
+                        .run_if(at_design_pose)
+                        .run_if(physics_stopped),
                 )
                     .chain(),
             );

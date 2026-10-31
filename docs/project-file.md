@@ -62,6 +62,8 @@
 | `position` / `rotation_deg` | 親から見た配置。回転は X → Y → Z の順に回す角度(度) |
 | `visible` / `color` | 表示/非表示と、ユーザーが付けた色(sRGB 0〜1、子孫にも効く)。省略すると表示・色なし |
 | `kind` | `Assembly`(まとめるだけ)、`Box`(寸法・位置・回転を箱自身が持つ)、`Imported`(`step_files` の番号と製品名) |
+| `physics`(ノード) | 部品の物理の設定。`mode`(`Fixed` / `Mechanism` / `Dynamic` / `Ignored`)、`shape`(`Auto` / `Box` / `ConvexHull` / `ConvexDecomposition` / `Mesh`)、`friction`、`restitution`、`density`(g/cm³)、`belt`(`axis`・`reversed`・`speed`)。既定(機構で動く)なら省く |
+| `cables` | ケーブル・ホース。`name`、`hose`、`start` / `end`(`node` は寸法と同じ番号の道筋、省くとワールド。`local` は部品の座標系かワールドの位置)、`length`、`diameter`、`min_bend_radius`。端の部品が見つからないものは読み飛ばす |
 | `annotations` | 寸法と注記。`PointDistance` / `EdgeLength` / `FaceDistance` / `Note`。部品は `node` に「最上位から順にたどる子の番号」で書く(例 `[0, 1, 0]` は1つ目の最上位ノードの2番目の子の1番目の子)。`local` は箱なら半寸法で割った値(-1〜1)、取り込んだ部品なら部品の座標系の位置。`face` / `edge` は部品の面・稜線の番号。寸法がなければ項目ごと省く |
 | `flow` | 工程モデル。`duration` / `warmup`(秒)と `seed`、`elements` に要素を並べる。要素は `id`・`name`・`type`(`Source` / `Process` / `Buffer` / `Sink`)と種類ごとの値(`interval` / `cycle_time` / `spread` / `limit` / `mtbf` / `mttr` / `capacity`、時間は秒、`spread` は ± の割合)、送り先の `next`(要素の id)、対応する 3D の部品 `part`(`annotations` と同じ子の番号の並び)、`rated_kw` / `standby_kw` / `air_l_per_min`。工程がなければ項目ごと省く |
 | `floor` | 床の配置。`safety` に安全機器(`id`・`name`・`kind`(`LightCurtain` / `AreaSensor` / `Fence` / `EmergencyStop`)・`position` [x, 下端の高さ, z]・`yaw_deg`・`size`・`stop_time`(秒)・`resolution`・`required_clearance`)、`operators` に作業者(`start` [x, z]・`walk_speed` mm/s・`tasks`。手順は `type` が `Walk`(`to`)/ `Pick` / `Button`(`label`・`duration`)/ `Wait`(`duration`))、`agv` に AGV の経路(`nodes`・`edges`(点の id の組)・`flows`(`from` / `to` / `interval`))と性能(`count`・`speed`・`load_time`・`unload_time`・`length`・`width`・`gap`)。長さは mm。何も置いていなければ項目ごと省く |
