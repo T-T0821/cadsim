@@ -350,6 +350,7 @@ fn highlight_of(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn update_materials(
     model: Res<Model>,
     selection: Res<Selection>,

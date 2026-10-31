@@ -337,6 +337,7 @@ impl Simulation {
     }
 
     /// 最後まで回して結果を返す
+    #[cfg(test)]
     pub fn run(model: &FlowModel) -> Result<Report, Vec<String>> {
         let mut sim = Self::new(model)?;
         sim.advance(f64::INFINITY, usize::MAX);
@@ -459,7 +460,7 @@ impl Simulation {
         if measuring {
             rt.count += 1;
         }
-        let work = match kind {
+        match kind {
             ElementKind::Source {
                 interval,
                 spread,
@@ -490,8 +491,7 @@ impl Simulation {
                 work
             }
             ElementKind::Sink => unreachable!("sink never sends"),
-        };
-        work
+        }
     }
 
     fn accept(&mut self, i: usize, work: Work) {

@@ -276,7 +276,7 @@ impl FlowModel {
                 ElementKind::Source {
                     interval, spread, ..
                 } => {
-                    if !(*interval >= MIN_TIME) {
+                    if interval.is_nan() || *interval < MIN_TIME {
                         out.push(format!("{name}: 間隔は {MIN_TIME} 秒以上にしてください"));
                     }
                     if !(0.0..=1.0).contains(spread) {
@@ -288,7 +288,7 @@ impl FlowModel {
                     spread,
                     failure,
                 } => {
-                    if !(*cycle_time >= MIN_TIME) {
+                    if cycle_time.is_nan() || *cycle_time < MIN_TIME {
                         out.push(format!(
                             "{name}: サイクルタイムは {MIN_TIME} 秒以上にしてください"
                         ));
@@ -297,7 +297,10 @@ impl FlowModel {
                         out.push(format!("{name}: ばらつきは 0〜100% にしてください"));
                     }
                     if let Some(f) = failure
-                        && !(f.mtbf >= MIN_TIME && f.mttr >= MIN_TIME)
+                        && (f.mtbf.is_nan()
+                            || f.mttr.is_nan()
+                            || f.mtbf < MIN_TIME
+                            || f.mttr < MIN_TIME)
                     {
                         out.push(format!("{name}: MTBF・MTTR は正の値にしてください"));
                     }
