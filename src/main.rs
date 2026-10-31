@@ -36,6 +36,8 @@ mod math;
 mod model;
 mod motion;
 mod project;
+mod remap;
+mod scripting;
 mod shortcuts;
 mod simulation;
 mod step_import;
