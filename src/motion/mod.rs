@@ -33,6 +33,7 @@ mod kinematics;
 mod melfa;
 mod path_interference;
 mod pose;
+mod profile;
 mod robot_path;
 mod robot_time;
 mod robot_ui;

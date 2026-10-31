@@ -17,6 +17,8 @@ use bevy::prelude::Resource;
 
 pub use super::sensor::{Sensor, SensorKind};
 
+use super::profile;
+pub use super::profile::CamTable;
 use super::robot_path::{self, PathSample};
 
 /// アクチュエータの種類
@@ -84,28 +86,59 @@ impl Axis {
 }
 
 /// 動き始めと止まり際の速度の付け方
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Easing {
     /// 一定速度
     Linear,
-    /// 加減速あり (S字)
+    /// 加減速あり (S字、3 次式)
     Smooth,
+    /// 台形加減速。`accel` は加速 (と減速) にかける時間の割合 (0〜0.5)。
+    Trapezoid { accel: f64 },
+    /// サイクロイド (加速度が 0 から始まり 0 で終わる)
+    Cycloid,
+    /// 電子カム表 (チャートの `cams` の id)
+    Cam(u32),
 }
 
 impl Easing {
+    /// 選べる種類 (カムは表ごとに別に並べる)
+    pub const BASIC: [Easing; 4] = [
+        Easing::Smooth,
+        Easing::Trapezoid { accel: 0.25 },
+        Easing::Cycloid,
+        Easing::Linear,
+    ];
+
     pub fn label(self) -> &'static str {
         match self {
             Easing::Linear => "等速",
             Easing::Smooth => "S字加減速",
+            Easing::Trapezoid { .. } => "台形加減速",
+            Easing::Cycloid => "サイクロイド",
+            Easing::Cam(_) => "電子カム",
         }
     }
 
-    /// 0..1 の進み具合を、速度の付け方に合わせた 0..1 に変換する
+    /// 種類が同じか (台形の割合やカムの表の違いは見ない)
+    pub fn same_kind(self, other: Easing) -> bool {
+        std::mem::discriminant(&self) == std::mem::discriminant(&other)
+    }
+
+    /// 0..1 の進み具合を、速度の付け方に合わせた 0..1 に変換する。
+    /// 電子カムは表がないと分からないので等速として扱う ([`Easing::apply_with`] を使う)。
     pub fn apply(self, x: f64) -> f64 {
+        self.apply_with(x, &[])
+    }
+
+    /// 電子カムの表 `cams` も使って変換する
+    pub fn apply_with(self, x: f64, cams: &[CamTable]) -> f64 {
         let x = x.clamp(0.0, 1.0);
         match self {
             Easing::Linear => x,
             Easing::Smooth => x * x * (3.0 - 2.0 * x),
+            Easing::Trapezoid { accel } => profile::trapezoid(x, accel),
+            Easing::Cycloid => profile::cycloid(x),
+            Easing::Cam(id) => cams.iter().find(|c| c.id == id).map_or(x, |c| c.eval(x)),
         }
     }
 }
@@ -372,9 +405,39 @@ pub struct TimingChart {
     pub next_sensor_id: u32,
     pub robots: Vec<Robot>,
     pub next_robot_id: u32,
+    /// 電子カム表 (アクチュエータの加減速で選ぶ)
+    pub cams: Vec<CamTable>,
+    pub next_cam_id: u32,
 }
 
 impl TimingChart {
+    pub fn cam_mut(&mut self, id: u32) -> Option<&mut CamTable> {
+        self.cams.iter_mut().find(|c| c.id == id)
+    }
+
+    /// 電子カム表を追加する。最初は「前半で加速、後半で減速」の点を入れておく。
+    pub fn add_cam(&mut self) -> u32 {
+        self.next_cam_id = self.next_cam_id.max(1);
+        let id = self.next_cam_id;
+        self.next_cam_id += 1;
+        self.cams.push(CamTable {
+            id,
+            name: format!("カム {id}"),
+            points: vec![[0.25, 0.1], [0.5, 0.5], [0.75, 0.9]],
+        });
+        id
+    }
+
+    /// 電子カム表を消す。その表を使っていたアクチュエータは S字加減速に戻す。
+    pub fn remove_cam(&mut self, id: u32) {
+        self.cams.retain(|c| c.id != id);
+        for actuator in &mut self.actuators {
+            if actuator.easing == Easing::Cam(id) {
+                actuator.easing = Easing::Smooth;
+            }
+        }
+    }
+
     pub fn add_actuator(&mut self, kind: ActuatorKind) -> u32 {
         self.next_actuator_id = self.next_actuator_id.max(1);
         let id = self.next_actuator_id;
@@ -535,7 +598,10 @@ impl TimingChart {
         &self,
         mut unmet: impl FnMut(&Schedule, f64, &Step) -> Vec<Interlock>,
     ) -> Schedule {
-        let mut schedule = Schedule::default();
+        let mut schedule = Schedule {
+            cams: self.cams.clone(),
+            ..Default::default()
+        };
         // 各アクチュエータの、直前までの動作で決まった値 (サイクル開始時はすべて 0)
         let mut values: HashMap<u32, f64> = HashMap::new();
         let mut time = 0.0;
@@ -720,6 +786,8 @@ pub struct Schedule {
     pub stop: Option<InterlockStop>,
     /// ロボットの移動ごとの逆運動学の結果 (届かない教示点の警告に使う)
     pub moves: Vec<SolvedMove>,
+    /// 電子カム表 (チャートから写したもの。値を読むときに使う)
+    pub cams: Vec<CamTable>,
 }
 
 /// ロボットの移動1つ分の逆運動学と経路の結果
@@ -774,9 +842,16 @@ impl Schedule {
                 (t - segment.start) / segment.duration
             };
             let easing = segment.easing.unwrap_or(actuator.easing);
-            value += (segment.target - value) * easing.apply(progress);
+            value += (segment.target - value) * easing.apply_with(progress, &self.cams);
         }
         actuator.clamp(value)
+    }
+
+    /// 時刻 t でのアクチュエータの速度 (値の単位/秒。シリンダは 0〜1 の値の速さ)
+    pub fn velocity_at(&self, actuator: &Actuator, t: f64) -> f64 {
+        let h = 1e-3;
+        (self.value_at(actuator, t + h) - self.value_at(actuator, (t - h).max(0.0)))
+            / (t + h - (t - h).max(0.0))
     }
 
     /// 時刻 t での全アクチュエータの値
@@ -966,4 +1041,29 @@ mod tests {
         assert!(chart.is_mounted_under(b, a));
         assert!(!chart.is_mounted_under(a, b));
     }
+}
+#[test]
+fn cam_table_shapes_the_motion_and_is_reset_when_removed() {
+    let mut chart = TimingChart::default();
+    let id = chart.add_actuator(ActuatorKind::LinearAxis);
+    let cam = chart.add_cam();
+    chart.cam_mut(cam).unwrap().points = vec![[0.5, 0.9]];
+    chart.actuator_mut(id).unwrap().easing = Easing::Cam(cam);
+    chart.steps = vec![Step {
+        actions: vec![Action {
+            actuator: id,
+            target: 100.0,
+            duration: 2.0,
+        }],
+        ..Default::default()
+    }];
+    let schedule = chart.schedule();
+    let actuator = chart.actuator(id).unwrap();
+    // 動作時間の半分で、移動量の 90% まで進む
+    assert!((schedule.value_at(actuator, 1.0) - 90.0).abs() < 1e-9);
+    assert!((schedule.value_at(actuator, 2.0) - 100.0).abs() < 1e-9);
+    assert!(schedule.velocity_at(actuator, 0.5) > schedule.velocity_at(actuator, 1.5));
+
+    chart.remove_cam(cam);
+    assert_eq!(chart.actuator(id).unwrap().easing, Easing::Smooth);
 }
