@@ -48,10 +48,8 @@ use bevy_egui::{
 };
 
 use crate::animation::Animations;
-use crate::camera::{CameraRequest, OrbitCamera, ViewportRect};
 use crate::file_io::ImportJobs;
 use crate::flow::{self, FlowUi};
-use crate::gizmo::{GizmoTool, transform_gizmo_system};
 use crate::history::History;
 use crate::japanese_font::install_japanese_font;
 use crate::model::{Model, Selection};
@@ -59,9 +57,11 @@ use crate::motion::{self, MotionUi, at_design_pose};
 use crate::physics::physics_stopped;
 use crate::plc::plc_active;
 use crate::project::{ProjectState, show_confirm_dialog};
-use crate::recording::RecordSettings;
 use crate::result_export::ResultExport;
-use crate::viewport::{Defeaturing, RenderStats, ViewSettings};
+use crate::view::camera::{CameraRequest, OrbitCamera, ViewportRect};
+use crate::view::gizmo::{GizmoTool, transform_gizmo_system};
+use crate::view::recording::RecordSettings;
+use crate::view::viewport::{Defeaturing, RenderStats, ViewSettings};
 
 pub struct UiPlugin;
 

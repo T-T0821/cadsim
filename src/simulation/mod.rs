@@ -23,7 +23,7 @@ use bevy::{
 };
 use bevy_egui::EguiPrimaryContextPass;
 
-use crate::camera::{keyboard_free, pointer_in_3d_view};
+use crate::view::camera::{keyboard_free, pointer_in_3d_view};
 use truck_meshalgo::prelude::*;
 
 pub use cadsim_core::simulation::{geometry, interference};

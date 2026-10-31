@@ -6,13 +6,13 @@ use super::UiState;
 use super::dock;
 use super::modeling::Tab;
 use super::theme::palette;
-use crate::camera::{CameraRequest, StandardView};
 use crate::file_io::ExportScope;
-use crate::gizmo::Tool as Tool3d;
 use crate::history::Request;
 use crate::interchange::{FORMATS, LENGTH_UNITS};
 use crate::project::ProjectAction;
 use crate::result_export::ResultKind;
+use crate::view::camera::{CameraRequest, StandardView};
+use crate::view::gizmo::Tool as Tool3d;
 use cadsim_core::usecase::help::SHORTCUTS;
 use cadsim_core::workspace::{Tool, ToolGroup};
 

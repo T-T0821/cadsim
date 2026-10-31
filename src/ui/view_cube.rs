@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use bevy_egui::egui;
 
 use super::UiState;
-use crate::camera::{CameraRequest, StandardView};
+use crate::view::camera::{CameraRequest, StandardView};
 
 const CUBE_SIZE: f32 = 46.0;
 const MARGIN: f32 = 16.0;

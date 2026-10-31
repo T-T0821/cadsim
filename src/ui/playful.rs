@@ -17,7 +17,6 @@ use super::theme::{self, palette};
 use super::tutorial::{self, TutorialUi};
 use crate::annotation::Annotations;
 use crate::assistant::help::HelpChat;
-use crate::camera::{OrbitCamera, ViewportRect};
 use crate::flow::FlowRun;
 use crate::history::History;
 use crate::model::NodeKind;
@@ -28,6 +27,7 @@ use crate::project::ProjectState;
 use crate::simulation::InterferenceCheck;
 use crate::simulation::interference::PairStatus;
 use crate::simulation::measure::MeasureTool;
+use crate::view::camera::{OrbitCamera, ViewportRect};
 use cadsim_core::gamify::{
     Achievement, Chapter, ConfettiPiece, MissionId, Observation, Preferences, confetti,
     level_title, mission,

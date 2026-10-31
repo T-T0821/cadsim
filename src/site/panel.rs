@@ -8,10 +8,10 @@ use cadsim_core::workspace::Tool;
 
 use super::cloud_view::{CloudCheck, CloudDisplay};
 use super::{PlanTool, format_count};
-use crate::camera::ViewportRect;
 use crate::drawing::format_length;
 use crate::model::Model;
 use crate::simulation::SimBody;
+use crate::view::camera::ViewportRect;
 
 #[allow(clippy::too_many_arguments)]
 pub fn site_panel(

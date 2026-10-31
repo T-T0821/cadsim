@@ -13,9 +13,9 @@ use super::dock::{self, Dock, RAIL_WIDTH};
 use super::playful::{PlayfulUi, mascot};
 use super::theme::palette;
 use crate::assistant::help::HelpChat;
-use crate::camera::ViewportRect;
 use crate::motion::Playback;
 use crate::project::{ProjectAction, ProjectState};
+use crate::view::camera::ViewportRect;
 use cadsim_core::gamify::{Chapter, MISSIONS, Mission, Place};
 
 /// 手順を出しているときのミッションカードの幅

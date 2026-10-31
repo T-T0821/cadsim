@@ -39,7 +39,7 @@ STEP サンプル (`assets/sample_assembly.step`) を開いたところ。軸が
 
 ```mermaid
 flowchart LR
-    subgraph viewport.rs [部品の表示 viewport.rs]
+    subgraph viewport.rs [部品の表示 view/viewport.rs]
         P[Model の箱・STEP 部品<br/>f64 の設計データ] -->|テッセレーション<br/>配置行列 → 姿勢| R[部品のエンティティ PartView]
     end
     R -->|SimBody を付ける| S
@@ -55,7 +55,7 @@ flowchart LR
 
 ほかの機能とのつなぎ目は **`SimBody` コンポーネントだけ** です。
 部品のルートエンティティに `SimBody` (と表示名の `Name`) を付ければ、シミュレーション側が自動で拾います。
-箱も STEP から取り込んだ部品も、`viewport.rs` が部品のエンティティを作るときに `SimBody` を付けています。取り込んだ部品のメッシュは同じ製品のインスタンスで共有します (同じボルト100本でも検索木は1回だけ作る)。
+箱も STEP から取り込んだ部品も、`view/viewport.rs` が部品のエンティティを作るときに `SimBody` を付けています。取り込んだ部品のメッシュは同じ製品のインスタンスで共有します (同じボルト100本でも検索木は1回だけ作る)。
 非表示にした部品は判定から外します。
 
 ```rust
@@ -71,7 +71,7 @@ pub struct SimBody {
 工場ラインの装置をタイミングチャートどおりに動かしながら、干渉をフレームごとに調べられるようにしています。
 
 - 形状 (`mesh`) と位置 (`pose`) を分けています。**動かすときは `pose` だけを書き換えます。**
-  いまは `viewport.rs` の `sync_placement_and_visibility` が `Model` の配置行列から毎フレーム `pose` を写しています。
+  いまは `view/viewport.rs` の `sync_placement_and_visibility` が `Model` の配置行列から毎フレーム `pose` を写しています。
   再生で部品を動かすときは、`Model` の配置を動かすか、このシステムの後で `pose` を上書きしてください。
   メッシュと検索木 (BVH) は作り直さないので、毎フレームの判定でも軽く済みます。
 - `SimBody` が変わったフレームだけ判定が走ります (「自動」がオンのとき)。再生中は毎フレーム、止まっていれば判定しません。

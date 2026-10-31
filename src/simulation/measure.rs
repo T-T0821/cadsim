@@ -10,7 +10,7 @@ use bevy::{math::DVec3, prelude::*, window::PrimaryWindow};
 use bevy_egui::{EguiContexts, egui};
 
 use super::{SimBody, view::SimulationGizmos};
-use crate::viewport::PartPicker;
+use crate::view::viewport::PartPicker;
 
 /// 頂点に吸着する範囲 (画面上のピクセル)
 const SNAP_PIXELS: f32 = 12.0;

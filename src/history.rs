@@ -28,8 +28,8 @@ use cadsim_core::usecase::edit_tracker::EditTracker;
 
 pub use cadsim_core::history::{ModelChange, Request};
 
-use crate::gizmo::transform_gizmo_system;
 use crate::model::{Model, NodeId, Selection};
+use crate::view::gizmo::transform_gizmo_system;
 
 pub struct HistoryPlugin;
 

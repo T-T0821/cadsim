@@ -29,12 +29,12 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy_egui::EguiPrimaryContextPass;
 
-use crate::camera::{CameraRequest, ViewportRect, alt_pressed, pointer_in_3d_view};
 use crate::file_io::{ImportJobs, file_name};
 use crate::formats::pointcloud_read::{default_settings, is_cloud_file, read_cloud};
 use crate::formats::read_plan_file;
 use crate::history::{TrackDocExt, TrackedDoc};
 use crate::model::Model;
+use crate::view::camera::{CameraRequest, ViewportRect, alt_pressed, pointer_in_3d_view};
 use model::Site;
 use pointcloud::{CloudSettings, PlacedCloud, PointCloud};
 use underlay::{PlanContent, Underlay, unit_in_mm};

@@ -12,7 +12,7 @@ use super::{
     AGV_HEIGHT, AgvLayoutRes, FloorClock, FloorState, FloorTool, OperatorsRes, PERSON_HEIGHT,
     PERSON_RADIUS, agv_corners, operator_position,
 };
-use crate::camera::ViewportRect;
+use crate::view::camera::ViewportRect;
 
 const PATH_COLOR: Color = Color::srgb(0.3, 0.75, 1.0);
 const PERSON_COLOR: Color = Color::srgb(0.2, 0.6, 1.0);

@@ -24,7 +24,7 @@ use super::ui::{ChartUiState, ERROR_COLOR, WARN_COLOR};
 use super::{ChartSchedule, JogPose, SimulationPose};
 use crate::model::Model;
 use crate::simulation::{InterferenceCheck, SimBody};
-use crate::viewport::PartPicker;
+use crate::view::viewport::PartPicker;
 
 /// 移動中の干渉を調べる時刻の間隔 (秒)
 const INTERFERENCE_INTERVAL: f64 = 0.05;

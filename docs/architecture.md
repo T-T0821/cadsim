@@ -86,7 +86,7 @@ crates/
 3. **ファイル形式を io へ。** 🔶 `cadsim_io` を作り、3D ファイル形式の読み書き (`interchange` の Scene・glTF・OBJ・STL・USD・Web ビューア) を移した。アプリ側の `interchange` から再公開しているので呼び出し側は変わらない。`Scene` ⇔ `Model` の変換 (`model_io`) も、手順 4 で `Model` が core に移ったあと io へ移した。続いて STEP の読み込みを `cadsim_io::step` に移し、取り込んだ形状とアセンブリの木の型 (`ImportedShape` など) は `cadsim_core::shape`、表示用メッシュ (`part_mesh`)・BVH・アニメーションの型 (`Animation` など) は `cadsim_core` に移した (io → core の向き)。さらに平面図・点群・図面の形式 (`formats::{dxf, pdf_plan, pointcloud_read, site_record, drawing_out, conveyor_record}`)、工程シミュレーションの記録と Excel 書き出し (`flow::{record, xlsx}`)、設定ファイル (`preferences_file`) を `cadsim_io` に移した。アプリ側の `formats` / `flow` / `preferences_file` から再公開している。部品表の書き出し (`formats::bom_out`) も io。タイミングチャートとアニメーションの保存形式 (`formats::chart_record`) も io。`.cadsim` の JSON の構造体はまだアプリ側。
 4. **設計データを core へ。** 🔶 `Model` と `Node`・`NodeKind`・`BoxPart` などを `cadsim_core::model` に移した。アプリ側の `model::Model` は `#[derive(Resource, Deref, DerefMut)] struct Model(cadsim_core::model::Model)` という包み型で、`Res<Model>` やメソッド呼び出しはそのまま使える。標準部品の種類・パラメータ・形状 (`library::{catalog, geometry}`) と、モデリングで作った形状の出どころ `ModeledSource` も core に置き、JSON との変換は `cadsim_io::modeled` の `ModeledSourceExt` に置いた。`Selection` は画面の状態なので UI 層 (アプリ側) のまま。`Model` のテストはサンプルの STEP (io) を読むのでアプリ側に残した。部品表の計算 (`bom`) も core に移した (テストはサンプルの STEP を読むのでアプリ側)。読み込み元の表示名は `StepSource::display_name`。モデリング (円柱・押し出し・穴あけ・ブーリアン) も `cadsim_core::modeling` に移し、B-rep を JSON に詰める部分はポート `SolidStore` にして io (`JsonSolids`) が実装する。
 5. **ユースケースを切り出す。** 開く・保存・取り込み・書き出し・削除・元に戻すを `usecase` の関数にし、Bevy のシステムからはそれを呼ぶだけにする。元に戻す履歴は `World` ではなくドキュメント(モデル + チャートなど)を書き換える形にする。 🔶 まず履歴の山 (`UndoStack`)・モデルの変更 (`ModelChange`)・ドラッグ中の編集のまとめ方 (`ModelEdits`) を `cadsim_core::history` に移した。アプリ側の `History` (Resource) はそれを持ち、`Command` で `World` を書き換える部分と見張る文書 (`TrackedDoc`) だけを持つ。
-6. **UI 層を整理する。** 残った Bevy / egui のコードを `view` / `input` / `ui` に分ける。
+6. **UI 層を整理する。** 残った Bevy / egui のコードを `view` / `input` / `ui` に分ける。 🔶 3D 表示の `viewport`・`camera`・`gizmo`・`recording` を `src/view/` に、キーのショートカット `shortcuts` を `src/input/` に移した。`main.rs` はそれらを `use` してプラグインを並べる。ファイルダイアログとドラッグ&ドロップ (`file_io`) は開く・保存の処理と混ざっているので、ユースケースに切り出してから `input` に移す。
 
 安全機器と作業者・AGV は、`device.rs`・`geom.rs`・`operator_plan.rs`・`agv_sim.rs` を `cadsim_core::{safety, floor}` に移した。動作範囲と距離の確認 (`check.rs`) も、チャートが core に移ったあと `cadsim_core::safety` に移した。`src/safety/`・`src/floor/` の `mod.rs`・`view.rs`・`panel.rs` が UI 層です。
 
@@ -113,7 +113,7 @@ crates/
 | 部品表 | `bom` | `formats::bom_out` | `documents.rs` |
 | モデリング | `modeling`(B-rep の詰め方のポート `SolidStore`) | `modeled`(B-rep ⇔ JSON) | `ui/modeling.rs` |
 | 物理演算 | `physics::{settings, cable}`(ドメイン)、`physics::world`(ユースケース。物理エンジンのポート `PhysicsEngine`) | `physics::{rapier, records}`(Rapier と .cadsim の形) | `physics/{mod, panel, sample}` |
-| 動画書き出し | `video`(撮る時刻・切り抜き・書き込み先のポート `VideoSink`) | `video::{encode, mp4}`(MP4 / GIF / PNG) | `recording.rs`(画面のキャプチャ・設定ウィンドウ) |
+| 動画書き出し | `video`(撮る時刻・切り抜き・書き込み先のポート `VideoSink`) | `video::{encode, mp4}`(MP4 / GIF / PNG) | `view/recording.rs`(画面のキャプチャ・設定ウィンドウ) |
 | タイミングチャート・アニメーションの保存 | `motion::chart` | `formats::chart_record` | `project.rs` |
 | 文書の変更を元に戻す履歴にまとめる | `usecase::edit_tracker`(前に確定した状態との比較) | — | `history.rs` の `TrackedDoc`(各プラグインで登録) |
 | 実機ロボット (UR) の関節角度の受信 | —(角度から関節の値への直し方 `motion::live_joints` は Bevy 非依存。`motion::chart` と一緒に手順 2 で core へ) | `cadsim_io::rtde`(RTDE の読み書きと通信スレッド) | `motion/ur_ui.rs` |

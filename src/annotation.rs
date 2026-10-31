@@ -29,15 +29,15 @@ use serde::{Deserialize, Serialize};
 use truck_meshalgo::prelude::*;
 use truck_modeling::Solid;
 
-use crate::camera::{ViewportRect, alt_pressed, keyboard_free};
-use crate::gizmo::transform_gizmo_system;
 use crate::history::{Command, History};
 use crate::japanese_font::install_japanese_font;
 use crate::math::euler_deg_to_quat;
 use crate::model::{BoxPart, Model, NodeId, NodeKind, Selection};
 use crate::simulation::measure::MeasureTool;
 use crate::ui::widgets::length;
-use crate::viewport::PartPicker;
+use crate::view::camera::{ViewportRect, alt_pressed, keyboard_free};
+use crate::view::gizmo::transform_gizmo_system;
+use crate::view::viewport::PartPicker;
 
 /// 吸着する距離 (画面上のピクセル)
 const SNAP_PX: f32 = 12.0;

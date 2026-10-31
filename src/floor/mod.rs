@@ -21,11 +21,11 @@ use bevy::math::{DVec2, DVec3};
 use bevy::prelude::*;
 use bevy_egui::EguiPrimaryContextPass;
 
-use crate::camera::pointer_in_3d_view;
 use crate::floor_record::{FloorLayout, FloorRecord};
 use crate::history::{TrackDocExt, TrackedDoc};
 use crate::math::Aabb;
 use crate::safety::{Intruder, SafetyIntruders, SafetyLayoutRes, SafetySet, SafetyState};
+use crate::view::camera::pointer_in_3d_view;
 use agv_sim::{AgvGraph, AgvParams, AgvSim, FleetResult, Flow};
 use operator_plan::{Operator, OperatorPlan};
 

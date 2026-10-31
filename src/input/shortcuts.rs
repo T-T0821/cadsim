@@ -2,12 +2,12 @@
 
 use bevy::prelude::*;
 
-use crate::camera::{CameraRequest, StandardView, alt_pressed, keyboard_free};
 use crate::file_io::ImportJobs;
-use crate::gizmo::{GizmoTool, Tool};
 use crate::history::{History, Request};
 use crate::model::{Model, Selection};
 use crate::project::{ProjectAction, ProjectState};
+use crate::view::camera::{CameraRequest, StandardView, alt_pressed, keyboard_free};
+use crate::view::gizmo::{GizmoTool, Tool};
 
 pub struct ShortcutsPlugin;
 

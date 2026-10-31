@@ -15,10 +15,10 @@ use bevy::render::view::window::screenshot::{Screenshot, ScreenshotCaptured};
 use bevy::window::PrimaryWindow;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
-use crate::camera::ViewportRect;
 use crate::model::Selection;
 use crate::motion::{ChartSchedule, MotionSet, Playback};
 use crate::video::encode::{EncodeSettings, EncoderThread};
+use crate::view::camera::ViewportRect;
 use cadsim_core::video::{CropRect, Format, Frame, FramePlan, RecordingSession};
 
 pub struct RecordingPlugin;

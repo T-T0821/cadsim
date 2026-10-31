@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 
-use crate::camera::ViewportRect;
+use crate::view::camera::ViewportRect;
 
 use super::{
     InterferenceCheck, SimBody,
