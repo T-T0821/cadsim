@@ -1,0 +1,9 @@
+[package]
+name = "cadsim_core"
+version = "0.1.0"
+edition = "2024"
+description = "cadsim のドメインとユースケース。Bevy・egui・ファイル形式のライブラリに依存しない"
+
+[dependencies]
+# Bevy 0.20 (bevy_math) と同じ版にして、ベクトル・行列の型をそのまま受け渡せるようにする
+glam = "0.33"

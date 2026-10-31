@@ -23,11 +23,16 @@
 
 ## コードの構成
 
+層の分け方は [architecture.md](architecture.md) を見てください。
+
 ```text
-src/
+crates/cadsim_core/   Bevy に依存しないドメイン (cargo test -p cadsim_core で単体テスト)
+├── math.rs          回転・行列・外接箱の計算 (f64)
+├── remap.rs         形状の差し替え: 古い木と新しい木のノードの対応づけ
+└── simulation/      干渉チェックの幾何計算 (geometry / mesh / interference / overlap)
+src/                  アプリ本体 (Bevy + egui)
 ├── main.rs          アプリの組み立て (プラグインを並べるだけ)
 ├── model.rs         設計データ: アセンブリの木 (f64) と選択状態
-├── remap.rs         形状の差し替え: 古い木と新しい木のノードの対応づけ (Bevy 非依存)
 ├── step_import.rs   STEP → アセンブリの木と B-rep (Bevy に依存しない)
 ├── file_io.rs       ダイアログ・ドラッグ&ドロップ・別スレッドでの読み込み・書き出し
 ├── interchange/     glTF / OBJ / STL などの読み書き (形式に依存しない中間表現 Scene を経由)
@@ -35,6 +40,7 @@ src/
 │   ├── model_io.rs   Scene ⇔ Model の変換 (単位の換算、メッシュの稜線)
 │   ├── gltf.rs / obj.rs / stl.rs
 │   ├── usd.rs        OpenUSD (.usda / .usdc / .usdz)
+│   ├── web_viewer.rs Web ビューア (.html、GLB を埋め込んだ1ファイル。docs/web-viewer.md)
 │   └── samples.rs    サンプルファイルを作るテスト (手で実行)
 ├── animation.rs     取り込んだアニメーションの再生
 ├── project.rs       プロジェクトファイル (.cadsim) の保存と読み込み
@@ -54,9 +60,9 @@ src/
 │   └── demo.rs       サンプル装置 (ピック & プレース)
 ├── shortcuts.rs     キーボードショートカット
 ├── history.rs       元に戻す・やり直し
-├── math.rs          回転・行列・外接箱の計算
+├── math.rs          f64 の配置を Bevy の Transform にする (計算は cadsim_core::math)
 ├── japanese_font.rs egui に日本語フォントを登録
-├── simulation/      干渉チェックと距離計測 (詳しくは docs/simulation.md)
+├── simulation/      干渉チェックの配線・表示・パネルと距離計測 (詳しくは docs/simulation.md)
 ├── annotation.rs    3D 上の寸法と注記 (置く操作・描画・パネル・保存形式)
 └── ui/
     ├── mod.rs        画面の割り付け (上 → 下 → 左 → 右 → 残りが 3D ビュー)
@@ -188,7 +194,7 @@ egui のパネルを上・下・左・右の順に置き、残った領域を 3D
 - 追加・削除・すべて削除・注記の文字の編集は元に戻せる。部品を削除すると寸法は隠れ、部品の削除を元に戻すと寸法も戻る。
 - 距離計測(シミュレーション)と寸法の道具は、片方を始めるともう片方は止まる。
 
-### 形状の差し替え(`remap.rs`、`Model::replace_geometry`)
+### 形状の差し替え(`cadsim_core::remap`、`Model::replace_geometry`)
 
 設計変更後のファイルを読み、選んだノード以下の木と新しい木のノードを対応づけてから入れ替えます。
 対応づけ(`remap::plan_remap`)は Bevy にもファイル形式にも依存しない純粋な関数で、次の順に試します。

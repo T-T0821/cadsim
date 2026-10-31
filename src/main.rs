@@ -43,7 +43,6 @@ mod model;
 mod motion;
 mod part_mesh;
 mod project;
-mod remap;
 mod shortcuts;
 mod simulation;
 mod step_import;

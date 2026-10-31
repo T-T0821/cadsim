@@ -118,14 +118,40 @@ cargo run --release -- --stress 5000  # 部品 5000 個ほどの負荷テスト�
 | OpenUSD(.usda / .usdc / .usdz / .usd) | ○ | ○ | 階層・名前・色・アニメーション(タイミングチャートの動きも)。Omniverse でそのまま再生できます |
 | OBJ | ○ | ○ | 部品ごとの形状と色 |
 | STL | ○ | ○ | 形状だけ |
+| Web ビューア(.html) | | ○ | 階層・名前・色・アニメーション。cadsim が無い人がブラウザ・スマホ・VR で見られます([下記](#ブラウザやスマホで見てもらうvr-で実寸で見る)) |
 
 OBJ と STL には単位がないので、「ファイル → OBJ / STL の単位」で mm / cm / m / inch と上向きの軸を選んでから読み書きしてください(既定は mm・Y 軸が上)。
 アニメーション付きのファイルを開くと、ビューの下に「アニメーション」パネルが出て、再生・停止と、好きな時刻への移動ができます。
-タイミングチャートに動きがあるときは、その1サイクルも glTF / GLB と OpenUSD にアニメーションとして書き出されます(秒間 30 キー)。
+タイミングチャートに動きがあるときは、その1サイクルも glTF / GLB・OpenUSD・Web ビューアにアニメーションとして書き出されます(秒間 30 キー)。
 
 | glTF のアニメーションを再生 | 書き出しメニュー |
 | --- | --- |
 | ![glTF アニメーション](docs/screenshots/10_gltf_animation.png) | ![書き出しメニュー](docs/screenshots/12_export_menu.png) |
+
+### ブラウザやスマホで見てもらう・VR で実寸で見る
+
+「ファイル → 書き出し → すべてを書き出し…」で保存先の拡張子を `.html` にすると、モデルとアニメーションを1つの HTML ファイルにまとめて書き出します。
+メールやチャットで送れば、cadsim を入れていない人もブラウザで開くだけで見られます。インターネットにつながっていなくても表示できます。
+
+| PC のブラウザ | スマホ |
+| --- | --- |
+| ![Web ビューア](docs/screenshots/15_web_viewer.png) | ![スマホで開いたところ](docs/screenshots/16_web_viewer_phone.png) |
+
+| 操作(PC) | 操作(スマホ) | 内容 |
+| --- | --- | --- |
+| 左ドラッグ | 1本指でドラッグ | 回転 |
+| 右ドラッグ / Shift + ドラッグ | 2本指でドラッグ | 平行移動 |
+| ホイール | ピンチ | 拡大・縮小 |
+| クリック | タップ | 部品を選んで名前を表示 |
+| ダブルクリック / 「全体表示」 | 「全体表示」 | 全体が見える向きに戻す |
+
+アニメーションがあれば下に再生バーが出て、再生・停止、好きな時刻への移動、速度の切り替えができます。
+
+**VR で実寸で見る。** VR に対応したブラウザ(Meta Quest のブラウザ、PC VR を Chrome / Edge で使う場合など)で開くと「VR で見る」ボタンが出ます。押すとモデルが実寸(1 m = 1 m)で床の上に置かれ、手前の端が 1 m 先に来ます。
+左スティックで見ている方向へ歩き、右スティックを左右に倒すと 30° ずつ向きが変わります。設備の間を歩いて、作業のしやすさやメンテナンスの空間を確かめられます。
+AR に対応した端末では「AR で置く」ボタンも出て、カメラの映像の上に実寸で置けます。
+
+cadsim から直接見るときは「ファイル → 書き出し → ブラウザ / VR で見る」を押すと、いまのモデル全体を書き出して既定のブラウザで開きます。PC につないだ VR ヘッドセットで見るときはここから「VR で見る」を押してください。
 
 ### 設計変更後の形状に差し替える
 
@@ -257,5 +283,12 @@ cargo test --locked
 | [docs/internals.md](docs/internals.md) | 使っているライブラリ、各機能のしくみ、サンプルとフォントの作り方 |
 | [docs/simulation.md](docs/simulation.md) | 干渉チェック・距離計測の設計 |
 | [docs/performance.md](docs/performance.md) | 大規模アセンブリを軽くするしくみと、負荷テスト・FPS の測り方 |
+| [docs/web-viewer.md](docs/web-viewer.md) | Web ビューア(.html)と VR / AR 表示のしくみ |
 | [docs/project-file.md](docs/project-file.md) | プロジェクトファイル(.cadsim)の形式 |
 | [docs/release.md](docs/release.md) | Windows / Mac 向けの配布パッケージと Release の作り方 |
+
+## ライセンス
+
+[MIT License](LICENSE-MIT) と [Apache License 2.0](LICENSE-APACHE) のどちらかを選んで使えます(デュアルライセンス)。
+
+ただし、同梱の日本語フォント `assets/fonts/NotoSansJP-Subset.otf` は [SIL Open Font License 1.1](assets/fonts/OFL.txt) です。

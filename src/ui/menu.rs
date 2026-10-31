@@ -89,6 +89,13 @@ fn export_menu(ui: &mut egui::Ui, state: &mut UiState) {
         {
             state.jobs.request_export(ExportScope::Selection);
         }
+        if ui
+            .button("ブラウザ / VR で見る")
+            .on_hover_text("Web ビューアにして既定のブラウザで開きます。WebXR 対応のブラウザなら VR ヘッドセットで実寸で見られます")
+            .clicked()
+        {
+            state.jobs.request_browser_view();
+        }
         ui.separator();
         ui.weak("保存ダイアログで選んだ拡張子の形式で書き出します");
         for format in FORMATS.iter().filter(|f| f.export.is_some()) {

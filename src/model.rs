@@ -15,8 +15,8 @@ use truck_modeling::{Solid, builder};
 use truck_meshalgo::prelude::{EuclideanSpace, Point3, Rad, Vector3};
 
 use crate::math::{Aabb, euler_deg_to_quat};
-use crate::remap::{OutlineNode, plan_remap};
 use crate::step_import::{ImportNode, ImportedShape};
+use cadsim_core::remap::{OutlineNode, plan_remap};
 
 pub type NodeId = u32;
 

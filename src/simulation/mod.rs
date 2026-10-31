@@ -4,10 +4,10 @@
 //!
 //! | ファイル | 役割 |
 //! | --- | --- |
-//! | `geometry.rs` | f64 の幾何計算 (姿勢・外接箱・三角形の交差と距離) |
-//! | `mesh.rs` | 干渉チェック用メッシュ [`TriMesh`] と検索木 (BVH) |
-//! | `interference.rs` | 部品の組ごとの判定 (干渉 / 接触 / 近接) |
-//! | `overlap.rs` | 干渉部分の立体 (体積・表示用メッシュ) |
+//! | `cadsim_core::simulation::geometry` | f64 の幾何計算 (姿勢・外接箱・三角形の交差と距離) |
+//! | `cadsim_core::simulation::mesh` | 干渉チェック用メッシュ [`TriMesh`] と検索木 (BVH) |
+//! | `cadsim_core::simulation::interference` | 部品の組ごとの判定 (干渉 / 接触 / 近接) |
+//! | `cadsim_core::simulation::overlap` | 干渉部分の立体 (体積・表示用メッシュ) |
 //! | `view.rs` | 判定結果の3D表示 |
 //! | `measure.rs` | 2点間の距離計測ツール |
 //! | `panel.rs` | 右側の「シミュレーション」パネル |
@@ -26,11 +26,9 @@ use bevy_egui::EguiPrimaryContextPass;
 use crate::camera::{keyboard_free, pointer_in_3d_view};
 use truck_meshalgo::prelude::*;
 
-pub mod geometry;
-pub mod interference;
+pub use cadsim_core::simulation::{geometry, interference};
+use cadsim_core::simulation::{mesh, overlap};
 pub mod measure;
-mod mesh;
-mod overlap;
 mod panel;
 mod view;
 

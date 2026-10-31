@@ -12,7 +12,7 @@
 
 use std::cell::Cell;
 
-use bevy::math::DVec3;
+use glam::DVec3;
 
 use super::geometry::{
     Aabb, Pose, Triangle, TriangleContact, closest_points_on_triangles, intersect_triangles,
@@ -239,7 +239,7 @@ fn closest_points(a: &Body, b: &Body, b_to_a: &Pose, reach: f64) -> Option<[DVec
 mod tests {
     use super::*;
     use crate::simulation::mesh::tests::box_mesh;
-    use bevy::math::DQuat;
+    use glam::DQuat;
 
     /// 組を絞り込んだ結果が、全部の組を順に調べた結果と同じ
     #[test]
