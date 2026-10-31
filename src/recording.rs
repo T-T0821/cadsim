@@ -97,6 +97,11 @@ impl Recorder {
     pub fn is_capturing(&self) -> bool {
         matches!(self.state, State::Capturing(_))
     }
+
+    /// 撮影かエンコードの途中
+    pub fn is_busy(&self) -> bool {
+        !matches!(self.state, State::Idle)
+    }
 }
 
 #[derive(Default)]
@@ -188,6 +193,14 @@ fn start_if_requested(
 
 /// 保存先のダイアログ。PNG 連番はフォルダを作ってその中に並べる
 fn pick_output(format: Format) -> Option<PathBuf> {
+    // 画面の自動確認では OS のダイアログを操作できないので、決まった場所に書く
+    let default_name = match format.extension() {
+        Some(ext) => format!("simulation.{ext}"),
+        None => "simulation_frames".into(),
+    };
+    if let Some(path) = crate::ui_check::save_path(&default_name) {
+        return Some(path);
+    }
     let dialog = rfd::FileDialog::new().set_title("動画の書き出し");
     match format.extension() {
         Some(ext) => {

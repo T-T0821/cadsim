@@ -69,6 +69,10 @@ pub fn from_json(json: &str) -> Preferences {
         .into_prefs()
 }
 
+/// 設定ファイルを置くフォルダを差し替える環境変数。画面の自動確認で、
+/// 使う人の設定 (見た目・ミッションの進み・自作部品・AI の設定) に左右されないようにする
+pub const CONFIG_DIR_ENV: &str = "CADSIM_CONFIG_DIR";
+
 /// 設定ファイルの場所。ホームフォルダが分からなければ None (保存しない)
 pub fn default_path() -> Option<PathBuf> {
     let env = |key| {
@@ -76,6 +80,9 @@ pub fn default_path() -> Option<PathBuf> {
             .filter(|v| !v.is_empty())
             .map(PathBuf::from)
     };
+    if let Some(dir) = env(CONFIG_DIR_ENV) {
+        return Some(dir.join("preferences.json"));
+    }
     let dir = if cfg!(windows) {
         env("APPDATA")
     } else if cfg!(target_os = "macos") {

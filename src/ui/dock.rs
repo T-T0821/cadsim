@@ -171,6 +171,15 @@ fn rail_button(ui: &mut egui::Ui, item: &RailItem) -> egui::Response {
         egui::Sense::hover()
     };
     let (rect, response) = ui.allocate_exact_size(BUTTON_SIZE, sense);
+    // 絵で描くボタンなので、読み上げや画面の自動確認 (表示名で探す) のために名前を付ける
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(
+            egui::WidgetType::Button,
+            item.enabled,
+            item.open,
+            item.tool.short_label(),
+        )
+    });
     // チュートリアルの矢印がこのボタンを指せるよう、置いた場所を覚えておく
     ui.ctx()
         .data_mut(|d| d.insert_temp(rail_button_id(item.tool), rect));

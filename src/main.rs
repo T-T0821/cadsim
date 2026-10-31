@@ -42,6 +42,7 @@
 //! - `physics`     物理演算 (重力・接触・摩擦、ベルトコンベア、ケーブル・ホース)
 //! - `recording`   動画書き出しの設定画面と画面のキャプチャ
 //! - `video`       動画のエンコード (MP4 / GIF / PNG。Bevy に依存しない)
+//! - `ui_check`    画面での動作確認の自動化 (`--ui-check`。手順書どおりに操作して画面を撮り、基準画像と比べる)
 
 // Windows のリリースビルドでは、起動時に黒いコンソール窓を出さない
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
@@ -90,6 +91,7 @@ mod site;
 mod step_import;
 mod stress;
 mod ui;
+mod ui_check;
 mod video;
 mod viewport;
 
@@ -97,6 +99,10 @@ use bevy::{diagnostic::FrameTimeDiagnosticsPlugin, prelude::*};
 use bevy_egui::EguiPlugin;
 
 fn main() {
+    // `--ui-check` なら手順書ごとにアプリを起動し直して流し、結果を返して終わる
+    if let Some(code) = ui_check::suite::run_if_requested() {
+        std::process::exit(code);
+    }
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
@@ -150,6 +156,7 @@ fn main() {
                 physics::PhysicsPlugin,
                 assistant::AssistantPlugin,
                 sequence_gen::SequenceGenPlugin,
+                ui_check::UiCheckPlugin,
             ),
         ))
         .run();

@@ -97,10 +97,13 @@ fn run_section(ui: &mut egui::Ui, state: &mut PhysicsState) {
                     ));
                     ui.end_row();
                     ui.weak("計算時間");
-                    ui.label(format!("{:.2} ms / フレーム", stats.frame_ms));
+                    ui.label(format!(
+                        "{} ms / フレーム",
+                        crate::ui_check::measured(stats.frame_ms, 2)
+                    ));
                     ui.end_row();
                     ui.weak("画面");
-                    ui.label(format!("{:.0} fps", stats.fps));
+                    ui.label(format!("{} fps", crate::ui_check::measured(stats.fps, 0)));
                     ui.end_row();
                 });
         }

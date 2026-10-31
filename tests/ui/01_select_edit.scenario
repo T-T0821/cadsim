@@ -1,0 +1,27 @@
+# 部品の選択・ギズモ・削除と元に戻す (サンプルの万力で)
+wait_loaded
+click "空のプロジェクトから"        # ようこそ画面を閉じて空から始める
+wait_loaded
+open assets/sample_assembly.step
+wait_loaded
+wait 60
+expect "SampleVise"
+screenshot 01_vise
+
+# ツリーの行をクリックして選ぶ
+click "⚙ BasePlate_1"
+expect "選択: "
+screenshot 02_selected
+
+# ギズモを回転に切り替える
+key e
+screenshot 03_rotate_gizmo
+
+# 削除して、元に戻す
+key w
+key delete
+expect_not "⚙ BasePlate_1"
+screenshot 04_deleted
+key ctrl+z
+expect "⚙ BasePlate_1"
+screenshot 05_undo

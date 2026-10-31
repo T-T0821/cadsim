@@ -28,6 +28,7 @@ pub mod shape;
 pub mod simulation;
 pub mod site;
 pub mod staffing;
+pub mod ui_check;
 pub mod usecase;
 pub mod video;
 pub mod workspace;

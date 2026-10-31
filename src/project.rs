@@ -821,6 +821,13 @@ pub struct ProjectState {
     unsaved: bool,
 }
 
+impl ProjectState {
+    /// 開く・保存などの操作が進行中か (確認ダイアログの返事待ちは含まない)
+    pub fn is_busy(&self) -> bool {
+        self.loading.is_some() || self.requested.is_some()
+    }
+}
+
 impl Default for ProjectState {
     fn default() -> Self {
         Self {
@@ -1103,6 +1110,10 @@ fn run_project_actions(
         ProjectAction::Save | ProjectAction::SaveAs => {
             let path = match (&action, &state.path) {
                 (ProjectAction::Save, Some(path)) => Some(path.clone()),
+                // 画面の自動確認では OS のダイアログを操作できないので、決まった場所に書く
+                _ if crate::ui_check::running() => {
+                    crate::ui_check::save_path(&format!("project.{FILE_EXTENSION}"))
+                }
                 _ => rfd::FileDialog::new()
                     .set_title("名前を付けて保存")
                     .add_filter("プロジェクト", &[FILE_EXTENSION])

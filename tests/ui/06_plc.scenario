@@ -1,0 +1,24 @@
+# PLC 連携: サンプル装置を内蔵の模擬 PLC で動かす
+wait_loaded
+click "空のプロジェクトから"        # ようこそ画面を閉じて空から始める
+wait_loaded
+wait 30
+click "サンプル装置"
+click "PLC"                       # 左のツールレール
+expect "内蔵の模擬PLC"
+screenshot 01_plc_window
+
+click "内蔵の模擬PLC"
+wait 10
+expect "▶ 運転"
+screenshot 02_simulated_plc
+
+click "▶ 運転"
+wait 120
+expect "■ 停止"
+screenshot 03_running
+
+click "■ 停止"
+click "リセット"
+wait 10
+screenshot 04_reset

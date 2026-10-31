@@ -1,0 +1,16 @@
+# 工程シミュレーション: サンプル工程を回して結果を見る
+wait_loaded
+click "空のプロジェクトから"        # ようこそ画面を閉じて空から始める
+wait_loaded
+wait 30
+click "ファイル"
+hover "サンプルを開く"
+click "工程シミュレーションのサンプル"
+wait 10
+expect "サンプル工程"
+screenshot 01_flow_window
+click "⏩ 最後まで"
+wait_loaded
+wait 30
+expect "スループット"
+screenshot 02_result

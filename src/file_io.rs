@@ -248,6 +248,18 @@ pub struct CommandLine {
     pub bench_secs: Option<f32>,
     /// `--physics`: 物理演算のサンプルライン (ワーク 100 個) を開き、物理演算を始める
     pub physics: bool,
+    /// `--ui-check-run 手順書 --out 出力 --baseline 基準画像 [--update]`:
+    /// 手順書どおりに操作して画面を撮り、基準画像と比べて終了する (ui_check が使う)
+    pub ui_check: Option<UiCheckRun>,
+}
+
+/// 画面の自動確認を1つ流すときの指定
+#[derive(Default, Debug, PartialEq, Clone)]
+pub struct UiCheckRun {
+    pub scenario: PathBuf,
+    pub out: PathBuf,
+    pub baseline: PathBuf,
+    pub update: bool,
 }
 
 impl CommandLine {
@@ -263,6 +275,16 @@ impl CommandLine {
                 Some("--stress") => out.stress = Some(parse_next(args.next()).unwrap_or(5000)),
                 Some("--bench") => out.bench_secs = Some(parse_next(args.next()).unwrap_or(10.0)),
                 Some("--physics") => out.physics = true,
+                Some("--ui-check-run") => {
+                    out.ui_check.get_or_insert_default().scenario = args.next().unwrap_or_default();
+                }
+                Some("--out") => {
+                    out.ui_check.get_or_insert_default().out = args.next().unwrap_or_default()
+                }
+                Some("--baseline") => {
+                    out.ui_check.get_or_insert_default().baseline = args.next().unwrap_or_default();
+                }
+                Some("--update") => out.ui_check.get_or_insert_default().update = true,
                 _ => out.file = Some(arg),
             }
         }
@@ -275,7 +297,7 @@ fn parse_next<T: std::str::FromStr>(next: Option<PathBuf>) -> Option<T> {
 }
 
 /// 拡張子を見て、プロジェクトなら開き直し、STEP なら今のモデルに取り込む
-fn open_any(path: PathBuf, jobs: &mut ImportJobs, project: &mut ProjectState) {
+pub fn open_any(path: PathBuf, jobs: &mut ImportJobs, project: &mut ProjectState) {
     if is_project_file(&path) {
         project.request(ProjectAction::OpenPath(path));
     } else if is_plan_file(&path) || is_cloud_file(&path) {
@@ -596,6 +618,25 @@ mod tests {
         assert_eq!(bench.stress, Some(2000));
         assert_eq!(bench.bench_secs, Some(5.0));
         assert!(parse(&["--physics", "--bench", "20"]).physics);
+        let check = parse(&[
+            "--ui-check-run",
+            "a.scenario",
+            "--out",
+            "o",
+            "--baseline",
+            "b",
+            "--update",
+        ]);
+        assert_eq!(check.file, None);
+        assert_eq!(
+            check.ui_check,
+            Some(UiCheckRun {
+                scenario: "a.scenario".into(),
+                out: "o".into(),
+                baseline: "b".into(),
+                update: true,
+            })
+        );
     }
 
     #[test]
