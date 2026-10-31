@@ -2,7 +2,8 @@
 //!
 //! - ジョグ: 関節ごとのスライダか、TCP を X / Y / Z に少しずつ動かすボタン (逆運動学) で
 //!   一時的に姿勢を動かす。チャートは変えず、再生やスクラブでチャートの位置に戻る。
-//! - 教示点: 今の TCP を登録するか、座標を直接入力する。選択中のステップに移動を置ける。
+//! - 教示点: 今の TCP を登録するか、3D ビューで部品の面をクリックして置くか、座標を直接入力する。
+//!   選択中のステップに移動を置ける。
 //! - 経路の確認: 届かない移動・特異点の近くを通る移動の一覧と、移動中の干渉チェック。
 //!   3D ビューには TCP の通り道を描き、問題のあるところに色を付ける。
 
@@ -14,11 +15,13 @@ use super::chart::{MoveKind, Robot, RobotMove, TeachPoint, TimingChart};
 use super::kinematics::{self, Tcp};
 use super::path_interference::{PathBody, PathHit, robot_path_interference};
 use super::robot_path::SINGULAR_DEXTERITY;
+use super::teach::{self, point_on_surface};
 use super::ui::MotionUi;
 use super::ui::{ChartUiState, ERROR_COLOR, WARN_COLOR};
 use super::{ChartSchedule, JogPose, SimulationPose};
 use crate::model::Model;
 use crate::simulation::{InterferenceCheck, SimBody};
+use crate::viewport::PartPicker;
 
 /// 移動中の干渉を調べる時刻の間隔 (秒)
 const INTERFERENCE_INTERVAL: f64 = 0.05;
@@ -46,6 +49,12 @@ pub struct RobotUiState {
     interference_request: Option<u32>,
     /// 直前に調べた移動中の干渉 (ロボット, 結果)。チャートを変えたら消す。
     interference: Option<(u32, Vec<PathHit>)>,
+    /// 3D ビューのクリックで教示点を置くロボット (置くモード中だけ Some)
+    placing: Option<u32>,
+    /// 置くとき、クリックした面から教示点を離す距離 (モデル単位)
+    standoff: f64,
+    /// 置くモード中、カーソルの下の面から作る教示点
+    hover: Option<teach::SurfacePoint>,
 }
 
 impl Default for RobotUiState {
@@ -56,6 +65,9 @@ impl Default for RobotUiState {
             message: None,
             interference_request: None,
             interference: None,
+            placing: None,
+            standoff: 0.0,
+            hover: None,
         }
     }
 }
@@ -246,15 +258,34 @@ fn robot_panel(
     ui.horizontal(|ui| {
         ui.strong("教示点");
         if ui.button("+ 今の TCP を登録").clicked() {
-            let name = format!("P{}", robot.next_point_id.max(1));
-            let approach = Some(round_direction(tcp.tool_axis).to_array());
+            let name = teach::next_point_name(&robot);
+            let approach = Some(teach::round_direction(tcp.tool_axis, 1.0).to_array());
             if let Some(r) = chart.robot_mut(robot.id) {
                 r.add_point(name, tcp.position.to_array(), approach);
             }
         }
+        let placing = state.placing == Some(robot.id);
+        if ui
+            .selectable_label(placing, "+ 3D ビューで置く")
+            .on_hover_text("部品の面をクリックすると、そこに教示点を置きます")
+            .clicked()
+        {
+            state.placing = if placing { None } else { Some(robot.id) };
+            state.hover = None;
+        }
     });
-    if robot.points.is_empty() {
-        ui.weak("ジョグで TCP を動かしてから「今の TCP を登録」を押します。");
+    if state.placing == Some(robot.id) {
+        ui.horizontal(|ui| {
+            ui.label("面から離す");
+            ui.add(
+                egui::DragValue::new(&mut state.standoff)
+                    .speed(reach * 0.002)
+                    .range(0.0..=f64::MAX),
+            );
+        });
+        ui.weak("部品の面をクリックすると、そこから離した位置に、面に向かう工具の向きで教示点を置きます。Esc でやめます。");
+    } else if robot.points.is_empty() {
+        ui.weak("ジョグで TCP を動かしてから「今の TCP を登録」を押すか、「3D ビューで置く」で部品の面をクリックします。");
     }
     let step = chart_state.selected_step.filter(|&s| s < chart.steps.len());
     for point in &robot.points {
@@ -563,23 +594,6 @@ fn jog_to(
     values
 }
 
-/// 軸の向きにほぼ一致するなら、その軸にそろえる (登録した教示点の向きをきれいにするため)
-fn round_direction(v: DVec3) -> DVec3 {
-    for axis in [
-        DVec3::X,
-        DVec3::NEG_X,
-        DVec3::Y,
-        DVec3::NEG_Y,
-        DVec3::Z,
-        DVec3::NEG_Z,
-    ] {
-        if v.angle_between(axis) < 1f64.to_radians() {
-            return axis;
-        }
-    }
-    v
-}
-
 // ---------------------------------------------------------------------------
 // 3D ビューへの表示
 // ---------------------------------------------------------------------------
@@ -692,4 +706,79 @@ pub fn draw_robots(
             }
         }
     }
+}
+
+/// 「3D ビューで置く」の間、カーソルの下の部品の面を調べ、クリックでそこに教示点を置く
+#[allow(clippy::too_many_arguments)]
+pub fn place_teach_point(
+    buttons: Res<ButtonInput<MouseButton>>,
+    keys: Res<ButtonInput<KeyCode>>,
+    window: Single<&Window, With<bevy::window::PrimaryWindow>>,
+    camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
+    picker: PartPicker,
+    bodies: Query<&SimBody>,
+    mut state: ResMut<RobotUiState>,
+    mut chart: ResMut<TimingChart>,
+    mut gizmos: Gizmos,
+) {
+    let Some(robot) = state.placing else {
+        return;
+    };
+    if keys.just_pressed(KeyCode::Escape) || chart.robot(robot).is_none() {
+        state.placing = None;
+        state.hover = None;
+        return;
+    }
+    let (camera, camera_transform) = *camera;
+    let standoff = state.standoff;
+    state.hover = window.cursor_position().and_then(|cursor| {
+        let ray = camera.viewport_to_world(camera_transform, cursor).ok()?;
+        let hit = picker.cast(ray)?;
+        let body = bodies.get(hit.entity).ok()?;
+        // 当たった点を f64 の形状に載せ直し、その三角形の法線を使う
+        let local = body.pose.inverse().apply(hit.point.as_dvec3());
+        let (q, normal) = body.mesh.closest_point(local)?;
+        let world = body.pose.apply(q);
+        let normal = body.pose.rotation * normal;
+        // 法線がカメラと反対を向いていたら裏返す (面の表裏が逆の形状でも外へ離す)
+        let normal = if normal.dot(ray.direction.as_dvec3()) > 0.0 {
+            -normal
+        } else {
+            normal
+        };
+        Some(point_on_surface(world, normal, standoff))
+    });
+
+    let Some(hover) = state.hover else {
+        return;
+    };
+    let k = kinematics::reach(&chart, chart.robot(robot).expect("上で確かめた"));
+    let p = hover.position.as_vec3();
+    gizmos.sphere(p, (0.016 * k) as f32, POINT_COLOR);
+    gizmos.line(
+        (hover.position - hover.approach * 0.065 * k).as_vec3(),
+        p,
+        POINT_COLOR,
+    );
+
+    // Alt + 左ドラッグはカメラのオービットなので置かない
+    let alt = keys.any_pressed([KeyCode::AltLeft, KeyCode::AltRight]);
+    if !buttons.just_pressed(MouseButton::Left) || alt {
+        return;
+    }
+    if let Some(r) = chart.robot_mut(robot) {
+        let name = teach::next_point_name(r);
+        r.add_point(
+            name,
+            hover.position.to_array(),
+            Some(hover.approach.to_array()),
+        );
+    }
+    state.placing = None;
+    state.hover = None;
+}
+
+/// 「3D ビューで置く」の間は、クリックで部品を選ばない
+pub fn teach_tool_off(state: Res<RobotUiState>) -> bool {
+    state.placing.is_none()
 }
