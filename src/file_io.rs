@@ -21,6 +21,7 @@ use crate::interchange::{
     model_io::{model_to_scene, scene_to_import},
 };
 use crate::model::{Model, NodeId, Selection, StepSource};
+use crate::motion::{ChartSchedule, Schedule, TimingChart, chart_animation};
 use crate::project::{ProjectAction, ProjectState, is_project_file};
 use crate::step_import::{ImportedFile, import_step};
 
@@ -239,6 +240,8 @@ fn export_if_requested(
     model: Res<Model>,
     selection: Res<Selection>,
     animations: Res<Animations>,
+    chart: Res<TimingChart>,
+    schedule: Res<ChartSchedule>,
     _main_thread: NonSendMarker,
 ) {
     let Some(scope) = jobs.export_requested.take() else {
@@ -261,7 +264,8 @@ fn export_if_requested(
     let Some(path) = dialog.save_file() else {
         return;
     };
-    let message = match export_model(&model, &roots, &animations, &path, &jobs.units) {
+    let chart = Some((&*chart, &**schedule));
+    let message = match export_model(&model, &roots, &animations, chart, &path, &jobs.units) {
         Ok(()) => format!("{} に書き出しました", file_name(&path)),
         Err(err) => {
             error!("{err}");
@@ -271,11 +275,13 @@ fn export_if_requested(
     jobs.messages.push(message);
 }
 
-/// モデルをファイルに書き出す。`roots` が空ならモデル全体。拡張子が無ければ glb にする
+/// モデルをファイルに書き出す。`roots` が空ならモデル全体。拡張子が無ければ glb にする。
+/// タイミングチャートに動きがあれば、その1サイクルもアニメーションとして書き出す
 pub fn export_model(
     model: &Model,
     roots: &[NodeId],
     animations: &Animations,
+    chart: Option<(&TimingChart, &Schedule)>,
     path: &Path,
     units: &UnitOptions,
 ) -> Result<(), String> {
@@ -286,6 +292,13 @@ pub fn export_model(
     };
     let (mut scene, index_of) = model_to_scene(model, roots);
     scene.animations = animations.to_scene(&index_of, &model.unit);
+    if let Some((chart, schedule)) = chart {
+        let parents: Vec<_> = scene.nodes.iter().map(|n| n.parent).collect();
+        // USD のタイムラインは1本なので、チャートの動きを先頭に置いて優先する
+        if let Some(motion) = chart_animation(chart, schedule, model, &index_of, &parents) {
+            scene.animations.insert(0, motion);
+        }
+    }
     interchange::export_file(&scene, &path, units)
 }
 
