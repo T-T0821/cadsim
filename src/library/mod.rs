@@ -368,7 +368,7 @@ mod tests {
     #[test]
     fn bodies_are_scaled_to_the_model_unit() {
         let mut model = Model::default();
-        model.unit = "m".into();
+        model.0.unit = "m".into();
         let id = add_standard(&mut model, PartKind::BeltConveyor, DVec3::ZERO);
         let bounds = model.world_bounds(id).unwrap();
         // 搬送面の高さ 700 mm = 0.7 m (フレームが 15 mm 上に出る)
