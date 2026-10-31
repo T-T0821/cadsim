@@ -55,8 +55,8 @@ impl Point {
     }
 }
 
-/// 番号の割り付け方 (各領域の先頭番号)
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+/// 番号の割り付け方。各領域の先頭番号から詰めて振り、`custom` にある信号だけ個別の設定を使う。
+#[derive(Clone, PartialEq, Debug)]
 pub struct AddressPlan {
     /// PLC → 設備 のビット (コイル)
     pub output_bits: u16,
@@ -66,6 +66,8 @@ pub struct AddressPlan {
     pub input_bits: u16,
     /// 設備 → PLC のワード (保持レジスタ)
     pub input_words: u16,
+    /// 信号ごとの個別設定 (CSV の読み込みで入る)
+    pub custom: HashMap<Point, PointSettings>,
 }
 
 impl Default for AddressPlan {
@@ -75,8 +77,18 @@ impl Default for AddressPlan {
             output_words: 0,
             input_bits: 100,
             input_words: 100,
+            custom: HashMap::new(),
         }
     }
+}
+
+/// 1つの信号の個別設定。None / 空なら自動の値を使う。
+#[derive(Clone, PartialEq, Debug, Default)]
+pub struct PointSettings {
+    pub address: Option<u16>,
+    pub scale: Option<f64>,
+    /// OPC UA のノード ID ("ns=2;s=Line1.Cyl1.Out" など)
+    pub node: String,
 }
 
 /// I/O 一覧の1行
@@ -89,6 +101,8 @@ pub struct IoPoint {
     pub address: u16,
     /// ワード1カウントあたりの値。直動は 0.1 (mm なら 0.1 mm)、回転は 0.1°。
     pub scale: f64,
+    /// OPC UA のノード ID。空ならその信号は OPC UA でやりとりしない。
+    pub node: String,
 }
 
 impl IoPoint {
@@ -127,7 +141,11 @@ pub struct IoTable {
 impl IoTable {
     /// タイミングチャートのアクチュエータから I/O 一覧を作る
     pub fn from_chart(chart: &TimingChart, plan: &AddressPlan) -> Self {
-        let mut next = *plan;
+        // 領域ごとの「次に振る番号」
+        let mut next_output_bit = plan.output_bits;
+        let mut next_output_word = plan.output_words;
+        let mut next_input_bit = plan.input_bits;
+        let mut next_input_word = plan.input_words;
         let mut points = Vec::new();
         for actuator in &chart.actuators {
             let id = actuator.id;
@@ -145,18 +163,21 @@ impl IoTable {
             };
             for point in signals {
                 let counter = match (point.is_output(), point.is_word()) {
-                    (true, false) => &mut next.output_bits,
-                    (true, true) => &mut next.output_words,
-                    (false, false) => &mut next.input_bits,
-                    (false, true) => &mut next.input_words,
+                    (true, false) => &mut next_output_bit,
+                    (true, true) => &mut next_output_word,
+                    (false, false) => &mut next_input_bit,
+                    (false, true) => &mut next_input_word,
                 };
+                let auto_address = *counter;
+                *counter = counter.saturating_add(1);
+                let custom = plan.custom.get(&point).cloned().unwrap_or_default();
                 points.push(IoPoint {
                     point,
                     name: format!("{}.{}", actuator.name, point.label()),
-                    address: *counter,
-                    scale,
+                    address: custom.address.unwrap_or(auto_address),
+                    scale: custom.scale.unwrap_or(scale),
+                    node: custom.node,
                 });
-                *counter = counter.saturating_add(1);
             }
         }
         Self { points }
@@ -244,6 +265,26 @@ mod tests {
     }
 
     #[test]
+    fn custom_settings_override_the_automatic_ones() {
+        let mut chart = TimingChart::default();
+        let a = chart.add_actuator(ActuatorKind::Cylinder);
+        let mut plan = AddressPlan::default();
+        plan.custom.insert(
+            Point::CylinderExtended(a),
+            PointSettings {
+                address: Some(500),
+                scale: None,
+                node: "ns=2;s=Cyl.Ext".into(),
+            },
+        );
+        let table = IoTable::from_chart(&chart, &plan);
+        let p = table.get(Point::CylinderExtended(a)).unwrap();
+        assert_eq!((p.address, p.node.as_str()), (500, "ns=2;s=Cyl.Ext"));
+        // 個別設定のない信号は自動のまま (戻端は出端の次の 101)
+        assert_eq!(table.get(Point::CylinderRetracted(a)).unwrap().address, 101);
+    }
+
+    #[test]
     fn overlapping_areas_are_reported() {
         let mut chart = TimingChart::default();
         chart.add_actuator(ActuatorKind::Cylinder);
@@ -262,6 +303,7 @@ mod tests {
             name: String::new(),
             address: 0,
             scale: 0.001,
+            node: String::new(),
         };
         assert_eq!(p.encode_word(-1.5), (-1500i16) as u16);
         assert!((p.decode_word(p.encode_word(-1.5)) + 1.5).abs() < 1e-12);
