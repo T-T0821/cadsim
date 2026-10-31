@@ -15,9 +15,9 @@ use krilla::paint::{Fill, LineCap, Stroke, StrokeDash};
 use krilla::text::{Font, TextDirection};
 
 use super::dxf::{DxfDrawing, insunits_for, write_drawing};
-use crate::drawing::{Layer, PAPER_MM, Sheet};
+use cadsim_core::drawing::{Layer, PAPER_MM, Sheet};
 
-const FONT_BYTES: &[u8] = include_bytes!("../../assets/fonts/NotoSansJP-Subset.otf");
+const FONT_BYTES: &[u8] = include_bytes!("../../../../assets/fonts/NotoSansJP-Subset.otf");
 /// 1 mm は何ポイントか
 const PT_PER_MM: f64 = 72.0 / 25.4;
 
@@ -135,7 +135,7 @@ pub fn write_pdf(sheet: &Sheet) -> Result<Vec<u8>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::drawing::{DrawingInput, DrawingItem, DrawingOptions, make_sheet};
+    use cadsim_core::drawing::{DrawingInput, DrawingItem, DrawingOptions, make_sheet};
     use glam::DVec3;
 
     fn sheet() -> Sheet {

@@ -11,7 +11,7 @@ use glam::{DAffine2, DVec2};
 use lopdf::content::Content;
 use lopdf::{Dictionary, Document, Object, ObjectId};
 
-use crate::site::underlay::{PlanContent, PlanImage};
+use cadsim_core::site::underlay::{PlanContent, PlanImage};
 
 /// 1 ポイントは何 mm か
 const POINT_MM: f64 = 25.4 / 72.0;

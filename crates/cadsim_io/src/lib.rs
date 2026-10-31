@@ -1,8 +1,11 @@
 //! cadsim のアダプター層
 //!
-//! ファイル形式など外部とのやり取りを、形式に依存しない中間表現に変換する。
+//! ファイル形式など外部とのやり取りを、ドメインの型や形式に依存しない中間表現に変換する。
 //! Bevy・egui には依存しない (docs/architecture.md)。
 
+pub mod flow;
+pub mod formats;
 pub mod interchange;
+pub mod preferences_file;
 pub mod rtde;
 pub mod step;

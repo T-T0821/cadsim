@@ -13,7 +13,7 @@ use std::fmt::Write as _;
 
 use glam::{DAffine2, DVec2};
 
-use crate::site::underlay::PlanContent;
+use cadsim_core::site::underlay::PlanContent;
 
 /// ブロックの入れ子をたどる深さの上限 (自分自身を参照する壊れたファイルで止まらないように)
 const MAX_INSERT_DEPTH: usize = 8;
