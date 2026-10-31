@@ -18,6 +18,7 @@ use bevy::{
 use crate::gizmo::gizmo_not_focused;
 use crate::math::Aabb;
 use crate::model::{Model, Selection};
+use crate::recording::Recorder;
 
 /// 透視投影の縦の画角 (Bevy の既定値と同じ 45°)
 const FOV_Y: f32 = FRAC_PI_4;
@@ -211,13 +212,15 @@ impl ViewportRect {
 }
 
 /// マウスで 3D ビューを操作してよいとき (クリック選択やカメラ操作の実行条件)
-pub fn pointer_in_3d_view(viewport: Res<ViewportRect>) -> bool {
-    !viewport.pointer_on_ui
+/// (動画の書き出し中はカメラを動かさない)
+pub fn pointer_in_3d_view(viewport: Res<ViewportRect>, recorder: Res<Recorder>) -> bool {
+    !viewport.pointer_on_ui && !recorder.is_capturing()
 }
 
 /// キーボードショートカットを受け付けてよいとき (入力欄に文字を打っている間は止める)
-pub fn keyboard_free(viewport: Res<ViewportRect>) -> bool {
-    !viewport.typing_in_ui
+/// (動画の書き出し中も止める)
+pub fn keyboard_free(viewport: Res<ViewportRect>, recorder: Res<Recorder>) -> bool {
+    !viewport.typing_in_ui && !recorder.is_capturing()
 }
 
 fn spawn_camera(mut commands: Commands) {

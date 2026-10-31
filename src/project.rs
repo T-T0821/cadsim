@@ -41,6 +41,7 @@ use crate::interchange::UnitOptions;
 use crate::math::{euler_deg_to_quat, quat_to_euler_deg, split_placement};
 use crate::model::{BoxPart, Model, NodeId, NodeKind, Selection, StepSource};
 use crate::physics::{CableRecord, PartPhysicsRecord};
+use crate::recording::is_recording;
 use crate::site::model::Site;
 use crate::step_import::{ImportNode, ImportedShape};
 
@@ -60,7 +61,8 @@ impl Plugin for ProjectPlugin {
             (
                 // STEP の読み込み結果がモデルに入った後で、未保存かどうかを判断する
                 run_project_actions.after(receive_imports),
-                update_window_title,
+                // 動画の書き出し中は進み具合をタイトルに出すので書き換えない
+                update_window_title.run_if(not(is_recording)),
             )
                 .chain(),
         );
