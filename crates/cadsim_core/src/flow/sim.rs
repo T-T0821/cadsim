@@ -10,11 +10,18 @@
 //! ライン連携 ([`Simulation::link`]) をすると、ワークの移動を [`FlowEvent`] として記録し、
 //! AGV で運ぶ要素は自分では送り出さずに運び手を待つ ([`Simulation::pick_up`] /
 //! [`Simulation::deliver`])。
+//!
+//! 人が要る工程 ([`Labor`]) は、ワークが届くと「人待ち」になり、その工程ができて手の空いている
+//! 出勤中の作業者を呼ぶ。来られる人が複数いれば速い人、同じなら今その工程にいる人を選ぶ。
+//! 作業者は手が空くと、人待ちの工程のうちいちばん長く待っているところへ行く。
+//! 別の工程へ移るときは歩行時間がかかる。シフトの終わりや休憩に入るときは、
+//! 今の作業を終えてから抜ける (作業の途中では抜けない)。
 
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BinaryHeap, VecDeque};
 
-use super::model::{ElementId, ElementKind, FlowModel, RunSettings};
+use super::model::{ElementId, ElementKind, FlowModel, Labor, RunSettings};
+use crate::staffing::model::WorkerId;
 
 /// 設備の状態
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -27,10 +34,18 @@ pub enum State {
     Blocked,
     /// 故障で停止中
     Down,
+    /// 人待ち (ワークはあるが、作業者が来ない)
+    NoOperator,
 }
 
 impl State {
-    pub const ALL: [State; 4] = [State::Working, State::Waiting, State::Blocked, State::Down];
+    pub const ALL: [State; 5] = [
+        State::Working,
+        State::Waiting,
+        State::Blocked,
+        State::Down,
+        State::NoOperator,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
@@ -38,6 +53,7 @@ impl State {
             State::Waiting => "待ち",
             State::Blocked => "詰まり",
             State::Down => "故障",
+            State::NoOperator => "人待ち",
         }
     }
 
@@ -48,7 +64,7 @@ impl State {
 
 /// 状態ごとの時間 (秒)。[`State::ALL`] の順。
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct StateTimes(pub [f64; 4]);
+pub struct StateTimes(pub [f64; 5]);
 
 impl StateTimes {
     pub fn get(&self, state: State) -> f64 {
@@ -103,6 +119,10 @@ struct Runtime {
     content_max: usize,
     /// 排出: 生成から排出までの時間の合計
     lead_sum: f64,
+    /// 人が要る工程: 付いている (向かっている) 作業者 (作業者の並びの添字)
+    operator: Option<usize>,
+    /// 人が要る工程: 人が来たら始める加工時間 (秒、人の速さで割る前)
+    pending: Option<f64>,
 }
 
 impl Runtime {
@@ -123,12 +143,96 @@ impl Runtime {
             content_since: 0.0,
             content_max: 0,
             lead_sum: 0.0,
+            operator: None,
+            pending: None,
         }
     }
 
     fn content(&self) -> usize {
         self.queue.len() + usize::from(self.slot.is_some())
     }
+}
+
+/// 作業者の状態
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum WorkerState {
+    /// 工程で作業中
+    Working,
+    /// 工程へ歩いている
+    Walking,
+    /// 出勤しているが手が空いている
+    Idle,
+    /// 勤務時間外・休憩中
+    OffDuty,
+}
+
+impl WorkerState {
+    pub const ALL: [WorkerState; 4] = [
+        WorkerState::Working,
+        WorkerState::Walking,
+        WorkerState::Idle,
+        WorkerState::OffDuty,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            WorkerState::Working => "作業",
+            WorkerState::Walking => "歩行",
+            WorkerState::Idle => "手待ち",
+            WorkerState::OffDuty => "休み",
+        }
+    }
+
+    fn index(self) -> usize {
+        self as usize
+    }
+}
+
+/// 作業者の状態ごとの時間 (秒)。[`WorkerState::ALL`] の順。
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct WorkerTimes(pub [f64; 4]);
+
+impl WorkerTimes {
+    pub fn get(&self, state: WorkerState) -> f64 {
+        self.0[state.index()]
+    }
+
+    /// 出勤している時間 (休み以外)
+    pub fn on_duty(&self) -> f64 {
+        self.0.iter().sum::<f64>() - self.get(WorkerState::OffDuty)
+    }
+
+    /// 出勤している時間に対する割合 (0〜1)
+    pub fn ratio(&self, state: WorkerState) -> f64 {
+        let on = self.on_duty();
+        if on > 0.0 && state != WorkerState::OffDuty {
+            self.get(state) / on
+        } else {
+            0.0
+        }
+    }
+}
+
+/// 実行中の作業者1人分 (欠勤の人は入れない)
+#[derive(Clone, Debug)]
+struct WorkerRt {
+    id: WorkerId,
+    name: String,
+    state: WorkerState,
+    since: f64,
+    times: WorkerTimes,
+    /// シフト上、今働く時間か
+    on_duty: bool,
+    /// 最後にいた工程 (要素の添字)。歩行時間の判定に使う。
+    at: Option<usize>,
+    /// シフトがあれば次の切り替えを入れる
+    shift: Option<crate::staffing::model::Shift>,
+    /// 要素ごとの作業の速さ (できない工程は None)
+    speed: Vec<Option<f64>>,
+    /// 集計期間に終えた作業の数
+    tasks: u32,
+    /// 集計期間に歩いた回数
+    walks: u32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -141,6 +245,12 @@ enum EventKind {
     Fail,
     /// 工程の修理が終わる
     Repair,
+    /// 作業者 (`element` は作業者の添字) のシフト・休憩が切り替わる
+    WorkerShift,
+    /// 工程に作業者が歩いて着く
+    WorkerArrive,
+    /// 投入・段取りが終わって、工程の作業者の手が空く
+    OperatorRelease,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -280,6 +390,8 @@ pub struct Simulation {
     next_sample: f64,
     /// ライン連携 (しないときは None)
     link: Option<Link>,
+    /// 出勤する作業者
+    workers: Vec<WorkerRt>,
 }
 
 impl Simulation {
@@ -312,7 +424,9 @@ impl Simulation {
             sample_interval: settings.duration / SAMPLE_COUNT as f64,
             next_sample: 0.0,
             link: None,
+            workers: Vec::new(),
         };
+        sim.start_workers();
         for i in 0..sim.runtime.len() {
             match sim.model.elements[i].kind {
                 ElementKind::Source { .. } => sim.schedule(0.0, i, EventKind::Arrival),
@@ -604,6 +718,9 @@ impl Simulation {
             EventKind::Done => {
                 self.runtime[i].done = true;
                 self.set_state(i, State::Blocked);
+                if self.model.elements[i].labor == Labor::Full {
+                    self.release_operator(i);
+                }
             }
             EventKind::Fail => {
                 if self.measuring() {
@@ -621,6 +738,14 @@ impl Simulation {
                 let remaining = self.runtime[i].remaining;
                 self.start_work(i, remaining);
             }
+            EventKind::WorkerShift => self.shift_change(i),
+            EventKind::WorkerArrive => {
+                if let Some(w) = self.runtime[i].operator {
+                    self.workers[w].at = Some(i);
+                    self.begin_task(i);
+                }
+            }
+            EventKind::OperatorRelease => self.release_operator(i),
         }
     }
 
@@ -748,7 +873,13 @@ impl Simulation {
             } => {
                 self.runtime[i].slot = Some(work);
                 let duration = self.rng.around(cycle_time, spread);
-                self.start_work(i, duration);
+                if self.model.elements[i].labor.needs_operator() {
+                    self.runtime[i].pending = Some(duration);
+                    self.set_state(i, State::NoOperator);
+                    self.call_operator(i);
+                } else {
+                    self.start_work(i, duration);
+                }
             }
             ElementKind::Buffer { .. } => {
                 self.runtime[i].queue.push_back(work);
@@ -767,6 +898,171 @@ impl Simulation {
         }
         let rt = &mut self.runtime[i];
         rt.content_max = rt.content_max.max(rt.content());
+    }
+
+    // --- 作業者 --------------------------------------------------------------
+
+    /// 出勤する作業者を並べ、シフトの切り替えを入れる
+    fn start_workers(&mut self) {
+        let staffing = self.model.staffing.clone();
+        let clock = staffing.start_clock;
+        for w in staffing.workers.iter().filter(|w| !w.absent) {
+            let shift = w.shift.and_then(|s| staffing.shift(s)).cloned();
+            let on_duty = shift.as_ref().is_none_or(|s| s.on_duty_at(clock));
+            let speed = self
+                .model
+                .elements
+                .iter()
+                .map(|e| w.speed_for(e.id))
+                .collect();
+            self.workers.push(WorkerRt {
+                id: w.id,
+                name: w.name.clone(),
+                state: if on_duty {
+                    WorkerState::Idle
+                } else {
+                    WorkerState::OffDuty
+                },
+                since: 0.0,
+                times: WorkerTimes::default(),
+                on_duty,
+                at: None,
+                shift,
+                speed,
+                tasks: 0,
+                walks: 0,
+            });
+        }
+        for w in 0..self.workers.len() {
+            self.schedule_shift_change(w);
+        }
+    }
+
+    fn clock(&self) -> f64 {
+        self.model.staffing.start_clock + self.now
+    }
+
+    fn schedule_shift_change(&mut self, w: usize) {
+        if let Some(shift) = &self.workers[w].shift {
+            let after = shift.next_change_after(self.clock());
+            self.schedule(self.now + after, w, EventKind::WorkerShift);
+        }
+    }
+
+    fn set_worker_state(&mut self, w: usize, state: WorkerState) {
+        let span = self.measured_span(self.workers[w].since);
+        let wr = &mut self.workers[w];
+        wr.times.0[wr.state.index()] += span;
+        wr.state = state;
+        wr.since = self.now;
+    }
+
+    /// シフト・休憩の切り替え。作業中・歩行中なら、その作業が終わったときに抜ける。
+    fn shift_change(&mut self, w: usize) {
+        let clock = self.clock();
+        let on_duty = self.workers[w]
+            .shift
+            .as_ref()
+            .is_none_or(|s| s.on_duty_at(clock));
+        self.workers[w].on_duty = on_duty;
+        match (on_duty, self.workers[w].state) {
+            (true, WorkerState::OffDuty) => {
+                self.set_worker_state(w, WorkerState::Idle);
+                self.find_work(w);
+            }
+            (false, WorkerState::Idle) => self.set_worker_state(w, WorkerState::OffDuty),
+            _ => {}
+        }
+        self.schedule_shift_change(w);
+    }
+
+    /// 人待ちになった工程に作業者を呼ぶ。来られる人がいなければ人待ちのまま。
+    fn call_operator(&mut self, i: usize) {
+        let best = (0..self.workers.len())
+            .filter(|&w| self.workers[w].state == WorkerState::Idle)
+            .filter_map(|w| Some((w, self.workers[w].speed[i]?)))
+            .max_by(|(a, sa), (b, sb)| {
+                sa.total_cmp(sb)
+                    // 同じ速さなら、今その工程にいる人 → 名簿の上の人
+                    .then((self.workers[*a].at == Some(i)).cmp(&(self.workers[*b].at == Some(i))))
+                    .then(b.cmp(a))
+            })
+            .map(|(w, _)| w);
+        if let Some(w) = best {
+            self.assign(w, i);
+        }
+    }
+
+    /// 手の空いた作業者に、いちばん長く人待ちしている工程を割り当てる
+    fn find_work(&mut self, w: usize) {
+        let target = (0..self.runtime.len())
+            .filter(|&i| {
+                let rt = &self.runtime[i];
+                rt.state == State::NoOperator
+                    && rt.operator.is_none()
+                    && self.workers[w].speed[i].is_some()
+            })
+            .min_by(|&a, &b| self.runtime[a].since.total_cmp(&self.runtime[b].since));
+        if let Some(i) = target {
+            self.assign(w, i);
+        }
+    }
+
+    fn assign(&mut self, w: usize, i: usize) {
+        self.runtime[i].operator = Some(w);
+        let walk = self.model.staffing.walk_seconds;
+        if self.workers[w].at == Some(i) || walk <= 0.0 {
+            self.workers[w].at = Some(i);
+            self.begin_task(i);
+        } else {
+            if self.measuring() {
+                self.workers[w].walks += 1;
+            }
+            self.set_worker_state(w, WorkerState::Walking);
+            self.schedule(self.now + walk, i, EventKind::WorkerArrive);
+        }
+    }
+
+    /// 作業者が工程に着いたので加工を始める
+    fn begin_task(&mut self, i: usize) {
+        let Some(w) = self.runtime[i].operator else {
+            return;
+        };
+        let Some(duration) = self.runtime[i].pending.take() else {
+            return;
+        };
+        let speed = self.workers[w].speed[i].unwrap_or(1.0);
+        self.set_worker_state(w, WorkerState::Working);
+        match self.model.elements[i].labor {
+            Labor::Full => self.start_work(i, duration / speed),
+            Labor::Load { seconds } => {
+                // 最初の `seconds` 秒が人の作業。人が速ければその分だけ短くなる。
+                let hand = seconds.min(duration);
+                let manual = hand / speed;
+                self.schedule(self.now + manual, i, EventKind::OperatorRelease);
+                self.start_work(i, duration - hand + manual);
+            }
+            Labor::None => {
+                self.start_work(i, duration);
+                self.release_operator(i);
+            }
+        }
+    }
+
+    /// 工程の作業者の手が空いた。次の人待ちへ行くか、勤務時間外なら抜ける。
+    fn release_operator(&mut self, i: usize) {
+        let Some(w) = self.runtime[i].operator.take() else {
+            return;
+        };
+        if self.measuring() {
+            self.workers[w].tasks += 1;
+        }
+        if self.workers[w].on_duty {
+            self.set_worker_state(w, WorkerState::Idle);
+            self.find_work(w);
+        } else {
+            self.set_worker_state(w, WorkerState::OffDuty);
+        }
     }
 
     // --- 集計 ---------------------------------------------------------------
@@ -875,6 +1171,21 @@ impl Simulation {
             .iter()
             .filter_map(|e| Some(e.lead_time? * e.count as f64))
             .sum();
+        let workers = self
+            .workers
+            .iter()
+            .map(|w| {
+                let mut times = w.times;
+                times.0[w.state.index()] += self.measured_span(w.since);
+                WorkerStats {
+                    id: w.id,
+                    name: w.name.clone(),
+                    times,
+                    tasks: w.tasks,
+                    walks: w.walks,
+                }
+            })
+            .collect();
         let wip_area = self.wip_area + self.wip as f64 * self.measured_span(self.wip_since);
         let energy_kwh = elements.iter().map(|e| e.energy_kwh).sum();
         let air_m3 = elements.iter().map(|e| e.air_m3).sum();
@@ -900,8 +1211,29 @@ impl Simulation {
             air_m3,
             energy_per_work_kwh: (output > 0).then(|| energy_kwh / output as f64),
             elements,
+            workers,
             samples: self.samples.clone(),
         }
+    }
+}
+
+/// 作業者1人分の集計
+#[derive(Clone, Debug, PartialEq)]
+pub struct WorkerStats {
+    pub id: WorkerId,
+    pub name: String,
+    /// 集計期間の状態ごとの時間
+    pub times: WorkerTimes,
+    /// 終えた作業の数
+    pub tasks: u32,
+    /// 別の工程へ歩いた回数
+    pub walks: u32,
+}
+
+impl WorkerStats {
+    /// 稼働率: 出勤している時間のうち、作業と歩行の割合
+    pub fn utilization(&self) -> f64 {
+        self.times.ratio(WorkerState::Working) + self.times.ratio(WorkerState::Walking)
     }
 }
 
@@ -957,12 +1289,36 @@ pub struct Report {
     pub air_m3: f64,
     pub energy_per_work_kwh: Option<f64>,
     pub elements: Vec<ElementStats>,
+    /// 出勤した作業者 (欠勤の人は入らない)
+    pub workers: Vec<WorkerStats>,
     pub samples: Vec<Sample>,
 }
 
 impl Report {
     pub fn element(&self, id: ElementId) -> Option<&ElementStats> {
         self.elements.iter().find(|e| e.id == id)
+    }
+
+    /// 作業者の稼働率の平均。作業者がいなければ None。
+    pub fn worker_utilization(&self) -> Option<f64> {
+        (!self.workers.is_empty()).then(|| {
+            self.workers
+                .iter()
+                .map(WorkerStats::utilization)
+                .sum::<f64>()
+                / self.workers.len() as f64
+        })
+    }
+
+    /// 人が要る工程の「人待ち」の割合の平均。人が要る工程がなければ None。
+    pub fn no_operator_ratio(&self, model: &FlowModel) -> Option<f64> {
+        let ratios: Vec<f64> = self
+            .elements
+            .iter()
+            .filter(|e| model.get(e.id).is_some_and(|m| m.labor.needs_operator()))
+            .map(|e| e.times.ratio(State::NoOperator))
+            .collect();
+        (!ratios.is_empty()).then(|| ratios.iter().sum::<f64>() / ratios.len() as f64)
     }
 }
 
@@ -1150,5 +1506,170 @@ mod tests {
     #[test]
     fn invalid_models_are_rejected() {
         assert!(Simulation::new(&FlowModel::default()).is_err());
+    }
+
+    // --- 人員配置 ---------------------------------------------------------------
+
+    use crate::staffing::model::{Break, Shift};
+
+    /// 工程ごとに人の要否を決め、`workers` 人 (全員が全工程をできる、速さ 1.0) を入れる
+    fn staffed(mut m: FlowModel, labor: &[Labor], workers: usize) -> FlowModel {
+        let processes: Vec<ElementId> = m
+            .elements
+            .iter()
+            .filter(|e| e.kind.tag() == KindTag::Process)
+            .map(|e| e.id)
+            .collect();
+        for (&id, &l) in processes.iter().zip(labor) {
+            m.get_mut(id).unwrap().labor = l;
+        }
+        for _ in 0..workers {
+            let w = m.staffing.add_worker();
+            for &p in &processes {
+                m.staffing.worker_mut(w).unwrap().set_skill(p, true);
+            }
+        }
+        m
+    }
+
+    #[test]
+    fn one_person_for_two_manual_processes_halves_the_pace() {
+        // 1 秒ごとに投入、10 秒の手作業が 2 つ。1 人だと 20 秒に 1 個、2 人なら 10 秒に 1 個。
+        let base = line(1.0, &[10.0, 10.0]);
+        let one = Simulation::run(&staffed(base.clone(), &[Labor::Full, Labor::Full], 1)).unwrap();
+        let two = Simulation::run(&staffed(base, &[Labor::Full, Labor::Full], 2)).unwrap();
+        assert!(
+            close(one.throughput_per_hour, 180.0, 3.0),
+            "{}",
+            one.throughput_per_hour
+        );
+        assert!(
+            close(two.throughput_per_hour, 360.0, 3.0),
+            "{}",
+            two.throughput_per_hour
+        );
+        // 1 人のときはどちらの工程も半分くらい人待ち
+        let p = one.element(one.elements[1].id).unwrap();
+        assert!(p.times.ratio(State::NoOperator) > 0.3, "{p:?}");
+        assert!(one.workers[0].utilization() > 0.99);
+        assert_eq!(two.workers.len(), 2);
+    }
+
+    #[test]
+    fn load_only_frees_the_operator_while_the_machine_runs() {
+        // 投入 5 秒 + 自動 25 秒の機械が直列に 2 台。1 人で両方の投入を回せるが、
+        // 2 台が同時に空くので片方は 5 秒人待ちになり、35 秒に 1 個になる。
+        let m = staffed(
+            line(1.0, &[30.0, 30.0]),
+            &[Labor::Load { seconds: 5.0 }, Labor::Load { seconds: 5.0 }],
+            1,
+        );
+        let r = Simulation::run(&m).unwrap();
+        assert!(
+            close(r.throughput_per_hour, 3600.0 / 35.0, 2.0),
+            "{}",
+            r.throughput_per_hour
+        );
+        let w = &r.workers[0];
+        // 35 秒ごとに 5 秒 × 2 台の作業
+        assert!(
+            close(w.times.ratio(WorkerState::Working), 10.0 / 35.0, 0.03),
+            "{w:?}"
+        );
+        // 人が加工中ずっと付く場合 (30 秒 × 2 台を 1 人) よりずっと速い
+        let full = staffed(line(1.0, &[30.0, 30.0]), &[Labor::Full, Labor::Full], 1);
+        assert!(Simulation::run(&full).unwrap().throughput_per_hour < 61.0);
+    }
+
+    #[test]
+    fn faster_workers_shorten_manual_work() {
+        let mut m = staffed(line(1.0, &[10.0]), &[Labor::Full], 1);
+        let p = m.elements[1].id;
+        m.staffing.workers[0].skills[0] = crate::staffing::model::Skill {
+            element: p,
+            speed: 2.0,
+        };
+        let r = Simulation::run(&m).unwrap();
+        assert!(
+            close(r.throughput_per_hour, 720.0, 3.0),
+            "{}",
+            r.throughput_per_hour
+        );
+    }
+
+    #[test]
+    fn walking_between_stations_costs_time() {
+        let mut m = staffed(line(1.0, &[10.0, 10.0]), &[Labor::Full, Labor::Full], 1);
+        m.staffing.walk_seconds = 5.0;
+        let r = Simulation::run(&m).unwrap();
+        // 10 秒 + 歩行 5 秒 を 2 回で 30 秒に 1 個
+        assert!(
+            close(r.throughput_per_hour, 120.0, 3.0),
+            "{}",
+            r.throughput_per_hour
+        );
+        let w = &r.workers[0];
+        assert!(
+            close(w.times.ratio(WorkerState::Walking), 1.0 / 3.0, 0.03),
+            "{w:?}"
+        );
+        assert!(w.walks > 200);
+    }
+
+    #[test]
+    fn lunch_break_stops_manual_work() {
+        // 8:00 から 4 時間回す。11:00〜12:00 は休憩なので 3 時間分しか作れない。
+        let mut m = staffed(line(1.0, &[10.0]), &[Labor::Full], 1);
+        m.settings.duration = 4.0 * 3600.0;
+        let shift = m.staffing.insert_shift(Shift {
+            id: 0,
+            name: "日勤".into(),
+            start: 8.0 * 3600.0,
+            end: 17.0 * 3600.0,
+            breaks: vec![Break {
+                start: 11.0 * 3600.0,
+                end: 12.0 * 3600.0,
+            }],
+        });
+        m.staffing.workers[0].shift = Some(shift);
+        let r = Simulation::run(&m).unwrap();
+        assert!((1078..=1081).contains(&r.output), "{}", r.output);
+        let w = &r.workers[0];
+        assert!(
+            close(w.times.get(WorkerState::OffDuty), 3600.0, 10.0),
+            "{w:?}"
+        );
+        assert!(close(w.utilization(), 1.0, 0.01));
+    }
+
+    #[test]
+    fn absent_workers_do_not_come() {
+        let mut m = staffed(line(1.0, &[10.0, 10.0]), &[Labor::Full, Labor::Full], 2);
+        m.staffing.workers[1].absent = true;
+        let r = Simulation::run(&m).unwrap();
+        assert_eq!(r.workers.len(), 1);
+        assert!(close(r.throughput_per_hour, 180.0, 3.0));
+    }
+
+    #[test]
+    fn staffed_sample_is_deterministic_and_steppable() {
+        let mut m = sample_line();
+        crate::flow::model::apply_sample_staffing(&mut m);
+        let full = Simulation::run(&m).unwrap();
+        let mut sim = Simulation::new(&m).unwrap();
+        let mut t = 0.0;
+        while !sim.finished() {
+            t = sim.advance(t + 77.7, 40);
+        }
+        assert_eq!(sim.report(), full);
+        assert_eq!(full.workers.len(), 3);
+        // 昼休みがあるので、人のいないラインより少ない
+        let unstaffed = Simulation::run(&sample_line()).unwrap();
+        assert!(
+            full.output < unstaffed.output,
+            "{} {}",
+            full.output,
+            unstaffed.output
+        );
     }
 }

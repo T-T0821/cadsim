@@ -5,7 +5,9 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::model::{AgvCall, Element, ElementKind, Energy, Failure, FlowModel, RunSettings};
+use cadsim_core::staffing::model::{Break, Shift, Skill, Staffing, Worker};
+
+use super::model::{AgvCall, Element, ElementKind, Energy, Failure, FlowModel, Labor, RunSettings};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct FlowRecord {
@@ -17,6 +19,9 @@ pub struct FlowRecord {
     #[serde(default = "default_seed")]
     pub seed: u64,
     pub elements: Vec<ElementRecord>,
+    /// 作業者の名簿とシフト (なければ書かない)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub staffing: Option<StaffingRecord>,
 }
 
 fn default_seed() -> u64 {
@@ -46,6 +51,9 @@ pub struct ElementRecord {
     /// ライン連携: 加工を始めるたびにタイミングチャートを頭から再生する
     #[serde(default, skip_serializing_if = "is_false")]
     pub starts_chart: bool,
+    /// 工程に人が要るか (要らなければ書かない)
+    #[serde(default, skip_serializing_if = "LaborRecord::is_none")]
+    pub labor: LaborRecord,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
@@ -56,6 +64,157 @@ pub struct AgvCallRecord {
 
 fn is_false(v: &bool) -> bool {
     !*v
+}
+
+/// 工程に人が要るか。JSON では `"labor": {"type": "Load", "seconds": 8}` のように書く。
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Default)]
+#[serde(tag = "type")]
+pub enum LaborRecord {
+    #[default]
+    None,
+    Full,
+    Load {
+        seconds: f64,
+    },
+}
+
+impl LaborRecord {
+    fn is_none(&self) -> bool {
+        *self == LaborRecord::None
+    }
+}
+
+impl From<Labor> for LaborRecord {
+    fn from(l: Labor) -> Self {
+        match l {
+            Labor::None => LaborRecord::None,
+            Labor::Full => LaborRecord::Full,
+            Labor::Load { seconds } => LaborRecord::Load { seconds },
+        }
+    }
+}
+
+impl From<LaborRecord> for Labor {
+    fn from(l: LaborRecord) -> Self {
+        match l {
+            LaborRecord::None => Labor::None,
+            LaborRecord::Full => Labor::Full,
+            LaborRecord::Load { seconds } => Labor::Load { seconds },
+        }
+    }
+}
+
+/// 作業者の名簿とシフト。時刻は 0:00 からの秒、時間は秒。
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct StaffingRecord {
+    pub start_clock: f64,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub walk_seconds: f64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub shifts: Vec<ShiftRecord>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub workers: Vec<WorkerRecord>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct ShiftRecord {
+    pub id: u32,
+    pub name: String,
+    pub start: f64,
+    pub end: f64,
+    /// 休憩 `[開始, 終了]` の並び
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub breaks: Vec<[f64; 2]>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct WorkerRecord {
+    pub id: u32,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shift: Option<u32>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub absent: bool,
+    /// できる工程 `[工程の ID, 速さ]` の並び (速さ 1.0 が標準)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skills: Vec<(u32, f64)>,
+}
+
+fn staffing_record(s: &Staffing) -> Option<StaffingRecord> {
+    (!s.is_empty()).then(|| StaffingRecord {
+        start_clock: s.start_clock,
+        walk_seconds: s.walk_seconds,
+        shifts: s
+            .shifts
+            .iter()
+            .map(|sh| ShiftRecord {
+                id: sh.id,
+                name: sh.name.clone(),
+                start: sh.start,
+                end: sh.end,
+                breaks: sh.breaks.iter().map(|b| [b.start, b.end]).collect(),
+            })
+            .collect(),
+        workers: s
+            .workers
+            .iter()
+            .map(|w| WorkerRecord {
+                id: w.id,
+                name: w.name.clone(),
+                shift: w.shift,
+                absent: w.absent,
+                skills: w.skills.iter().map(|k| (k.element, k.speed)).collect(),
+            })
+            .collect(),
+    })
+}
+
+fn staffing_from_record(r: &StaffingRecord, warnings: &mut Vec<String>) -> Staffing {
+    let mut s = Staffing::default();
+    s.start_clock = r.start_clock;
+    s.walk_seconds = r.walk_seconds;
+    for sh in &r.shifts {
+        let ok = s.insert_shift_with_id(Shift {
+            id: sh.id,
+            name: sh.name.clone(),
+            start: sh.start,
+            end: sh.end,
+            breaks: sh
+                .breaks
+                .iter()
+                .map(|[start, end]| Break {
+                    start: *start,
+                    end: *end,
+                })
+                .collect(),
+        });
+        if !ok {
+            warnings.push(format!(
+                "シフトの ID {} が重なっているため読み飛ばしました",
+                sh.id
+            ));
+        }
+    }
+    for w in &r.workers {
+        let ok = s.insert_worker_with_id(Worker {
+            id: w.id,
+            name: w.name.clone(),
+            shift: w.shift,
+            absent: w.absent,
+            skills: w
+                .skills
+                .iter()
+                .map(|&(element, speed)| Skill { element, speed })
+                .collect(),
+        });
+        if !ok {
+            warnings.push(format!(
+                "作業者の ID {} が重なっているため読み飛ばしました",
+                w.id
+            ));
+        }
+    }
+    s
 }
 
 fn is_zero(v: &f64) -> bool {
@@ -135,8 +294,10 @@ pub fn to_record(model: &FlowModel, part_path: impl Fn(u32) -> Option<Vec<usize>
                     to: c.to,
                 }),
                 starts_chart: e.starts_chart,
+                labor: e.labor.into(),
             })
             .collect(),
+        staffing: staffing_record(&model.staffing),
     }
 }
 
@@ -211,6 +372,7 @@ pub fn from_record(
                 to: c.to,
             }),
             starts_chart: r.starts_chart,
+            labor: r.labor.into(),
         });
         if !inserted {
             warnings.push(format!(
@@ -218,6 +380,9 @@ pub fn from_record(
                 r.id
             ));
         }
+    }
+    if let Some(staffing) = &record.staffing {
+        model.staffing = staffing_from_record(staffing, &mut warnings);
     }
     (model, warnings)
 }
@@ -240,6 +405,29 @@ mod tests {
         let (restored, warnings) = from_record(&parsed, |p| (p == [0, 3]).then_some(42));
         assert!(warnings.is_empty());
         assert_eq!(restored, model);
+    }
+
+    #[test]
+    fn round_trip_keeps_the_staffing() {
+        let mut model = sample_line();
+        super::super::model::apply_sample_staffing(&mut model);
+        model.staffing.workers[2].absent = true;
+        let record = to_record(&model, |_| None);
+        let json = serde_json::to_string(&record).unwrap();
+        assert!(json.contains("\"labor\":{\"type\":\"Full\"}"), "{json}");
+        let parsed: FlowRecord = serde_json::from_str(&json).unwrap();
+        let (restored, warnings) = from_record(&parsed, |_| None);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(restored, model);
+    }
+
+    #[test]
+    fn old_files_without_staffing_still_load() {
+        let json = r#"{"duration":3600,"elements":[{"id":1,"name":"工程1","type":"Process","cycle_time":10}]}"#;
+        let parsed: FlowRecord = serde_json::from_str(json).unwrap();
+        let (restored, _) = from_record(&parsed, |_| None);
+        assert_eq!(restored.elements[0].labor, Labor::None);
+        assert!(restored.staffing.is_empty());
     }
 
     #[test]
