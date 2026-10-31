@@ -3,12 +3,24 @@
 use bevy::prelude::*;
 
 pub use cadsim_core::model::{
-    BoxPart, DEFAULT_PART_COLOR, ModeledSource, Node, NodeId, NodeKind, Snapshot, StepSource,
+    BoxPart, DEFAULT_PART_COLOR, ModeledSource, NodeId, NodeKind, StepSource,
 };
 
 /// 設計データ。`cadsim_core::model::Model` を Bevy の Resource にするための包み
 #[derive(Resource, Default, Deref, DerefMut)]
 pub struct Model(pub cadsim_core::model::Model);
+
+impl std::borrow::Borrow<cadsim_core::model::Model> for Model {
+    fn borrow(&self) -> &cadsim_core::model::Model {
+        &self.0
+    }
+}
+
+impl std::borrow::BorrowMut<cadsim_core::model::Model> for Model {
+    fn borrow_mut(&mut self) -> &mut cadsim_core::model::Model {
+        &mut self.0
+    }
+}
 
 /// いま選んでいるもの
 #[derive(Resource, Default)]

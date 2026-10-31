@@ -44,6 +44,7 @@ crates/cadsim_core/   Bevy に依存しないドメイン (cargo test -p cadsim_
 ├── bvh.rs           外接箱の木 (BVH) とレイの当たり判定
 ├── part_mesh.rs     部品1つ分の表示用メッシュ (面をまとめたもの・面番号の表・簡略形状)
 ├── shape.rs         取り込んだ形状 (B-rep・面メッシュ・計測値) とアセンブリの木 (ImportNode)
+├── history.rs       元に戻す履歴の山 (UndoStack)・モデルの変更 (ModelChange)・ドラッグ中の編集のまとめ方
 ├── gamify.rs        ゲーム風 UI の中身: ミッションの判定・経験値とレベル・紙吹雪 (docs/playful-ui.md)
 ├── math.rs          回転・行列・外接箱の計算 (f64)
 ├── model.rs         設計データ: アセンブリの木 (f64)。ノード・箱・取り込んだ部品・標準部品
@@ -90,7 +91,7 @@ src/                  アプリ本体 (Bevy + egui)
 │   ├── export.rs     1サイクルの動きを書き出し用のアニメーションにする
 │   └── demo.rs       サンプル装置 (ピック & プレース)
 ├── shortcuts.rs     キーボードショートカット
-├── history.rs       元に戻す・やり直し
+├── history.rs       元に戻す・やり直しの Bevy 側 (履歴の山とモデルの変更は cadsim_core::history)
 ├── math.rs          f64 の配置を Bevy の Transform にする (計算は cadsim_core::math)
 ├── japanese_font.rs egui に日本語フォントを登録
 ├── simulation/      干渉チェックの配線・表示・パネルと距離計測 (詳しくは docs/simulation.md)
@@ -290,7 +291,7 @@ ID で部品を指している設定(アクチュエータなど)はそのまま
 
 ### 元に戻す・やり直し(`history.rs`)
 
-変更を済ませてから記録する方式です。モデルを書き換えたあと、その変更を戻すための `Command` を `History` に積みます。
+変更を済ませてから記録する方式です。モデルを書き換えたあと、その変更を戻すための `Command` を `History` に積みます。履歴の山 (`UndoStack`)・`ModelChange`・ドラッグ中の編集のまとめ方 (`ModelEdits`) は Bevy に依存しない `cadsim_core::history` にあり、アプリ側の `history.rs` は `World` を書き換える部分とシステムだけを持ちます。
 
 - モデルの変更は `ModelChange` で表します。中身は変更前と変更後のノードの写し(`Model::snapshot`、子孫ごと)です。取り込んだ形状は `Arc` で共有しているので、大きなアセンブリでも写すのは軽く済みます。
 - 履歴に載るもの: 箱の追加、円柱・押し出しの追加、穴あけ・ブーリアン、STEP の読み込み、タイミングチャートのサンプル装置の読み込み(`History::replace_all`)、削除(Delete キー・ツリー・プロパティ)、すべて閉じる、ギズモでの移動・回転・拡大縮小、プロパティでの寸法・位置・回転・名前・色・部品スクリプトの変更。
