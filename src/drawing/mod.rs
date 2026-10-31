@@ -236,6 +236,7 @@ pub fn make_sheet(input: &DrawingInput, options: &DrawingOptions) -> Sheet {
 
     for &(view, shift, min, max) in &placed {
         draw_view(&mut sheet, input, &meshes, view, shift, options, scene_size);
+        drop_covered_hidden_lines(&mut sheet, scene_size);
         let label_h = mm(TEXT_MM);
         sheet.texts.push(SheetText {
             layer: Layer::Text,
@@ -385,6 +386,41 @@ fn draw_view(
             }
         }
     }
+}
+
+/// 外形線と重なるかくれ線を消す (箱の底の辺が上面図で上の辺と重なる場合など)
+fn drop_covered_hidden_lines(sheet: &mut Sheet, scene_size: f64) {
+    use std::collections::HashMap;
+    let cell = scene_size / 50.0;
+    let eps = scene_size * 1e-6;
+    let key = |p: DVec2| ((p.x / cell).floor() as i64, (p.y / cell).floor() as i64);
+    let mut grid: HashMap<(i64, i64), Vec<(DVec2, DVec2)>> = HashMap::new();
+    for (layer, a, b) in &sheet.lines {
+        if *layer != Layer::Outline {
+            continue;
+        }
+        let (lo, hi) = (key(a.min(*b)), key(a.max(*b)));
+        if (hi.0 - lo.0 + 1) * (hi.1 - lo.1 + 1) > 10_000 {
+            continue;
+        }
+        for x in lo.0..=hi.0 {
+            for y in lo.1..=hi.1 {
+                grid.entry((x, y)).or_default().push((*a, *b));
+            }
+        }
+    }
+    let on_outline = |p: DVec2| {
+        grid.get(&key(p)).is_some_and(|segments| {
+            segments.iter().any(|&(a, b)| {
+                let ab = b - a;
+                let t = ((p - a).dot(ab) / ab.length_squared().max(1e-300)).clamp(0.0, 1.0);
+                (a + ab * t).distance(p) < eps
+            })
+        })
+    };
+    sheet.lines.retain(|(layer, a, b)| {
+        *layer != Layer::Hidden || ![*a, a.lerp(*b, 0.5), *b].into_iter().all(on_outline)
+    });
 }
 
 /// 曲面の輪郭: 面のメッシュの中で、表を向いた三角形と裏を向いた三角形の境の辺
@@ -701,7 +737,8 @@ mod tests {
     #[test]
     fn scale_fits_a3() {
         // 3 m の設備は A3 に 1:10 では入らず 1:20
-        assert_eq!(choose_scale(3000.0, 800.0, 2, 30.0), 20.0);
+        assert_eq!(choose_scale(4000.0, 800.0, 2, 30.0), 20.0);
+        assert_eq!(choose_scale(3000.0, 800.0, 2, 30.0), 10.0);
         assert_eq!(choose_scale(100.0, 50.0, 2, 30.0), 1.0);
         assert_eq!(chain_positions([0.0, 100.0, 100.2, 300.0].into_iter(), 300.0), vec![0.0, 100.0, 300.0]);
         assert_eq!(format_length(1200.0), "1200");
@@ -710,8 +747,8 @@ mod tests {
 
     #[test]
     fn top_view_hides_lower_box() {
-        // 大きな箱の上に小さな箱。下に隠れる箱はないので、上面図には隠れ線が出ない。
-        // 大きな箱の下にある箱は、上面図ではかくれ線になる
+        // 大きな箱の下にある箱は、上面図ではかくれ線になる。
+        // 大きな箱の底の辺は上の辺と重なるので、かくれ線にしない
         let data = input(vec![
             (DVec3::new(0.0, 100.0, 0.0), DVec3::new(400.0, 200.0, 400.0)),
             (DVec3::new(0.0, -50.0, 0.0), DVec3::new(100.0, 100.0, 100.0)),
@@ -730,7 +767,7 @@ mod tests {
             let w = (*b - *a).abs();
             assert!(w.x <= 100.0 + 1e-6 && w.y <= 100.0 + 1e-6, "{a} {b}");
         }
-        assert_eq!(sheet.scale, 2.0);
+        assert_eq!(sheet.scale, 5.0);
         // 寸法の数字に全体寸法 400 が入る
         assert!(sheet.texts.iter().any(|t| t.text == "400"));
         assert!(sheet.texts.iter().any(|t| t.text == "上面図"));

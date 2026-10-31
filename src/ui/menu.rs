@@ -84,6 +84,23 @@ fn export_menu(ui: &mut egui::Ui, state: &mut UiState) {
             state.jobs.request_export(ExportScope::Selection);
         }
         ui.separator();
+        if ui
+            .button("図面 (PDF / DXF)…")
+            .on_hover_text("表示中の部品の上面図・正面図を、寸法付きで A3 の図面にする")
+            .clicked()
+        {
+            state.documents.open_drawing_dialog();
+            ui.close();
+        }
+        if ui
+            .button("部品表 (Excel / CSV)…")
+            .on_hover_text("同じ部品をまとめて数えた部品表と、ツリーの構成表")
+            .clicked()
+        {
+            state.documents.request_bom();
+            ui.close();
+        }
+        ui.separator();
         ui.weak("保存ダイアログで選んだ拡張子の形式で書き出します");
         for format in FORMATS.iter().filter(|f| f.export.is_some()) {
             let note = if format.export_note.is_empty() {

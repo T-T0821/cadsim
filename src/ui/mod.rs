@@ -79,6 +79,7 @@ pub struct UiState<'w> {
     pub camera: MessageWriter<'w, CameraRequest>,
     pub viewport: ResMut<'w, ViewportRect>,
     pub motion: MotionUi<'w>,
+    pub documents: ResMut<'w, crate::documents::DocumentExport>,
 }
 
 /// UI 専用のカメラ。3D カメラはパネルを除いた領域だけに描くので、

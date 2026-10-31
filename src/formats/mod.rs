@@ -3,6 +3,8 @@
 //! 平面図 (DXF / PDF / 画像) の読み込みと、図面 (DXF) の書き出し。
 //! Bevy にも egui にも依存しない。
 
+pub mod bom_out;
+pub mod drawing_out;
 pub mod dxf;
 pub mod pdf_plan;
 pub mod site_record;

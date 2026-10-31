@@ -370,8 +370,8 @@ fn spline(e: &Entity) -> Vec<DVec2> {
 pub struct DxfDrawing<'a> {
     /// (画層, 始点, 終点)
     pub lines: Vec<(&'a str, DVec2, DVec2)>,
-    /// (画層, 位置 (左下), 高さ, 文字)
-    pub texts: Vec<(&'a str, DVec2, f64, String)>,
+    /// (画層, 位置 (左下), 高さ, 角度 (度), 文字)
+    pub texts: Vec<(&'a str, DVec2, f64, f64, String)>,
     /// $INSUNITS (4 = mm など)
     pub insunits: i64,
 }
@@ -455,7 +455,7 @@ pub fn write_drawing(drawing: &DxfDrawing) -> String {
         pair(21, &num(b.y));
         pair(31, "0");
     }
-    for (layer, at, height, text) in &drawing.texts {
+    for (layer, at, height, angle, text) in &drawing.texts {
         pair(0, "TEXT");
         pair(8, layer);
         pair(10, &num(at.x));
@@ -463,6 +463,9 @@ pub fn write_drawing(drawing: &DxfDrawing) -> String {
         pair(30, "0");
         pair(40, &num(*height));
         pair(1, &escape_text(text));
+        if *angle != 0.0 {
+            pair(50, &num(*angle));
+        }
     }
     pair(0, "ENDSEC");
     pair(0, "EOF");
@@ -551,7 +554,7 @@ mod tests {
     fn written_drawing_reads_back() {
         let drawing = DxfDrawing {
             lines: vec![("OUTLINE", DVec2::ZERO, DVec2::new(100.0, 50.0))],
-            texts: vec![("TEXT", DVec2::new(1.0, 2.0), 3.5, "上面 A-1".into())],
+            texts: vec![("TEXT", DVec2::new(1.0, 2.0), 3.5, 0.0, "上面 A-1".into())],
             insunits: 4,
         };
         let text = write_drawing(&drawing);
