@@ -13,8 +13,8 @@
 
 use std::collections::{BinaryHeap, HashMap, VecDeque};
 
-use bevy::math::DVec2;
-use cadsim_core::line::AgvEvent;
+use crate::line::AgvEvent;
+use glam::DVec2;
 
 /// 経路の点
 #[derive(Clone, Debug, PartialEq)]

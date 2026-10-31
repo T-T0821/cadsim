@@ -86,7 +86,7 @@ crates/
 5. **ユースケースを切り出す。** 開く・保存・取り込み・書き出し・削除・元に戻すを `usecase` の関数にし、Bevy のシステムからはそれを呼ぶだけにする。元に戻す履歴は `World` ではなくドキュメント(モデル + チャートなど)を書き換える形にする。 🔶 まず履歴の山 (`UndoStack`)・モデルの変更 (`ModelChange`)・ドラッグ中の編集のまとめ方 (`ModelEdits`) を `cadsim_core::history` に移した。アプリ側の `History` (Resource) はそれを持ち、`Command` で `World` を書き換える部分と見張る文書 (`TrackedDoc`) だけを持つ。
 6. **UI 層を整理する。** 残った Bevy / egui のコードを `view` / `input` / `ui` に分ける。
 
-いまの `src/safety/` と `src/floor/` は、`device.rs`・`check.rs`・`geom.rs`・`operator_plan.rs`・`agv_sim.rs` が Bevy に依存しない層 (2. で core へ移すもの)、`mod.rs`・`view.rs`・`panel.rs` が UI 層です。
+安全機器と作業者・AGV は、`device.rs`・`geom.rs`・`operator_plan.rs`・`agv_sim.rs` を `cadsim_core::{safety, floor}` に移した。`src/safety/check.rs` はタイミングチャートを使うので、チャートが core に移ってから移す。`src/safety/`・`src/floor/` の `mod.rs`・`view.rs`・`panel.rs` が UI 層です。
 
 新しく足した機能のうち、すでに層を分けてあるもの:
 

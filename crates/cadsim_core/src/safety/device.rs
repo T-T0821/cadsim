@@ -12,7 +12,7 @@
 
 use std::collections::BTreeSet;
 
-use bevy::math::{DVec2, DVec3};
+use glam::{DVec2, DVec3};
 
 use crate::floor::geom::{Rect2, Zone};
 use crate::math::Aabb;
