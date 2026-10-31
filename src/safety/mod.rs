@@ -3,7 +3,7 @@
 //! | ファイル | 役割 |
 //! | --- | --- |
 //! | `cadsim_core::safety::device` | 機器のデータ、侵入の検知、停止信号のラッチ、ISO 13855 の安全距離 |
-//! | `check.rs` | 動作範囲 (危険源) と、柵・ライトカーテンの距離の確認 (Bevy 非依存) |
+//! | `cadsim_core::safety::check` | 動作範囲 (危険源) と、柵・ライトカーテンの距離の確認 |
 //! | `view.rs` | 機器と動作範囲の 3D 表示 |
 //! | `panel.rs` | 「安全」パネル |
 //!
@@ -11,8 +11,7 @@
 //! ほかの機能は `SafetySet::Intruders` の中で書き足す。検知すると停止信号 ([`SafetyState::is_stopped`])
 //! を出し、タイミングチャートの再生を止める。リセットするまで再生できない。
 
-mod check;
-pub use cadsim_core::safety::device;
+pub use cadsim_core::safety::{check, device};
 mod panel;
 mod view;
 

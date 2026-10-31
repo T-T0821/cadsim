@@ -87,7 +87,7 @@
 }
 ```
 
-実装は `src/project.rs`、平面図と点群の記録は `src/formats/site_record.rs`、タイミングチャートとアニメーションの記録は `src/formats/chart_record.rs` です。ファイル形式の構造体(`ProjectFile` など)は内部の `Model` と分けているので、内部を変えてもファイルの互換を保てます。
+実装は `src/project.rs`、平面図と点群の記録は `crates/cadsim_io/src/formats/site_record.rs`、タイミングチャートとアニメーションの記録は `crates/cadsim_io/src/formats/chart_record.rs` です。ファイル形式の構造体(`ProjectFile` など)は内部の `Model` と分けているので、内部を変えてもファイルの互換を保てます。
 
 - 開く処理(JSON の解釈と STEP の読み直し)は別スレッドで行い、画面は止まりません。
 - 工程モデルやタイミングチャートの 3D の部品が見つからないときは、対応付けだけ外して注意を出します。見つからないノードのアニメーションのトラックは読み飛ばします。

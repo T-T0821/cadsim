@@ -678,10 +678,10 @@ mod tests {
 
     #[test]
     fn many_steps_widen_device_blocks() {
-        let chart = TimingChart {
+        let chart = TimingChart(cadsim_core::motion::TimingChart {
             steps: vec![Default::default(); 150],
             ..Default::default()
-        };
+        });
         let ladder = generate(&chart);
         assert!(
             ladder

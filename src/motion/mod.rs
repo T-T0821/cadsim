@@ -29,16 +29,16 @@
 pub mod chart;
 mod demo;
 mod export;
-mod kinematics;
+use cadsim_core::motion::kinematics;
 mod live_joints;
 mod melfa;
-mod path_interference;
-mod pose;
-mod profile;
-mod robot_path;
-mod robot_time;
+use cadsim_core::motion::path_interference;
+use cadsim_core::motion::pose;
+use cadsim_core::motion::profile;
+use cadsim_core::motion::robot_path;
+use cadsim_core::motion::robot_time;
 mod robot_ui;
-mod sensor;
+use cadsim_core::motion::sensor;
 mod sensor_view;
 mod targets;
 mod teach;
@@ -49,11 +49,13 @@ use std::collections::HashMap;
 
 use bevy::prelude::*;
 
-pub use chart::{Action, Actuator, ActuatorKind, Axis, Easing, Schedule, Step, TimingChart};
+pub use cadsim_core::motion::pose::{
+    RigidPose, actuator_poses, actuator_poses_for, part_poses, part_poses_for,
+};
+pub use chart::{Action, Actuator, ActuatorKind, Axis, Schedule, Step, TimingChart};
 #[cfg(test)]
 pub use demo::load_demo;
 pub use export::chart_animation;
-pub use pose::{RigidPose, actuator_poses, actuator_poses_for, part_poses, part_poses_for};
 pub use robot_ui::{show_robot_section, teach_tool_off};
 pub use ui::{MotionUi, show_panel};
 
