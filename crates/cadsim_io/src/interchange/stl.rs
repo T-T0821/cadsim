@@ -5,7 +5,7 @@
 
 use std::{fs::File, io::BufReader, path::Path};
 
-use bevy::math::DVec3;
+use glam::DVec3;
 
 use super::{ExchangeResult, Scene, SceneNode, TriMesh, UnitOptions, io_error};
 
