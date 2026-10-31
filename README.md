@@ -214,6 +214,19 @@ cadsim から直接見るときは「ファイル → 書き出し → ブラウ
 
 ![負荷テスト用シーン](docs/screenshots/15_stress_scene.png)
 
+#### 小さな穴とフィレットを省略する
+
+「表示 → 小さな穴とフィレットを省略」をオンにすると、STEP で読み込んだ部品の小さな穴を埋め、角の丸み(フィレット)を尖った角にして描きます。ボルト穴や丸みの多い部品が並ぶアセンブリで、描く三角形が大きく減ります。
+
+- 消す大きさは、その下の「穴の直径」「フィレットの半径」のスライダーで決めます(モデルの単位)。
+- 計算は部品の形ごとに裏で行い、できたものから表示が変わります。メニューに計算の進み具合と、省略した穴・フィレットの数が出ます。
+- 干渉チェックは元の形のまま行います。クリックでの選択や距離計測は、表示している形に当たります。
+- glTF / OBJ / STL などメッシュで読み込んだ部品と、ここで作った箱は変わりません。
+
+| オフ | オン(穴 4 個とフィレット 4 個を省略、三角形 3654 → 1558) |
+| --- | --- |
+| ![省略なし](docs/screenshots/16_defeature_off.png) | ![穴とフィレットを省略](docs/screenshots/17_defeature_on.png) |
+
 ### 干渉チェックと距離計測
 
 部品を動かすたびに、表示中のすべての部品の組み合わせを自動で調べます。
@@ -477,6 +490,7 @@ cargo test --locked
 | [docs/safety-and-floor.md](docs/safety-and-floor.md) | 安全機器・作業者・AGV のしくみ(検知と停止、安全距離、配車、交差点の排他) |
 | [docs/playful-ui.md](docs/playful-ui.md) | ゲーム風の画面(テーマ・ミッション・経験値・設定ファイル)のしくみ |
 | [docs/physics.md](docs/physics.md) | 物理演算・ベルトコンベア・ケーブルの紐モデルの設計 |
+| [docs/defeature.md](docs/defeature.md) | 小さな穴とフィレットを省略する形状の簡略化のしくみ |
 | [docs/project-file.md](docs/project-file.md) | プロジェクトファイル(.cadsim)の形式 |
 | [docs/release.md](docs/release.md) | Windows / Mac 向けの配布パッケージと Release の作り方 |
 

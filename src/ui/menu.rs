@@ -279,6 +279,34 @@ fn view_menu(ui: &mut egui::Ui, state: &mut UiState) {
                     .text("省略 (px 未満)"),
             );
         });
+        ui.checkbox(&mut state.settings.defeature, "小さな穴とフィレットを省略")
+            .on_hover_text(
+                "取り込んだ部品の小さな穴を埋め、角の丸みを尖らせて三角形を減らす。\n\
+                 干渉チェックは元の形で行う",
+            );
+        ui.add_enabled_ui(state.settings.defeature, |ui| {
+            let unit = &state.model.unit;
+            ui.add(
+                egui::Slider::new(&mut state.settings.defeature_hole, 0.0..=100.0)
+                    .text(format!("穴の直径 ({unit} 以下)")),
+            );
+            ui.add(
+                egui::Slider::new(&mut state.settings.defeature_fillet, 0.0..=50.0)
+                    .text(format!("フィレットの半径 ({unit} 以下)")),
+            );
+            if state.settings.defeature {
+                let pending = state.defeaturing.pending();
+                let removed = state.defeaturing.removed();
+                ui.label(if pending > 0 {
+                    format!("計算中… (残り {pending} 形状)")
+                } else {
+                    format!(
+                        "穴 {} 個・フィレット {} 個を省略 (形状ごとに数える)",
+                        removed.holes, removed.fillets
+                    )
+                });
+            }
+        });
         ui.separator();
         if ui.button("すべて表示").clicked() {
             state.model.show_all();

@@ -46,6 +46,7 @@ mod bench;
 mod bom;
 mod bvh;
 mod camera;
+mod defeature;
 mod documents;
 mod drawing;
 mod file_io;
