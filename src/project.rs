@@ -31,11 +31,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::annotation::{AnnotationRecord, Annotations, to_records};
 use crate::camera::CameraRequest;
+use crate::formats::site_record::{UnderlayRecord, load_site};
 use crate::file_io::{ImportJobs, file_name, load_source, receive_imports, source_name};
 use crate::history::History;
 use crate::interchange::UnitOptions;
 use crate::math::{euler_deg_to_quat, quat_to_euler_deg, split_placement};
 use crate::model::{BoxPart, Model, NodeId, NodeKind, Selection, StepSource};
+use crate::site::model::Site;
 use crate::step_import::{ImportNode, ImportedShape};
 
 /// ファイル形式のバージョン。古いファイルを開けなくなる変更をしたときだけ上げる。
@@ -89,6 +91,9 @@ pub struct ProjectFile {
     /// 3D 上の寸法と注記
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub annotations: Vec<AnnotationRecord>,
+    /// 床に敷いた平面図
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub underlays: Vec<UnderlayRecord>,
 }
 
 fn default_unit() -> String {
@@ -168,6 +173,7 @@ impl ProjectFile {
                 .collect(),
             nodes,
             annotations: Vec::new(),
+            underlays: crate::formats::site_record::to_records(&model.site, base_dir),
         }
     }
 
@@ -391,6 +397,8 @@ pub struct LoadedProject {
     pub sources: Vec<StepSource>,
     /// STEP ごとの「製品名 → 形状」。読めなかった STEP は空。
     pub shapes: Vec<HashMap<String, Arc<ImportedShape>>>,
+    /// 平面図など。図面は元のファイルから読み直してある。
+    pub site: Site,
     pub warnings: Vec<String>,
 }
 
@@ -429,10 +437,12 @@ impl LoadedProject {
                 }
             })
             .collect();
+        let site = load_site(&file.underlays, base_dir, &mut warnings);
         Self {
             file,
             sources,
             shapes,
+            site,
             warnings,
         }
     }
@@ -441,6 +451,7 @@ impl LoadedProject {
     pub fn apply_to(&self, model: &mut Model) -> Vec<String> {
         model.clear();
         model.unit = self.file.unit.clone();
+        model.site = self.site.clone();
         let mut warnings = self.warnings.clone();
         for record in &self.file.nodes {
             self.add_record(model, None, record, &mut warnings);
@@ -690,6 +701,7 @@ fn run_project_actions(
     match action {
         ProjectAction::New => {
             model.clear();
+            model.site = Site::default();
             *annotations = Annotations::default();
             *history = History::default();
             selection.clear();

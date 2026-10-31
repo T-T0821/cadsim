@@ -20,6 +20,8 @@
 //! - `math`        回転や行列の変換
 //! - `simulation`  干渉チェックと距離計測 (`SimBody` を付けた部品が対象)
 //! - `annotation`  3D 上の寸法 (点間距離・辺の長さ・面間距離) と注記
+//! - `site`        床に敷く平面図 (DXF / PDF / 画像) と縮尺合わせ
+//! - `formats`     平面図や図面などのファイル形式の読み書き (Bevy に依存しない)
 
 // Windows のリリースビルドでは、起動時に黒いコンソール窓を出さない
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
@@ -28,6 +30,7 @@ mod animation;
 mod annotation;
 mod camera;
 mod file_io;
+mod formats;
 mod gizmo;
 mod history;
 mod interchange;
@@ -38,6 +41,7 @@ mod motion;
 mod project;
 mod shortcuts;
 mod simulation;
+mod site;
 mod step_import;
 mod ui;
 mod viewport;
@@ -72,6 +76,7 @@ fn main() {
             simulation::SimulationPlugin,
             annotation::AnnotationPlugin,
             motion::MotionPlugin,
+            site::SitePlugin,
         ))
         .run();
 }

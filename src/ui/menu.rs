@@ -63,6 +63,7 @@ fn file_menu(ui: &mut egui::Ui, state: &mut UiState) {
         ui.separator();
         ui.weak("ウィンドウへのドラッグ&ドロップでも開けます");
         ui.weak(format!("取り込める形式: STEP, {}", format_list()));
+        ui.weak("平面図として床に敷く形式: DXF, PDF, PNG, JPG");
     });
 }
 

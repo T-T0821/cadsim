@@ -21,6 +21,13 @@ truck-stepio = "0.3"
 truck-topology = "0.6"
 # OpenUSD (.usda / .usdc / .usdz) の読み書き。純 Rust
 openusd = "0.8"
+glam = { version = "0.33.12", features = ["serde"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+truck-shapeops = { version = "0.4", default-features = false }
+lopdf = "0.46"
+krilla = "0.8"
+rust_xlsxwriter = "0.102"
+e57 = "0.11"
 
 # 開発ビルドでも Bevy などの依存は最適化して、操作を軽くする
 [profile.dev]

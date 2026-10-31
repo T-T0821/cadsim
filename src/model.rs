@@ -15,6 +15,7 @@ use truck_modeling::{Solid, builder};
 use truck_meshalgo::prelude::{EuclideanSpace, Point3, Rad, Vector3};
 
 use crate::math::{Aabb, euler_deg_to_quat};
+use crate::site::model::Site;
 use crate::step_import::{ImportNode, ImportedShape};
 
 pub type NodeId = u32;
@@ -158,6 +159,8 @@ pub struct Model {
     pub unit: String,
     /// 新規作成フォームの寸法
     pub new_box_size: [f64; 3],
+    /// 床に敷いた平面図など、部品のツリーの外にある現場のデータ
+    pub site: Site,
 }
 
 impl Default for Model {
@@ -169,6 +172,7 @@ impl Default for Model {
             dirty: HashSet::new(),
             unit: "mm".into(),
             new_box_size: [1.0, 1.0, 1.0],
+            site: Site::default(),
         }
     }
 }

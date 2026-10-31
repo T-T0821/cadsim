@@ -20,6 +20,7 @@ use crate::interchange::{
     self, FORMATS, Scene, UnitOptions,
     model_io::{model_to_scene, scene_to_import},
 };
+use crate::formats::{PLAN_EXTENSIONS, is_plan_file};
 use crate::model::{Model, NodeId, Selection, StepSource};
 use crate::project::{ProjectAction, ProjectState, is_project_file};
 use crate::step_import::{ImportedFile, import_step};
@@ -87,6 +88,8 @@ pub struct ImportJobs {
     export_requested: Option<ExportScope>,
     /// OBJ / STL の単位と上方向 (読み込みと書き出しの両方で使う)
     pub units: UnitOptions,
+    /// 平面図として開くファイル (site が受け取って読む)
+    pub site_files: Vec<PathBuf>,
 }
 
 impl Default for ImportJobs {
@@ -100,6 +103,7 @@ impl Default for ImportJobs {
             dialog_requested: false,
             export_requested: None,
             units: UnitOptions::default(),
+            site_files: Vec::new(),
         }
     }
 }
@@ -190,6 +194,8 @@ fn open_command_line_file(mut jobs: ResMut<ImportJobs>, mut project: ResMut<Proj
 fn open_any(path: PathBuf, jobs: &mut ImportJobs, project: &mut ProjectState) {
     if is_project_file(&path) {
         project.request(ProjectAction::OpenPath(path));
+    } else if is_plan_file(&path) {
+        jobs.site_files.push(path);
     } else {
         jobs.open_path(path);
     }
@@ -211,6 +217,7 @@ fn open_dialog_if_requested(
             .filter(|f| f.import.is_some())
             .flat_map(|f| f.extensions.iter().copied()),
     );
+    all.extend(PLAN_EXTENSIONS);
     let mut dialog = rfd::FileDialog::new()
         .set_title("開く")
         .add_filter("対応しているすべての形式", &with_upper_case(&all))
@@ -219,6 +226,10 @@ fn open_dialog_if_requested(
     for format in FORMATS.iter().filter(|f| f.import.is_some()) {
         dialog = dialog.add_filter(format.name, &with_upper_case(format.extensions));
     }
+    dialog = dialog.add_filter(
+        "平面図 (DXF / PDF / 画像)",
+        &with_upper_case(PLAN_EXTENSIONS),
+    );
     let picked = dialog.add_filter("すべてのファイル", &["*"]).pick_file();
     if let Some(path) = picked {
         open_any(path, &mut jobs, &mut project);

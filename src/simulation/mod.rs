@@ -32,7 +32,7 @@ pub mod measure;
 mod mesh;
 mod overlap;
 mod panel;
-mod view;
+pub mod view;
 
 pub use geometry::Pose;
 pub use mesh::TriMesh;
