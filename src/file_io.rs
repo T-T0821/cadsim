@@ -228,10 +228,12 @@ pub fn file_name(path: &Path) -> String {
 
 /// `cargo run -- 部品.step` (または `line.cadsim`) のように渡されたファイルを開く。
 /// 無ければサンプルを開く。`--stress 5000` なら負荷テスト用のシーンを開く
-/// (`--bench` は bench.rs が読む)。
+/// (`--bench` は bench.rs、`--physics` は physics が読む)。
 fn open_command_line_file(mut jobs: ResMut<ImportJobs>, mut project: ResMut<ProjectState>) {
     let args = CommandLine::parse();
-    if let Some(count) = args.stress {
+    if args.physics {
+        // 物理演算のサンプルラインは physics が作る
+    } else if let Some(count) = args.stress {
         jobs.open_stress(count);
     } else if let Some(path) = args.file {
         open_any(path, &mut jobs, &mut project);
@@ -249,6 +251,8 @@ pub struct CommandLine {
     pub stress: Option<usize>,
     /// `--bench 秒`: カメラを回しながら FPS を測り、結果を出して終了する
     pub bench_secs: Option<f32>,
+    /// `--physics`: 物理演算のサンプルライン (ワーク 100 個) を開き、物理演算を始める
+    pub physics: bool,
 }
 
 impl CommandLine {
@@ -263,6 +267,7 @@ impl CommandLine {
             match arg.to_str() {
                 Some("--stress") => out.stress = Some(parse_next(args.next()).unwrap_or(5000)),
                 Some("--bench") => out.bench_secs = Some(parse_next(args.next()).unwrap_or(10.0)),
+                Some("--physics") => out.physics = true,
                 _ => out.file = Some(arg),
             }
         }
@@ -595,6 +600,7 @@ mod tests {
         let bench = parse(&["--stress", "2000", "--bench", "5"]);
         assert_eq!(bench.stress, Some(2000));
         assert_eq!(bench.bench_secs, Some(5.0));
+        assert!(parse(&["--physics", "--bench", "20"]).physics);
     }
 
     #[test]

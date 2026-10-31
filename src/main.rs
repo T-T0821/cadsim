@@ -34,6 +34,8 @@
 //! - `floor`       作業者と AGV (床の上を動くもの)、床の上の幾何計算
 //! - `floor_record` 安全機器・作業者・AGV の .cadsim での形
 //! - `safety`      安全機器 (ライトカーテン・エリアセンサ・安全柵・非常停止) と動作範囲
+//! - `preferences_file` 見た目とミッションの設定の読み書き (中身は `cadsim_core::gamify`)
+//! - `physics`     物理演算 (重力・接触・摩擦、ベルトコンベア、ケーブル・ホース)
 
 // Windows のリリースビルドでは、起動時に黒いコンソール窓を出さない
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
@@ -60,6 +62,8 @@ mod model;
 mod modeling;
 mod motion;
 mod part_mesh;
+mod physics;
+mod preferences_file;
 mod project;
 mod safety;
 mod shortcuts;
@@ -100,10 +104,10 @@ fn main() {
             simulation::SimulationPlugin,
             annotation::AnnotationPlugin,
             motion::MotionPlugin,
-            flow::FlowPlugin,
-            bench::BenchPlugin,
+            (flow::FlowPlugin, bench::BenchPlugin),
             (safety::SafetyPlugin, floor::FloorPlugin),
             (site::SitePlugin, documents::DocumentsPlugin),
+            physics::PhysicsPlugin,
         ))
         .run();
 }

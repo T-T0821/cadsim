@@ -40,6 +40,7 @@ use crate::history::History;
 use crate::interchange::UnitOptions;
 use crate::math::{euler_deg_to_quat, quat_to_euler_deg, split_placement};
 use crate::model::{BoxPart, Model, NodeId, NodeKind, Selection, StepSource};
+use crate::physics::{CableRecord, PartPhysicsRecord};
 use crate::site::model::Site;
 use crate::step_import::{ImportNode, ImportedShape};
 
@@ -106,6 +107,9 @@ pub struct ProjectFile {
     /// 安全機器・作業者・AGV の配置
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub floor: Option<FloorRecord>,
+    /// 部品の間に渡したケーブル・ホース
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cables: Vec<CableRecord>,
 }
 
 fn default_unit() -> String {
@@ -142,6 +146,9 @@ pub struct NodeRecord {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<[f32; 3]>,
     pub kind: NodeKindRecord,
+    /// 物理演算での振る舞い。既定 (機構で動く) なら省く。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub physics: Option<PartPhysicsRecord>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<NodeRecord>,
 }
@@ -193,6 +200,11 @@ impl ProjectFile {
             point_clouds: crate::formats::site_record::cloud_records(&model.site, base_dir),
             flow: None,
             floor: None,
+            cables: model
+                .cables
+                .iter()
+                .map(|c| CableRecord::from_cable(c, |id| node_path(model, id)))
+                .collect(),
         }
     }
 
@@ -256,6 +268,9 @@ impl ProjectFile {
             if !finite(&node.position) || !finite(&node.rotation_deg) {
                 return invalid("配置");
             }
+            if node.physics.as_ref().is_some_and(|p| !p.is_valid()) {
+                return invalid("物理の設定");
+            }
             match &node.kind {
                 NodeKindRecord::Assembly { .. } => {}
                 NodeKindRecord::Box {
@@ -277,6 +292,12 @@ impl ProjectFile {
                 }
             }
             stack.extend(&node.children);
+        }
+        if let Some(cable) = self.cables.iter().find(|c| !c.is_valid()) {
+            return Err(ProjectError::Invalid(format!(
+                "ケーブル「{}」の寸法が正しくありません",
+                cable.name
+            )));
         }
         Ok(())
     }
@@ -317,6 +338,7 @@ fn node_record(model: &Model, id: NodeId, sources: &mut Vec<StepSource>) -> Opti
         visible: node.visible,
         color: node.color,
         kind,
+        physics: PartPhysicsRecord::from_settings(&node.physics),
         children: node
             .children
             .iter()
@@ -510,6 +532,15 @@ impl LoadedProject {
         for record in &self.file.nodes {
             self.add_record(model, None, record, &mut warnings);
         }
+        for record in &self.file.cables {
+            match record.to_cable(|path| node_at_path(model, path)) {
+                Some(cable) => model.cables.push(cable),
+                None => warnings.push(format!(
+                    "ケーブル「{}」の端の部品が見つからないため読み飛ばしました",
+                    record.name
+                )),
+            }
+        }
         warnings
     }
 
@@ -561,6 +592,11 @@ impl LoadedProject {
         if let Some(node) = model.get_mut(id) {
             node.visible = record.visible;
             node.color = record.color;
+            node.physics = record
+                .physics
+                .as_ref()
+                .map(PartPhysicsRecord::to_settings)
+                .unwrap_or_default();
         }
         for child in &record.children {
             self.add_record(model, Some(id), child, warnings);
@@ -613,6 +649,8 @@ pub struct ProjectState {
     /// 未保存の変更を捨ててよいか確認している操作
     confirm_discard: Option<ProjectAction>,
     loading: Option<LoadTask>,
+    /// 直前のフレームで未保存の変更があったか (`update_window_title` が毎フレーム更新する)
+    unsaved: bool,
 }
 
 impl Default for ProjectState {
@@ -624,6 +662,7 @@ impl Default for ProjectState {
             requested: None,
             confirm_discard: None,
             loading: None,
+            unsaved: false,
         }
     }
 }
@@ -641,6 +680,16 @@ impl ProjectState {
         floor: &FloorRecord,
     ) -> bool {
         self.saved != ProjectFile::capture(model, annotations, flow, floor, self.base_dir())
+    }
+
+    /// ファイルに結びついているか (保存したか、ファイルから開いたか)
+    pub fn has_file(&self) -> bool {
+        self.path.is_some()
+    }
+
+    /// 直前のフレームで調べた未保存の変更の有無 (比べ直さないので軽い)
+    pub fn unsaved(&self) -> bool {
+        self.unsaved
     }
 
     pub fn file_name(&self) -> String {
@@ -880,18 +929,19 @@ enum Choice {
 
 /// ウィンドウのタイトルにファイル名と未保存の印 (*) を出す。
 fn update_window_title(
-    state: Res<ProjectState>,
+    mut state: ResMut<ProjectState>,
     model: Res<Model>,
     annotations: Res<Annotations>,
     flow: Res<FlowRes>,
     floor: FloorView,
     mut window: Single<&mut Window, With<PrimaryWindow>>,
 ) {
-    let marker = if state.has_unsaved_changes(&model, &annotations, &flow, &floor.record()) {
-        " *"
-    } else {
-        ""
-    };
+    let unsaved = state.has_unsaved_changes(&model, &annotations, &flow, &floor.record());
+    // 毎フレーム書くと変更検知が走り続けるので、変わったときだけ書く
+    if state.unsaved != unsaved {
+        state.unsaved = unsaved;
+    }
+    let marker = if unsaved { " *" } else { "" };
     let title = format!("{APP_TITLE} - {}{marker}", state.file_name());
     // 毎フレーム書き換えると変更検知が走り続けるので、変わったときだけ書く
     if window.title != title {

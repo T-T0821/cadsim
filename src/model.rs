@@ -15,6 +15,7 @@ use truck_modeling::{Solid, builder};
 use truck_meshalgo::prelude::{EuclideanSpace, Point3, Rad, Vector3};
 
 use crate::math::{Aabb, euler_deg_to_quat};
+use crate::physics::{Cable, PartPhysics};
 use crate::site::model::Site;
 use crate::step_import::{ImportNode, ImportedShape};
 use cadsim_core::remap::{OutlineNode, plan_remap};
@@ -36,6 +37,8 @@ pub struct Node {
     /// ユーザーが付けた色。子孫の部品にも効く。
     pub color: Option<[f32; 3]>,
     pub kind: NodeKind,
+    /// 物理演算での振る舞い (部品だけが使う)
+    pub physics: PartPhysics,
 }
 
 #[derive(Clone)]
@@ -191,6 +194,8 @@ pub struct Model {
     pub new_box_size: [f64; 3],
     /// 床に敷いた平面図など、部品のツリーの外にある現場のデータ
     pub site: Site,
+    /// 部品の間に渡したケーブル・ホース
+    pub cables: Vec<Cable>,
 }
 
 impl Default for Model {
@@ -203,6 +208,7 @@ impl Default for Model {
             unit: "mm".into(),
             new_box_size: [1.0, 1.0, 1.0],
             site: Site::default(),
+            cables: Vec::new(),
         }
     }
 }
@@ -231,6 +237,7 @@ impl Model {
                 visible: true,
                 color: None,
                 kind,
+                physics: PartPhysics::default(),
             },
         );
         match parent.and_then(|p| self.nodes.get_mut(&p)) {
@@ -516,6 +523,7 @@ impl Model {
         for root in self.roots.clone() {
             self.remove(root);
         }
+        self.cables.clear();
     }
 
     // --- 参照 ---------------------------------------------------------------

@@ -15,15 +15,20 @@
 //! └──────────────────────────────────────────────┘
 //! ```
 //!
+//! 3D ビューの左下にはミッションカード、達成時は上にお祝いと紙吹雪を重ねる (playful.rs)。
+//! 見た目 (ゲーム風 / シンプル) は theme.rs。
+//!
 //! egui のパネルは「外側から順に場所を取る」ので、1つのシステムの中で
 //! 上 → 下 → 左 → 右 の順に描き、残った領域を 3D ビューにする。
 
 mod animation;
 mod menu;
 pub mod modeling;
+pub mod playful;
 mod properties;
 mod replace;
 mod status;
+pub mod theme;
 mod tree;
 mod view_cube;
 pub mod widgets;
@@ -48,6 +53,7 @@ use crate::history::History;
 use crate::japanese_font::install_japanese_font;
 use crate::model::{Model, Selection};
 use crate::motion::{self, MotionUi, at_design_pose};
+use crate::physics::physics_stopped;
 use crate::project::{ProjectState, show_confirm_dialog};
 use crate::viewport::{RenderStats, ViewSettings};
 
@@ -56,14 +62,19 @@ pub struct UiPlugin;
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<modeling::ModelingUi>()
+            .add_plugins(playful::PlayfulPlugin)
             .add_systems(Startup, spawn_ui_camera)
             .add_systems(
                 EguiPrimaryContextPass,
                 (
                     install_japanese_font,
+                    playful::apply_theme,
                     draw_ui,
-                    // 動作シミュレーションで部品が動いている間はギズモで編集しない
-                    transform_gizmo_system.run_if(at_design_pose),
+                    playful::draw_overlay,
+                    // 動作シミュレーション・物理演算で部品が動いている間はギズモで編集しない
+                    transform_gizmo_system
+                        .run_if(at_design_pose)
+                        .run_if(physics_stopped),
                 )
                     .chain(),
             );
@@ -90,6 +101,7 @@ pub struct UiState<'w> {
     pub flow: FlowUi<'w>,
     pub diagnostics: Res<'w, DiagnosticsStore>,
     pub render_stats: Res<'w, RenderStats>,
+    pub playful: ResMut<'w, playful::PlayfulUi>,
 }
 
 /// UI 専用のカメラ。3D カメラはパネルを除いた領域だけに描くので、

@@ -27,6 +27,8 @@
 | e57(E57 の点群の読み込み) | 0.11 |
 | krilla(図面の PDF 書き出し) | 0.8 |
 | rust_xlsxwriter(部品表・工程シミュレーションの Excel 書き出し) | 0.102 |
+| rapier3d(物理演算。Bevy に依存しない) | 0.36 |
+| glam(Bevy に依存しない層のベクトル・行列。Bevy と同じ版) | 0.33 |
 
 ## コードの構成
 
@@ -34,12 +36,14 @@
 
 ```text
 crates/cadsim_core/   Bevy に依存しないドメイン (cargo test -p cadsim_core で単体テスト)
+├── gamify.rs        ゲーム風 UI の中身: ミッションの判定・経験値とレベル・紙吹雪 (docs/playful-ui.md)
 ├── math.rs          回転・行列・外接箱の計算 (f64)
 ├── remap.rs         形状の差し替え: 古い木と新しい木のノードの対応づけ
 ├── simulation/      干渉チェックの幾何計算 (geometry / mesh / interference / overlap)
 ├── drawing.rs       2D 図面: 投影・かくれ線・シルエット・寸法・図枠 (docs/drawing.md)
 ├── site/            平面図の下敷きの配置と縮尺合わせ、点群の間引き・LOD・干渉 (docs/site.md)
 └── flow/            工程モデル (model)、離散事象シミュレーションと集計 (sim)、状態・稼働率の色 (palette)
+└── physics/         物理演算の設定・ケーブルの紐モデル・剛体の進め方 (settings / cable / world)
 src/                  アプリ本体 (Bevy + egui)
 ├── main.rs          アプリの組み立て (プラグインを並べるだけ)
 ├── model.rs         設計データ: アセンブリの木 (f64) と選択状態
@@ -54,6 +58,7 @@ src/                  アプリ本体 (Bevy + egui)
 │   └── samples.rs    サンプルファイルを作るテスト (手で実行)
 ├── animation.rs     取り込んだアニメーションの再生
 ├── project.rs       プロジェクトファイル (.cadsim) の保存と読み込み
+├── preferences_file.rs 見た目とミッションの設定 (preferences.json) の読み書き (Bevy に依存しない)
 ├── viewport.rs      3D 表示: メッシュ作成、選択の強調、簡略表示 (LOD)、グリッド、クリック選択
 ├── part_mesh.rs     部品1つ分の表示用メッシュ (面をまとめたもの・面番号の表・簡略形状。Bevy に依存しない)
 ├── bvh.rs           外接箱の木 (BVH) とレイの当たり判定 (Bevy に依存しない)
@@ -93,6 +98,7 @@ src/                  アプリ本体 (Bevy + egui)
 │   └── ui.rs         工程シミュレーションのウィンドウ
 ├── safety/          安全機器・動作範囲・距離の確認 (詳しくは docs/safety-and-floor.md)
 ├── floor/           作業者と AGV、床の上の幾何計算 (詳しくは docs/safety-and-floor.md)
+├── physics/         物理演算の配線・パネル・サンプルライン、Rapier のアダプター、保存形式 (詳しくは docs/physics.md)
 └── ui/
     ├── mod.rs        画面の割り付け (上 → 下 → 左 → 右 → 残りが 3D ビュー)
     ├── menu.rs       メニューバーとツールバー
@@ -101,12 +107,14 @@ src/                  アプリ本体 (Bevy + egui)
     ├── status.rs     ステータスバーと読み込み中の表示
     ├── animation.rs  アニメーションの再生パネル
     ├── modeling.rs   「モデリング」ウィンドウ (円柱・押し出し・穴あけ・ブーリアン)
+    ├── theme.rs      見た目 (ゲーム風 / シンプル) の配色と角丸
+    ├── playful.rs    ミッションカード・マスコット・お祝いと紙吹雪
     ├── view_cube.rs  ビューキューブと座標軸
     └── widgets.rs    数値入力などの小さな部品
 ```
 
 データは一方向に流れます: **UI・ギズモ・読み込み → `Model`(f64)→ `viewport` が Bevy のエンティティに写す**。
-動作シミュレーションは `Model` を書き換えず、`viewport` が配置を写すときに `SimulationPose` の動きを重ねます。
+動作シミュレーションは `Model` を書き換えず、`viewport` が配置を写すときに `SimulationPose` の動きを重ねます。物理演算で動いている部品は `PhysicsPose` の位置に置きます(`physics::displayed_matrix`)。
 `Model` は Bevy のエンティティを知らないので、表示を変えても設計データには影響しません。
 
 ## 各機能のしくみ
