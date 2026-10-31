@@ -5,7 +5,7 @@
 //!
 //! - `domain`: I/O の割り付け表、設備モデル、内蔵の模擬 PLC (Bevy なし)
 //! - `usecase`: 1スキャン分の処理と、外部 PLC との通信のポート [`usecase::PlcLink`] (Bevy なし)
-//! - `adapter`: 通信方式の実装 (Modbus TCP)
+//! - `adapter`: 通信方式の実装 (Modbus TCP、OPC UA)
 //! - このファイルと `ui`: Bevy のシステムと egui の画面
 //!
 //! 部品の位置はチャート再生と同じ `SimulationPose` に書くので、表示や干渉チェックはそのまま使える。
@@ -40,9 +40,19 @@ impl Plugin for PlcPlugin {
 #[derive(Resource, Default)]
 pub struct Plc {
     session: PlcSession,
+    protocol: Protocol,
     modbus: adapter::modbus::ModbusSettings,
+    opcua: adapter::opcua::OpcUaSettings,
     /// 画面に出すお知らせ (CSV の読み込み結果など)
     notice: Option<String>,
+}
+
+/// 外部の PLC との通信方式
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+enum Protocol {
+    #[default]
+    ModbusTcp,
+    OpcUa,
 }
 
 /// PLC がアクチュエータを動かしているとき true。

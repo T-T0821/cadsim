@@ -38,6 +38,9 @@ krilla = "0.8"
 rust_xlsxwriter = "0.102"
 e57 = "0.11"
 rapier3d = "0.36"
+# PLC との OPC UA 通信 (クライアントのみ)。純 Rust
+async-opcua = { version = "0.19", default-features = false, features = ["client"] }
+tokio = { version = "1", features = ["rt", "time"] }
 
 [dev-dependencies]
 # テストで Modbus TCP サーバー (PLC の代わり) を立てる
