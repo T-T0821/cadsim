@@ -104,5 +104,6 @@ crates/
 | 部品表 | —(`Model` を読むので `bom.rs` はアプリ側。手順 4 で core へ) | `formats::bom_out` | `documents.rs` |
 | モデリング | —(`Model` と履歴を書き換えるので `modeling.rs` はアプリ側。手順 4 で core へ) | — | `ui/modeling.rs` |
 | 物理演算 | `physics::{settings, cable}`(ドメイン)、`physics::world`(ユースケース。物理エンジンのポート `PhysicsEngine`) | `physics::{rapier, records}`(Rapier と .cadsim の形) | `physics/{mod, panel, sample}` |
+| 動画書き出し | `video`(撮る時刻・切り抜き・書き込み先のポート `VideoSink`) | `video::{encode, mp4}`(MP4 / GIF / PNG) | `recording.rs`(画面のキャプチャ・設定ウィンドウ) |
 
 `formats/` と `bom.rs`・`modeling.rs`・`drawing/collect.rs` は Bevy に依存しない書き方にしてあり、`Model` が core に移ればそのまま移せます。

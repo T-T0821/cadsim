@@ -13,7 +13,10 @@ default-members = [".", "crates/cadsim_core"]
 cadsim_core = { path = "crates/cadsim_core" }
 bevy = "0.20"
 bevy_egui = "0.43"
+# 動画の書き出し: GIF と PNG 連番は純 Rust、MP4 は同梱の OpenH264 (C++) をビルドして使う。ffmpeg は不要
+gif = "0.14"
 # 3D ファイルの読み書き (glTF / GLB, OBJ, STL)。すべて純 Rust
+openh264 = "0.9"
 gltf = { version = "1.4", features = ["import", "names", "utils", "extras"] }
 rfd = "0.17.2"
 ruststep = "0.4"

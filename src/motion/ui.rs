@@ -20,6 +20,7 @@ use super::{ChartSchedule, Playback, SensorStates, SensorTimeline, demo};
 use crate::camera::CameraRequest;
 use crate::conveyor::ConveyorConfigRes;
 use crate::model::{Model, NodeId, Selection};
+use crate::recording::Recorder;
 
 const NAME_WIDTH: f32 = 150.0;
 const HEADER_HEIGHT: f32 = 34.0;
@@ -87,6 +88,7 @@ pub struct MotionUi<'w> {
     state: ResMut<'w, ChartUiState>,
     /// サンプル装置を読み込むときに、コンベアとグリッパも置き換える
     conveyors: ResMut<'w, ConveyorConfigRes>,
+    recorder: Res<'w, Recorder>,
 }
 
 /// 画面下のタイミングチャートのパネル。ステータスバーの上、左右のパネルより外側に置く。
@@ -148,6 +150,10 @@ pub fn show_panel(
         });
     });
 
+    // 動画の書き出し中は表示だけして、チャートや再生位置の操作は反映しない
+    if motion.recorder.is_capturing() {
+        return;
+    }
     if load_demo {
         demo::load_demo(model, &mut edited, &mut motion.conveyors);
         camera.write(CameraRequest::FitAll);
