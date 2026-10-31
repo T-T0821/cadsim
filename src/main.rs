@@ -44,7 +44,6 @@ mod motion;
 mod part_mesh;
 mod project;
 mod remap;
-mod scripting;
 mod shortcuts;
 mod simulation;
 mod step_import;

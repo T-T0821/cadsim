@@ -37,17 +37,6 @@ pub enum MatchReason {
     Product,
 }
 
-impl MatchReason {
-    pub fn label(self) -> &'static str {
-        match self {
-            MatchReason::Root => "最上位",
-            MatchReason::Path => "パスが一致",
-            MatchReason::Name => "名前が一致",
-            MatchReason::Product => "製品名が一致",
-        }
-    }
-}
-
 /// 対応づけの結果。番号は渡した一覧の中の位置。
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct RemapPlan {
@@ -57,16 +46,6 @@ pub struct RemapPlan {
     pub unmatched_old: Vec<usize>,
     /// 古い側に見つからなかった新しいノード (新しく加わる)
     pub unmatched_new: Vec<usize>,
-}
-
-impl RemapPlan {
-    /// 古い番号に対応づけた新しい番号
-    pub fn new_for(&self, old: usize) -> Option<usize> {
-        self.matched
-            .iter()
-            .find(|(o, _, _)| *o == old)
-            .map(|(_, n, _)| *n)
-    }
 }
 
 /// 一番上から自分までの名前の並び (一番上自身の名前は含めない)
@@ -83,11 +62,11 @@ fn path_of(nodes: &[OutlineNode], mut i: usize) -> Vec<&str> {
 type Key = fn(&OutlineNode) -> Option<&str>;
 
 /// まだ決まっていないノードを、(キー, 部品か) ごとにまとめる
-fn group_free<'a>(
-    nodes: &'a [OutlineNode],
+fn group_free(
+    nodes: &[OutlineNode],
     key: Key,
     free: impl Fn(usize) -> bool,
-) -> HashMap<(&'a str, bool), Vec<usize>> {
+) -> HashMap<(&str, bool), Vec<usize>> {
     let mut map: HashMap<(&str, bool), Vec<usize>> = HashMap::new();
     for (i, node) in nodes.iter().enumerate().skip(1) {
         if free(i)
@@ -114,12 +93,12 @@ pub fn plan_remap(old: &[OutlineNode], new: &[OutlineNode]) -> RemapPlan {
     for n in 1..new.len() {
         new_by_path.entry(path_of(new, n)).or_default().push(n);
     }
-    for o in 1..old.len() {
+    for (o, slot) in old_to_new.iter_mut().enumerate().skip(1) {
         if let Some(list) = new_by_path.get_mut(&path_of(old, o))
             && !list.is_empty()
         {
             let n = list.remove(0);
-            old_to_new[o] = Some((n, MatchReason::Path));
+            *slot = Some((n, MatchReason::Path));
             new_taken[n] = true;
         }
     }
@@ -162,6 +141,15 @@ pub fn plan_remap(old: &[OutlineNode], new: &[OutlineNode]) -> RemapPlan {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    impl RemapPlan {
+        fn new_for(&self, old: usize) -> Option<usize> {
+            self.matched
+                .iter()
+                .find(|(o, _, _)| *o == old)
+                .map(|(_, n, _)| *n)
+        }
+    }
 
     fn node(name: &str, product: &str, parent: Option<usize>, is_part: bool) -> OutlineNode {
         OutlineNode {

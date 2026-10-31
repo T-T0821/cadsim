@@ -21,8 +21,6 @@ truck-stepio = "0.3"
 truck-topology = "0.6"
 # OpenUSD (.usda / .usdc / .usdz) の読み書き。純 Rust
 openusd = "0.8"
-# 部品ごとのスクリプト (Rhai)。純 Rust
-rhai = "1.23"
 
 # 開発ビルドでも Bevy などの依存は最適化して、操作を軽くする
 [profile.dev]
