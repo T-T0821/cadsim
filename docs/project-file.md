@@ -65,9 +65,12 @@
 | `physics`(ノード) | 部品の物理の設定。`mode`(`Fixed` / `Mechanism` / `Dynamic` / `Ignored`)、`shape`(`Auto` / `Box` / `ConvexHull` / `ConvexDecomposition` / `Mesh`)、`friction`、`restitution`、`density`(g/cm³)、`belt`(`axis`・`reversed`・`speed`)。既定(機構で動く)なら省く |
 | `cables` | ケーブル・ホース。`name`、`hose`、`start` / `end`(`node` は寸法と同じ番号の道筋、省くとワールド。`local` は部品の座標系かワールドの位置)、`length`、`diameter`、`min_bend_radius`。端の部品が見つからないものは読み飛ばす |
 | `annotations` | 寸法と注記。`PointDistance` / `EdgeLength` / `FaceDistance` / `Note`。部品は `node` に「最上位から順にたどる子の番号」で書く(例 `[0, 1, 0]` は1つ目の最上位ノードの2番目の子の1番目の子)。`local` は箱なら半寸法で割った値(-1〜1)、取り込んだ部品なら部品の座標系の位置。`face` / `edge` は部品の面・稜線の番号。寸法がなければ項目ごと省く |
-| `flow` | 工程モデル。`duration` / `warmup`(秒)と `seed`、`elements` に要素を並べる。要素は `id`・`name`・`type`(`Source` / `Process` / `Buffer` / `Sink`)と種類ごとの値(`interval` / `cycle_time` / `spread` / `limit` / `mtbf` / `mttr` / `capacity`、時間は秒、`spread` は ± の割合)、送り先の `next`(要素の id)、対応する 3D の部品 `part`(`annotations` と同じ子の番号の並び)、`rated_kw` / `standby_kw` / `air_l_per_min`。工程がなければ項目ごと省く |
+| `flow` | 工程モデル。`duration` / `warmup`(秒)と `seed`、`elements` に要素を並べる。要素は `id`・`name`・`type`(`Source` / `Process` / `Buffer` / `Sink`)と種類ごとの値(`interval` / `cycle_time` / `spread` / `limit` / `mtbf` / `mttr` / `capacity`、時間は秒、`spread` は ± の割合)、送り先の `next`(要素の id)、対応する 3D の部品 `part`(`annotations` と同じ子の番号の並び)、`rated_kw` / `standby_kw` / `air_l_per_min`、ライン連携のつなぎ方 `agv`(送り出しを運ぶ AGV の `from` / `to`。`floor.agv.nodes` の点の id)と `starts_chart`(加工開始でタイミングチャートを頭から再生)。工程がなければ項目ごと省く |
 | `floor` | 床の配置。`safety` に安全機器(`id`・`name`・`kind`(`LightCurtain` / `AreaSensor` / `Fence` / `EmergencyStop`)・`position` [x, 下端の高さ, z]・`yaw_deg`・`size`・`stop_time`(秒)・`resolution`・`required_clearance`)、`operators` に作業者(`start` [x, z]・`walk_speed` mm/s・`tasks`。手順は `type` が `Walk`(`to`)/ `Pick` / `Button`(`label`・`duration`)/ `Wait`(`duration`))、`agv` に AGV の経路(`nodes`・`edges`(点の id の組)・`flows`(`from` / `to` / `interval`))と性能(`count`・`speed`・`load_time`・`unload_time`・`length`・`width`・`gap`)。長さは mm。何も置いていなければ項目ごと省く |
-
+| `chart` | タイミングチャート。`actuators` にアクチュエータ(`id`・`name`・`kind`(`Cylinder` / `LinearAxis` / `RotaryTable`)・`axis`(`X` / `Y` / `Z`)・`reversed`・`stroke`・`pivot`・載っている親の `mounted_on`(アクチュエータの id)・動かす部品 `parts`(`annotations` と同じ子の番号の並びのリスト)・`easing`(`Linear` / `Smooth`)・`default_duration`・関節の可動範囲 `limits`(`[下限, 上限]`、なければ省く))、`sensors` にセンサー(`id`・`name`・`kind`(`Photoelectric` / `Proximity`)・`position`・`axis`・`reversed`・`range`・載せ先の `mounted_on`。強制 ON / OFF は書かない)、`steps` にステップ(`comment`・`dwell`(秒)・`actions`(`actuator` の id・`target`・`duration`)・開始条件 `interlocks`(`sensor` の id・`on`)・ロボットの移動 `moves`(`robot` の id・`point` の id・`duration`))、`robots` にロボット(`id`・`name`・先端の関節 `tip`(アクチュエータの id)・設計位置での `tcp` と `tool_axis`・教示点 `points`(`id`・`name`・`position`・工具の向き `approach`))。すべて空なら項目ごと省く |
+| `conveyors` | ワーク搬送。`kinds` にワーク種類(`id`・`name`・`size`・`color`)、`sources` に投入口(`id`・`name`・部品 `part`・出す先 `output`(`{ "type": "Conveyor", "conveyor": id }` か `{ "type": "OnPart" }`)・`interval`(秒)・出す種類 `kinds`・`limit`)、`sinks` に排出口(`id`・`name`・`part`)、`conveyors` にコンベア(`id`・`name`・ベルトにする部品 `part`・`axis`(`X` / `Z`)・`reversed`・`speed`・`end`(`Stopper` / `Discharge`))、`grippers` にグリッパ(`id`・`name`・`chuck`(アクチュエータの id)・`tcp`・`reach`)。部品は子の番号の並びで書く。なければ項目ごと省く |
+| `animations` | glTF などから取り込んだアニメーション。クリップごとに `name` と `tracks`。トラックは動かすノード `node`(子の番号の並び)と `keys`(`time` 秒・親から見た `position`(モデルの単位)・`rotation`(四元数 [x, y, z, w])・`scale`)。元のファイルを読み直さなくても、ツリーを組み替えたあとの対応のまま戻せるように中身ごと書く。なければ項目ごと省く |
+| `plc` | PLC 連携の設定。番号の割り付けの先頭 `output_bits` / `output_words` / `input_bits` / `input_words`、CSV で個別に決めた信号 `custom`(`actuator` の id・`signal`(`CylinderExtend` / `CylinderExtended` / `CylinderRetracted` / `AxisTarget` / `AxisPosition` / `AxisInPosition`)・`address`・`scale`・`node`(OPC UA)・`log_column`(ログ CSV の列))、外部 PLC の通信方式 `use_opcua`(true なら OPC UA、省くと Modbus TCP)と接続先 `modbus`(`host`・`port`・`unit_id`・`poll_ms`)・`opcua`(`endpoint`・`interval_ms`)。接続先は初期値のままなら省く。どれも初期値なら項目ごと省く |
 | `underlays` | 床に敷いた平面図。`path`(`step_files` と同じ書き方)、`scale`(図面の 1 がモデルの単位でいくつか)、`origin`(図面の原点を置くワールドの [X, Z])、`rotation_deg`、`elevation`(高さ Y)、`opacity`、`visible`。図面の中身は書かず、開くときに読み直す。なければ項目ごと省く |
 | `point_clouds` | 読み込んだ点群。`path`、`offset`(点群の中心を置くワールドの位置)、`rotation_deg`(Y 軸まわり)、`visible` と、読み直すときの設定 `spacing`(最小の点の間隔、モデルの単位)・`budget`(残す点の数の上限)・`unit_mm`(点群の座標 1 が何 mm か)・`z_up`。なければ項目ごと省く |
 
@@ -82,10 +85,10 @@
 }
 ```
 
-実装は `src/project.rs`、平面図と点群の記録は `src/formats/site_record.rs` です。ファイル形式の構造体(`ProjectFile` など)は内部の `Model` と分けているので、内部を変えてもファイルの互換を保てます。
+実装は `src/project.rs`、平面図と点群の記録は `src/formats/site_record.rs`、タイミングチャートとアニメーションの記録は `src/formats/chart_record.rs` です。ファイル形式の構造体(`ProjectFile` など)は内部の `Model` と分けているので、内部を変えてもファイルの互換を保てます。
 
 - 開く処理(JSON の解釈と STEP の読み直し)は別スレッドで行い、画面は止まりません。
-- 工程モデルの 3D の部品が見つからないときは、対応付けだけ外して注意を出します。
+- 工程モデルやタイミングチャートの 3D の部品が見つからないときは、対応付けだけ外して注意を出します。見つからないノードのアニメーションのトラックは読み飛ばします。
 - 部品が見つからない寸法・注記は読み飛ばし、件数をステータスバーに出します。部品を削除して隠れている寸法は保存しません。
 - 未保存かどうかは、最後に保存した内容と今のモデルから作った内容を比べて判断します。元に戻して保存時と同じ状態になれば、未保存の印も消えます。
 - 新規作成やプロジェクトを開いたときは、元に戻す履歴を消します(前のプロジェクトに戻せないように)。「すべて閉じる」は今のプロジェクトのまま中身を空にする操作なので、元に戻せます。

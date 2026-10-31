@@ -33,7 +33,9 @@ use crate::camera::{CameraRequest, ViewportRect, alt_pressed, pointer_in_3d_view
 use crate::file_io::{ImportJobs, file_name};
 use crate::formats::pointcloud_read::{default_settings, is_cloud_file, read_cloud};
 use crate::formats::read_plan_file;
+use crate::history::{TrackDocExt, TrackedDoc};
 use crate::model::Model;
+use model::Site;
 use pointcloud::{CloudSettings, PlacedCloud, PointCloud};
 use underlay::{PlanContent, Underlay, unit_in_mm};
 
@@ -42,6 +44,7 @@ pub struct SitePlugin;
 impl Plugin for SitePlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SiteJobs>()
+            .track_doc::<SiteDoc>()
             .init_resource::<PlanTool>()
             .init_resource::<cloud_view::CloudDisplay>()
             .init_resource::<cloud_view::CloudCheck>()
@@ -62,6 +65,30 @@ impl Plugin for SitePlugin {
                     .chain(),
             )
             .add_systems(EguiPrimaryContextPass, panel::site_panel);
+    }
+}
+
+/// 平面図の下敷きと点群の追加・削除・配置の変更を元に戻す履歴に載せる。
+/// 図面と点の中身は `Arc` で共有しているので、写しても重くない。
+struct SiteDoc;
+
+impl TrackedDoc for SiteDoc {
+    type Value = Site;
+    const LABEL: &'static str = "平面図・点群を編集";
+
+    fn read(world: &World) -> Site {
+        world.resource::<Model>().site.clone()
+    }
+
+    fn write(world: &mut World, mut value: Site) {
+        let mut model = world.resource_mut::<Model>();
+        // 表示を作り直してもらうため、番号は今より進める
+        value.revision = model.site.revision + 1;
+        model.site = value;
+    }
+
+    fn same(a: &Site, b: &Site) -> bool {
+        a.same_layout(b)
     }
 }
 

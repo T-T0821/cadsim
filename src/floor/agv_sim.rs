@@ -14,6 +14,7 @@
 use std::collections::{BinaryHeap, HashMap, VecDeque};
 
 use bevy::math::DVec2;
+use cadsim_core::line::AgvEvent;
 
 /// 経路の点
 #[derive(Clone, Debug, PartialEq)]
@@ -219,7 +220,10 @@ impl AgvParams {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Job {
-    pub flow: usize,
+    /// 決まった間隔の要求なら、その要求の番号
+    pub flow: Option<usize>,
+    /// ライン連携で頼まれた搬送なら、その荷札 ([`AgvSim::request`])
+    pub tag: Option<u64>,
     pub from: u32,
     pub to: u32,
     /// 要求が出た時刻
@@ -305,6 +309,8 @@ pub struct AgvSim {
     pub vehicles: Vec<Vehicle>,
     pub pending: VecDeque<Job>,
     pub stats: AgvStats,
+    /// ライン連携で頼まれた搬送の出来事 ([`AgvSim::take_events`])
+    events: Vec<AgvEvent>,
     /// 交差点 → 予約している AGV
     reservations: HashMap<u32, usize>,
     next_spawn: Vec<f64>,
@@ -328,6 +334,7 @@ impl AgvSim {
             vehicles: Vec::new(),
             pending: VecDeque::new(),
             stats: AgvStats::default(),
+            events: Vec::new(),
             reservations: HashMap::new(),
             next_spawn: vec![0.0; flows.len()],
             graph: graph.clone(),
@@ -375,6 +382,29 @@ impl AgvSim {
         self.reservations.get(&node).copied()
     }
 
+    /// ライン連携: `from` で積んで `to` で降ろす搬送を1件頼む。
+    /// 積み込み・荷降ろしが終わると `tag` 付きの出来事 ([`AgvSim::take_events`]) を出す。
+    pub fn request(&mut self, from: u32, to: u32, tag: u64) {
+        self.pending.push_back(Job {
+            flow: None,
+            tag: Some(tag),
+            from,
+            to,
+            created: self.time,
+            assigned: None,
+        });
+    }
+
+    /// ライン連携で頼まれた搬送の、前回からの出来事を取り出す
+    pub fn take_events(&mut self) -> Vec<AgvEvent> {
+        std::mem::take(&mut self.events)
+    }
+
+    /// 荷を積んで走っている (積み込みが終わってから荷降ろしが終わるまで)
+    pub fn is_loaded(v: &Vehicle) -> bool {
+        matches!(v.phase, Phase::ToDrop | Phase::Unloading)
+    }
+
     /// `dt` 秒進める。`stopped` が true の間 (安全停止中) は AGV を動かさない。
     pub fn advance(&mut self, dt: f64, stopped: bool) {
         let mut left = dt.max(0.0);
@@ -408,7 +438,8 @@ impl AgvSim {
             }
             while self.next_spawn[index] <= self.time {
                 self.pending.push_back(Job {
-                    flow: index,
+                    flow: Some(index),
+                    tag: None,
                     from: flow.from,
                     to: flow.to,
                     created: self.next_spawn[index],
@@ -501,17 +532,26 @@ impl AgvSim {
                     Some((path, _)) => {
                         v.route = path;
                         v.phase = Phase::ToDrop;
+                        if let Some(tag) = job.tag {
+                            self.events.push(AgvEvent::PickedUp { tag });
+                        }
                     }
                     // 降ろし先に行けない要求は捨てる
                     None => {
                         v.job = None;
                         v.phase = Phase::Idle;
+                        if let Some(tag) = job.tag {
+                            self.events.push(AgvEvent::Abandoned { tag });
+                        }
                     }
                 }
             }
             Phase::Unloading => {
                 let v = &mut self.vehicles[index];
                 if let Some(job) = v.job.take() {
+                    if let Some(tag) = job.tag {
+                        self.events.push(AgvEvent::Delivered { tag });
+                    }
                     self.stats.delivered += 1;
                     self.stats.lead_time_sum += time - job.created;
                     self.stats.wait_time_sum += job.assigned.unwrap_or(time) - job.created;
@@ -741,6 +781,30 @@ mod tests {
             g.toggle_edge(c, x);
         }
         (g, [c, e, w, n, s])
+    }
+
+    #[test]
+    fn requested_job_reports_pickup_and_delivery_with_its_tag() {
+        let (g, [_, e, w, _, _]) = cross();
+        let params = AgvParams {
+            count: 1,
+            ..AgvParams::default()
+        };
+        let mut sim = AgvSim::new(&g, &[], &params);
+        sim.request(e, w, 7);
+        let mut events = Vec::new();
+        for _ in 0..600 {
+            sim.advance(0.5, false);
+            events.extend(sim.take_events());
+        }
+        assert_eq!(
+            events,
+            vec![
+                AgvEvent::PickedUp { tag: 7 },
+                AgvEvent::Delivered { tag: 7 }
+            ]
+        );
+        assert_eq!(sim.stats.delivered, 1);
     }
 
     #[test]

@@ -8,17 +8,22 @@
 //! - セルをダブルクリック: シリンダは 出 → 戻 → なし を切り替え、軸は動作を追加。
 //!   センサーは開始条件を ON 待ち → OFF 待ち → なし で切り替え
 //! - チャート上をドラッグ: 再生位置を動かす (スクラブ)
+//!
+//! アクチュエータの行の下に、ロボットの行 (教示点への移動) を並べる。
 
 use bevy::{ecs::system::SystemParam, prelude::*};
 use bevy_egui::egui;
 
 use super::chart::{
-    Action, Actuator, ActuatorKind, Axis, Easing, INTERLOCK_TIMEOUT, Schedule, Step, TimingChart,
+    Action, Actuator, ActuatorKind, Axis, Easing, INTERLOCK_TIMEOUT, RobotMove, Schedule, Step,
+    TimingChart,
 };
+use super::robot_ui::RobotUiState;
 use super::sensor::SensorKind;
-use super::{ChartSchedule, Playback, SensorStates, SensorTimeline, demo};
+use super::{ChartSchedule, JogPose, Playback, SensorStates, SensorTimeline, SimulationPose, demo};
 use crate::camera::CameraRequest;
 use crate::conveyor::ConveyorConfigRes;
+use crate::history::History;
 use crate::model::{Model, NodeId, Selection};
 use crate::recording::Recorder;
 
@@ -37,12 +42,17 @@ const SENSOR_ON_COLOR: egui::Color32 = egui::Color32::from_rgb(80, 200, 100);
 const WAIT_FILL: egui::Color32 = egui::Color32::from_rgba_premultiplied(120, 80, 20, 60);
 const INTERLOCK_COLOR: egui::Color32 = egui::Color32::from_rgb(240, 170, 60);
 const STOP_COLOR: egui::Color32 = egui::Color32::from_rgb(240, 80, 70);
+const MOVE_FILL: egui::Color32 = egui::Color32::from_rgba_premultiplied(150, 90, 30, 80);
+pub(super) const WARN_COLOR: egui::Color32 = egui::Color32::from_rgb(240, 180, 60);
+pub(super) const ERROR_COLOR: egui::Color32 = egui::Color32::from_rgb(235, 80, 70);
 
 #[derive(Resource, Default)]
 pub struct ChartUiState {
-    selected_actuator: Option<u32>,
+    pub(super) selected_actuator: Option<u32>,
     selected_sensor: Option<u32>,
-    selected_step: Option<usize>,
+    pub(super) selected_step: Option<usize>,
+    /// ロボットの行またはロボット画面で選んだロボット
+    pub(super) selected_robot: Option<u32>,
     /// パネルをツールバーだけに畳んでいる
     collapsed: bool,
 }
@@ -56,39 +66,56 @@ impl ChartUiState {
     fn select_actuator(&mut self, id: u32) {
         self.selected_actuator = Some(id);
         self.selected_sensor = None;
+        self.selected_robot = None;
     }
 
     fn select_sensor(&mut self, id: u32) {
         self.selected_sensor = Some(id);
         self.selected_actuator = None;
+        self.selected_robot = None;
+    }
+
+    fn select_robot(&mut self, id: u32) {
+        self.selected_robot = Some(id);
+        self.selected_actuator = None;
+        self.selected_sensor = None;
     }
 }
 
-/// チャートの1行: アクチュエータを上に、センサーを下に並べる
+/// チャートの1行: アクチュエータ、センサー、ロボットの順に並べる
 #[derive(Clone, Copy, PartialEq)]
 enum Row {
     Actuator(u32),
     Sensor(u32),
+    Robot(u32),
 }
 
 fn rows(chart: &TimingChart) -> Vec<Row> {
     let actuators = chart.actuators.iter().map(|a| Row::Actuator(a.id));
     let sensors = chart.sensors.iter().map(|s| Row::Sensor(s.id));
-    actuators.chain(sensors).collect()
+    let robots = chart.robots.iter().map(|r| Row::Robot(r.id));
+    actuators.chain(sensors).chain(robots).collect()
+}
+
+fn row_count(chart: &TimingChart) -> usize {
+    chart.actuators.len() + chart.sensors.len() + chart.robots.len()
 }
 
 /// タイミングチャートのパネルが読み書きするもの一式
 #[derive(SystemParam)]
 pub struct MotionUi<'w> {
-    chart: ResMut<'w, TimingChart>,
-    schedule: Res<'w, ChartSchedule>,
+    pub(super) chart: ResMut<'w, TimingChart>,
+    pub(super) schedule: Res<'w, ChartSchedule>,
     timeline: Res<'w, SensorTimeline>,
     sensor_states: Res<'w, SensorStates>,
     playback: ResMut<'w, Playback>,
-    state: ResMut<'w, ChartUiState>,
+    pub(super) state: ResMut<'w, ChartUiState>,
     /// サンプル装置を読み込むときに、コンベアとグリッパも置き換える
     conveyors: ResMut<'w, ConveyorConfigRes>,
     recorder: Res<'w, Recorder>,
+    pub(super) pose: Res<'w, SimulationPose>,
+    pub(super) jog: ResMut<'w, JogPose>,
+    pub(super) robot: ResMut<'w, RobotUiState>,
 }
 
 /// 画面下のタイミングチャートのパネル。ステータスバーの上、左右のパネルより外側に置く。
@@ -98,13 +125,14 @@ pub fn show_panel(
     model: &mut Model,
     selection: &Selection,
     camera: &mut MessageWriter<CameraRequest>,
+    history: &mut History,
 ) {
     // 編集はコピーに対して行い、変わったときだけ書き戻す (毎フレーム変更扱いにしないため)
     let mut edited = motion.chart.clone();
     let mut play = *motion.playback;
     let schedule = &motion.schedule;
     let state = &mut *motion.state;
-    let mut load_demo = false;
+    let mut load_demo = None;
 
     // 畳んだときと開いたときで別のパネルにする (開いたときの高さを覚えておくため)
     let panel = if state.collapsed {
@@ -154,8 +182,17 @@ pub fn show_panel(
     if motion.recorder.is_capturing() {
         return;
     }
-    if load_demo {
-        demo::load_demo(model, &mut edited, &mut motion.conveyors);
+    if let Some(which) = load_demo {
+        // 部品の入れ替えは1件の履歴にする (チャートの入れ替えは見張りが別の1件にする)
+        let conveyors = &mut motion.conveyors;
+        history.replace_all(
+            model,
+            "サンプル装置を読み込み".into(),
+            |model| match which {
+                Demo::Gantry => demo::load_demo(model, &mut edited, conveyors),
+                Demo::Robot => demo::load_robot_demo(model, &mut edited),
+            },
+        );
         camera.write(CameraRequest::FitAll);
         play = Playback::default();
         *state = ChartUiState::default();
@@ -170,15 +207,21 @@ pub fn show_panel(
 // 上部のツールバー (再生ボタンなど)
 // ---------------------------------------------------------------------------
 
-/// 「サンプル装置」が押されたら true を返す
+#[derive(Clone, Copy)]
+enum Demo {
+    Gantry,
+    Robot,
+}
+
+/// サンプルのボタンが押されたら、読み込むサンプルを返す
 fn toolbar(
     ui: &mut egui::Ui,
     chart: &mut TimingChart,
     schedule: &Schedule,
     play: &mut Playback,
     state: &mut ChartUiState,
-) -> bool {
-    let mut load_demo = false;
+) -> Option<Demo> {
+    let mut load_demo = None;
     ui.horizontal(|ui| {
         let arrow = if state.collapsed { "▶" } else { "▼" };
         if ui
@@ -243,7 +286,10 @@ fn toolbar(
             }
         });
         if ui.button("サンプル装置").clicked() {
-            load_demo = true;
+            load_demo = Some(Demo::Gantry);
+        }
+        if ui.button("ロボットのサンプル").clicked() {
+            load_demo = Some(Demo::Robot);
         }
     });
 
@@ -257,10 +303,29 @@ fn toolbar(
     interlock_status(ui, chart, schedule, play);
     if !not_home.is_empty() && schedule.stop.is_none() {
         ui.colored_label(
-            egui::Color32::from_rgb(240, 180, 60),
+            WARN_COLOR,
             format!(
                 "⚠ サイクル終了時に原点へ戻っていません: {}",
                 not_home.join(", ")
+            ),
+        );
+    }
+    let unreachable: Vec<String> = schedule
+        .moves
+        .iter()
+        .filter(|m| !m.reached)
+        .filter_map(|m| {
+            let robot = chart.robot(m.robot)?;
+            let point = robot.point(m.point)?;
+            Some(format!("S{} {}", m.step + 1, point.name))
+        })
+        .collect();
+    if !unreachable.is_empty() {
+        ui.colored_label(
+            ERROR_COLOR,
+            format!(
+                "⚠ ロボットが届かない教示点があります (可動範囲か腕の長さが足りません): {}",
+                unreachable.join(", ")
             ),
         );
     }
@@ -375,11 +440,11 @@ fn chart_view(
     state: &mut ChartUiState,
 ) {
     let schedule = view.schedule;
-    if chart.steps.is_empty() || chart.actuators.is_empty() {
+    if chart.steps.is_empty() || row_count(chart) == 0 {
         ui.label(
             "上のボタンでアクチュエータとステップを追加するか、「サンプル装置」を押してください。",
         );
-        if chart.steps.is_empty() && chart.actuators.is_empty() {
+        if chart.steps.is_empty() && row_count(chart) == 0 {
             return;
         }
     }
@@ -388,7 +453,7 @@ fn chart_view(
         ((ui.available_width() - NAME_WIDTH) / step_count as f32).max(MIN_COLUMN_WIDTH);
     let size = egui::vec2(
         NAME_WIDTH + column_width * step_count as f32,
-        HEADER_HEIGHT + ROW_HEIGHT * rows(chart).len() as f32 + 2.0,
+        HEADER_HEIGHT + ROW_HEIGHT * row_count(chart) as f32 + 2.0,
     );
     let (response, painter) = ui.allocate_painter(size, egui::Sense::click_and_drag());
     let layout = ChartLayout {
@@ -441,6 +506,7 @@ fn handle_chart_input(
     match row {
         Some(Row::Actuator(id)) => state.select_actuator(id),
         Some(Row::Sensor(id)) => state.select_sensor(id),
+        Some(Row::Robot(id)) => state.select_robot(id),
         None => {}
     }
     if in_steps {
@@ -452,6 +518,7 @@ fn handle_chart_input(
     match (step, row) {
         (Some(step), Some(Row::Actuator(id))) => quick_toggle_action(chart, schedule, step, id),
         (Some(step), Some(Row::Sensor(id))) => quick_toggle_interlock(&mut chart.steps[step], id),
+        (Some(step), Some(Row::Robot(id))) => add_robot_move(chart, step, id),
         _ => {}
     }
 }
@@ -464,6 +531,31 @@ fn quick_toggle_interlock(step: &mut Step, sensor: u32) {
         Some(false) => None,
     };
     step.set_interlock(sensor, next);
+}
+
+/// ロボットの移動を置く。教示点は、直前に移動した点の次 (なければ最初の点)。
+fn add_robot_move(chart: &mut TimingChart, step: usize, robot: u32) {
+    if chart.steps[step].robot_move(robot).is_some() {
+        return;
+    }
+    let Some(r) = chart.robot(robot) else {
+        return;
+    };
+    let previous = chart.steps[..step]
+        .iter()
+        .rev()
+        .find_map(|s| s.robot_move(robot))
+        .and_then(|m| r.points.iter().position(|p| p.id == m.point));
+    let index = previous.map_or(0, |i| (i + 1) % r.points.len().max(1));
+    let Some(point) = r.points.get(index) else {
+        return;
+    };
+    let point = point.id;
+    chart.steps[step].moves.push(RobotMove {
+        robot,
+        point,
+        duration: 1.0,
+    });
 }
 
 /// セルのダブルクリック: シリンダは 出 → 戻 → なし、軸は (なければ) 動作を追加
@@ -496,16 +588,17 @@ fn new_action(actuator: &Actuator, target: f64) -> Action {
     }
 }
 
-/// 値の表示範囲 (0 と全目標値を含む)
-fn value_range(actuator: &Actuator, chart: &TimingChart) -> (f64, f64) {
+/// 値の表示範囲 (0 と全目標値を含む。ロボットの移動で決まった値も含める)
+fn value_range(actuator: &Actuator, schedule: &Schedule) -> (f64, f64) {
     if actuator.kind == ActuatorKind::Cylinder {
         return (0.0, 1.0);
     }
-    let targets = chart
-        .steps
-        .iter()
-        .filter_map(|s| s.action(actuator.id))
-        .map(|a| a.target);
+    let targets = schedule
+        .segments
+        .get(&actuator.id)
+        .into_iter()
+        .flatten()
+        .map(|s| s.target);
     let (lo, hi) = targets.fold((0.0f64, 0.0f64), |(lo, hi), v| (lo.min(v), hi.max(v)));
     if hi - lo < 1e-9 {
         (lo, lo + 1.0)
@@ -532,7 +625,7 @@ fn draw_chart(
     let normal = egui::FontId::proportional(13.0);
     let left = layout.origin.x;
     let right = layout.column_x(chart.steps.len());
-    let bottom = layout.row_top(rows(chart).len());
+    let bottom = layout.row_top(row_count(chart));
     let current_step = schedule.step_at(play.time);
 
     // 見出し: ステップ番号と、そのステップにかかる時間
@@ -672,7 +765,7 @@ fn draw_chart(
         }
 
         // 波形: 各列を時間で細かく区切って値をなぞる
-        let (lo, hi) = value_range(actuator, chart);
+        let (lo, hi) = value_range(actuator, schedule);
         let y_of = |v: f64| {
             let fraction = ((v - lo) / (hi - lo)) as f32;
             top + ROW_HEIGHT - 5.0 - fraction * (ROW_HEIGHT - 10.0)
@@ -709,6 +802,92 @@ fn draw_chart(
 
     draw_sensor_rows(painter, layout, chart, view, state, visuals);
     draw_waits_and_stop(painter, layout, schedule, bottom);
+
+    // ロボットの行: 教示点への移動の帯と、移動先の点の名前
+    for (index, robot) in chart.robots.iter().enumerate() {
+        let row = chart.actuators.len() + chart.sensors.len() + index;
+        let top = layout.row_top(row);
+        let row_rect =
+            egui::Rect::from_min_max(egui::pos2(left, top), egui::pos2(right, top + ROW_HEIGHT));
+        if row % 2 == 1 {
+            painter.rect_filled(row_rect, 0.0, visuals.faint_bg_color);
+        }
+        if state.selected_robot == Some(robot.id) {
+            painter.rect_filled(
+                egui::Rect::from_min_max(
+                    row_rect.min,
+                    egui::pos2(left + NAME_WIDTH, row_rect.max.y),
+                ),
+                0.0,
+                visuals.selection.bg_fill.gamma_multiply(0.5),
+            );
+        }
+        painter.text(
+            egui::pos2(left + 4.0, top + 1.0),
+            egui::Align2::LEFT_TOP,
+            &robot.name,
+            normal.clone(),
+            text_color,
+        );
+        painter.text(
+            egui::pos2(left + 4.0, top + 17.5),
+            egui::Align2::LEFT_TOP,
+            format!("ロボット  教示点 {}", robot.points.len()),
+            small.clone(),
+            weak,
+        );
+        for (i, step) in chart.steps.iter().enumerate() {
+            let cell = egui::Rect::from_min_max(
+                egui::pos2(layout.column_x(i), top),
+                egui::pos2(layout.column_x(i) + layout.column_width, top + ROW_HEIGHT),
+            );
+            if let Some(robot_move) = step.robot_move(robot.id) {
+                // 異常停止で実行されない移動は帯を描かない。条件待ちがあれば帯は動作開始から
+                let executed = schedule.stop.as_ref().is_none_or(|stop| i < stop.step);
+                if let Some(span) = schedule.steps.get(i).filter(|_| executed) {
+                    let start_x = layout.time_to_x(schedule, span.action_start);
+                    let end_x = layout.time_to_x(schedule, span.action_start + robot_move.duration);
+                    let end_x = end_x.clamp(start_x + 3.0, cell.max.x);
+                    let band = egui::Rect::from_min_max(
+                        egui::pos2(start_x + 1.0, cell.min.y + 2.0),
+                        egui::pos2(end_x - 1.0, cell.max.y - 2.0),
+                    );
+                    painter.rect_filled(band, 2.0, MOVE_FILL);
+                }
+                let reached = schedule.solved_move(i, robot.id).is_none_or(|m| m.reached);
+                let name = robot
+                    .point(robot_move.point)
+                    .map_or("?", |p| p.name.as_str());
+                let (text, color) = if reached {
+                    (format!("→ {name}"), text_color)
+                } else {
+                    (format!("⚠ {name}"), ERROR_COLOR)
+                };
+                painter.text(
+                    cell.min + egui::vec2(4.0, ROW_HEIGHT / 2.0),
+                    egui::Align2::LEFT_CENTER,
+                    text,
+                    small.clone(),
+                    color,
+                );
+            }
+            if state.selected_step == Some(i) && state.selected_robot == Some(robot.id) {
+                painter.rect_stroke(
+                    cell.shrink(1.0),
+                    2.0,
+                    (1.5, SELECT_COLOR),
+                    egui::StrokeKind::Inside,
+                );
+            }
+        }
+        painter.line_segment(
+            [
+                egui::pos2(left, top + ROW_HEIGHT),
+                egui::pos2(right, top + ROW_HEIGHT),
+            ],
+            grid,
+        );
+    }
 
     // 縦の区切り線
     for i in 0..=chart.steps.len() {
@@ -945,6 +1124,12 @@ fn properties(
     {
         state.selected_sensor = None;
     }
+    if state
+        .selected_robot
+        .is_some_and(|id| chart.robot(id).is_none())
+    {
+        state.selected_robot = None;
+    }
 
     if let (Some(step), Some(id)) = (state.selected_step, state.selected_actuator) {
         cell_editor(ui, chart, schedule, step, id);
@@ -952,6 +1137,10 @@ fn properties(
     }
     if let (Some(step), Some(id)) = (state.selected_step, state.selected_sensor) {
         interlock_editor(ui, chart, step, id);
+        ui.separator();
+    }
+    if let (Some(step), Some(id)) = (state.selected_step, state.selected_robot) {
+        robot_cell_editor(ui, chart, schedule, step, id);
         ui.separator();
     }
     if let Some(step) = state.selected_step {
@@ -964,9 +1153,13 @@ fn properties(
     if let Some(id) = state.selected_sensor {
         sensor_editor(ui, chart, id, state);
     }
+    if state.selected_robot.is_some() && state.selected_step.is_none() {
+        ui.label("ロボットの設定・ジョグ・教示点は右のプロパティ欄の「ロボット」で行います。");
+    }
     if state.selected_step.is_none()
         && state.selected_actuator.is_none()
         && state.selected_sensor.is_none()
+        && state.selected_robot.is_none()
     {
         ui.label("セルをクリックで編集。\nダブルクリック: シリンダは 出→戻→なし、\n軸は動作を追加、センサーは開始条件を\nON待→OFF待→なし。\nチャート上をドラッグで再生位置を移動。");
     }
@@ -1166,6 +1359,71 @@ fn cell_editor(
     }
 }
 
+/// 選択中のセル (ステップ × ロボット) の移動
+fn robot_cell_editor(
+    ui: &mut egui::Ui,
+    chart: &mut TimingChart,
+    schedule: &Schedule,
+    step: usize,
+    id: u32,
+) {
+    let Some(robot) = chart.robot(id).cloned() else {
+        return;
+    };
+    ui.strong(format!("S{} × {}", step + 1, robot.name));
+    if robot.points.is_empty() {
+        ui.label("教示点がありません。「ロボット」画面で登録してください。");
+        return;
+    }
+    if chart.steps[step].robot_move(id).is_none() {
+        if ui.button("教示点への移動 (MoveJ) を追加").clicked() {
+            add_robot_move(chart, step, id);
+        }
+        return;
+    }
+    let robot_move = chart.steps[step].robot_move_mut(id).unwrap();
+    egui::Grid::new("robot_cell_editor")
+        .num_columns(2)
+        .show(ui, |ui| {
+            ui.label("移動先");
+            let current = robot
+                .point(robot_move.point)
+                .map_or("?".to_string(), |p| p.name.clone());
+            egui::ComboBox::from_id_salt("move_point")
+                .selected_text(current)
+                .show_ui(ui, |ui| {
+                    for point in &robot.points {
+                        ui.selectable_value(&mut robot_move.point, point.id, &point.name);
+                    }
+                });
+            ui.end_row();
+            ui.label("動作時間");
+            ui.add(
+                egui::DragValue::new(&mut robot_move.duration)
+                    .speed(0.01)
+                    .range(0.0..=60.0)
+                    .suffix(" s"),
+            );
+            ui.end_row();
+        });
+    if let Some(solved) = schedule.solved_move(step, id) {
+        if solved.reached {
+            ui.weak("各関節を同時に動かして教示点へ移動します (MoveJ)。");
+        } else {
+            ui.colored_label(
+                ERROR_COLOR,
+                format!(
+                    "⚠ 届きません (位置 {:.3} / 向き {:.1}° ずれ)",
+                    solved.position_error, solved.angle_error_deg
+                ),
+            );
+        }
+    }
+    if ui.button("移動を削除").clicked() {
+        chart.steps[step].moves.retain(|m| m.robot != id);
+    }
+}
+
 fn step_editor(ui: &mut egui::Ui, chart: &mut TimingChart, index: usize, state: &mut ChartUiState) {
     ui.strong(format!("ステップ S{}", index + 1));
     let step = &mut chart.steps[index];
@@ -1311,6 +1569,27 @@ fn actuator_editor(
                     }
                 });
             ui.end_row();
+
+            if actuator.is_joint() {
+                ui.label("可動範囲");
+                ui.horizontal(|ui| {
+                    let mut limited = actuator.limits.is_some();
+                    if ui.checkbox(&mut limited, "").changed() {
+                        actuator.limits = limited.then(|| match actuator.kind {
+                            ActuatorKind::RotaryTable => [-180.0, 180.0],
+                            _ => [-1.0, 1.0],
+                        });
+                    }
+                    if let Some([lo, hi]) = &mut actuator.limits {
+                        let unit = actuator.kind.unit();
+                        ui.add(egui::DragValue::new(lo).speed(0.05).suffix(unit));
+                        ui.label("〜");
+                        ui.add(egui::DragValue::new(hi).speed(0.05).suffix(unit));
+                        *hi = hi.max(*lo);
+                    }
+                });
+                ui.end_row();
+            }
         });
 
     // 動かす部品: ツリーやビューで選んだノードを追加する。アセンブリを追加すると子孫がまとめて動く。

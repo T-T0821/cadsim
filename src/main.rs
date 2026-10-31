@@ -32,6 +32,7 @@
 //! - `flow`        工程モデル (生成・工程・バッファ・排出) の早回しとスループット統計
 //! - `stress`      負荷テスト用の数千部品のシーン
 //! - `bench`       `--bench` で FPS を測って終了する
+//! - `line`        ライン連携 (工程・AGV・作業者・チャート・安全停止を1つの時計で動かす、PLC の信号表)
 //! - `floor`       作業者と AGV (床の上を動くもの)、床の上の幾何計算
 //! - `floor_record` 安全機器・作業者・AGV の .cadsim での形
 //! - `safety`      安全機器 (ライトカーテン・エリアセンサ・安全柵・非常停止) と動作範囲
@@ -62,6 +63,7 @@ mod gizmo;
 mod history;
 mod interchange;
 mod japanese_font;
+mod line;
 mod math;
 mod model;
 mod modeling;
@@ -122,7 +124,7 @@ fn main() {
                 conveyor::ConveyorPlugin,
                 bench::BenchPlugin,
             ),
-            (safety::SafetyPlugin, floor::FloorPlugin),
+            (safety::SafetyPlugin, floor::FloorPlugin, line::LinePlugin),
             (
                 site::SitePlugin,
                 documents::DocumentsPlugin,

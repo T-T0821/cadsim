@@ -15,18 +15,19 @@ pub(crate) mod agv_sim;
 pub mod geom;
 pub(crate) mod operator_plan;
 mod panel;
-mod sample;
+pub(crate) mod sample;
 mod view;
 
 use std::collections::HashMap;
 
-use bevy::ecs::system::SystemParam;
+use bevy::ecs::system::{SystemParam, SystemState};
 use bevy::math::{DVec2, DVec3};
 use bevy::prelude::*;
 use bevy_egui::EguiPrimaryContextPass;
 
 use crate::camera::pointer_in_3d_view;
 use crate::floor_record::{FloorLayout, FloorRecord};
+use crate::history::{TrackDocExt, TrackedDoc};
 use crate::math::Aabb;
 use crate::safety::{Intruder, SafetyIntruders, SafetyLayoutRes, SafetySet, SafetyState};
 use agv_sim::{AgvGraph, AgvParams, AgvSim, FleetResult, Flow};
@@ -36,13 +37,14 @@ use operator_plan::{Operator, OperatorPlan};
 const PERSON_RADIUS: f64 = 300.0;
 const PERSON_HEIGHT: f64 = 1700.0;
 /// AGV の高さ (mm)
-const AGV_HEIGHT: f64 = 400.0;
+pub(crate) const AGV_HEIGHT: f64 = 400.0;
 
 pub struct FloorPlugin;
 
 impl Plugin for FloorPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<FloorClock>()
+            .track_doc::<FloorTracked>()
             .init_resource::<OperatorsRes>()
             .init_resource::<AgvLayoutRes>()
             .init_resource::<FloorState>()
@@ -138,6 +140,20 @@ pub struct FloorState {
 impl FloorState {
     fn reset_sim(&mut self) {
         self.sim = None;
+    }
+
+    /// 実行中の AGV シミュレーション (ライン連携から使う)
+    pub(crate) fn agv_sim(&self) -> Option<&AgvSim> {
+        self.sim.as_ref()
+    }
+
+    pub(crate) fn agv_sim_mut(&mut self) -> Option<&mut AgvSim> {
+        self.sim.as_mut()
+    }
+
+    /// AGV を最初の位置から走らせ直す
+    pub(crate) fn restart_agv(&mut self, layout: &AgvLayoutRes) {
+        self.sim = Some(AgvSim::new(&layout.graph, &layout.flows, &layout.params));
     }
 }
 
@@ -256,6 +272,44 @@ impl FloorView<'_> {
             &self.agv.flows,
             &self.agv.params,
         )
+    }
+}
+
+/// 安全機器・作業者・AGV の配置の編集を元に戻す履歴に載せる。
+/// 比べるのは保存するのと同じ内容 (`FloorRecord`) なので、動かしている間の状態は含まない。
+struct FloorTracked;
+
+impl TrackedDoc for FloorTracked {
+    type Value = FloorRecord;
+    const LABEL: &'static str = "安全機器・作業者・AGV を編集";
+
+    fn read(world: &World) -> FloorRecord {
+        let (Some(safety), Some(operators), Some(agv)) = (
+            world.get_resource::<SafetyLayoutRes>(),
+            world.get_resource::<OperatorsRes>(),
+            world.get_resource::<AgvLayoutRes>(),
+        ) else {
+            return FloorRecord::default();
+        };
+        FloorRecord::capture(
+            safety,
+            &operators.operators,
+            &agv.graph,
+            &agv.flows,
+            &agv.params,
+        )
+    }
+
+    fn write(world: &mut World, value: FloorRecord) {
+        let mut state = SystemState::<FloorDoc>::new(world);
+        if let Ok(mut doc) = state.get_mut(world) {
+            doc.apply(value.restore());
+        }
+        state.apply(world);
+    }
+
+    fn same(a: &FloorRecord, b: &FloorRecord) -> bool {
+        a == b
     }
 }
 
