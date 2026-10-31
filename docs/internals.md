@@ -20,6 +20,7 @@
 | tobj(OBJ の読み込み) | 4 |
 | stl_io(STL の読み書き) | 0.11 |
 | openusd(OpenUSD の読み書き。純 Rust) | 0.8 |
+| rust_xlsxwriter(工程シミュレーションの Excel 書き出し) | 0.102 |
 
 ## コードの構成
 
@@ -28,7 +29,8 @@
 ```text
 crates/cadsim_core/   Bevy に依存しないドメイン (cargo test -p cadsim_core で単体テスト)
 ├── math.rs          回転・行列・外接箱の計算 (f64)
-└── simulation/      干渉チェックの幾何計算 (geometry / mesh / interference / overlap)
+├── simulation/      干渉チェックの幾何計算 (geometry / mesh / interference / overlap)
+└── flow/            工程モデル (model)、離散事象シミュレーションと集計 (sim)、状態・稼働率の色 (palette)
 src/                  アプリ本体 (Bevy + egui)
 ├── main.rs          アプリの組み立て (プラグインを並べるだけ)
 ├── model.rs         設計データ: アセンブリの木 (f64) と選択状態
@@ -63,6 +65,11 @@ src/                  アプリ本体 (Bevy + egui)
 ├── japanese_font.rs egui に日本語フォントを登録
 ├── simulation/      干渉チェックの配線・表示・パネルと距離計測 (詳しくは docs/simulation.md)
 ├── annotation.rs    3D 上の寸法と注記 (置く操作・描画・パネル・保存形式)
+├── flow/            工程シミュレーションの配線と画面 (計算は cadsim_core::flow。詳しくは docs/flow.md)
+│   ├── record.rs     .cadsim に書く形
+│   ├── xlsx.rs       Excel 書き出し
+│   ├── mod.rs        プラグイン、早送りの再生、3D の色分け (FlowColors)
+│   └── ui.rs         工程シミュレーションのウィンドウ
 └── ui/
     ├── mod.rs        画面の割り付け (上 → 下 → 左 → 右 → 残りが 3D ビュー)
     ├── menu.rs       メニューバーとツールバー
@@ -192,6 +199,10 @@ egui のパネルを上・下・左・右の順に置き、残った領域を 3D
 - 寸法線は部品に隠れないよう手前に描く。部品を隠すとその寸法も隠れる。
 - 追加・削除・すべて削除・注記の文字の編集は元に戻せる。部品を削除すると寸法は隠れ、部品の削除を元に戻すと寸法も戻る。
 - 距離計測(シミュレーション)と寸法の道具は、片方を始めるともう片方は止まる。
+
+### 工程シミュレーション(`flow/`)
+
+工程モデルの離散事象シミュレーションと集計、3D の色分け、Excel 書き出しのしくみは [flow.md](flow.md) にまとめています。工程モデルの編集は元に戻す履歴に入りません。
 
 ### 元に戻す・やり直し(`history.rs`)
 

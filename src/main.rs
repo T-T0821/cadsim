@@ -22,6 +22,7 @@
 //! - `math`        回転や行列の変換
 //! - `simulation`  干渉チェックと距離計測 (`SimBody` を付けた部品が対象)
 //! - `annotation`  3D 上の寸法 (点間距離・辺の長さ・面間距離) と注記
+//! - `flow`        工程モデル (生成・工程・バッファ・排出) の早回しとスループット統計
 //! - `stress`      負荷テスト用の数千部品のシーン
 //! - `bench`       `--bench` で FPS を測って終了する
 
@@ -34,6 +35,7 @@ mod bench;
 mod bvh;
 mod camera;
 mod file_io;
+mod flow;
 mod gizmo;
 mod history;
 mod interchange;
@@ -80,6 +82,7 @@ fn main() {
             simulation::SimulationPlugin,
             annotation::AnnotationPlugin,
             motion::MotionPlugin,
+            flow::FlowPlugin,
             bench::BenchPlugin,
         ))
         .run();
