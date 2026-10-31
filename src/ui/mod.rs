@@ -29,7 +29,8 @@ pub mod widgets;
 
 use bevy::{
     camera::{CameraOutputMode, visibility::RenderLayers},
-    ecs::system::SystemParam,
+    diagnostic::DiagnosticsStore,
+    ecs::{change_detection::DetectChangesMut, system::SystemParam},
     prelude::*,
     render::render_resource::BlendState,
 };
@@ -46,7 +47,7 @@ use crate::japanese_font::install_japanese_font;
 use crate::model::{Model, Selection};
 use crate::motion::{self, MotionUi, at_design_pose};
 use crate::project::{ProjectState, show_confirm_dialog};
-use crate::viewport::ViewSettings;
+use crate::viewport::{RenderStats, ViewSettings};
 
 pub struct UiPlugin;
 
@@ -84,6 +85,8 @@ pub struct UiState<'w> {
     pub motion: MotionUi<'w>,
     pub documents: ResMut<'w, crate::documents::DocumentExport>,
     pub modeling: ResMut<'w, modeling::ModelingUi>,
+    pub diagnostics: Res<'w, DiagnosticsStore>,
+    pub render_stats: Res<'w, RenderStats>,
 }
 
 /// UI 専用のカメラ。3D カメラはパネルを除いた領域だけに描くので、
@@ -117,6 +120,11 @@ fn draw_ui(mut contexts: EguiContexts, mut state: UiState) -> Result {
             .layer_id(egui::LayerId::background())
             .max_rect(ctx.viewport_rect()),
     );
+    // チェックボックスは値が同じでも書き込むので、終わってから本当に変わったかを見る
+    // (変わった扱いのままだと、3D ビューが数千部品の表示を毎フレーム計算し直す)
+    let settings_before = (*state.settings).clone();
+    let settings_tick = state.settings.last_changed();
+
     menu::show(&mut root, &mut state);
     status::show(&mut root, &mut state);
     motion::show_panel(
@@ -137,6 +145,9 @@ fn draw_ui(mut contexts: EguiContexts, mut state: UiState) -> Result {
     animation::show(&ctx, view, &mut state);
     modeling::show(&ctx, &mut state);
     show_confirm_dialog(&ctx, &mut state.project);
+    if *state.settings == settings_before {
+        state.settings.set_last_changed(settings_tick);
+    }
 
     // パネルの上やビューキューブの上では 3D ビューのマウス操作をしない
     let pointer = ctx.input(|i| i.pointer.hover_pos());

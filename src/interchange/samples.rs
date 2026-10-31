@@ -129,4 +129,19 @@ fn write_samples() {
     for ext in ["usda", "usdz"] {
         export_file(&robot(), &out.join(format!("robot.{ext}")), &units).unwrap();
     }
+
+    // タイミングチャートのサンプル装置を、1サイクルの動き付きで書き出す
+    let mut model = Model::default();
+    let mut chart = crate::motion::TimingChart::default();
+    crate::motion::load_demo(&mut model, &mut chart);
+    let schedule = chart.schedule();
+    let (mut scene, index_of) = model_to_scene(&model, &[]);
+    let parents: Vec<_> = scene.nodes.iter().map(|n| n.parent).collect();
+    scene.animations =
+        crate::motion::chart_animation(&chart, &schedule, &model, &index_of, &parents)
+            .into_iter()
+            .collect();
+    for ext in ["glb", "usda", "usdz", "html"] {
+        export_file(&scene, &out.join(format!("line_demo.{ext}")), &units).unwrap();
+    }
 }

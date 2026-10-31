@@ -18,6 +18,7 @@ use truck_modeling::{Solid, builder};
 use crate::history::ModelChange;
 use crate::math::euler_deg_to_quat;
 use crate::model::{BoxPart, Model, NodeId, NodeKind, StepSource};
+use crate::part_mesh::PartMesh;
 use crate::step_import::{ImportNode, ImportedFile, ImportedShape, mesh_stats, next_shape_id};
 
 /// ブーリアンの許容誤差 (形状の大きさに対する割合)
@@ -237,6 +238,7 @@ pub fn shape_from_solid(solid: &Solid) -> ImportedShape {
     }
     let mut stats = mesh_stats(&faces);
     stats.edge_count = edges.len();
+    let mesh = Arc::new(PartMesh::new(&faces, &edges));
     ImportedShape {
         id: next_shape_id(),
         breps: Vec::new(),
@@ -244,6 +246,7 @@ pub fn shape_from_solid(solid: &Solid) -> ImportedShape {
         edges,
         color: None,
         stats,
+        mesh,
     }
 }
 

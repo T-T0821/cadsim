@@ -5,7 +5,7 @@
 
 use std::cell::Cell;
 
-use bevy::math::DVec3;
+use glam::DVec3;
 
 use super::geometry::{
     Aabb, Pose, RayHit, Triangle, closest_point_on_triangle, ray_triangle, triangle_aabb,

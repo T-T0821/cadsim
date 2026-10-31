@@ -2,8 +2,15 @@
 name = "cad_proto"
 version = "0.1.0"
 edition = "2024"
+license = "MIT OR Apache-2.0"
+
+[workspace]
+members = ["crates/cadsim_core"]
+# 引数なしの cargo test / clippy でワークスペースの全 crate を確かめる
+default-members = [".", "crates/cadsim_core"]
 
 [dependencies]
+cadsim_core = { path = "crates/cadsim_core" }
 bevy = "0.20"
 bevy_egui = "0.43"
 # 3D ファイルの読み書き (glTF / GLB, OBJ, STL)。すべて純 Rust

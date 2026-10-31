@@ -43,6 +43,13 @@ fn file_menu(ui: &mut egui::Ui, state: &mut UiState) {
         if ui.button("サンプルのアセンブリを取り込む").clicked() {
             state.jobs.open_sample();
         }
+        ui.menu_button("負荷テスト用シーンを開く", |ui| {
+            for count in [1000, 5000, 10000] {
+                if ui.button(format!("部品 {count} 個")).clicked() {
+                    state.jobs.open_stress(count);
+                }
+            }
+        });
         ui.separator();
         if ui.button("保存  (Ctrl+S)").clicked() {
             state.project.request(ProjectAction::Save);
@@ -84,6 +91,13 @@ fn export_menu(ui: &mut egui::Ui, state: &mut UiState) {
             .clicked()
         {
             state.jobs.request_export(ExportScope::Selection);
+        }
+        if ui
+            .button("ブラウザ / VR で見る")
+            .on_hover_text("Web ビューアにして既定のブラウザで開きます。WebXR 対応のブラウザなら VR ヘッドセットで実寸で見られます")
+            .clicked()
+        {
+            state.jobs.request_browser_view();
         }
         ui.separator();
         if ui
@@ -195,6 +209,21 @@ fn view_menu(ui: &mut egui::Ui, state: &mut UiState) {
             &mut state.settings.ghost_unselected,
             "選択以外を半透明にする",
         );
+        ui.checkbox(
+            &mut state.settings.simplify_small_parts,
+            "画面上で小さい部品を簡略表示",
+        )
+        .on_hover_text("遠くの部品を粗い形にし、ごく小さい部品は描かずに軽くする");
+        ui.add_enabled_ui(state.settings.simplify_small_parts, |ui| {
+            ui.add(
+                egui::Slider::new(&mut state.settings.coarse_below_px, 0.0..=300.0)
+                    .text("簡略表示 (px 未満)"),
+            );
+            ui.add(
+                egui::Slider::new(&mut state.settings.hide_below_px, 0.0..=20.0)
+                    .text("省略 (px 未満)"),
+            );
+        });
         ui.separator();
         if ui.button("すべて表示").clicked() {
             state.model.show_all();

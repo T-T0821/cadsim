@@ -13,6 +13,7 @@ cadsim は、工場のライン設備を 3D で組み立てて動きを確かめ
 | STEP の取り込み(AP203 / AP214 / AP242) | 使える | [STEP ファイルを開く](step-import.md) |
 | プロジェクトの保存と読み込み(.cadsim) | 使える | [プロジェクトの保存と読み込み](project.md) |
 | glTF / GLB・OBJ・STL・OpenUSD の取り込みと書き出し、アニメーション再生 | 使える | [glTF・OBJ・STL・USD の読み書き](interchange.md) |
+| HTML ビューアの書き出し(ブラウザ・スマホ・VR / AR で実寸表示) | 使える | [ブラウザ・スマホ・VR で見る](web-viewer.md) |
 | アセンブリツリー、選択の強調表示 | 使える | [アセンブリツリーと選択](tree.md) |
 | プロパティ(配置・寸法・体積など) | 使える | [プロパティ](properties.md) |
 | Unity / Unreal と同じカメラ操作、標準ビュー、透視 / 平行投影 | 使える | [カメラとビュー](camera.md) |
