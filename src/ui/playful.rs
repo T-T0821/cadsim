@@ -15,7 +15,6 @@ use bevy_egui::{
 use super::theme::{self, palette};
 use crate::annotation::Annotations;
 use crate::camera::{OrbitCamera, ViewportRect};
-use crate::flow::FlowRes;
 use crate::history::History;
 use crate::model::{Model, Selection};
 use crate::motion::Playback;
@@ -25,7 +24,7 @@ use crate::simulation::InterferenceCheck;
 use crate::simulation::interference::PairStatus;
 use crate::simulation::measure::MeasureTool;
 use cadsim_core::gamify::{
-    Achievement, ConfettiPiece, MISSIONS, MissionId, Observation, Preferences, ThemeKind, confetti,
+    Achievement, ConfettiPiece, MISSIONS, Observation, Preferences, ThemeKind, confetti,
     level_title, mission,
 };
 
@@ -133,7 +132,6 @@ fn track_missions(
     annotations: Res<Annotations>,
     playback: Res<Playback>,
     project: Res<ProjectState>,
-    flow: Res<FlowRes>,
     viewport: Res<ViewportRect>,
     mouse: Res<ButtonInput<MouseButton>>,
 ) {
@@ -146,10 +144,7 @@ fn track_missions(
         .iter()
         .filter(|pair| matches!(pair.status, PairStatus::Interfering { .. }))
         .count();
-    // 未保存の判定はモデル全体を比べるので、セーブのミッションが残っている間だけ調べる
-    let saved_to_file = !ui.prefs.progress.is_done(MissionId::Save)
-        && project.has_file()
-        && !project.has_unsaved_changes(&model, &annotations, &flow);
+    let saved_to_file = project.has_file() && !project.unsaved();
     let now = Observation {
         selected: selection.node.is_some_and(|id| model.get(id).is_some()),
         camera_angles: [orbit.yaw as f64, orbit.pitch as f64],

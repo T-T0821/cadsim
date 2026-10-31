@@ -613,6 +613,8 @@ pub struct ProjectState {
     /// 未保存の変更を捨ててよいか確認している操作
     confirm_discard: Option<ProjectAction>,
     loading: Option<LoadTask>,
+    /// 直前のフレームで未保存の変更があったか (`update_window_title` が毎フレーム更新する)
+    unsaved: bool,
 }
 
 impl Default for ProjectState {
@@ -624,6 +626,7 @@ impl Default for ProjectState {
             requested: None,
             confirm_discard: None,
             loading: None,
+            unsaved: false,
         }
     }
 }
@@ -646,6 +649,11 @@ impl ProjectState {
     /// ファイルに結びついているか (保存したか、ファイルから開いたか)
     pub fn has_file(&self) -> bool {
         self.path.is_some()
+    }
+
+    /// 直前のフレームで調べた未保存の変更の有無 (比べ直さないので軽い)
+    pub fn unsaved(&self) -> bool {
+        self.unsaved
     }
 
     pub fn file_name(&self) -> String {
@@ -885,18 +893,19 @@ enum Choice {
 
 /// ウィンドウのタイトルにファイル名と未保存の印 (*) を出す。
 fn update_window_title(
-    state: Res<ProjectState>,
+    mut state: ResMut<ProjectState>,
     model: Res<Model>,
     annotations: Res<Annotations>,
     flow: Res<FlowRes>,
     floor: FloorView,
     mut window: Single<&mut Window, With<PrimaryWindow>>,
 ) {
-    let marker = if state.has_unsaved_changes(&model, &annotations, &flow, &floor.record()) {
-        " *"
-    } else {
-        ""
-    };
+    let unsaved = state.has_unsaved_changes(&model, &annotations, &flow, &floor.record());
+    // 毎フレーム書くと変更検知が走り続けるので、変わったときだけ書く
+    if state.unsaved != unsaved {
+        state.unsaved = unsaved;
+    }
+    let marker = if unsaved { " *" } else { "" };
     let title = format!("{APP_TITLE} - {}{marker}", state.file_name());
     // 毎フレーム書き換えると変更検知が走り続けるので、変わったときだけ書く
     if window.title != title {
