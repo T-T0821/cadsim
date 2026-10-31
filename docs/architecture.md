@@ -56,7 +56,7 @@ crates/
 │                         ports (SceneReader / SceneWriter / ProjectStore などのトレイト)
 ├── cadsim_io/            3. アダプター (Bevy なし)
 │   └── src/              step, interchange (gltf / obj / stl / usd), project_file (JSON),
-│                         modbus, video
+│                         modbus, video, xlsx (工程シミュレーションの結果)
 └── cadsim/               4. UI・フレームワーク (実行ファイル)
     └── src/
         ├── main.rs       プラグインを並べるだけ
@@ -79,3 +79,7 @@ crates/
 6. **UI 層を整理する。** 残った Bevy / egui のコードを `view` / `input` / `ui` に分ける。
 
 各段の終わりに、この文書の「目標のディレクトリ構成」と実際の構成の差を更新します。
+
+### すでに層を分けて書いてあるもの
+
+- `src/flow/`(工程シミュレーション): `model.rs`・`sim.rs`・`palette.rs` は Bevy・egui・serde を使わないドメイン、`record.rs`(.cadsim の形)と `xlsx.rs`(Excel 書き出し)はアダプター、`mod.rs`・`ui.rs` が UI 層。ワークスペース化のときは前の3つを `cadsim_core::domain::flow` に、`record.rs`・`xlsx.rs` を `cadsim_io` にそのまま移す。

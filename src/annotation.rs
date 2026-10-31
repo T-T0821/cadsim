@@ -254,7 +254,7 @@ pub enum AnnotationRecord {
     Note { at: AnchorRecord, text: String },
 }
 
-fn node_path(model: &Model, id: NodeId) -> Option<NodePath> {
+pub fn node_path(model: &Model, id: NodeId) -> Option<NodePath> {
     model
         .ancestors(id)
         .iter()
@@ -268,7 +268,7 @@ fn node_path(model: &Model, id: NodeId) -> Option<NodePath> {
         .collect()
 }
 
-fn node_at_path(model: &Model, path: &[usize]) -> Option<NodeId> {
+pub fn node_at_path(model: &Model, path: &[usize]) -> Option<NodeId> {
     let (&first, rest) = path.split_first()?;
     let mut id = *model.roots[..].get(first)?;
     for &index in rest {

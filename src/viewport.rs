@@ -22,6 +22,7 @@ use bevy::prelude::Transform;
 
 use crate::annotation::annotate_tool_off;
 use crate::camera::{ViewportRect, alt_pressed, pointer_in_3d_view};
+use crate::flow::FlowColors;
 use crate::gizmo::gizmo_not_focused;
 use crate::math::to_transform;
 use crate::model::{Model, NodeId, NodeKind, Selection};
@@ -354,6 +355,7 @@ fn update_materials(
     selection: Res<Selection>,
     settings: Res<ViewSettings>,
     check: Res<InterferenceCheck>,
+    flow_colors: Res<FlowColors>,
     mut palette: ResMut<Palette>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut faces: Query<(&FaceTag, &mut MeshMaterial3d<StandardMaterial>)>,
@@ -373,7 +375,10 @@ fn update_materials(
             Highlight::Hovered => palette.hovered.clone(),
             highlight => {
                 let ghost = highlight == Highlight::Ghost;
-                let rgb = model.display_color(tag.node);
+                // 工程シミュレーションの色分けがあれば、部品の色の代わりに使う
+                let rgb = flow_colors
+                    .color_of(&model, tag.node)
+                    .unwrap_or_else(|| model.display_color(tag.node));
                 let key = (
                     rgb.map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8),
                     ghost,

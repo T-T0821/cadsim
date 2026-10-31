@@ -1,0 +1,258 @@
+//! 工程モデルとスループット統計
+//!
+//! 生成・工程・バッファ・排出をノーコードで並べ、ラインを数時間分早回しして、
+//! 設備ごとの稼働・待ち・詰まり・故障の割合、サイクルタイム、仕掛数、電力量・エア消費量を集計する。
+//!
+//! - `model`   工程モデルのデータと検証 (Bevy 非依存)
+//! - `sim`     離散事象シミュレーションと集計 (Bevy 非依存)
+//! - `palette` 状態と稼働率の色 (Bevy 非依存)
+//! - `record`  プロジェクトファイルに書く形 (serde)
+//! - `xlsx`    結果の Excel 書き出し (rust_xlsxwriter)
+//! - `ui`      「工程シミュレーション」ウィンドウ
+//!
+//! このファイルは Bevy とのつなぎ: 工程モデルを包む Resource、早送りの再生、
+//! 3D の部品に塗る色 ([`FlowColors`]、viewport.rs が使う) を受け持つ。
+
+pub mod model;
+pub mod palette;
+pub mod record;
+pub mod sim;
+mod ui;
+pub mod xlsx;
+
+use std::collections::HashMap;
+use std::path::PathBuf;
+
+use bevy::ecs::system::NonSendMarker;
+use bevy::prelude::*;
+
+pub use ui::{FlowUi, show_window};
+
+use crate::file_io::ImportJobs;
+use crate::model::{Model, NodeId};
+use model::FlowModel;
+use sim::{Report, Simulation};
+
+pub struct FlowPlugin;
+
+impl Plugin for FlowPlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<FlowRes>()
+            .init_resource::<FlowRun>()
+            .init_resource::<FlowColors>()
+            .init_resource::<ui::FlowUiState>()
+            .add_systems(Update, (advance_run, update_colors, export_xlsx).chain());
+    }
+}
+
+/// 工程モデル (プロジェクトに保存する設計データ)
+#[derive(Resource, Default, Deref, DerefMut)]
+pub struct FlowRes(pub FlowModel);
+
+/// 3D ビューの色分け
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum ColorMode {
+    /// 色を付けない
+    Off,
+    /// 今の状態 (稼働・待ち・詰まり・故障)
+    #[default]
+    State,
+    /// 稼働率。ボトルネックを赤く
+    Busy,
+}
+
+impl ColorMode {
+    pub const ALL: [ColorMode; 3] = [ColorMode::Off, ColorMode::State, ColorMode::Busy];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            ColorMode::Off => "なし",
+            ColorMode::State => "状態",
+            ColorMode::Busy => "稼働率・ボトルネック",
+        }
+    }
+}
+
+/// 1回に処理する事象の上限。早送りでも画面が固まらないようにする。
+const EVENTS_PER_FRAME: usize = 200_000;
+
+/// 実行中・実行後のシミュレーションと、ウィンドウの表示状態
+#[derive(Resource)]
+pub struct FlowRun {
+    pub sim: Option<Simulation>,
+    pub report: Option<Report>,
+    /// 実行したときのモデル。今のモデルと違えば結果は古い。
+    pub ran_with: Option<FlowModel>,
+    pub playing: bool,
+    /// 実時間 1 秒あたりに進めるシミュレーションの秒数。∞ なら最後まで。
+    pub speed: f64,
+    pub color_mode: ColorMode,
+    /// ウィンドウを出しているか
+    pub open: bool,
+    /// Excel 書き出しを頼まれた
+    pub export_requested: bool,
+}
+
+impl Default for FlowRun {
+    fn default() -> Self {
+        Self {
+            sim: None,
+            report: None,
+            ran_with: None,
+            playing: false,
+            speed: 600.0,
+            color_mode: ColorMode::default(),
+            open: false,
+            export_requested: false,
+        }
+    }
+}
+
+impl FlowRun {
+    /// 今のモデルで最初から回し直す準備をする。回せなければ理由を返す。
+    pub fn restart(&mut self, model: &FlowModel) -> Result<(), Vec<String>> {
+        self.stop();
+        let sim = Simulation::new(model)?;
+        self.report = Some(sim.report());
+        self.sim = Some(sim);
+        self.ran_with = Some(model.clone());
+        Ok(())
+    }
+
+    /// 再生を止めて結果を消す
+    pub fn stop(&mut self) {
+        self.sim = None;
+        self.report = None;
+        self.ran_with = None;
+        self.playing = false;
+    }
+
+    /// 結果が今のモデルと合っていない
+    pub fn is_stale(&self, model: &FlowModel) -> bool {
+        self.ran_with.as_ref().is_some_and(|m| m != model)
+    }
+}
+
+/// 3D の部品に塗る色 (ノード → sRGB)。アセンブリに付けた色は子孫の部品にも効く。
+#[derive(Resource, Default)]
+pub struct FlowColors(pub HashMap<NodeId, [f32; 3]>);
+
+impl FlowColors {
+    /// 部品の色。自分か、いちばん近い祖先に色があればそれを使う。
+    pub fn color_of(&self, model: &Model, node: NodeId) -> Option<[f32; 3]> {
+        if self.0.is_empty() {
+            return None;
+        }
+        model
+            .ancestors(node)
+            .iter()
+            .rev()
+            .find_map(|id| self.0.get(id).copied())
+    }
+}
+
+fn advance_run(time: Res<Time>, mut run: ResMut<FlowRun>) {
+    if !run.playing {
+        return;
+    }
+    let run = &mut *run;
+    let Some(sim) = run.sim.as_mut() else {
+        run.playing = false;
+        return;
+    };
+    let target = sim.now() + time.delta_secs_f64() * run.speed;
+    sim.advance(target, EVENTS_PER_FRAME);
+    run.report = Some(sim.report());
+    if sim.finished() {
+        run.playing = false;
+    }
+}
+
+fn update_colors(
+    flow: Res<FlowRes>,
+    run: Res<FlowRun>,
+    model: Res<Model>,
+    mut colors: ResMut<FlowColors>,
+) {
+    if !(flow.is_changed() || run.is_changed() || model.is_changed()) {
+        return;
+    }
+    let mut map = HashMap::new();
+    if !run.is_stale(&flow) {
+        for e in &flow.elements {
+            let Some(part) = e.part.filter(|&p| model.get(p).is_some()) else {
+                continue;
+            };
+            let rgb = match run.color_mode {
+                ColorMode::Off => None,
+                ColorMode::State => run
+                    .sim
+                    .as_ref()
+                    .and_then(|s| s.state_of(e.id))
+                    .map(palette::state_rgb),
+                ColorMode::Busy => run.report.as_ref().and_then(|r| {
+                    let stats = r.element(e.id)?;
+                    (stats.times.total() > 0.0)
+                        .then(|| palette::busy_rgb(stats.busy_ratio(), r.bottleneck == Some(e.id)))
+                }),
+            };
+            if let Some(rgb) = rgb {
+                map.insert(part, rgb);
+            }
+        }
+    }
+    if colors.0 != map {
+        colors.0 = map;
+    }
+}
+
+/// 保存ダイアログを出して xlsx を書く。macOS ではダイアログをメインスレッドで出す必要がある。
+fn export_xlsx(
+    flow: Res<FlowRes>,
+    mut run: ResMut<FlowRun>,
+    mut jobs: ResMut<ImportJobs>,
+    _main_thread: NonSendMarker,
+) {
+    if !run.export_requested {
+        return;
+    }
+    run.export_requested = false;
+    let Some(report) = &run.report else {
+        return;
+    };
+    let Some(path) = rfd::FileDialog::new()
+        .set_title("工程シミュレーションの結果を書き出し")
+        .add_filter("Excel", &["xlsx"])
+        .set_file_name("工程シミュレーション.xlsx")
+        .save_file()
+    else {
+        return;
+    };
+    let path = with_xlsx_extension(path);
+    let name = path
+        .file_name()
+        .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+    let model = run.ran_with.as_ref().unwrap_or(&flow);
+    let result = xlsx::report_to_xlsx(model, report)
+        .map_err(|e| e.to_string())
+        .and_then(|bytes| std::fs::write(&path, bytes).map_err(|e| e.to_string()));
+    match result {
+        Ok(()) => jobs.messages.push(format!("{name} に書き出しました")),
+        Err(e) => {
+            error!("{}: {e}", path.display());
+            jobs.messages
+                .push(format!("{name} に書き出せませんでした: {e}"));
+        }
+    }
+}
+
+fn with_xlsx_extension(path: PathBuf) -> PathBuf {
+    if path
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("xlsx"))
+    {
+        path
+    } else {
+        path.with_extension("xlsx")
+    }
+}
