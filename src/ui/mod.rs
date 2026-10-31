@@ -32,6 +32,7 @@ mod replace;
 mod status;
 pub mod theme;
 mod tree;
+mod tutorial;
 mod view_cube;
 pub mod widgets;
 
@@ -81,6 +82,7 @@ impl Plugin for UiPlugin {
                     crate::library::io_list_window,
                     crate::library::drop_on_viewport,
                     playful::draw_overlay,
+                    tutorial::draw,
                     // 動作シミュレーション・物理演算・PLC 連携で部品が動いている間はギズモで編集しない
                     transform_gizmo_system
                         .run_if(at_design_pose)
@@ -113,6 +115,7 @@ pub struct UiState<'w> {
     pub diagnostics: Res<'w, DiagnosticsStore>,
     pub render_stats: Res<'w, RenderStats>,
     pub playful: ResMut<'w, playful::PlayfulUi>,
+    pub tutorial: ResMut<'w, tutorial::TutorialUi>,
     pub results: ResMut<'w, ResultExport>,
     pub defeaturing: Res<'w, Defeaturing>,
     pub recording: ResMut<'w, RecordSettings>,

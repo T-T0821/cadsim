@@ -45,7 +45,7 @@ crates/cadsim_core/   Bevy に依存しないドメイン (cargo test -p cadsim_
 ├── part_mesh.rs     部品1つ分の表示用メッシュ (面をまとめたもの・面番号の表・簡略形状)
 ├── shape.rs         取り込んだ形状 (B-rep・面メッシュ・計測値) とアセンブリの木 (ImportNode)
 ├── history.rs       元に戻す履歴の山 (UndoStack)・モデルの変更 (ModelChange)・ドラッグ中の編集のまとめ方
-├── gamify.rs        ゲーム風 UI の中身: ミッションの判定・経験値とレベル・紙吹雪 (docs/playful-ui.md)
+├── gamify.rs        ゲーム風 UI の中身: 章とミッション (手順・キー・操作する場所)・判定・とばす・経験値とレベル・紙吹雪 (docs/playful-ui.md)
 ├── math.rs          回転・行列・外接箱の計算 (f64)
 ├── modeling.rs      円柱・押し出し・穴あけ・ブーリアン (truck の B-rep。docs/modeling.md)
 ├── model.rs         設計データ: アセンブリの木 (f64)。ノード・箱・取り込んだ部品・標準部品
@@ -127,6 +127,7 @@ src/                  アプリ本体 (Bevy + egui)
     ├── modeling.rs   「モデリング」ウィンドウ (円柱・押し出し・穴あけ・ブーリアン)
     ├── theme.rs      見た目 (ゲーム風 / シンプル) の配色と角丸
     ├── playful.rs    ミッションカード・マスコット・お祝いと紙吹雪
+    ├── tutorial.rs   ようこそ画面、カードの手順・キー・とばす、操作する場所を指す矢印
     ├── view_cube.rs  ビューキューブと座標軸
     └── widgets.rs    数値入力などの小さな部品
 ```

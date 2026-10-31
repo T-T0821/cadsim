@@ -1,20 +1,78 @@
-//! ゲーム風の UI の中身: チュートリアルのミッション、経験値とレベル、達成時の紙吹雪、ミッションの表示の設定
+//! ゲーム風の UI の中身: チュートリアルの章とミッション、経験値とレベル、達成時の紙吹雪、ミッションの表示の設定
 //!
 //! Bevy・egui・ファイル形式に依存しない。UI 層は毎フレーム [`Observation`] を作って
 //! [`Progress::observe`] に渡し、返ってきた達成を画面に出すだけにする。
+
+use crate::workspace::Tool;
+
+/// チュートリアルの章。ミッションを「見る → さわる → ラインを組む → 仕上げる」の順にまとめる。
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Chapter {
+    Look,
+    Touch,
+    BuildLine,
+    Finish,
+}
+
+impl Chapter {
+    pub const ALL: [Chapter; 4] = [
+        Chapter::Look,
+        Chapter::Touch,
+        Chapter::BuildLine,
+        Chapter::Finish,
+    ];
+
+    /// 1 始まりの章番号
+    pub fn number(self) -> usize {
+        Self::ALL.iter().position(|&c| c == self).unwrap_or(0) + 1
+    }
+
+    pub fn title(self) -> &'static str {
+        match self {
+            Chapter::Look => "動くラインを見てみよう",
+            Chapter::Touch => "部品にさわってみよう",
+            Chapter::BuildLine => "ラインを組んでみよう",
+            Chapter::Finish => "仕上げて残そう",
+        }
+    }
+
+    /// この章のミッション (おすすめ順)
+    pub fn missions(self) -> impl Iterator<Item = &'static Mission> {
+        MISSIONS.iter().filter(move |m| m.chapter == self)
+    }
+}
+
+/// 操作する場所。UI 層はここを光らせたり矢印で指したりする。
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Place {
+    /// 3D ビューの中
+    Viewport,
+    /// 左のアセンブリツリー
+    Tree,
+    /// 画面下のタイミングチャート
+    Chart,
+    /// 上のメニューバー
+    Menu,
+    /// 画面左端のツールレール (道具のボタン)
+    Rail,
+    /// キーボード
+    Keyboard,
+}
 
 /// チュートリアルのミッション。並び順がおすすめの進め方。
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum MissionId {
     SelectPart,
     OrbitView,
+    PlayChart,
+    SwitchProjection,
     EditPart,
     Undo,
-    SwitchProjection,
     Measure,
     FindInterference,
+    PlaceLibraryPart,
+    RunFlow,
     Annotate,
-    PlayChart,
     Save,
 }
 
@@ -22,9 +80,22 @@ pub struct Mission {
     pub id: MissionId,
     /// 保存ファイルで使う名前 (変えない)
     pub key: &'static str,
+    pub chapter: Chapter,
     pub title: &'static str,
-    /// 画面のどこで何をすればよいか
+    /// 画面のどこで何をすればよいか (1行)
     pub hint: &'static str,
+    /// チュートリアルの手順。上から順にやればクリアできる
+    pub steps: &'static [&'static str],
+    /// この操作が何の役に立つか
+    pub why: &'static str,
+    /// 操作する場所
+    pub place: Place,
+    /// 設備が動いている間はできない (ギズモでの編集は設計位置で止まっているときだけ)
+    pub needs_stopped_line: bool,
+    /// 使うキー (カードにキーの形で出す)
+    pub keys: &'static [&'static str],
+    /// 使う道具。カードに「開く」ボタンを出す
+    pub tool: Option<Tool>,
     pub xp: u32,
 }
 
@@ -32,71 +103,211 @@ pub const MISSIONS: &[Mission] = &[
     Mission {
         id: MissionId::SelectPart,
         key: "select_part",
+        chapter: Chapter::Look,
         title: "部品をえらぼう",
         hint: "3D ビューの部品か、左のツリーの行をクリック",
+        steps: &[
+            "3D ビューで動いている部品をどれか1つクリックする",
+            "えらんだ部品が明るく光り、左のツリーの行も色が付く",
+        ],
+        why: "部品をえらぶと、右のプロパティで名前や位置を見たり変えたりできます",
+        place: Place::Viewport,
+        needs_stopped_line: false,
+        keys: &[],
+        tool: None,
         xp: 50,
     },
     Mission {
         id: MissionId::OrbitView,
         key: "orbit_view",
+        chapter: Chapter::Look,
         title: "ぐるっと見まわそう",
         hint: "Alt を押しながら左ドラッグ (右ドラッグでも見まわせる)",
+        steps: &[
+            "3D ビューの上で、Alt を押しながら左ボタンでドラッグする (右ボタンのドラッグでもよい)",
+            "ホイールで近づく・離れる。Home で全体が入る位置に戻る",
+        ],
+        why: "いろいろな向きから見ると、部品の重なりやすき間に気づけます",
+        place: Place::Viewport,
+        needs_stopped_line: false,
+        keys: &["Alt", "ドラッグ"],
+        tool: None,
+        xp: 50,
+    },
+    Mission {
+        id: MissionId::PlayChart,
+        key: "play_chart",
+        chapter: Chapter::Look,
+        title: "設備を止めて、また動かそう",
+        hint: "下のタイミングチャートの「⏸ 一時停止」→「▶ 再生」",
+        steps: &[
+            "画面下のタイミングチャートの「⏸ 一時停止」を押して動きを止める",
+            "もう一度「▶ 再生」を押す。横の「x1」で速さも変えられる",
+        ],
+        why: "設備の動きはタイミングチャートの手順どおりに再生されます。止めて1コマずつ確かめられます",
+        place: Place::Chart,
+        needs_stopped_line: false,
+        keys: &[],
+        tool: None,
+        xp: 80,
+    },
+    Mission {
+        id: MissionId::SwitchProjection,
+        key: "switch_projection",
+        chapter: Chapter::Look,
+        title: "図面モードに切り替えよう",
+        hint: "5 キーか、ツールバーの「平行」で平行投影に",
+        steps: &[
+            "3D ビューをクリックしてから 5 キーを押す (3D ビュー上のツールバーの「平行」でもよい)",
+            "遠近感のない図面のような見え方になる。もう一度押すと元に戻る",
+        ],
+        why: "平行投影では奥の部品も同じ大きさで見えるので、寸法や並びを確かめやすくなります",
+        place: Place::Keyboard,
+        needs_stopped_line: false,
+        keys: &["5"],
+        tool: None,
         xp: 50,
     },
     Mission {
         id: MissionId::EditPart,
         key: "edit_part",
+        chapter: Chapter::Touch,
         title: "部品を動かそう",
         hint: "部品をえらんで W を押し、出てきた矢印をドラッグ",
+        steps: &[
+            "画面下のタイミングチャートの「⏮ 先頭へ」で設備を止める (動いている間は部品を動かせない)",
+            "部品をクリックしてえらび、W を押すと赤・緑・青の矢印 (ギズモ) が出る",
+            "矢印をドラッグして部品をずらす。E で回転、R で拡大縮小",
+        ],
+        why: "配置を変えながら、設備どうしの距離や通り道を検討できます",
+        place: Place::Viewport,
+        needs_stopped_line: true,
+        keys: &["W", "E", "R"],
+        tool: None,
         xp: 80,
     },
     Mission {
         id: MissionId::Undo,
         key: "undo",
+        chapter: Chapter::Touch,
         title: "時間を巻き戻そう",
         hint: "Ctrl+Z で元に戻す (Ctrl+Y でやり直し)",
+        steps: &[
+            "Ctrl+Z を押すと、さっき動かした部品が元の位置に戻る",
+            "Ctrl+Y でやり直せる。「編集」メニューからもできる",
+        ],
+        why: "失敗しても戻せるので、思い切って試せます",
+        place: Place::Keyboard,
+        needs_stopped_line: false,
+        keys: &["Ctrl", "Z"],
+        tool: None,
         xp: 60,
-    },
-    Mission {
-        id: MissionId::SwitchProjection,
-        key: "switch_projection",
-        title: "図面モードに切り替えよう",
-        hint: "5 キーか、ツールバーの「平行」で平行投影に",
-        xp: 50,
     },
     Mission {
         id: MissionId::Measure,
         key: "measure",
+        chapter: Chapter::Touch,
         title: "距離をはかろう",
         hint: "M を押して、部品の表面を2回クリック",
+        steps: &[
+            "3D ビューで M を押して計測を始める",
+            "はかりたい2か所の表面を順にクリックする",
+            "2点の距離が線と数字で出る。Esc で計測をやめる",
+        ],
+        why: "設備のすき間や、作業者の手が届く距離を確かめられます",
+        place: Place::Viewport,
+        needs_stopped_line: false,
+        keys: &["M"],
+        tool: None,
         xp: 80,
     },
     Mission {
         id: MissionId::FindInterference,
         key: "find_interference",
+        chapter: Chapter::Touch,
         title: "ぶつかりを見つけよう",
         hint: "部品を動かして別の部品に重ねると、赤く光る",
+        steps: &[
+            "設備を止めたまま、部品をえらんで W を押す",
+            "矢印をドラッグして、となりの部品に重なるまで動かす",
+            "重なったところが赤く光る。左端の 💥 干渉 を開くと一覧が見られる",
+        ],
+        why: "設備を作る前に、ぶつかる配置や動きを画面の上で見つけられます",
+        place: Place::Viewport,
+        needs_stopped_line: true,
+        keys: &["W"],
+        tool: Some(Tool::Interference),
         xp: 100,
+    },
+    Mission {
+        id: MissionId::PlaceLibraryPart,
+        key: "place_library_part",
+        chapter: Chapter::BuildLine,
+        title: "標準部品を置こう",
+        hint: "左端の 📦 部品 を開き、部品を 3D ビューへドラッグ",
+        steps: &[
+            "画面左端のツールレールの 📦 部品 を押して部品ライブラリを開く (カードの「開く」でもよい)",
+            "シリンダやコンベアの行を 3D ビューへドラッグして離す (+ を押すと注視点に置く)",
+            "置いた部品は右のプロパティでストロークや長さを変えられる",
+        ],
+        why: "シリンダ・コンベア・センサーなどを寸法つきですぐ置けるので、ラインの形をすばやく試せます",
+        place: Place::Rail,
+        needs_stopped_line: false,
+        keys: &[],
+        tool: Some(Tool::Library),
+        xp: 100,
+    },
+    Mission {
+        id: MissionId::RunFlow,
+        key: "run_flow",
+        chapter: Chapter::BuildLine,
+        title: "ラインを早回ししよう",
+        hint: "左端の 📊 工程 を開き、「サンプル工程」を入れて「▶ 実行」",
+        steps: &[
+            "画面左端のツールレールの 📊 工程 を押す (カードの「開く」でもよい)",
+            "工程が空なら「サンプル工程」を押す",
+            "「▶ 実行」を押すと、数時間分を早回しして稼働率やスループットが出る",
+        ],
+        why: "どの工程が詰まるか (ボトルネック) を、作る前に数字で確かめられます",
+        place: Place::Rail,
+        needs_stopped_line: false,
+        keys: &[],
+        tool: Some(Tool::Flow),
+        xp: 120,
     },
     Mission {
         id: MissionId::Annotate,
         key: "annotate",
+        chapter: Chapter::Finish,
         title: "寸法を書きこもう",
-        hint: "「寸法・注記」ウィンドウで点間距離などを置く",
+        hint: "左端の 📐 寸法 を開き、点間距離などを置く",
+        steps: &[
+            "画面左端のツールレールの 📐 寸法 を押す (カードの「開く」でもよい)",
+            "「点間距離」を押してから、部品の表面を2か所クリックする",
+            "寸法線が 3D の中に残り、プロジェクトと一緒に保存される",
+        ],
+        why: "寸法やメモを図に残すと、ほかの人と検討するときに伝わりやすくなります",
+        place: Place::Rail,
+        needs_stopped_line: false,
+        keys: &[],
+        tool: Some(Tool::Annotation),
         xp: 80,
-    },
-    Mission {
-        id: MissionId::PlayChart,
-        key: "play_chart",
-        title: "設備を動かそう",
-        hint: "下のタイミングチャートの「▶ 再生」を押す",
-        xp: 100,
     },
     Mission {
         id: MissionId::Save,
         key: "save",
+        chapter: Chapter::Finish,
         title: "セーブしよう",
         hint: "Ctrl+S でプロジェクトを保存",
+        steps: &[
+            "Ctrl+S を押す (「ファイル → 保存」でもよい)",
+            "保存する場所と名前を決める。部品・チャート・工程がまとめて .cadsim に入る",
+        ],
+        why: "保存したファイルを開けば、いつでも続きから作業できます",
+        place: Place::Keyboard,
+        needs_stopped_line: false,
+        keys: &["Ctrl", "S"],
+        tool: None,
         xp: 80,
     },
 ];
@@ -133,6 +344,10 @@ pub struct Observation {
     pub playing: bool,
     /// ファイルに結びついたプロジェクトで、未保存の変更がない
     pub saved_to_file: bool,
+    /// 標準部品ライブラリから置いた部品の数
+    pub library_part_count: usize,
+    /// 工程シミュレーションの結果が出ている
+    pub flow_has_result: bool,
 }
 
 /// ミッションを1つ達成したときの知らせ
@@ -142,6 +357,8 @@ pub struct Achievement {
     pub xp: u32,
     /// レベルが上がったら、新しいレベル
     pub level_up: Option<u32>,
+    /// これで章のミッションが全部終わったら、その章
+    pub chapter_complete: Option<Chapter>,
     /// これで全部のミッションが終わった
     pub all_complete: bool,
 }
@@ -190,6 +407,8 @@ pub fn level_title(level: u32) -> &'static str {
 #[derive(Clone, Debug, Default)]
 pub struct Progress {
     completed: Vec<MissionId>,
+    /// 「とばす」を押したミッション。あとで達成すれば経験値がもらえる
+    skipped: Vec<MissionId>,
     xp: u32,
     /// 直前の状態 (変化を見つけるのに使う)。最初の観測では何も達成しない。
     last: Option<Observation>,
@@ -202,23 +421,25 @@ pub struct Progress {
 impl Progress {
     /// 保存しておいた進み具合から作る。知らない名前は無視する。
     pub fn restore<'a>(keys: impl IntoIterator<Item = &'a str>, xp: u32) -> Self {
-        let mut completed = Vec::new();
-        for key in keys {
-            if let Some(m) = MISSIONS.iter().find(|m| m.key == key)
-                && !completed.contains(&m.id)
-            {
-                completed.push(m.id);
-            }
-        }
         Self {
-            completed,
+            completed: ids_of(keys, &[]),
             xp,
             ..Default::default()
         }
     }
 
+    /// とばしたミッションも戻す。達成済みのものは達成のままにする。
+    pub fn with_skipped<'a>(mut self, keys: impl IntoIterator<Item = &'a str>) -> Self {
+        self.skipped = ids_of(keys, &self.completed);
+        self
+    }
+
     pub fn completed_keys(&self) -> Vec<&'static str> {
         self.completed.iter().map(|&id| mission(id).key).collect()
+    }
+
+    pub fn skipped_keys(&self) -> Vec<&'static str> {
+        self.skipped.iter().map(|&id| mission(id).key).collect()
     }
 
     pub fn xp(&self) -> u32 {
@@ -233,17 +454,51 @@ impl Progress {
         self.completed.contains(&id)
     }
 
+    pub fn is_skipped(&self, id: MissionId) -> bool {
+        self.skipped.contains(&id)
+    }
+
+    /// 達成したか、とばした
+    fn is_settled(&self, id: MissionId) -> bool {
+        self.is_done(id) || self.is_skipped(id)
+    }
+
     pub fn done_count(&self) -> usize {
         self.completed.len()
     }
 
+    /// 達成したかとばしたミッションの数 (「ミッション 3/12」の表示に使う)
+    pub fn settled_count(&self) -> usize {
+        self.completed.len() + self.skipped.len()
+    }
+
+    /// 全部のミッションを達成した (とばしたものは含めない)
     pub fn all_complete(&self) -> bool {
         self.completed.len() == MISSIONS.len()
     }
 
-    /// 次に挑戦するミッション (おすすめ順で最初の未達成)
+    /// 次に挑戦するミッション (おすすめ順で最初の、達成もとばしもしていないもの)
     pub fn next(&self) -> Option<&'static Mission> {
-        MISSIONS.iter().find(|m| !self.is_done(m.id))
+        MISSIONS.iter().find(|m| !self.is_settled(m.id))
+    }
+
+    /// 章の (達成した数, ミッションの数)
+    pub fn chapter_progress(&self, chapter: Chapter) -> (usize, usize) {
+        let total = chapter.missions().count();
+        let done = chapter.missions().filter(|m| self.is_done(m.id)).count();
+        (done, total)
+    }
+
+    /// 今のミッションをとばして次へ進む。経験値はもらえない。
+    pub fn skip(&mut self, id: MissionId) {
+        if !self.is_settled(id) {
+            self.skipped.push(id);
+        }
+    }
+
+    /// とばしたミッションをもう一度「次のミッション」の候補に戻す
+    pub fn retry(&mut self, id: MissionId) {
+        self.skipped.retain(|&s| s != id);
     }
 
     /// 最初からやり直す
@@ -287,6 +542,14 @@ impl Progress {
             ),
             (MissionId::PlayChart, now.playing && !before.playing),
             (MissionId::Save, now.saved_to_file && !before.saved_to_file),
+            (
+                MissionId::PlaceLibraryPart,
+                now.library_part_count > before.library_part_count,
+            ),
+            (
+                MissionId::RunFlow,
+                now.flow_has_result && !before.flow_has_result,
+            ),
         ];
 
         let mut achievements = Vec::new();
@@ -300,17 +563,34 @@ impl Progress {
 
     fn complete(&mut self, id: MissionId) -> Achievement {
         let before = self.level().level;
-        let xp = mission(id).xp;
+        let m = mission(id);
+        self.skipped.retain(|&s| s != id);
         self.completed.push(id);
-        self.xp += xp;
+        self.xp += m.xp;
         let after = self.level().level;
+        let (done, total) = self.chapter_progress(m.chapter);
         Achievement {
             mission: id,
-            xp,
+            xp: m.xp,
             level_up: (after > before).then_some(after),
+            chapter_complete: (done == total).then_some(m.chapter),
             all_complete: self.all_complete(),
         }
     }
+}
+
+/// 保存名からミッションを引く。知らない名前・重複・`except` にあるものは除く。
+fn ids_of<'a>(keys: impl IntoIterator<Item = &'a str>, except: &[MissionId]) -> Vec<MissionId> {
+    let mut ids = Vec::new();
+    for key in keys {
+        if let Some(m) = MISSIONS.iter().find(|m| m.key == key)
+            && !ids.contains(&m.id)
+            && !except.contains(&m.id)
+        {
+            ids.push(m.id);
+        }
+    }
+    ids
 }
 
 /// 部品の編集・追加による履歴か (読み込みは数えない)。
@@ -324,6 +604,8 @@ fn is_edit_label(label: &str) -> bool {
 pub struct Preferences {
     pub show_missions: bool,
     pub progress: Progress,
+    /// 初回のようこそ画面を閉じた
+    pub welcomed: bool,
 }
 
 impl Default for Preferences {
@@ -331,6 +613,7 @@ impl Default for Preferences {
         Self {
             show_missions: true,
             progress: Progress::default(),
+            welcomed: false,
         }
     }
 }
@@ -507,6 +790,99 @@ mod tests {
         assert!(restored.is_done(MissionId::Undo));
         assert_eq!(restored.done_count(), 2);
         assert_eq!(restored.next().unwrap().id, MissionId::SelectPart);
+    }
+
+    #[test]
+    fn skip_moves_on_and_can_still_be_achieved() {
+        let mut progress = Progress::default();
+        progress.skip(MissionId::SelectPart);
+        assert_eq!(progress.next().unwrap().id, MissionId::OrbitView);
+        assert_eq!(progress.settled_count(), 1);
+        assert_eq!(progress.done_count(), 0);
+        assert_eq!(progress.xp(), 0);
+        // とばしたあとでも、やれば達成になって経験値がもらえる
+        observe(&mut progress, |_| {});
+        assert_eq!(
+            observe(&mut progress, |o| o.selected = true),
+            [MissionId::SelectPart]
+        );
+        assert!(!progress.is_skipped(MissionId::SelectPart));
+        assert_eq!(progress.xp(), 50);
+
+        progress.skip(MissionId::OrbitView);
+        progress.retry(MissionId::OrbitView);
+        assert_eq!(progress.next().unwrap().id, MissionId::OrbitView);
+    }
+
+    #[test]
+    fn skipped_missions_are_not_all_complete() {
+        let mut progress = Progress::default();
+        for m in MISSIONS {
+            progress.skip(m.id);
+        }
+        assert!(progress.next().is_none());
+        assert!(!progress.all_complete());
+    }
+
+    #[test]
+    fn skipped_round_trip() {
+        let mut progress = Progress::default();
+        progress.complete(MissionId::Save);
+        progress.skip(MissionId::RunFlow);
+        let restored = Progress::restore(progress.completed_keys(), progress.xp())
+            .with_skipped(progress.skipped_keys().into_iter().chain(["save", "x"]));
+        assert!(restored.is_skipped(MissionId::RunFlow));
+        // 達成済みのものは、とばしたことにしない
+        assert!(!restored.is_skipped(MissionId::Save));
+        assert_eq!(restored.settled_count(), 2);
+    }
+
+    #[test]
+    fn chapter_complete_is_reported_once() {
+        let mut progress = Progress::default();
+        let look: Vec<MissionId> = Chapter::Look.missions().map(|m| m.id).collect();
+        let (last, rest) = look.split_last().unwrap();
+        for &id in rest {
+            assert_eq!(progress.complete(id).chapter_complete, None);
+        }
+        assert_eq!(
+            progress.complete(*last).chapter_complete,
+            Some(Chapter::Look)
+        );
+        assert_eq!(
+            progress.chapter_progress(Chapter::Look),
+            (look.len(), look.len())
+        );
+        assert_eq!(progress.chapter_progress(Chapter::Touch).0, 0);
+    }
+
+    #[test]
+    fn every_chapter_has_missions_in_order() {
+        // 章はミッション表の並びどおりに進む (章が行ったり来たりしない)
+        let mut chapter = 0;
+        for m in MISSIONS {
+            let n = m.chapter.number();
+            assert!(n >= chapter, "{} の章が前に戻っている", m.key);
+            chapter = n;
+            assert!(!m.steps.is_empty(), "{} に手順がない", m.key);
+        }
+        for c in Chapter::ALL {
+            assert!(c.missions().count() > 0);
+        }
+    }
+
+    #[test]
+    fn library_and_flow_missions() {
+        let mut progress = Progress::default();
+        observe(&mut progress, |o| o.library_part_count = 2);
+        assert_eq!(
+            observe(&mut progress, |o| o.library_part_count = 3),
+            [MissionId::PlaceLibraryPart]
+        );
+        assert_eq!(
+            observe(&mut progress, |o| o.flow_has_result = true),
+            [MissionId::RunFlow]
+        );
     }
 
     #[test]

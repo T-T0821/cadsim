@@ -756,6 +756,10 @@ fn collect_shapes(node: &ImportNode, out: &mut HashMap<String, Arc<ImportedShape
 pub enum ProjectAction {
     New,
     OpenPath(PathBuf),
+    /// アプリに埋め込みのデモラインを無題のプロジェクトとして開く。`play` なら開いたら再生する。
+    OpenDemoLine {
+        play: bool,
+    },
     Save,
     SaveAs,
 }
@@ -763,11 +767,40 @@ pub enum ProjectAction {
 impl ProjectAction {
     /// 今のモデルを捨てる操作か (未保存の変更があれば確認する)
     fn discards_model(&self) -> bool {
-        matches!(self, ProjectAction::New | ProjectAction::OpenPath(_))
+        matches!(
+            self,
+            ProjectAction::New | ProjectAction::OpenPath(_) | ProjectAction::OpenDemoLine { .. }
+        )
     }
 }
 
-type LoadTask = Task<(PathBuf, Result<LoadedProject, ProjectError>)>;
+/// 読み込み元。デモラインはファイルに結びつけない (保存すると名前を聞く)。
+enum LoadOrigin {
+    File(PathBuf),
+    DemoLine { play: bool },
+}
+
+impl LoadOrigin {
+    fn name(&self) -> String {
+        match self {
+            LoadOrigin::File(path) => file_name(path),
+            LoadOrigin::DemoLine { .. } => DEMO_LINE_NAME.into(),
+        }
+    }
+}
+
+type LoadTask = Task<(LoadOrigin, Result<LoadedProject, ProjectError>)>;
+
+/// 起動時に動かして見せるデモライン (ロボットセル・コンベア・安全機器・AGV・工程モデル)
+const DEMO_LINE: &str = include_str!("../samples/demo_line.cadsim");
+/// 読み込み中・読み込み後の表示名
+const DEMO_LINE_NAME: &str = "デモライン";
+
+/// 埋め込みのデモラインを読む。サンプルは STEP を参照しないので軽い。
+pub fn load_demo_line() -> Result<LoadedProject, ProjectError> {
+    let file = ProjectFile::from_json(DEMO_LINE)?;
+    Ok(LoadedProject::fetch_shapes(file, Path::new(".")))
+}
 
 #[derive(Resource)]
 pub struct ProjectState {
@@ -843,10 +876,13 @@ impl ProjectState {
         Ok(())
     }
 
-    fn start_loading(&mut self, path: PathBuf) {
+    fn start_loading(&mut self, origin: LoadOrigin) {
         self.loading = Some(AsyncComputeTaskPool::get().spawn(async move {
-            let result = LoadedProject::load(&path);
-            (path, result)
+            let result = match &origin {
+                LoadOrigin::File(path) => LoadedProject::load(path),
+                LoadOrigin::DemoLine { .. } => load_demo_line(),
+            };
+            (origin, result)
         }));
     }
 }
@@ -928,9 +964,9 @@ fn run_project_actions(
         state.startup = !jobs.loading.is_empty();
     }
 
-    if let Some((path, result)) = state.loading.as_mut().and_then(|t| block_on(poll_once(t))) {
+    if let Some((origin, result)) = state.loading.as_mut().and_then(|t| block_on(poll_once(t))) {
         state.loading = None;
-        let name = file_name(&path);
+        let name = origin.name();
         jobs.loading.retain(|n| *n != name);
         match result {
             Ok(loaded) => {
@@ -980,9 +1016,19 @@ fn run_project_actions(
                 history.clear();
                 selection.clear();
                 camera.write(CameraRequest::FitAll);
-                state.path = Some(path);
-                state.mark_saved(&docs!());
                 let mut message = format!("{name} を開きました");
+                match origin {
+                    LoadOrigin::File(path) => state.path = Some(path),
+                    LoadOrigin::DemoLine { play } => {
+                        state.path = None;
+                        if play {
+                            motion.playback.playing = true;
+                            motion.playback.looping = true;
+                            message = format!("{name} を動かしています");
+                        }
+                    }
+                }
+                state.mark_saved(&docs!());
                 if !warnings.is_empty() {
                     message += &format!("。注意が {} 件あります", warnings.len());
                 }
@@ -993,7 +1039,7 @@ fn run_project_actions(
                 jobs.messages.push(message);
             }
             Err(e) => {
-                error!("{}: {e}", path.display());
+                error!("{name}: {e}");
                 jobs.messages
                     .push(format!("{name} を開けませんでした: {e}"));
             }
@@ -1033,7 +1079,11 @@ fn run_project_actions(
         }
         ProjectAction::OpenPath(path) => {
             jobs.loading.push(file_name(&path));
-            state.start_loading(path);
+            state.start_loading(LoadOrigin::File(path));
+        }
+        ProjectAction::OpenDemoLine { play } => {
+            jobs.loading.push(DEMO_LINE_NAME.into());
+            state.start_loading(LoadOrigin::DemoLine { play });
         }
         ProjectAction::Save | ProjectAction::SaveAs => {
             let path = match (&action, &state.path) {
@@ -1515,6 +1565,26 @@ mod tests {
         assert!(compact.contains("\"name\": \"[1,\\\" 2]\""));
         assert!(compact.contains("\"v\": [1.0, -2e-3]"));
         assert!(compact.contains("\"e\": []"));
+    }
+
+    #[test]
+    fn embedded_demo_line_opens_without_warnings() {
+        // 起動時に開くデモラインは、外のファイルを参照せずに読めて、動きを持っている
+        let loaded = load_demo_line().expect("デモラインの JSON が読める");
+        assert!(loaded.file.step_files.is_empty(), "外の STEP を参照しない");
+        let mut model = Model::default();
+        let warnings = loaded.apply_to(&mut model);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert!(!model.is_empty());
+        let chart = loaded
+            .file
+            .chart
+            .as_ref()
+            .expect("タイミングチャートがある");
+        let find = |path: &[usize]| node_at_path(&model, path);
+        let (chart, chart_warnings) = chart_from_record(chart, find);
+        assert!(chart_warnings.is_empty(), "{chart_warnings:?}");
+        assert!(!chart.steps.is_empty());
     }
 
     #[test]

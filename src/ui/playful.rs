@@ -12,10 +12,15 @@ use bevy_egui::{
     egui::{self, Align2, Color32, CornerRadius, Pos2, Stroke, Vec2, pos2, vec2},
 };
 
+use super::dock::Dock;
 use super::theme::{self, palette};
+use super::tutorial::{self, TutorialUi};
 use crate::annotation::Annotations;
+use crate::assistant::help::HelpChat;
 use crate::camera::{OrbitCamera, ViewportRect};
+use crate::flow::FlowRun;
 use crate::history::History;
+use crate::model::NodeKind;
 use crate::model::{Model, Selection};
 use crate::motion::Playback;
 use crate::preferences_file;
@@ -24,7 +29,8 @@ use crate::simulation::InterferenceCheck;
 use crate::simulation::interference::PairStatus;
 use crate::simulation::measure::MeasureTool;
 use cadsim_core::gamify::{
-    Achievement, ConfettiPiece, MISSIONS, Observation, Preferences, confetti, level_title, mission,
+    Achievement, Chapter, ConfettiPiece, MissionId, Observation, Preferences, confetti,
+    level_title, mission,
 };
 
 /// お祝いの表示時間 (秒)
@@ -49,6 +55,8 @@ pub struct PlayfulUi {
     confetti_started: Option<f64>,
     bursts: u64,
     show_list: bool,
+    /// ミッションカードに今のミッションの手順を出す
+    pub show_steps: bool,
 }
 
 impl PlayfulUi {
@@ -69,6 +77,7 @@ impl PlayfulUi {
             confetti_started: None,
             bursts: 0,
             show_list: false,
+            show_steps: true,
         }
     }
 
@@ -77,6 +86,24 @@ impl PlayfulUi {
             self.prefs.show_missions = show;
             self.dirty = true;
         }
+    }
+
+    /// ようこそ画面を閉じた
+    pub fn mark_welcomed(&mut self) {
+        if !self.prefs.welcomed {
+            self.prefs.welcomed = true;
+            self.dirty = true;
+        }
+    }
+
+    pub fn skip_mission(&mut self, id: MissionId) {
+        self.prefs.progress.skip(id);
+        self.dirty = true;
+    }
+
+    pub fn retry_mission(&mut self, id: MissionId) {
+        self.prefs.progress.retry(id);
+        self.dirty = true;
     }
 
     pub fn reset_missions(&mut self) {
@@ -89,7 +116,10 @@ impl PlayfulUi {
 
     fn celebrate(&mut self, achievement: Achievement) {
         self.bursts += 1;
-        let count = if achievement.level_up.is_some() || achievement.all_complete {
+        let count = if achievement.level_up.is_some()
+            || achievement.chapter_complete.is_some()
+            || achievement.all_complete
+        {
             CONFETTI_PIECES * 2
         } else {
             CONFETTI_PIECES
@@ -105,6 +135,7 @@ pub struct PlayfulPlugin;
 impl Plugin for PlayfulPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(PlayfulUi::load())
+            .init_resource::<TutorialUi>()
             .add_systems(Update, (track_missions, save_preferences).chain());
     }
 }
@@ -124,6 +155,7 @@ fn track_missions(
     project: Res<ProjectState>,
     viewport: Res<ViewportRect>,
     mouse: Res<ButtonInput<MouseButton>>,
+    flow: Res<FlowRun>,
 ) {
     if ui.prefs.progress.all_complete() {
         return;
@@ -148,6 +180,16 @@ fn track_missions(
         annotation_count: annotations.items.len(),
         playing: playback.playing,
         saved_to_file,
+        library_part_count: model
+            .all_nodes()
+            .into_iter()
+            .filter(|&id| {
+                model
+                    .get(id)
+                    .is_some_and(|n| matches!(n.kind, NodeKind::Standard(_)))
+            })
+            .count(),
+        flow_has_result: flow.report.is_some(),
     };
     let achievements = ui.prefs.progress.observe(&now);
     if !achievements.is_empty() {
@@ -189,6 +231,10 @@ pub fn apply_theme(
 pub fn draw_overlay(
     mut contexts: EguiContexts,
     mut ui: ResMut<PlayfulUi>,
+    mut tutorial: ResMut<TutorialUi>,
+    mut playback: ResMut<Playback>,
+    mut help: ResMut<HelpChat>,
+    mut dock: ResMut<Dock>,
     viewport: Res<ViewportRect>,
 ) -> Result {
     let Some(rect) = viewport.rect else {
@@ -198,15 +244,28 @@ pub fn draw_overlay(
     let view = egui::Rect::from_min_max(pos2(rect.min.x, rect.min.y), pos2(rect.max.x, rect.max.y));
     let now = ctx.input(|i| i.time);
 
-    if ui.prefs.show_missions {
-        mission_card(&ctx, view, now, &mut ui);
+    // ようこそ画面を出している間はカードを隠す (tutorial::draw がようこそ画面を描く)
+    if ui.prefs.show_missions && ui.prefs.welcomed && !tutorial.welcome_requested {
+        let mut card = tutorial::CardCtx {
+            tutorial: &mut tutorial,
+            playback: &mut playback,
+            help: &mut help,
+            dock: &mut dock,
+        };
+        mission_card(&ctx, view, now, &mut ui, &mut card);
     }
     draw_toast(&ctx, view, now, &mut ui);
     draw_confetti(&ctx, view, now, &mut ui);
     Ok(())
 }
 
-fn mission_card(ctx: &egui::Context, view: egui::Rect, now: f64, state: &mut PlayfulUi) {
+fn mission_card(
+    ctx: &egui::Context,
+    view: egui::Rect,
+    now: f64,
+    state: &mut PlayfulUi,
+    card: &mut tutorial::CardCtx,
+) {
     let celebrating = !state.toasts.is_empty();
     egui::Area::new("mission_card".into())
         // 3D ビューの左下、座標軸の右に置く。背景をドラッグすると動かせる
@@ -218,13 +277,19 @@ fn mission_card(ctx: &egui::Context, view: egui::Rect, now: f64, state: &mut Pla
                 .stroke(Stroke::new(1.5, palette::PURPLE.gamma_multiply(0.7)))
                 .inner_margin(egui::Margin::same(12))
                 .show(ui, |ui| {
-                    ui.set_width(CARD_WIDTH);
+                    // 手順を出すときは読みやすいよう広げる
+                    let steps = state.show_steps && state.prefs.progress.next().is_some();
+                    ui.set_width(if steps {
+                        tutorial::CARD_WIDTH_WITH_STEPS
+                    } else {
+                        CARD_WIDTH
+                    });
                     ui.horizontal(|ui| {
                         mascot(ui, 42.0, now, celebrating);
                         level_header(ui, state);
                     });
                     ui.add_space(2.0);
-                    current_mission(ui, state);
+                    current_mission(ui, state, card);
                     ui.add_space(2.0);
                     ui.horizontal(|ui| {
                         let arrow = if state.show_list { "▼" } else { "▶" };
@@ -275,36 +340,13 @@ fn level_header(ui: &mut egui::Ui, state: &PlayfulUi) {
     });
 }
 
-fn current_mission(ui: &mut egui::Ui, state: &mut PlayfulUi) {
-    let progress = &state.prefs.progress;
-    match progress.next() {
-        Some(next) => {
-            ui.horizontal(|ui| {
-                ui.label(
-                    egui::RichText::new(format!(
-                        "ミッション {}/{}",
-                        progress.done_count() + 1,
-                        MISSIONS.len()
-                    ))
-                    .small()
-                    .color(palette::TEXT_FAINT),
-                );
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label(
-                        egui::RichText::new(format!("+{} XP", next.xp))
-                            .strong()
-                            .color(palette::ORANGE),
-                    );
-                });
-            });
+fn current_mission(ui: &mut egui::Ui, state: &mut PlayfulUi, card: &mut tutorial::CardCtx) {
+    match state.prefs.progress.next() {
+        Some(next) => tutorial::mission_body(ui, next, state, card),
+        None if !state.prefs.progress.all_complete() => {
+            ui.label("残りはとばしたミッションだけです。");
             ui.label(
-                egui::RichText::new(next.title)
-                    .strong()
-                    .size(16.0)
-                    .color(Color32::WHITE),
-            );
-            ui.label(
-                egui::RichText::new(format!("💡 {}", next.hint))
+                egui::RichText::new("「▶ 一覧」の「戻す」で、もう一度挑戦できます。")
                     .small()
                     .color(palette::TEXT),
             );
@@ -322,28 +364,51 @@ fn current_mission(ui: &mut egui::Ui, state: &mut PlayfulUi) {
     }
 }
 
-fn mission_list(ui: &mut egui::Ui, state: &PlayfulUi) {
+fn mission_list(ui: &mut egui::Ui, state: &mut PlayfulUi) {
+    let mut retry = None;
     egui::Grid::new("mission_list")
         .num_columns(3)
         .spacing([6.0, 3.0])
         .show(ui, |ui| {
-            for m in MISSIONS {
-                let done = state.prefs.progress.is_done(m.id);
-                if done {
-                    ui.colored_label(palette::GREEN, "✔");
-                    ui.weak(m.title);
-                } else {
-                    ui.weak("○");
-                    ui.label(m.title).on_hover_text(m.hint);
-                }
-                ui.weak(format!("{} XP", m.xp));
+            for chapter in Chapter::ALL {
+                ui.label(
+                    egui::RichText::new(format!("第{}章 {}", chapter.number(), chapter.title()))
+                        .small()
+                        .color(palette::TEAL),
+                );
                 ui.end_row();
+                for m in chapter.missions() {
+                    let progress = &state.prefs.progress;
+                    if progress.is_done(m.id) {
+                        ui.colored_label(palette::GREEN, "✔");
+                        ui.weak(m.title);
+                        ui.weak(format!("{} XP", m.xp));
+                    } else if progress.is_skipped(m.id) {
+                        ui.weak("↷");
+                        ui.weak(m.title).on_hover_text(m.hint);
+                        if ui
+                            .small_button("戻す")
+                            .on_hover_text("次のミッションの候補に戻す")
+                            .clicked()
+                        {
+                            retry = Some(m.id);
+                        }
+                    } else {
+                        ui.weak("○");
+                        ui.label(m.title).on_hover_text(m.hint);
+                        ui.weak(format!("{} XP", m.xp));
+                    }
+                    ui.end_row();
+                }
             }
         });
+    if let Some(id) = retry {
+        state.retry_mission(id);
+    }
 }
 
 /// 案内役のマスコット (立方体のキャラクター)。喜んでいるときは跳ねて目を細める。
-fn mascot(ui: &mut egui::Ui, size: f32, now: f64, happy: bool) {
+pub(super) fn mascot(ui: &mut egui::Ui, size: f32, now: f64, happy: bool) {
     let (rect, response) = ui.allocate_exact_size(Vec2::splat(size), egui::Sense::click());
     let t = now as f32;
     let bounce = if happy {
@@ -459,9 +524,11 @@ fn draw_toast(ctx: &egui::Context, view: egui::Rect, now: f64, state: &mut Playf
                 ui.vertical_centered(|ui| {
                     let size = |base: f32| base * pop.max(0.2);
                     let headline = if achievement.all_complete {
-                        "🏆 全ミッション制覇!"
+                        "🏆 全ミッション制覇!".to_owned()
+                    } else if let Some(chapter) = achievement.chapter_complete {
+                        format!("📘 第{}章 クリア!", chapter.number())
                     } else {
-                        "🎉 ミッション達成!"
+                        "🎉 ミッション達成!".to_owned()
                     };
                     ui.label(
                         egui::RichText::new(headline)
