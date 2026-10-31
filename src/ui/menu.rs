@@ -412,11 +412,32 @@ fn line_menu(ui: &mut egui::Ui, state: &mut UiState) {
             state.line.toggle();
             ui.close();
         }
+        ui.separator();
+        if ui
+            .button("言葉でラインを組む…")
+            .on_hover_text(
+                "「コンベア2本とロボット1台で箱詰め」のような文から、設備の配置とタイミングチャートの下書きを作る",
+            )
+            .clicked()
+        {
+            state.compose.open = true;
+            ui.close();
+        }
     });
 }
 
 fn ai_menu(ui: &mut egui::Ui, state: &mut UiState) {
     ui.menu_button("AI", |ui| {
+        if ui
+            .button("言葉でラインを組む…")
+            .on_hover_text(
+                "「コンベア2本とロボット1台で箱詰め」のような文から、設備の配置とタイミングチャートの下書きを作る",
+            )
+            .clicked()
+        {
+            state.compose.open = true;
+            ui.close();
+        }
         let label = if state.sequence_gen.open {
             "チャート・ラダーの自動生成を閉じる"
         } else {
