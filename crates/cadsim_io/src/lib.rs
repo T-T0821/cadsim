@@ -7,6 +7,7 @@ pub mod claude;
 pub mod flow;
 pub mod formats;
 pub mod interchange;
+pub mod line_draft_json;
 pub mod preferences_file;
 pub mod rtde;
 pub mod step;

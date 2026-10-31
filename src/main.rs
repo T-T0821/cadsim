@@ -34,6 +34,7 @@
 //! - `stress`      負荷テスト用の数千部品のシーン
 //! - `bench`       `--bench` で FPS を測って終了する
 //! - `line`        ライン連携 (工程・AGV・作業者・チャート・安全停止を1つの時計で動かす、PLC の信号表)
+//! - `line_compose` 言葉でラインを組む (文から設備の配置とタイミングチャートの下書きを作る。中身は `cadsim_core::line_draft`)
 //! - `floor`       作業者と AGV (床の上を動くもの)、床の上の幾何計算
 //! - `floor_record` 安全機器・作業者・AGV の .cadsim での形
 //! - `safety`      安全機器 (ライトカーテン・エリアセンサ・安全柵・非常停止) と動作範囲
@@ -68,6 +69,7 @@ mod interchange;
 mod japanese_font;
 mod library;
 mod line;
+mod line_compose;
 mod math;
 mod model;
 mod modeling;
@@ -133,7 +135,12 @@ fn main() {
                 custom_part::CustomPartPlugin,
                 bench::BenchPlugin,
             ),
-            (safety::SafetyPlugin, floor::FloorPlugin, line::LinePlugin),
+            (
+                safety::SafetyPlugin,
+                floor::FloorPlugin,
+                line::LinePlugin,
+                line_compose::LineComposePlugin,
+            ),
             (
                 site::SitePlugin,
                 documents::DocumentsPlugin,

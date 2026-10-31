@@ -60,14 +60,15 @@ crates/
 │       │                 motion (チャート・姿勢・運動学), plc (シーケンス・I/O 表), flow, conveyor,
 │       │                 staffing (作業者の名簿・スキル・シフト・人数の比較),
 │       │                 safety (安全機器・検知・安全距離), floor (作業者・AGV・床の幾何),
-│       │                 line (工程と AGV の受け渡し・PLC の信号表・ワークの位置)
-│       └── usecase/      document (開く・保存・取り込み・書き出し), edit, history,
+│       │                 line (工程と AGV の受け渡し・PLC の信号表・ワークの位置),
+│       │                 line_draft (言葉で組むラインの下書き・整え方・並べ方)
+│       └── usecase/      document (開く・保存・取り込み・書き出し), edit, history, compose_line (言葉でラインを組む),
 │                         report (シミュレーション結果の CSV), llm (生成 AI のポート LlmClient), script (部品スクリプトの実行と ScriptHost ポート),
 │                         ports (SceneReader / SceneWriter / ProjectStore などのトレイト)
 └── cadsim_io/            3. アダプター (Bevy なし)
     └── src/              step, interchange (gltf / obj / stl / usd), project_file (JSON),
                           modbus, rtde (UR の関節角度の受信), video, xlsx (工程シミュレーションの結果), rhai (部品スクリプトのエンジン),
-                          claude (生成 AI の Claude API)
+                          claude (生成 AI の Claude API), line_draft_json (生成 AI とやり取りするラインの下書きの JSON)
 ```
 
 ルートの `Cargo.toml` の `default-members` に全 crate を並べているので、引数なしの `cargo test` / `cargo clippy` でワークスペース全体を確かめられます。
@@ -117,5 +118,6 @@ crates/
 | 生成 AI の呼び出し | `usecase::llm`(ポート `LlmClient`) | `cadsim_io::claude`(Claude API) | `assistant/`(`settings_file.rs`・`job.rs` は Bevy 非依存) |
 | チャート・ラダーの自動生成 | —(`TimingChart` がアプリ側なので `sequence_gen/{spec, ladder, log_events, usecase}.rs` はアプリ側。Bevy 非依存で、チャートと一緒に手順 2 で core へ) | `sequence_gen/json.rs`(下書き ⇔ JSON) | `sequence_gen/{mod, ui}.rs` |
 | ライン連携 | `line::{coupler, signals, workpieces}`、`flow::sim` の連携の口 | — | `line/`(`stepper.rs` は Bevy 非依存。AGV のシミュレーションと一緒に手順 2 で core へ) |
+| 言葉でラインを組む | `line_draft::{model, check, layout, rules}`(ドメイン)、`usecase::compose_line`(生成 AI のポート `LineDraftAi`) | `cadsim_io::line_draft_json`(AI への指示と返答の JSON) | `line_compose/`(`apply.rs` は Bevy 非依存。`TimingChart` が core に移ったら一緒に移す) |
 
 `formats::chart_record` と `modeling.rs`・`drawing/collect.rs` は Bevy に依存しない書き方にしてあり、次の手順で core / io に移します。
