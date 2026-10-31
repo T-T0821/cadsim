@@ -47,6 +47,7 @@ crates/cadsim_core/   Bevy に依存しないドメイン (cargo test -p cadsim_
 ├── history.rs       元に戻す履歴の山 (UndoStack)・モデルの変更 (ModelChange)・ドラッグ中の編集のまとめ方
 ├── gamify.rs        ゲーム風 UI の中身: ミッションの判定・経験値とレベル・紙吹雪 (docs/playful-ui.md)
 ├── math.rs          回転・行列・外接箱の計算 (f64)
+├── modeling.rs      円柱・押し出し・穴あけ・ブーリアン (truck の B-rep。docs/modeling.md)
 ├── model.rs         設計データ: アセンブリの木 (f64)。ノード・箱・取り込んだ部品・標準部品
 ├── library/         標準部品の種類とパラメータ (catalog)、本体の形状 (geometry)
 ├── remap.rs         形状の差し替え: 古い木と新しい木のノードの対応づけ
@@ -60,6 +61,7 @@ crates/cadsim_io/     Bevy に依存しないアダプター (cargo test -p cads
 ├── formats/         平面図 (DXF / PDF)・点群 (E57 など)・2D 図面と部品表の書き出し・.cadsim の現場とコンベヤの形
 ├── flow/            工程シミュレーションの .cadsim の形 (record) と Excel 書き出し (xlsx)
 ├── preferences_file.rs 見た目とミッションの設定 (preferences.json) の読み書き
+├── modeled.rs       モデリングで作った B-rep ⇔ JSON (.cadsim に埋め込む)
 └── interchange/     glTF / OBJ / STL などの読み書き (形式に依存しない中間表現 Scene を経由)
     ├── mod.rs        Scene・Format・対応形式の一覧 FORMATS
     ├── gltf.rs / obj.rs / stl.rs
@@ -101,7 +103,7 @@ src/                  アプリ本体 (Bevy + egui)
 ├── assistant/       生成 AI (Claude) の設定と、問い合わせを別スレッドで待つ口 (詳しくは docs/ai.md)
 ├── sequence_gen/    説明文からチャートの下書き、チャートからラダーと I/O 表、動作の説明 (詳しくは docs/ai.md)
 ├── annotation.rs    3D 上の寸法と注記 (置く操作・描画・パネル・保存形式)
-├── modeling.rs      円柱・押し出し・穴あけ・ブーリアン (truck の B-rep。docs/modeling.md)
+├── modeling.rs      モデリングの履歴への積み方 (計算は cadsim_core::modeling。docs/modeling.md)
 ├── drawing/         図面の材料をモデルから集める (計算は cadsim_core::drawing)
 ├── bom.rs           部品表のテスト (計算は cadsim_core::bom)
 ├── documents.rs     図面・部品表の書き出しダイアログと保存

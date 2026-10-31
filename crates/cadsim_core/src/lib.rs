@@ -16,6 +16,7 @@ pub mod library;
 pub mod line;
 pub mod math;
 pub mod model;
+pub mod modeling;
 pub mod part_mesh;
 pub mod physics;
 pub mod remap;
