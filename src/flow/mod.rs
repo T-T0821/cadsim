@@ -3,9 +3,7 @@
 //! 生成・工程・バッファ・排出をノーコードで並べ、ラインを数時間分早回しして、
 //! 設備ごとの稼働・待ち・詰まり・故障の割合、サイクルタイム、仕掛数、電力量・エア消費量を集計する。
 //!
-//! - `model`   工程モデルのデータと検証 (Bevy 非依存)
-//! - `sim`     離散事象シミュレーションと集計 (Bevy 非依存)
-//! - `palette` 状態と稼働率の色 (Bevy 非依存)
+//! - `model` / `sim` / `palette` 工程モデル・シミュレーション・色 (`cadsim_core::flow` のドメイン)
 //! - `record`  プロジェクトファイルに書く形 (serde)
 //! - `xlsx`    結果の Excel 書き出し (rust_xlsxwriter)
 //! - `ui`      「工程シミュレーション」ウィンドウ
@@ -13,12 +11,11 @@
 //! このファイルは Bevy とのつなぎ: 工程モデルを包む Resource、早送りの再生、
 //! 3D の部品に塗る色 ([`FlowColors`]、viewport.rs が使う) を受け持つ。
 
-pub mod model;
-pub mod palette;
 pub mod record;
-pub mod sim;
 mod ui;
 pub mod xlsx;
+
+pub use cadsim_core::flow::{model, palette, sim};
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -138,16 +135,9 @@ impl FlowRun {
 pub struct FlowColors(pub HashMap<NodeId, [f32; 3]>);
 
 impl FlowColors {
-    /// 部品の色。自分か、いちばん近い祖先に色があればそれを使う。
-    pub fn color_of(&self, model: &Model, node: NodeId) -> Option<[f32; 3]> {
-        if self.0.is_empty() {
-            return None;
-        }
-        model
-            .ancestors(node)
-            .iter()
-            .rev()
-            .find_map(|id| self.0.get(id).copied())
+    /// 部品の色。`path` はルートから部品までのノード。自分か、いちばん近い祖先の色を使う。
+    pub fn color_on_path(&self, path: &[NodeId]) -> Option<[f32; 3]> {
+        path.iter().rev().find_map(|id| self.0.get(id).copied())
     }
 }
 

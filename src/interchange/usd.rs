@@ -1113,9 +1113,12 @@ mod tests {
     }
 
     fn write_and_read(scene: &Scene, ext: &str) -> Scene {
+        // テストは並列に走るので、呼ぶたびに別のファイルにする
+        static COUNT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let dir = std::env::temp_dir().join(format!("cadsim_usd_test_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join(format!("scene.{ext}"));
+        let path = dir.join(format!("scene_{n}.{ext}"));
         let units = UnitOptions::default();
         export(scene, &path, &units).unwrap();
         let read = import(&path, &units).unwrap();

@@ -337,7 +337,6 @@ impl Simulation {
     }
 
     /// 最後まで回して結果を返す
-    #[cfg(test)]
     pub fn run(model: &FlowModel) -> Result<Report, Vec<String>> {
         let mut sim = Self::new(model)?;
         sim.advance(f64::INFINITY, usize::MAX);

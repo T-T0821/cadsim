@@ -4,19 +4,19 @@
 
 ## 層の分け方
 
-コードは `src/flow/` にあります。Bevy に依存しないモジュールと、Bevy・egui のつなぎに分けています([architecture.md](architecture.md) の目標構成では、前の3つが `cadsim_core::domain::flow`、`record` と `xlsx` が `cadsim_io` に移ります)。
+ドメインは `crates/cadsim_core/src/flow/`、保存形式・Excel・画面はアプリの `src/flow/` にあります。`record` と `xlsx` は Bevy に依存しないアダプターで、`cadsim_io` ができたらそちらに移します([architecture.md](architecture.md))。
 
 | ファイル | 層 | 内容 |
 | --- | --- | --- |
-| `model.rs` | ドメイン | 工程モデル(`FlowModel` / `Element` / `ElementKind`)、追加・削除・並べ替え、回せない理由の検証、サンプルライン |
-| `sim.rs` | ドメイン | 離散事象シミュレーション(`Simulation`)と集計(`Report`) |
-| `palette.rs` | ドメイン | 状態・稼働率の色(3D ビュー・グラフ・Excel で共通) |
+| `cadsim_core` の `flow/model.rs` | ドメイン | 工程モデル(`FlowModel` / `Element` / `ElementKind`)、追加・削除・並べ替え、回せない理由の検証、サンプルライン |
+| `cadsim_core` の `flow/sim.rs` | ドメイン | 離散事象シミュレーション(`Simulation`)と集計(`Report`) |
+| `cadsim_core` の `flow/palette.rs` | ドメイン | 状態・稼働率の色(3D ビュー・グラフ・Excel で共通) |
 | `record.rs` | アダプター | `.cadsim` に書く形(serde)。部品は木の中の位置で指す |
 | `xlsx.rs` | アダプター | 結果の Excel 書き出し(`rust_xlsxwriter`) |
 | `mod.rs` | UI | `FlowRes`(モデルの包み)、`FlowRun`(実行中のシミュレーションと再生)、`FlowColors`(3D の部品に塗る色)、保存ダイアログ |
 | `ui.rs` | UI | ウィンドウ(工程・結果・グラフのタブ) |
 
-3D の部品とは `Element::part`(ノード ID)だけでつながります。`viewport.rs` の `update_materials` は、選択・干渉の強調がない部品について `FlowColors::color_of`(自分か一番近い祖先の色)を部品の色の代わりに使います。
+3D の部品とは `Element::part`(ノード ID)だけでつながります。`viewport.rs` の `sync_views` は、`FlowColors::color_on_path`(自分か一番近い祖先の色)があれば部品の色の代わりに使います。選択・干渉の強調はそれより優先します。
 
 ## モデル
 

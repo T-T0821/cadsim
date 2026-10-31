@@ -107,6 +107,8 @@ pub enum StepFileRecord {
     Sample,
     /// プロジェクトファイルと同じフォルダ以下なら相対パス、それ以外は絶対パス
     File { path: String },
+    /// 負荷テスト用のシーン (開き直すと同じものを作り直す)
+    Stress { parts: usize },
 }
 
 /// アセンブリの木の1ノード
@@ -312,6 +314,7 @@ impl StepFileRecord {
     fn from_source(source: &StepSource, base_dir: Option<&Path>) -> Self {
         match source {
             StepSource::Sample => StepFileRecord::Sample,
+            &StepSource::Stress(parts) => StepFileRecord::Stress { parts },
             StepSource::File(path) => {
                 let relative = base_dir.and_then(|dir| path.strip_prefix(dir).ok());
                 let path = match relative {
@@ -327,6 +330,7 @@ impl StepFileRecord {
     fn to_source(&self, base_dir: &Path) -> StepSource {
         match self {
             StepFileRecord::Sample => StepSource::Sample,
+            &StepFileRecord::Stress { parts } => StepSource::Stress(parts),
             StepFileRecord::File { path } => StepSource::File(base_dir.join(path)),
         }
     }
