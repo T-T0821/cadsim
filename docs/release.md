@@ -16,8 +16,8 @@ Release は**人が手動で実行したときだけ**作られます。PR を m
 | OS | ファイル | 中身 |
 | --- | --- | --- |
 | Windows (x86_64) | `cadsim-v<版>-windows-x86_64.exe` | 単体の実行ファイル。これだけで起動する |
-| Windows (x86_64) | `cadsim-v<版>-windows-x86_64.zip` | 上と同じ exe(`cad_proto.exe`)と README |
-| macOS (Apple Silicon + Intel) | `cadsim-v<版>-macos-universal.zip` | `CAD Prototype.app`。arm64 と x86_64 を `lipo` で1つにまとめ、アドホック署名だけ付けている |
+| Windows (x86_64) | `cadsim-v<版>-windows-x86_64.zip` | 上と同じ exe(`cad_proto.exe`)、README、ライセンス文(`LICENSE-MIT`・`LICENSE-APACHE`・`THIRD_PARTY_LICENSES.txt`) |
+| macOS (Apple Silicon + Intel) | `cadsim-v<版>-macos-universal.zip` | `CAD Prototype.app`。arm64 と x86_64 を `lipo` で1つにまとめ、アドホック署名だけ付けている。ライセンス文は `Contents/Resources` に入れる |
 
 ## インストール不要にするための工夫
 
@@ -26,6 +26,7 @@ Release は**人が手動で実行したときだけ**作られます。PR を m
 - xz (liblzma) は同じ設定ファイルの `LZMA_API_STATIC` でソースからビルドして静的リンクしている。これがないと Mac の CI で Homebrew の `liblzma.dylib` に依存してしまい、Homebrew のない Mac で起動できなくなる。
 - ワークフローで依存ライブラリを確かめている。Windows は `dumpbin /dependents` で C ランタイムの DLL に依存していないこと、Mac は `otool -L` で `/System/Library/` と `/usr/lib/` 以外の dylib に依存していないことを見て、違えば失敗させる。
 - Mac は `.app` 1つにまとまっているので、どこに置いても動く。
+- 第三者ライセンスの一覧(`assets/licenses/THIRD_PARTY_LICENSES.txt`)も実行ファイルに埋め込み、ヘルプ → ライセンスで見せている。依存を変えたら作り直す([licenses.md](licenses.md))。
 - 見た目などの設定だけは OS の設定フォルダ(`src/preferences_file.rs`)に保存する。なくても標準の設定で起動する。
 
 Windows のリリースビルドでは、起動時に黒いコンソール窓を出さないようにしています(`src/main.rs` の `windows_subsystem`)。

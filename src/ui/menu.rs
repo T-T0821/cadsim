@@ -663,6 +663,15 @@ fn help_menu(ui: &mut egui::Ui, state: &mut UiState) {
         {
             state.playful.reset_missions();
         }
+        ui.separator();
+        if ui
+            .button("ライセンス")
+            .on_hover_text("cadsim と、使っている第三者のソフトウェアのライセンスを見る")
+            .clicked()
+        {
+            super::licenses::open(ui.ctx());
+            ui.close();
+        }
     });
 }
 

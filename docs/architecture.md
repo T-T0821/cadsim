@@ -136,6 +136,7 @@ crates/
 | 状態のエフェクト (詰まり・故障の光と煙、溶接と干渉の火花) | `effects`(きっかけと見た目・出す場所の決め方)、`effects::particles`(煙と火花の粒) | — | `effects/mod.rs`(状態を集めて光・煙・火花に写す)、表示メニュー (`ui/menu.rs`) |
 | 設備の音と警報 | `sound::{synth, settings, spatial, cues, alarm}` | `cadsim_io::sound_settings`(`sound.json`) | `sound/`(`mod.rs` が状態を集めて音を出し入れ、`source.rs` が波形を Bevy の音に、`panel.rs` が設定ウィンドウと警報の帯) |
 | 最初の5分 (ようこそ画面・章立てのチュートリアル) | `gamify`(章・ミッションの手順・使う道具 `workspace::Tool`・とばす・判定) | `cadsim_io::preferences_file`(とばしたミッション・ようこそ画面を閉じたか) | `ui/tutorial.rs`(ようこそ画面・カードの手順・矢印)、`ui/playful.rs`、起動時のデモラインは `project/mod.rs` の `ProjectAction::OpenDemoLine` |
+| ライセンス一覧 (ヘルプ → ライセンス) | — | — (一覧は `tools/licenses/generate.sh` が作る `assets/licenses/THIRD_PARTY_LICENSES.txt` を埋め込む) | `ui/licenses.rs`(ウィンドウ)、ヘルプメニュー (`ui/menu.rs`) |
 | 複数人でレビュー | `review::{Message, Hub, ReviewSession, SendThrottle, PlacementTracker}` | `cadsim_io::review`(1 行の JSON・TCP の待ち受けと接続のスレッド `ReviewLink`) | `review/`(送受信のシステム・アバターの表示・パネル)。docs/review.md |
 
 `drawing/collect.rs` と `motion::live_joints` は Bevy に依存しない書き方にしてあり、次の手順で core に移します。

@@ -89,6 +89,7 @@ jobs:
           New-Item -ItemType Directory $name | Out-Null
           Copy-Item "target/release/$env:APP_NAME.exe" $name
           Copy-Item README.md $name
+          Copy-Item LICENSE-MIT, LICENSE-APACHE, assets/licenses/THIRD_PARTY_LICENSES.txt $name
           Compress-Archive -Path $name -DestinationPath "$name.zip"
 
       - uses: actions/upload-artifact@v4
@@ -131,6 +132,9 @@ jobs:
             "target/aarch64-apple-darwin/release/$APP_NAME" \
             "target/x86_64-apple-darwin/release/$APP_NAME"
           sed "s/__VERSION__/${VERSION%-dev}/g" packaging/macos/Info.plist > "$app/Contents/Info.plist"
+          # ライセンス文 (アプリの「ヘルプ → ライセンス」でも見られる)
+          mkdir -p "$app/Contents/Resources"
+          cp LICENSE-MIT LICENSE-APACHE assets/licenses/THIRD_PARTY_LICENSES.txt "$app/Contents/Resources/"
           # .app だけで動くことを確かめる: macOS 標準以外の dylib に依存していたら失敗させる
           otool -L "$app/Contents/MacOS/$APP_NAME"
           if otool -L "$app/Contents/MacOS/$APP_NAME" | tail -n +2 | grep -vE '^[[:space:]]+(/System/Library/|/usr/lib/)' | grep -v ':$'; then
