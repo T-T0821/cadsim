@@ -3,24 +3,30 @@
 //! 流れ:
 //! 1. 工程シミュレーションで、AGV で送り出す要素 ([`Element::carrier`]) にワークができると
 //!    [`FlowEvent::CarrierNeeded`] が出る → AGV に搬送を頼む ([`LineCommand::RequestAgv`])。
-//! 2. AGV が積み込みを終えると [`AgvEvent::PickedUp`] → 工程シミュレーションからワークを取り出す
+//! 2. AGV が積み込みを終えると [`CarrierEvent::PickedUp`] → 工程シミュレーションからワークを取り出す
 //!    ([`Simulation::pick_up`])。空いた設備には上流から次のワークが入る。
-//! 3. AGV が荷降ろしを終えると [`AgvEvent::Delivered`] → 送り先の要素へ入れる
+//! 3. AGV が荷降ろしを終えると [`CarrierEvent::Delivered`] → 送り先の要素へ入れる
 //!    ([`Simulation::deliver`])。
 //!
-//! 降ろし先へ行けずに AGV が搬送をあきらめたとき ([`AgvEvent::Abandoned`]) は、
+//! 降ろし先へ行けずに AGV が搬送をあきらめたとき ([`CarrierEvent::Abandoned`]) は、
 //! ワークがなくならないように、その場で送り先へ入れる。
 //!
+//! ワーク搬送 (3D のコンベア) で送り出す要素 ([`Element::conveyor`]) も同じ流れで、
+//! AGV の代わりに投入口へ流すよう頼む ([`LineCommand::FeedConveyor`])。投入口からワークが出たら
+//! 積み込み (`PickedUp`)、排出口か排出端のコンベアから出たら荷降ろし (`Delivered`) として扱う。
+//!
 //! [`Element::carrier`]: crate::flow::model::Element::carrier
+//! [`Element::conveyor`]: crate::flow::model::Element::conveyor
 
 use std::collections::BTreeMap;
 
 use crate::flow::model::{ElementId, ElementKind, FlowModel};
 use crate::flow::sim::{FlowEvent, LoadId, Simulation};
 
-/// AGV シミュレーションから届く出来事。`tag` は [`LineCommand::RequestAgv`] で渡したもの。
+/// 運ぶもの (AGV・コンベア) から届く出来事。`tag` は [`LineCommand::RequestAgv`] か
+/// [`LineCommand::FeedConveyor`] で渡したもの。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AgvEvent {
+pub enum CarrierEvent {
     /// 積み込みが終わった
     PickedUp { tag: u64 },
     /// 荷降ろしが終わった
@@ -34,6 +40,8 @@ pub enum AgvEvent {
 pub enum LineCommand {
     /// AGV に `from` で積んで `to` で降ろす搬送を頼む
     RequestAgv { from: u32, to: u32, tag: u64 },
+    /// ワーク搬送の投入口 `source` からワークを流す
+    FeedConveyor { source: u32, tag: u64 },
     /// タイミングチャートを頭から再生する
     RestartChart,
 }
@@ -47,12 +55,23 @@ pub struct Transit {
     pub start: f64,
 }
 
+/// 何で運ぶか
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Via {
+    Agv,
+    Conveyor,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Job {
-    /// AGV を頼んだが、まだ積んでいない
-    Requested { element: ElementId },
+    /// 頼んだが、まだ積んでいない (コンベアなら投入口から出ていない)
+    Requested { element: ElementId, via: Via },
     /// 積んで運んでいる
-    Loaded { element: ElementId, load: LoadId },
+    Loaded {
+        element: ElementId,
+        load: LoadId,
+        via: Via,
+    },
 }
 
 /// ライン連携の実行中の状態
@@ -63,6 +82,8 @@ pub struct LineCoupler {
     transits: Vec<Transit>,
     /// AGV が運んだワークの数
     carried: u32,
+    /// コンベアで運んだワークの数
+    conveyed: u32,
 }
 
 impl LineCoupler {
@@ -70,12 +91,15 @@ impl LineCoupler {
         Self::default()
     }
 
-    /// AGV で送り出す要素の一覧 ([`Simulation::link`] に渡す)
+    /// AGV かコンベアで送り出す要素の一覧 ([`Simulation::link`] に渡す)
     pub fn carried_elements(model: &FlowModel) -> Vec<ElementId> {
         model
             .elements
             .iter()
-            .filter(|e| e.carrier.is_some() && !matches!(e.kind, ElementKind::Sink))
+            .filter(|e| {
+                (e.carrier.is_some() || e.conveyor.is_some())
+                    && !matches!(e.kind, ElementKind::Sink)
+            })
             .map(|e| e.id)
             .collect()
     }
@@ -90,17 +114,27 @@ impl LineCoupler {
         for event in events {
             match event {
                 FlowEvent::CarrierNeeded { element, .. } => {
-                    let Some(call) = model.get(element).and_then(|e| e.carrier) else {
+                    let Some(e) = model.get(element) else {
                         continue;
                     };
                     let tag = self.next_tag;
+                    let (via, command) = match (e.carrier, e.conveyor) {
+                        (Some(call), _) => (
+                            Via::Agv,
+                            LineCommand::RequestAgv {
+                                from: call.from,
+                                to: call.to,
+                                tag,
+                            },
+                        ),
+                        (None, Some(source)) => {
+                            (Via::Conveyor, LineCommand::FeedConveyor { source, tag })
+                        }
+                        (None, None) => continue,
+                    };
                     self.next_tag += 1;
-                    self.jobs.insert(tag, Job::Requested { element });
-                    out.push(LineCommand::RequestAgv {
-                        from: call.from,
-                        to: call.to,
-                        tag,
-                    });
+                    self.jobs.insert(tag, Job::Requested { element, via });
+                    out.push(command);
                 }
                 FlowEvent::Moved {
                     time,
@@ -129,15 +163,15 @@ impl LineCoupler {
 
     /// AGV の出来事を工程シミュレーションに伝える。その結果の工程シミュレーションの出来事は
     /// [`Simulation::take_events`] で取り出して [`LineCoupler::on_flow_events`] に渡す。
-    pub fn on_agv_event(&mut self, sim: &mut Simulation, event: AgvEvent) {
+    pub fn on_carrier_event(&mut self, sim: &mut Simulation, event: CarrierEvent) {
         match event {
-            AgvEvent::PickedUp { tag } => {
-                let Some(Job::Requested { element }) = self.jobs.get(&tag).copied() else {
+            CarrierEvent::PickedUp { tag } => {
+                let Some(Job::Requested { element, via }) = self.jobs.get(&tag).copied() else {
                     return;
                 };
                 match sim.pick_up(element) {
                     Some(load) => {
-                        self.jobs.insert(tag, Job::Loaded { element, load });
+                        self.jobs.insert(tag, Job::Loaded { element, load, via });
                     }
                     // 積むワークがない (起こらないはず): 空で走らせる
                     None => {
@@ -145,15 +179,18 @@ impl LineCoupler {
                     }
                 }
             }
-            AgvEvent::Delivered { tag } | AgvEvent::Abandoned { tag } => {
+            CarrierEvent::Delivered { tag } | CarrierEvent::Abandoned { tag } => {
                 match self.jobs.remove(&tag) {
-                    Some(Job::Loaded { load, .. }) => {
+                    Some(Job::Loaded { load, via, .. }) => {
                         if sim.deliver(load) {
-                            self.carried += 1;
+                            match via {
+                                Via::Agv => self.carried += 1,
+                                Via::Conveyor => self.conveyed += 1,
+                            }
                         }
                     }
                     // 積む前にあきらめた: ワークはまだ設備にあるので、すぐ積んで降ろす
-                    Some(Job::Requested { element }) => {
+                    Some(Job::Requested { element, .. }) => {
                         if let Some(load) = sim.pick_up(element) {
                             sim.deliver(load);
                         }
@@ -171,15 +208,47 @@ impl LineCoupler {
 
     /// AGV を頼んでまだ積んでいない数
     pub fn waiting_for_agv(&self) -> usize {
-        self.jobs
-            .values()
-            .filter(|j| matches!(j, Job::Requested { .. }))
-            .count()
+        self.count(|j| matches!(j, Job::Requested { via: Via::Agv, .. }))
+    }
+
+    /// コンベアの投入口に頼んで、まだ流れ始めていない数 (投入口がふさがっている)
+    pub fn waiting_for_conveyor(&self) -> usize {
+        self.count(|j| {
+            matches!(
+                j,
+                Job::Requested {
+                    via: Via::Conveyor,
+                    ..
+                }
+            )
+        })
+    }
+
+    /// いまコンベアの上を流れている、工程から送り出したワークの数
+    pub fn on_conveyor(&self) -> usize {
+        self.count(|j| {
+            matches!(
+                j,
+                Job::Loaded {
+                    via: Via::Conveyor,
+                    ..
+                }
+            )
+        })
+    }
+
+    fn count(&self, f: impl Fn(&Job) -> bool) -> usize {
+        self.jobs.values().filter(|j| f(j)).count()
     }
 
     /// AGV が運び終えたワークの数
     pub fn carried(&self) -> u32 {
         self.carried
+    }
+
+    /// コンベアで運び終えたワークの数
+    pub fn conveyed(&self) -> u32 {
+        self.conveyed
     }
 
     /// 時刻 `now` に渡っている途中のワークと、その進み (0〜1)。
@@ -251,7 +320,7 @@ mod tests {
         assert_eq!(sim.content_of(p2), Some(0));
 
         // 積み込み: 工程1 が空き、次のワークを受け取る
-        coupler.on_agv_event(&mut sim, AgvEvent::PickedUp { tag: 0 });
+        coupler.on_carrier_event(&mut sim, CarrierEvent::PickedUp { tag: 0 });
         assert!(coupler.is_loaded(0));
         assert_eq!(sim.in_transit(), 1);
         assert_eq!(sim.content_of(p1), Some(1));
@@ -260,7 +329,7 @@ mod tests {
         // 荷降ろし: 工程2 に入り、チャートを頭から再生する
         sim.advance(40.0, usize::MAX);
         coupler.on_flow_events(&m, sim.take_events());
-        coupler.on_agv_event(&mut sim, AgvEvent::Delivered { tag: 0 });
+        coupler.on_carrier_event(&mut sim, CarrierEvent::Delivered { tag: 0 });
         assert_eq!(sim.in_transit(), 0);
         assert_eq!(sim.content_of(p2), Some(1));
         assert_eq!(coupler.carried(), 1);
@@ -288,7 +357,7 @@ mod tests {
         let mut coupler = LineCoupler::new();
         sim.advance(6.0, usize::MAX);
         coupler.on_flow_events(&m, sim.take_events());
-        coupler.on_agv_event(&mut sim, AgvEvent::Abandoned { tag: 0 });
+        coupler.on_carrier_event(&mut sim, CarrierEvent::Abandoned { tag: 0 });
         assert_eq!(sim.content_of(p2), Some(1));
     }
 

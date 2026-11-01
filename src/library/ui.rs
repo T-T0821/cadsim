@@ -15,6 +15,7 @@ use super::{Jog, add_standard, dir_to_world, io_capacity, io_table, local_to_wor
 use super::{rebuild_bodies, standard_nodes};
 use crate::custom_part::{CustomDrag, CustomLibrary};
 use crate::file_io::ImportJobs;
+use crate::floor::figures::FloorFigure;
 use crate::history::History;
 use crate::model::{Model, NodeId, NodeKind, Selection};
 use crate::ui::UiState;
@@ -148,6 +149,7 @@ pub fn drop_on_viewport(
     camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
     viewport: Res<ViewportRect>,
     mut ray_cast: MeshRayCast,
+    figures: Query<(), With<FloorFigure>>,
     mut gizmos: Gizmos,
     mut model: ResMut<Model>,
     mut selection: ResMut<Selection>,
@@ -175,8 +177,13 @@ pub fn drop_on_viewport(
     let Ok(ray) = camera.viewport_to_world(camera_transform, cursor) else {
         return Ok(());
     };
+    // 作業者・AGV の体の上には置かない
+    let not_figure = |e: Entity| !figures.contains(e);
     let on_part = ray_cast
-        .cast_ray(ray, &MeshRayCastSettings::default())
+        .cast_ray(
+            ray,
+            &MeshRayCastSettings::default().with_filter(&not_figure),
+        )
         .first()
         .map(|(_, hit)| hit.point);
     let on_floor = || {

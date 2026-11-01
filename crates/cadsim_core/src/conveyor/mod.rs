@@ -16,6 +16,6 @@ pub use config::{
     BeltAxis, Conveyor, ConveyorConfig, ConveyorEnd, Gripper, Sink, Source, SourceOutput, WorkKind,
 };
 pub use sim::{
-    Bounds, Carrier, ConveyorInputs, ConveyorSim, Counts, Exit, GripperState, MachineMotion, Place,
-    Pose, TIME_STEP, Work,
+    Bounds, Carrier, ConveyorEvent, ConveyorInputs, ConveyorSim, Counts, Exit, GripperState,
+    MachineMotion, Place, Pose, TIME_STEP, Work,
 };

@@ -39,6 +39,7 @@
 
 ## センサーなどから使う
 
+- ライン連携で工程の送り出しに使う投入口は、間隔ではなく工程から頼まれたときだけワークを出し、そのワークに荷札 `Work::tag` を付ける。しくみは [line.md](line.md) の「工程とコンベアの受け渡し」。
 - 毎フレームのワークは `conveyor::WorkState::works()`。ワークの位置を使うシステムは `.after(ConveyorSet::Works)` で登録する。`Work::aabb()` でワールドの外接箱が取れる。
 - 時刻表を作りながら任意の時刻のワークを知りたいときは、`ChartMotion { repeat: false, .. }` を渡した `ConveyorInputs` で `ConveyorSim::advance_to` を時刻順に呼ぶ。
 
