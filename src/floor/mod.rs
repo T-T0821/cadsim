@@ -6,13 +6,15 @@
 //! | `cadsim_core::floor::figure` | 作業者と AGV の 3D の形・歩く動き・向き |
 //! | `figures.rs` | 作業者と AGV の 3D モデルの表示 (形の計算結果をメッシュに写す) |
 //! | `view.rs` | 歩行経路・AGV の通路の線と、床をクリックして点を置く操作 |
+//! | `heatmap_view.rs` | 人と AGV の動線のヒートマップ (床に敷く色と PNG の書き出し) |
 //! | `panel.rs` | 「作業者・AGV」パネル |
 //!
 //! 作業者と AGV はタイミングチャートとは別の時計 ([`FloorClock`]) で動く。
 //! どちらも安全機器の検知の対象 (`SafetyIntruders`) に入り、AGV は安全停止中は止まる。
 
-pub use cadsim_core::floor::{agv_sim, figure, geom, operator_plan};
+pub use cadsim_core::floor::{agv_sim, figure, geom, heatmap, operator_plan};
 pub(crate) mod figures;
+mod heatmap_view;
 mod panel;
 pub(crate) mod sample;
 mod view;
@@ -48,10 +50,19 @@ impl Plugin for FloorPlugin {
             .init_resource::<AgvLayoutRes>()
             .init_resource::<FloorState>()
             .init_resource::<figures::FigureAssets>()
+            .init_resource::<heatmap_view::HeatmapRes>()
+            .add_systems(Startup, heatmap_view::setup)
             .add_systems(
                 Update,
                 (
-                    (update_plans, advance_clock).chain(),
+                    (
+                        update_plans,
+                        advance_clock,
+                        heatmap_view::record,
+                        heatmap_view::sync_overlay,
+                    )
+                        .chain(),
+                    heatmap_view::export_if_requested,
                     view::floor_click.run_if(pointer_in_3d_view),
                     add_intruders.in_set(SafetySet::Intruders),
                     view::draw.after(SafetySet::Detect),
@@ -323,6 +334,7 @@ pub struct FloorDoc<'w> {
     agv: ResMut<'w, AgvLayoutRes>,
     state: ResMut<'w, FloorState>,
     clock: ResMut<'w, FloorClock>,
+    heatmap: ResMut<'w, heatmap_view::HeatmapRes>,
 }
 
 impl FloorDoc<'_> {
@@ -347,5 +359,6 @@ impl FloorDoc<'_> {
         self.agv.params = layout.params;
         *self.state = FloorState::default();
         *self.clock = FloorClock::default();
+        self.heatmap.clear();
     }
 }

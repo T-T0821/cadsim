@@ -59,7 +59,7 @@ crates/
 │       ├── domain/       model, math, camera_path (紹介動画のカメラの通り道), melsec (三菱 PLC のデバイス), selection, remap (形状の差し替えの対応づけ), simulation (幾何・干渉・計測),
 │       │                 motion (チャート・姿勢・運動学・URDF の機種の関節への直し方), plc (シーケンス・I/O 表), flow, conveyor,
 │       │                 staffing (作業者の名簿・スキル・シフト・人数の比較),
-│       │                 safety (安全機器・検知・安全距離), floor (作業者・AGV・床の幾何・作業者と AGV の 3D の形),
+│       │                 safety (安全機器・検知・安全距離), floor (作業者・AGV・床の幾何・作業者と AGV の 3D の形・動線のヒートマップ),
 │       │                 line (工程と AGV・コンベアの受け渡しと時間の進め方・PLC の信号表・ワークの位置),
 │       │                 line_draft (言葉で組むラインの下書き・整え方・並べ方),
 │       │                 effects (状態のエフェクトのきっかけ・見た目・煙と火花の粒),
@@ -70,7 +70,7 @@ crates/
 │                         report (シミュレーション結果の CSV), llm (生成 AI のポート LlmClient), help (使い方を AI に聞く), script (部品スクリプトの実行と ScriptHost ポート),
 │                         ports (SceneReader / SceneWriter / ProjectStore などのトレイト)
 └── cadsim_io/            3. アダプター (Bevy なし)
-    └── src/              step, interchange (gltf / obj / stl / usd), project_file (JSON),
+    └── src/              step, interchange (gltf / obj / stl / usd), project_file (JSON), formats (平面図・図面・帳票・動線のヒートマップの PNG など),
                           modbus, slmp (三菱 PLC との SLMP 通信・テスト用の PLC), rtde (UR の関節角度の受信), urdf (ロボット機種の URDF・COLLADA), video, xlsx (工程シミュレーションの結果), rhai (部品スクリプトのエンジン),
                           claude (生成 AI の Claude API), line_draft_json (生成 AI とやり取りするラインの下書きの JSON),
                           ui_check (画面の自動確認の PNG・結果の JSON・報告書の HTML)
