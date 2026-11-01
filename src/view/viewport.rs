@@ -357,7 +357,7 @@ fn rebuild_dirty_parts(
                 // 干渉チェックの対象。姿勢と表示/非表示は sync_views がモデルから写す。
                 SimBody {
                     id,
-                    group: model.pick_target(id),
+                    group: model.interference_group(id),
                     mesh: assets.sim,
                     pose: Pose::from_matrix(model.world_matrix(id)),
                     shown: true,
@@ -663,9 +663,11 @@ fn sync_views(
         }
         // 変わったときだけ書く (書くと干渉チェックが走る)。再生中は動いた位置で判定される。
         let pose = Pose::from_matrix(state.world);
-        if body.pose != pose || body.shown != state.shown {
+        let group = model.interference_group(view.node);
+        if body.pose != pose || body.shown != state.shown || body.group != group {
             body.pose = pose;
             body.shown = state.shown;
+            body.group = group;
         }
         let highlighted = matches!(state.highlight, Highlight::Selected | Highlight::Hovered);
         if view.shown != state.shown || view.highlighted != highlighted {

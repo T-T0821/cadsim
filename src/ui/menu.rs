@@ -77,6 +77,17 @@ fn file_menu(ui: &mut egui::Ui, state: &mut UiState) {
                 ui.close();
             }
             if ui
+                .button("本物の装置 (UR5e + Robotiq 2F-85)")
+                .on_hover_text(
+                    "メーカー公開の CAD (協働ロボット UR5e と電動グリッパ 2F-85) に関節と動きを付けた\n\
+                     ピック & プレースのセルを開いて再生する",
+                )
+                .clicked()
+            {
+                state.project.request(ProjectAction::OpenRealRobot);
+                ui.close();
+            }
+            if ui
                 .button("組立品 (万力)")
                 .on_hover_text("7 部品の小さなアセンブリを取り込む")
                 .clicked()

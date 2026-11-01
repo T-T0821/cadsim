@@ -1,0 +1,21 @@
+# 本物の装置のサンプル: メーカー公開の CAD (glTF) を読み込んで、関節で動かす
+wait_loaded
+click "空のプロジェクトから"
+wait_loaded
+wait 30
+click "★ Lv."                  # ミッションカードを隠す
+click "ファイル"
+hover "サンプルを開く"
+click "本物の装置 (UR5e + Robotiq 2F-85)"
+wait_loaded
+expect "UR5e (Universal Robots)"
+expect "サイクル 8.83 s"
+click "⏸ 一時停止"
+click "⏮ 先頭へ"
+wait 30
+screenshot 01_opened
+click "▶ 再生"
+wait 300
+click "⏸ 一時停止"
+wait 30
+screenshot 02_moving

@@ -63,6 +63,7 @@
 | `visible` / `color` | 表示/非表示と、ユーザーが付けた色(sRGB 0〜1、子孫にも効く)。省略すると表示・色なし |
 | `kind` | `Assembly`(まとめるだけ)、`Box`(寸法・位置・回転を箱自身が持つ)、`Imported`(`step_files` の番号と製品名)、`Standard`(標準部品。`part` が種類、`params` が寸法パラメータ mm。本体は書かず、開くときにパラメータから作り直す) |
 | `physics`(ノード) | 部品の物理の設定。`mode`(`Fixed` / `Mechanism` / `Dynamic` / `Ignored`)、`shape`(`Auto` / `Box` / `ConvexHull` / `ConvexDecomposition` / `Mesh`)、`friction`、`restitution`、`density`(g/cm³)、`belt`(`axis`・`reversed`・`speed`)。既定(機構で動く)なら省く |
+| `skip_inner_interference`(ノード) | `true` なら、このノードの中の部品どうしの干渉を調べない(購入品の CAD など)。調べるなら省く |
 | `script`(ノード) | 部品スクリプト(Rhai のソース)。付けていなければ省く |
 | `custom_part`(ノード) | 自作部品を置いた一番上のノードに付くしるし。`part`(ライブラリでの部品名)、`prefix`(この部品のアクチュエータ・センサーの名前の頭。例 `"プッシャー 1/"`)、`params`(公開パラメータ。`label`・`target`(`{"type": "Stroke", "actuator": id}` / `Duration` / `LimitMin` / `LimitMax` / `{"type": "SensorRange", "sensor": id}`)・`value`)。自作部品のファイル(`part.cadpart`)については docs/custom-parts.md |
 | `cables` | ケーブル・ホース。`name`、`hose`、`start` / `end`(`node` は寸法と同じ番号の道筋、省くとワールド。`local` は部品の座標系かワールドの位置)、`length`、`diameter`、`min_bend_radius`。端の部品が見つからないものは読み飛ばす |

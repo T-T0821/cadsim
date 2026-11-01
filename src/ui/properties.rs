@@ -136,6 +136,7 @@ fn general_section(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
     let mut name = node.name.clone();
     let mut visible = node.visible;
     let mut color = node.color;
+    let mut skip_inner = node.skip_inner_interference;
     ui.add(egui::TextEdit::singleline(&mut name).desired_width(f32::INFINITY));
     ui.add_space(4.0);
     egui::Grid::new("general")
@@ -158,6 +159,17 @@ fn general_section(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
             ui.checkbox(&mut visible, "表示する");
             ui.end_row();
 
+            // 標準部品の本体どうしは、もともと調べない
+            if !node.children.is_empty() && !matches!(node.kind, NodeKind::Standard(_)) {
+                ui.weak("干渉");
+                ui.checkbox(&mut skip_inner, "中の部品どうしは調べない")
+                    .on_hover_text(
+                        "メーカーの CAD を取り込んだ購入品のように、組み付いた状態で形状が重なっている\n\
+                         アセンブリに付けます。中の部品とほかの部品との干渉は調べます。",
+                    );
+                ui.end_row();
+            }
+
             ui.weak("色");
             ui.horizontal(|ui| {
                 let mut rgb = color.unwrap_or(match &node.kind {
@@ -175,9 +187,10 @@ fn general_section(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
             });
             ui.end_row();
         });
-    let named_or_colored = name != node.name || color != node.color;
+    let named_or_colored =
+        name != node.name || color != node.color || skip_inner != node.skip_inner_interference;
     let visibility_changed = visible != node.visible;
-    // 名前と色は履歴に載せる (変更前のモデルを覚えさせてから書く)
+    // 名前・色・干渉の設定は履歴に載せる (変更前のモデルを覚えさせてから書く)
     if named_or_colored {
         state.history.begin_edit(&state.model, id);
     }
@@ -187,6 +200,7 @@ fn general_section(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
         node.name = name;
         node.visible = visible;
         node.color = color;
+        node.skip_inner_interference = skip_inner;
     }
 }
 

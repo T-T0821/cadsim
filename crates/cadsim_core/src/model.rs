@@ -44,6 +44,9 @@ pub struct Node {
     pub script: Option<String>,
     /// 自作部品ライブラリから置いた部品の一番上なら、その部品名と公開パラメータ
     pub custom_part: Option<CustomInstance>,
+    /// 中の部品どうしの干渉を調べない (メーカーの CAD を取り込んだ購入品など、
+    /// 組み付いた状態で形状が重なっているもの)。ほかの部品との干渉は調べる。
+    pub skip_inner_interference: bool,
 }
 
 #[derive(Clone)]
@@ -278,6 +281,7 @@ impl Model {
                 physics: PartPhysics::default(),
                 script: None,
                 custom_part: None,
+                skip_inner_interference: false,
             },
         );
         match parent.and_then(|p| self.nodes.get_mut(&p)) {
@@ -616,6 +620,16 @@ impl Model {
         }
     }
 
+    /// 干渉チェックでのまとまり。同じ値の部品どうしは調べない。
+    /// 「中の部品どうしの干渉を調べない」にした祖先があれば、いちばん上のその祖先。
+    /// なければ [`Self::pick_target`] (標準部品の本体は部品全体でまとめる)。
+    pub fn interference_group(&self, id: NodeId) -> NodeId {
+        self.ancestors(id)
+            .into_iter()
+            .find(|a| self.nodes.get(a).is_some_and(|n| n.skip_inner_interference))
+            .unwrap_or_else(|| self.pick_target(id))
+    }
+
     /// すべてのノードの id (ツリーの表示順)
     pub fn all_nodes(&self) -> Vec<NodeId> {
         self.roots.iter().flat_map(|&r| self.subtree(r)).collect()
@@ -810,5 +824,52 @@ impl Eq for ModeledSource {}
 impl std::hash::Hash for ModeledSource {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.id.hash(state);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn assembly(model: &mut Model, parent: Option<NodeId>, name: &str) -> NodeId {
+        model.add_node(
+            parent,
+            name.into(),
+            DMat4::IDENTITY,
+            NodeKind::Assembly { product: None },
+        )
+    }
+
+    fn part(model: &mut Model, parent: NodeId) -> NodeId {
+        let part = BoxPart {
+            size: [1.0; 3],
+            position: [0.0; 3],
+            rotation_deg: [0.0; 3],
+        };
+        model.add_node(
+            Some(parent),
+            "箱".into(),
+            DMat4::IDENTITY,
+            NodeKind::Box(part),
+        )
+    }
+
+    #[test]
+    fn inner_interference_is_grouped_by_the_topmost_flagged_assembly() {
+        let mut model = Model::default();
+        let robot = assembly(&mut model, None, "ロボット");
+        let link = assembly(&mut model, Some(robot), "リンク");
+        let a = part(&mut model, link);
+        let b = part(&mut model, robot);
+        // 印がなければ部品ごと
+        assert_eq!(model.interference_group(a), a);
+        assert_eq!(model.interference_group(b), b);
+        // 内側と外側の両方に印があれば、いちばん上でまとめる
+        model.get_mut(link).unwrap().skip_inner_interference = true;
+        assert_eq!(model.interference_group(a), link);
+        assert_eq!(model.interference_group(b), b);
+        model.get_mut(robot).unwrap().skip_inner_interference = true;
+        assert_eq!(model.interference_group(a), robot);
+        assert_eq!(model.interference_group(b), robot);
     }
 }

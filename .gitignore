@@ -1,3 +1,4 @@
 /target
 /docs/book
 /recordings
+__pycache__/

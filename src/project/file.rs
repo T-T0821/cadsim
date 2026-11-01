@@ -144,12 +144,19 @@ pub struct NodeRecord {
     /// 自作部品ライブラリから置いた部品なら、その部品名と公開パラメータ
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_part: Option<CustomInstanceRecord>,
+    /// 中の部品どうしの干渉を調べない (購入品の CAD など)。既定 (調べる) なら省く。
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub skip_inner_interference: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub children: Vec<NodeRecord>,
 }
 
 fn visible_by_default() -> bool {
     true
+}
+
+fn is_false(value: &bool) -> bool {
+    !value
 }
 
 /// ノードの種類。JSON では `"type"` で見分ける。
@@ -388,6 +395,7 @@ fn node_record(model: &Model, id: NodeId, sources: &mut Vec<StepSource>) -> Opti
             .custom_part
             .as_ref()
             .map(CustomInstanceRecord::from_instance),
+        skip_inner_interference: node.skip_inner_interference,
         children: node
             .children
             .iter()
