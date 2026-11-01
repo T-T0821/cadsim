@@ -9,6 +9,7 @@ pub mod bvh;
 pub mod conveyor;
 pub mod custom_part;
 pub mod drawing;
+pub mod factory_hall;
 pub mod floor;
 pub mod flow;
 pub mod gamify;

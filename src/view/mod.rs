@@ -3,6 +3,7 @@
 //! 判断や計算は `cadsim_core` に置き、ここでは入力を集めて結果を画面に写すだけにする。
 
 pub mod camera;
+pub mod factory_hall;
 pub mod gizmo;
 pub mod recording;
 pub mod viewport;

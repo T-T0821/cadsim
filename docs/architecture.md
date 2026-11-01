@@ -113,6 +113,7 @@ crates/
 | 部品表 | `bom` | `formats::bom_out` | `documents.rs` |
 | モデリング | `modeling`(B-rep の詰め方のポート `SolidStore`) | `modeled`(B-rep ⇔ JSON) | `ui/modeling.rs` |
 | 物理演算 | `physics::{settings, cable}`(ドメイン)、`physics::world`(ユースケース。物理エンジンのポート `PhysicsEngine`) | `physics::{rapier, records}`(Rapier と .cadsim の形) | `physics/{mod, panel, sample}` |
+| 背景の工場の建屋 | `factory_hall`(床・通路の線・壁・柱・グリッドの配置、コンクリートの模様) | — | `view/factory_hall.rs`(メッシュにして置く・手前の壁を隠す) |
 | 動画書き出し | `video`(撮る時刻・切り抜き・書き込み先のポート `VideoSink`) | `video::{encode, mp4}`(MP4 / GIF / PNG) | `view/recording.rs`(画面のキャプチャ・設定ウィンドウ) |
 | タイミングチャート・アニメーションの保存 | `motion::chart` | `formats::chart_record` | `project/` |
 | 文書の変更を元に戻す履歴にまとめる | `usecase::edit_tracker`(前に確定した状態との比較) | — | `history.rs` の `TrackedDoc`(各プラグインで登録) |

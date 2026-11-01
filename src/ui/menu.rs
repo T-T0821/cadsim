@@ -1,6 +1,7 @@
 //! 上部のメニューバーとツールバー
 
 use bevy_egui::egui;
+use cadsim_core::factory_hall::HallSize;
 
 use super::UiState;
 use super::dock;
@@ -435,7 +436,9 @@ fn view_menu(ui: &mut egui::Ui, state: &mut UiState) {
         projection_buttons(ui, state);
         ui.separator();
         ui.checkbox(&mut state.settings.show_edges, "稜線を表示");
-        ui.checkbox(&mut state.settings.show_grid, "グリッドを表示");
+        ui.checkbox(&mut state.settings.show_grid, "グリッドを表示")
+            .on_hover_text("工場の床を出しているときは 1 マス 1 m、太い線は 5 m ごと");
+        ui.menu_button("工場の床と壁", |ui| factory_hall_menu(ui, state));
         ui.checkbox(&mut state.settings.show_bounds, "選択の外接箱を表示");
         ui.checkbox(
             &mut state.settings.ghost_unselected,
@@ -459,6 +462,22 @@ fn view_menu(ui: &mut egui::Ui, state: &mut UiState) {
             .clicked()
         {
             state.dock.close_all();
+        }
+    });
+}
+
+/// 背景の工場の建屋: 出すかどうか・壁と柱・広さ
+fn factory_hall_menu(ui: &mut egui::Ui, state: &mut UiState) {
+    let hall = &mut state.settings.hall;
+    ui.checkbox(&mut hall.show, "工場の床を表示")
+        .on_hover_text("コンクリートの床・通路の線・メートルのグリッドを出す");
+    ui.add_enabled_ui(hall.show, |ui| {
+        ui.checkbox(&mut hall.walls, "壁・柱・高窓を表示")
+            .on_hover_text("建屋の外から見ているときは、手前の壁と柱を自動で隠す");
+        ui.separator();
+        ui.label("広さ");
+        for size in HallSize::PRESETS {
+            ui.radio_value(&mut hall.size, size, size.label());
         }
     });
 }
@@ -713,6 +732,8 @@ fn toolbar(ui: &mut egui::Ui, state: &mut UiState) {
                 .on_hover_text("部品の稜線を表示する");
             ui.toggle_value(&mut state.settings.ghost_unselected, "半透明")
                 .on_hover_text("選択以外を半透明にする");
+            ui.toggle_value(&mut state.settings.hall.show, "工場の床")
+                .on_hover_text("背景に工場の床・通路・壁を出す (広さは 表示 → 工場の床と壁)");
         });
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
