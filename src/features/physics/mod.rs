@@ -27,7 +27,6 @@ use bevy::prelude::*;
 use bevy_egui::EguiPrimaryContextPass;
 
 use plantwright_core::physics::cable::{Cable, CableAnchor, CableKind, CableReport};
-use plantwright_core::physics::record::{CableRecord, PartPhysicsRecord};
 use plantwright_core::physics::settings::BodyMode;
 
 use engine::{RapierBackendPlugin, RapierEngine};
