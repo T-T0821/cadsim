@@ -71,6 +71,11 @@ impl Plc {
         })
     }
 
+    /// 内蔵の模擬 PLC で運転している (チュートリアルの達成に使う)
+    pub fn simulated_running(&self) -> bool {
+        self.session.mode == PlcMode::Simulated && self.session.sequencer.running
+    }
+
     /// 開いた (または新規の) プロジェクトの設定に置き換える。PLC 連携は止める。
     pub fn restore(&mut self, record: Option<&PlcRecord>) {
         let settings = adapter::record::from_record(record);

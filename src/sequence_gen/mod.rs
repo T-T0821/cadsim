@@ -71,9 +71,16 @@ pub struct SequenceGen {
     explaining: Option<LlmJob<String>>,
     explanation: String,
     notice: Option<String>,
+    /// ラダー・I/O 表を書き出した (コピーした) 回数 (チュートリアルの達成に使う)
+    exports: u32,
 }
 
 impl SequenceGen {
+    /// ラダー・I/O 表を書き出した (コピーした) 回数
+    pub fn export_count(&self) -> u32 {
+        self.exports
+    }
+
     /// 終わった問い合わせの結果を受け取る
     fn poll_jobs(&mut self) {
         if let Some(result) = self.generating.as_ref().and_then(LlmJob::poll) {

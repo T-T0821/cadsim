@@ -113,11 +113,18 @@ pub struct Recorder {
     state: State,
     /// 最後の書き出しの結果 (成功ならファイルの場所)
     result: Option<Result<PathBuf, String>>,
+    /// 書き出し終えた回数 (チュートリアルの達成に使う)
+    finished: u32,
 }
 
 impl Recorder {
     pub fn is_capturing(&self) -> bool {
         matches!(self.state, State::Capturing(_))
+    }
+
+    /// 動画を書き出し終えた回数
+    pub fn finished_count(&self) -> u32 {
+        self.finished
     }
 
     /// 撮影かエンコードの途中
@@ -269,7 +276,10 @@ fn drive_recording(
                     remove_output(&path);
                     Err("中止しました".into())
                 }
-                Ok(path) => Ok(path),
+                Ok(path) => {
+                    recorder.finished += 1;
+                    Ok(path)
+                }
                 Err(err) => Err(err.to_string()),
             });
         }

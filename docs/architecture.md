@@ -136,7 +136,7 @@ crates/
 | 言葉でラインを組む | `line_draft::{model, check, layout, rules}`(ドメイン)、`usecase::compose_line`(生成 AI のポート `LineDraftAi`) | `cadsim_io::line_draft_json`(AI への指示と返答の JSON) | `line_compose/`(`apply.rs` は Bevy 非依存。`TimingChart` が core に移ったら一緒に移す) |
 | 状態のエフェクト (詰まり・故障の光と煙、溶接と干渉の火花) | `effects`(きっかけと見た目・出す場所の決め方)、`effects::particles`(煙と火花の粒) | — | `effects/mod.rs`(状態を集めて光・煙・火花に写す)、表示メニュー (`ui/menu.rs`) |
 | 設備の音と警報 | `sound::{synth, settings, spatial, cues, alarm}` | `cadsim_io::sound_settings`(`sound.json`) | `sound/`(`mod.rs` が状態を集めて音を出し入れ、`source.rs` が波形を Bevy の音に、`panel.rs` が設定ウィンドウと警報の帯) |
-| 最初の5分 (ようこそ画面・章立てのチュートリアル) | `gamify`(章・ミッションの手順・使う道具 `workspace::Tool`・とばす・判定) | `cadsim_io::preferences_file`(とばしたミッション・ようこそ画面を閉じたか) | `ui/tutorial.rs`(ようこそ画面・カードの手順・矢印)、`ui/playful.rs`、起動時のデモラインは `project/mod.rs` の `ProjectAction::OpenDemoLine` |
+| 最初の5分 (ようこそ画面・章立てのチュートリアル) | `gamify`(基本編・応用編の章・ミッションの手順・使う道具 `workspace::Tool`・とばす・一覧からの挑戦・判定) | `cadsim_io::preferences_file`(とばしたミッション・ようこそ画面を閉じたか) | `ui/tutorial.rs`(ようこそ画面・カードの手順・矢印)、`ui/playful.rs`、起動時のデモラインは `project/mod.rs` の `ProjectAction::OpenDemoLine` |
 | ライセンス一覧 (ヘルプ → ライセンス) | — | — (一覧は `tools/licenses/generate.sh` が作る `assets/licenses/THIRD_PARTY_LICENSES.txt` を埋め込む) | `ui/licenses.rs`(ウィンドウ)、ヘルプメニュー (`ui/menu.rs`) |
 | 取り込むファイルを Bevy のアセットとして読み、更新で読み直す | `usecase::file_watch`(更新の見つけ方)、`Model::{file_sources, roots_from_file}`(見張るファイルと差し替える木) | `cadsim_io::asset_key`(絶対パスと単位 ⇔ アセットの鍵) | `scene_asset.rs`(アセットの読み元・読み込み・見張り)、モデルへの反映は `file_io.rs` の `receive_imports` |
 | 作業者と AGV の動き (Bevy のアニメーション) | `floor::figure_motion`(クリップのキー・切り替えで混ぜる重み・クリップの時刻) | — | `floor/figures.rs`(クリップを `AnimationClip` / `AnimationGraph` にし、毎フレーム時刻と重みを写す) |

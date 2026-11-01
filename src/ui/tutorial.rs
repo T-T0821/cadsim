@@ -17,7 +17,7 @@ use crate::assistant::help::HelpChat;
 use crate::motion::Playback;
 use crate::project::{ProjectAction, ProjectState};
 use crate::view::camera::ViewportRect;
-use cadsim_core::gamify::{Chapter, MISSIONS, Mission, Place};
+use cadsim_core::gamify::{Chapter, MISSIONS, Mission, Part, Place};
 
 /// 手順を出しているときのミッションカードの幅
 pub const CARD_WIDTH_WITH_STEPS: f32 = 310.0;
@@ -141,21 +141,28 @@ fn welcome(
                     );
                     ui.add_space(4.0);
                     ui.label(format!(
-                        "チュートリアルでは {} つの章・{} 個のミッションで、\
-                         見る → さわる → ラインを組む → 保存する をひと回りします (5 分ほど)。",
+                        "チュートリアルは {} つの章・{} 個のミッション。\
+                         基本編で主な操作をひと回りしたら、応用編で動き・PLC・AI まで覚えられます。",
                         Chapter::ALL.len(),
                         MISSIONS.len()
                     ));
                     ui.add_space(4.0);
-                    for chapter in Chapter::ALL {
+                    for part in Part::ALL {
                         ui.label(
-                            egui::RichText::new(format!(
-                                "  第{}章  {}",
-                                chapter.number(),
-                                chapter.title()
-                            ))
-                            .color(palette::TEAL),
+                            egui::RichText::new(format!("{}  {}", part.title(), part.summary()))
+                                .strong()
+                                .color(palette::YELLOW),
                         );
+                        for chapter in part.chapters() {
+                            ui.label(
+                                egui::RichText::new(format!(
+                                    "  第{}章  {}",
+                                    chapter.number(),
+                                    chapter.title()
+                                ))
+                                .color(palette::TEAL),
+                            );
+                        }
                     }
                     ui.add_space(10.0);
                     ui.vertical_centered_justified(|ui| {
