@@ -136,7 +136,8 @@ impl MotionUi<'_> {
 pub fn show_panel(
     root: &mut egui::Ui,
     motion: &mut MotionUi,
-    model: &mut Model,
+    // 読むだけのフレームで「変わった」扱いにしないよう、書くとき (サンプルの読み込み) だけ可変で借りる
+    model: &mut ResMut<Model>,
     selection: &Selection,
     camera: &mut MessageWriter<CameraRequest>,
     history: &mut History,

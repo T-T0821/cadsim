@@ -655,6 +655,8 @@ fn sync_views(
     });
     cache.scene_bounds = scene_bounds;
     cache.selection_bounds = selection_bounds;
+    // 干渉している部品を先に集めておく (部品ごとに干渉の一覧をなめると、部品数 × 組の数になる)
+    let interfering = check.interfering_parts();
 
     for (mut view, mut transform, mut face_material, mut body) in &mut views {
         let Some(state) = states.get(&view.node) else {
@@ -677,7 +679,7 @@ fn sync_views(
             view.highlighted = highlighted;
         }
 
-        let interfering = check.is_interfering(view.node);
+        let interfering = interfering.contains(&view.node);
         let wanted = match state.highlight {
             Highlight::Selected if interfering => palette.selected_interfering.clone(),
             Highlight::Selected => palette.selected.clone(),

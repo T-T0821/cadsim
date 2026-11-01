@@ -64,15 +64,18 @@ fn run_bench(
     let frames = times.len();
     let total: f32 = times.iter().sum();
     let p95 = times[(frames * 95 / 100).min(frames - 1)];
+    // 平均は読み込み直後の干渉チェックなど一度きりの重さに引っぱられるので、ふだんの重さは中央値で見る
+    let median = times[frames / 2];
     let parts = model
         .roots
         .iter()
         .map(|&r| model.measure(r).part_count)
         .sum::<usize>();
     println!(
-        "BENCH parts={parts} frames={frames} avg_fps={:.1} avg_ms={:.2} p95_ms={:.2} max_ms={:.2}",
+        "BENCH parts={parts} frames={frames} avg_fps={:.1} avg_ms={:.2} median_ms={:.2} p95_ms={:.2} max_ms={:.2}",
         frames as f32 / total,
         total / frames as f32 * 1000.0,
+        median * 1000.0,
         p95 * 1000.0,
         times[frames - 1] * 1000.0,
     );

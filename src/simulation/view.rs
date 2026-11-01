@@ -4,7 +4,11 @@
 //! - 交線: 赤い太線
 //! - 接触・近接: 最も近い2点を結ぶ線 (接触 = 橙, 近接 = 黄)
 //!
-//! 線は部品の奥にあっても見えるよう、手前に描く設定のギズモ群で描く。
+//! 線は部品の奥にあっても見えるよう、手前に描く設定のギズモで描く。
+//!
+//! 干渉の組が数千あっても軽いよう、どちらも判定結果が変わったときだけ作り直して GPU に置いておく。
+//! 干渉部分の立体は全部の組を1つのメッシュにまとめ (1回の描画で済む)、線は保持型のギズモ
+//! (`Gizmo` + `GizmoAsset`) にして、毎フレーム CPU で線を積み直さない。
 
 use bevy::{asset::RenderAssetUsages, mesh::PrimitiveTopology, prelude::*};
 
@@ -29,9 +33,17 @@ pub struct OverlapVisual;
 #[derive(Resource)]
 pub struct OverlapMaterial(Handle<StandardMaterial>);
 
+/// 交線・最近点の線を入れておくギズモ (判定結果が変わったときだけ中身を作り直す)
+#[derive(Resource)]
+pub struct ResultLines(Handle<GizmoAsset>);
+
+/// 線の太さ (ピクセル)
+const LINE_WIDTH: f32 = 3.0;
+
 pub fn setup(
     mut commands: Commands,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut gizmo_assets: ResMut<Assets<GizmoAsset>>,
     mut gizmo_config: ResMut<GizmoConfigStore>,
 ) {
     commands.insert_resource(OverlapMaterial(materials.add(StandardMaterial {
@@ -45,7 +57,21 @@ pub fn setup(
     })));
     let (config, _) = gizmo_config.config_mut::<SimulationGizmos>();
     config.depth_bias = -1.0;
-    config.line.width = 3.0;
+    config.line.width = LINE_WIDTH;
+
+    let lines = gizmo_assets.add(GizmoAsset::default());
+    commands.spawn((
+        Gizmo {
+            handle: lines.clone(),
+            line_config: GizmoLineConfig {
+                width: LINE_WIDTH,
+                ..default()
+            },
+            depth_bias: -1.0,
+        },
+        Name::new("干渉チェックの線"),
+    ));
+    commands.insert_resource(ResultLines(lines));
 }
 
 /// 判定結果が変わったら、干渉部分の立体メッシュを作り直す。
@@ -64,22 +90,46 @@ pub fn sync_overlap_meshes(
     for entity in &visuals {
         commands.entity(entity).despawn();
     }
-    for pair in &check.report.pairs {
-        if let PairStatus::Interfering {
-            overlap: Some(overlap),
-        } = &pair.status
-            && !overlap.triangles.is_empty()
-        {
-            commands.spawn((
-                Mesh3d(meshes.add(triangles_to_mesh(&overlap.triangles))),
-                MeshMaterial3d(material.0.clone()),
-                OverlapVisual,
-            ));
-        }
+    // 全部の組の干渉部分を1つのメッシュにまとめる (組ごとに分けると組の数だけ描画が要る)
+    let triangles: Vec<Triangle> = check
+        .report
+        .pairs
+        .iter()
+        .filter_map(|pair| match &pair.status {
+            PairStatus::Interfering {
+                overlap: Some(overlap),
+            } => Some(overlap.triangles.iter().copied()),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    if !triangles.is_empty() {
+        commands.spawn((
+            Mesh3d(meshes.add(triangles_to_mesh(&triangles))),
+            MeshMaterial3d(material.0.clone()),
+            OverlapVisual,
+        ));
     }
 }
 
-pub fn draw_results(mut gizmos: Gizmos<SimulationGizmos>, check: Res<InterferenceCheck>) {
+/// 判定結果が変わったら、交線と最近点の線を作り直す
+pub fn sync_result_lines(
+    check: Res<InterferenceCheck>,
+    lines: Res<ResultLines>,
+    mut gizmo_assets: ResMut<Assets<GizmoAsset>>,
+    mut shown_revision: Local<Option<u64>>,
+) {
+    if *shown_revision == Some(check.report.revision) {
+        return;
+    }
+    *shown_revision = Some(check.report.revision);
+    if let Some(mut asset) = gizmo_assets.get_mut(&lines.0) {
+        *asset = result_lines(&check);
+    }
+}
+
+fn result_lines(check: &InterferenceCheck) -> GizmoAsset {
+    let mut gizmos = GizmoAsset::default();
     for pair in &check.report.pairs {
         for [a, b] in &pair.curves {
             gizmos.line(a.as_vec3(), b.as_vec3(), INTERFERENCE_COLOR);
@@ -96,6 +146,7 @@ pub fn draw_results(mut gizmos: Gizmos<SimulationGizmos>, check: Res<Interferenc
             gizmos.sphere(Isometry3d::from_translation(b), 0.03, color);
         }
     }
+    gizmos
 }
 
 fn triangles_to_mesh(triangles: &[Triangle]) -> Mesh {
