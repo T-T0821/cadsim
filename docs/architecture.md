@@ -98,8 +98,8 @@ crates/
 
 新しく足した機能のうち、すでに層を分けてあるもの:
 
-- `src/result_export/report/` … ユースケース層 (CSV の作成)。Bevy の ECS・egui・ファイルシステムに依存しない。移行時は `usecase/report` へ移す。`src/result_export/plugin.rs` は UI 層。
-- PLC 連携(`src/plc/`)は先に `domain` / `usecase` / `adapter` / UI に分けてあるので、移行時はディレクトリごと core / io へ移せます。三菱 PLC との SLMP 通信は、デバイスの型を `cadsim_core::melsec`、電文とクライアントを `cadsim_io::slmp` に置き、`src/plc/domain/device_map.rs`(信号 → デバイス)と `src/plc/adapter/slmp.rs`(`PlcLink` の実装)がそれを使う。
+- `src/result_export/report/` … ユースケース層 (CSV に書く表の作成。文字への変換は `cadsim_io::csv_text`)。Bevy の ECS・egui・ファイルシステムに依存しない。移行時は `usecase/report` へ移す。`src/result_export/plugin.rs` は UI 層。
+- PLC 連携(`src/plc/`)は先に `domain` / `usecase` / `adapter` / UI に分けてあるので、移行時はディレクトリごと core / io へ移せます。三菱 PLC との SLMP 通信は、デバイスの型を `cadsim_core::melsec`、電文とクライアントを `cadsim_io::slmp` に置き、`src/plc/domain/device_map.rs`(信号 → デバイス)と `src/plc/adapter/slmp.rs`(`PlcLink` の実装)がそれを使う。I/O 対応表の CSV は、ドメインの `io_csv` が表 (行 × 欄の文字) を作って解釈し、CSV の文字との変換は UI 層が `cadsim_io::csv_text` で行う。
 - 部品スクリプト(`src/scripting/`)は、`runner.rs`(実行とポート `ScriptHost`)と `controller.rs`(PLC 連携の I/O へのつなぎ)がユースケース層、`rhai_engine.rs` がアダプター層、`mod.rs`・`ui.rs` が UI 層。`controller.rs` は PLC の I/O の型を使うので、PLC 連携と一緒に core へ移す。
 
 - 自作部品は、ノードに付けるしるしと公開パラメータの型(`CustomInstance`・`ParamTarget`)を `cadsim_core::custom_part` に置いた。アプリの `src/custom_part/` のうち `param.rs`(公開パラメータのチャートへの読み書き)と `place.rs`(置くときの名前の頭と id の付け替え)がユースケース層、`file.rs`(`part.cadpart` の JSON とフォルダへの保存)がアダプター層、`mod.rs`・`ui.rs` が UI 層。`param.rs`・`place.rs` はタイミングチャートの型を使うので、チャートを core へ移すときに一緒に移す。
@@ -108,7 +108,7 @@ crates/
 
 ### すでに層を分けて書いてあるもの
 
-- 工程シミュレーション: ドメイン(工程モデル・離散事象シミュレーション・色・工場のライン・品種と生産計画・案の比較)は `cadsim_core::flow` に置いた。`.cadsim` の形 (`record`)、Excel 書き出し (`xlsx`)、生産計画の表の読み込み (`plan_table`。Excel・ODS は `calamine`、CSV は Shift_JIS も `encoding_rs` で読む) は `cadsim_io::flow`。アプリの `src/flow/` の `mod.rs`・`ui.rs`・`staff_ui.rs`・`factory_ui.rs`・`plan_ui.rs`・`scenario_ui.rs` が UI 層。
+- 工程シミュレーション: ドメイン(工程モデル・離散事象シミュレーション・色・工場のライン・品種と生産計画・案の比較)は `cadsim_core::flow` に置いた。`.cadsim` の形 (`record`)、Excel 書き出し (`xlsx`)、生産計画の表の読み込み (`plan_table`。Excel・ODS は `calamine`、CSV は Shift_JIS も `encoding_rs` で読み、区切りと引用符は `cadsim_io::csv_text` (`csv` クレート) に任せる) は `cadsim_io::flow`。アプリの `src/flow/` の `mod.rs`・`ui.rs`・`staff_ui.rs`・`factory_ui.rs`・`plan_ui.rs`・`scenario_ui.rs` が UI 層。
 
 ### 移行の途中で足した機能の置き場所
 

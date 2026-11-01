@@ -26,6 +26,9 @@
 | lopdf(PDF の平面図の読み込み) | 0.46 |
 | image(PNG / JPEG の平面図) | 0.25 |
 | e57(E57 の点群の読み込み) | 0.11 |
+| las(LAS / LAZ の点群の読み込み。`laz` 機能) | 0.11 |
+| csv(CSV / TSV の読み書き) | 1 |
+| parry3d-f64(干渉チェックの検索木 `Bvh`) | 0.31 |
 | krilla(図面の PDF 書き出し) | 0.8 |
 | rust_xlsxwriter(部品表・工程シミュレーションの Excel 書き出し) | 0.102 |
 | rapier3d(物理演算。Bevy に依存しない) | 0.36 |

@@ -27,27 +27,9 @@ fn bom_header(unit: &str) -> Vec<String> {
 
 const TREE_HEADER: [&str; 7] = ["階層", "名前", "種類", "部品表 No.", "X", "Y", "Z"];
 
-fn csv_field(value: &str) -> String {
-    if value.contains([',', '"', '\n', '\r']) {
-        format!("\"{}\"", value.replace('"', "\"\""))
-    } else {
-        value.to_owned()
-    }
-}
-
 pub fn write_csv(bom: &Bom) -> String {
-    let mut out = String::from('\u{FEFF}');
-    let mut line = |fields: Vec<String>| {
-        out += &fields
-            .iter()
-            .map(|f| csv_field(f))
-            .collect::<Vec<_>>()
-            .join(",");
-        out += "\r\n";
-    };
-    line(bom_header(&bom.unit));
-    for row in &bom.rows {
-        line(vec![
+    let rows = bom.rows.iter().map(|row| {
+        vec![
             row.number.to_string(),
             row.name.clone(),
             row.kind.clone(),
@@ -58,9 +40,9 @@ pub fn write_csv(bom: &Bom) -> String {
             row.quantity.to_string(),
             format_length(row.volume),
             row.used_in.join(" / "),
-        ]);
-    }
-    out
+        ]
+    });
+    crate::csv_text::write(std::iter::once(bom_header(&bom.unit)).chain(rows))
 }
 
 pub fn write_xlsx(bom: &Bom) -> Result<Vec<u8>, String> {
@@ -150,7 +132,6 @@ mod tests {
         let lines: Vec<&str> = csv.trim_start_matches('\u{FEFF}').split("\r\n").collect();
         assert!(lines[0].starts_with("No.,品名,種類"));
         assert_eq!(lines[1], "1,箱,箱,,100,50,20,2,100000,(最上位)");
-        assert_eq!(csv_field("a,\"b\""), "\"a,\"\"b\"\"\"");
     }
 
     #[test]

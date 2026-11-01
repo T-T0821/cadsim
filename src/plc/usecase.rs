@@ -166,14 +166,18 @@ impl PlcSession {
         })
     }
 
-    /// I/O 対応表を CSV にする (Excel で編集して読み戻せる)
-    pub fn export_io_csv(&self) -> String {
-        io_csv::to_csv(&self.table)
+    /// I/O 対応表を CSV の表にする (Excel で編集して読み戻せる)
+    pub fn export_io_rows(&self) -> Vec<Vec<String>> {
+        io_csv::to_rows(&self.table)
     }
 
-    /// 編集した I/O 対応表の CSV を読み、番号・スケール・OPC UA ノードを信号ごとに反映する
-    pub fn import_io_csv(&mut self, text: &str, chart: &TimingChart) -> Result<CsvReport, String> {
-        let report = io_csv::apply_csv(text, &self.table, &mut self.plan)?;
+    /// 編集した I/O 対応表 (CSV の表) を読み、番号・スケール・OPC UA ノードを信号ごとに反映する
+    pub fn import_io_rows(
+        &mut self,
+        rows: &[Vec<String>],
+        chart: &TimingChart,
+    ) -> Result<CsvReport, String> {
+        let report = io_csv::apply_rows(rows, &self.table, &mut self.plan)?;
         self.refresh_table(chart);
         Ok(report)
     }

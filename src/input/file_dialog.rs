@@ -111,7 +111,10 @@ fn open_dialog_if_requested(
         "平面図 (DXF / PDF / 画像)",
         &with_upper_case(PLAN_EXTENSIONS),
     );
-    dialog = dialog.add_filter("点群 (PLY / LAS / E57)", &with_upper_case(CLOUD_EXTENSIONS));
+    dialog = dialog.add_filter(
+        "点群 (PLY / LAS / LAZ / E57)",
+        &with_upper_case(CLOUD_EXTENSIONS),
+    );
     let picked = dialog.add_filter("すべてのファイル", &["*"]).pick_file();
     if let Some(path) = picked {
         open_any(path, &mut jobs, &mut project);
