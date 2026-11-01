@@ -11,7 +11,7 @@ use bevy::ecs::change_detection::DetectChangesMut;
 use bevy_egui::egui;
 
 use super::UiState;
-use crate::view::camera::CameraRequest;
+use crate::viewport::camera::CameraRequest;
 use plantwright_core::model::Model;
 use plantwright_core::model::NodeId;
 use plantwright_core::model::NodeKind;

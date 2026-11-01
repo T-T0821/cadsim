@@ -43,12 +43,12 @@ fn write_samples() {
     // タイミングチャートのサンプル装置を、1サイクルの動き付きで書き出す
     let mut model = Model::default();
     let mut chart = plantwright_core::motion::chart::TimingChart::default();
-    crate::motion::load_demo(&mut model, &mut chart, &mut Default::default());
+    crate::features::motion::load_demo(&mut model, &mut chart, &mut Default::default());
     let schedule = chart.schedule();
     let (mut scene, index_of) = model_to_scene(&model, &[]);
     let parents: Vec<_> = scene.nodes.iter().map(|n| n.parent).collect();
     scene.animations =
-        crate::motion::chart_animation(&chart, &schedule, &model, &index_of, &parents)
+        crate::features::motion::chart_animation(&chart, &schedule, &model, &index_of, &parents)
             .into_iter()
             .collect();
     for ext in ["glb", "usda", "usdz", "html"] {

@@ -5,9 +5,9 @@ use bevy_egui::egui;
 
 use super::UiState;
 use super::widgets::{length, round_for_display, row, xyz_editor};
-use crate::motion;
-use crate::view::camera::CameraRequest;
-use crate::view::gizmo::snap_settings_ui;
+use crate::features::motion;
+use crate::viewport::camera::CameraRequest;
+use crate::viewport::gizmo::snap_settings_ui;
 use plantwright_core::math::euler_deg_to_quat;
 use plantwright_core::math::quat_to_euler_deg;
 use plantwright_core::math::split_placement;
@@ -76,7 +76,9 @@ fn selected_node(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
     ) {
         egui::CollapsingHeader::new("標準部品")
             .default_open(true)
-            .show(ui, |ui| crate::library::properties_section(ui, state, id));
+            .show(ui, |ui| {
+                crate::features::library::properties_section(ui, state, id)
+            });
     }
     let is_box = matches!(state.model.get(id).map(|n| &n.kind), Some(NodeKind::Box(_)));
     egui::CollapsingHeader::new(if is_box {
@@ -100,12 +102,12 @@ fn selected_node(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
     egui::CollapsingHeader::new("スクリプト")
         .default_open(state.model.get(id).is_some_and(|n| n.script.is_some()))
         .show(ui, |ui| {
-            crate::scripting::script_section(ui, &mut state.model, &mut state.history, id)
+            crate::features::scripting::script_section(ui, &mut state.model, &mut state.history, id)
         });
     egui::CollapsingHeader::new("自作部品")
         .default_open(state.model.get(id).is_some_and(|n| n.custom_part.is_some()))
         .show(ui, |ui| {
-            let changed = crate::custom_part::properties_section(
+            let changed = crate::features::custom_part::properties_section(
                 ui,
                 &state.model,
                 state.motion.chart(),
@@ -113,7 +115,7 @@ fn selected_node(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
                 id,
             );
             if let Some((index, value)) = changed {
-                crate::custom_part::set_param(
+                crate::features::custom_part::set_param(
                     &mut state.model,
                     state.motion.chart_mut(),
                     id,

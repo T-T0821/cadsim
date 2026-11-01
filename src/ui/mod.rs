@@ -22,12 +22,11 @@
 //! egui のパネルは「外側から順に場所を取る」ので、1つのシステムの中で
 //! 上 → 下 → 左 → 右 の順に描き、残った領域を 3D ビューにする。
 
-mod animation;
 pub mod dock;
+pub mod font;
 mod licenses;
 pub mod logo;
 mod menu;
-pub mod modeling;
 pub mod playful;
 mod properties;
 mod replace;
@@ -49,28 +48,28 @@ use bevy_egui::{
     EguiContexts, EguiGlobalSettings, EguiPrimaryContextPass, PrimaryEguiContext, egui,
 };
 
-use crate::animation::Animations;
-use crate::file_io::ImportJobs;
-use crate::flow::{self, FlowUi};
-use crate::history::History;
-use crate::japanese_font::install_japanese_font;
-use crate::model::Selection;
-use crate::motion::{self, MotionUi, at_design_pose};
-use crate::physics::physics_stopped;
-use crate::plc::plc_active;
-use crate::project::{ProjectState, show_confirm_dialog};
-use crate::result_export::ResultExport;
-use crate::view::camera::{CameraRequest, OrbitCamera, ViewportRect};
-use crate::view::gizmo::{GizmoTool, transform_gizmo_system};
-use crate::view::recording::RecordSettings;
-use crate::view::viewport::{Defeaturing, RenderStats, ViewSettings};
+use crate::document::history::History;
+use crate::document::import::ImportJobs;
+use crate::document::project::{ProjectState, show_confirm_dialog};
+use crate::document::selection::Selection;
+use crate::features::animation::Animations;
+use crate::features::flow::{self, FlowUi};
+use crate::features::motion::{self, MotionUi, at_design_pose};
+use crate::features::physics::physics_stopped;
+use crate::features::plc::plc_active;
+use crate::features::result_export::ResultExport;
+use crate::features::video::recording::RecordSettings;
+use crate::ui::font::install_japanese_font;
+use crate::viewport::camera::{CameraRequest, OrbitCamera, ViewportRect};
+use crate::viewport::gizmo::{GizmoTool, transform_gizmo_system};
+use crate::viewport::parts::{Defeaturing, RenderStats, ViewSettings};
 use plantwright_core::model::Model;
 
 pub struct UiPlugin;
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<modeling::ModelingUi>()
+        app.init_resource::<crate::features::modeling::panel::ModelingUi>()
             .init_resource::<dock::Dock>()
             .add_plugins((playful::PlayfulPlugin, logo::LogoPlugin))
             .add_systems(Startup, spawn_ui_camera)
@@ -80,10 +79,10 @@ impl Plugin for UiPlugin {
                     install_japanese_font,
                     playful::apply_theme,
                     draw_ui,
-                    crate::library::palette_window,
-                    crate::custom_part::save_window,
-                    crate::library::io_list_window,
-                    crate::library::drop_on_viewport,
+                    crate::features::library::palette_window,
+                    crate::features::custom_part::save_window,
+                    crate::features::library::io_list_window,
+                    crate::features::library::drop_on_viewport,
                     playful::draw_overlay,
                     tutorial::draw,
                     // 動作シミュレーション・物理演算・PLC 連携で部品が動いている間はギズモで編集しない
@@ -112,8 +111,8 @@ pub struct UiState<'w> {
     pub camera: MessageWriter<'w, CameraRequest>,
     pub viewport: ResMut<'w, ViewportRect>,
     pub motion: MotionUi<'w>,
-    pub documents: ResMut<'w, crate::documents::DocumentExport>,
-    pub modeling: ResMut<'w, modeling::ModelingUi>,
+    pub documents: ResMut<'w, crate::features::drawing::DocumentExport>,
+    pub modeling: ResMut<'w, crate::features::modeling::panel::ModelingUi>,
     pub flow: FlowUi<'w>,
     pub diagnostics: Res<'w, DiagnosticsStore>,
     pub render_stats: Res<'w, RenderStats>,
@@ -123,23 +122,23 @@ pub struct UiState<'w> {
     pub defeaturing: Res<'w, Defeaturing>,
     pub recording: ResMut<'w, RecordSettings>,
     /// 標準部品の動作テストの値
-    pub jog: ResMut<'w, crate::library::Jog>,
+    pub jog: ResMut<'w, crate::features::library::Jog>,
     /// 「自作部品として保存」のウィンドウ
-    pub custom_dialog: ResMut<'w, crate::custom_part::SaveDialog>,
-    pub assistant: ResMut<'w, crate::assistant::AiAssistant>,
+    pub custom_dialog: ResMut<'w, crate::features::custom_part::SaveDialog>,
+    pub assistant: ResMut<'w, crate::features::assistant::AiAssistant>,
     /// 開いている道具
     pub dock: ResMut<'w, dock::Dock>,
     /// 「AI に聞く」
-    pub help: ResMut<'w, crate::assistant::help::HelpChat>,
+    pub help: ResMut<'w, crate::features::assistant::help::HelpChat>,
     /// ツールレールの印 (干渉の数・安全停止)
-    pub interference: Res<'w, crate::simulation::InterferenceCheck>,
-    pub safety: Res<'w, crate::safety::SafetyState>,
+    pub interference: Res<'w, crate::features::simulation::InterferenceCheck>,
+    pub safety: Res<'w, crate::features::safety::SafetyState>,
     /// 一人称で歩く
-    pub walk: ResMut<'w, crate::view::walk::WalkMode>,
+    pub walk: ResMut<'w, crate::viewport::walk::WalkMode>,
     /// 音の設定 (ミュート・音量)
-    pub sound: ResMut<'w, crate::sound::SoundUi>,
+    pub sound: ResMut<'w, crate::features::sound::SoundUi>,
     /// 3D ビューの画質 (影・陰影・光のにじみ)
-    pub render_quality: ResMut<'w, crate::view::render_quality::RenderQualityUi>,
+    pub render_quality: ResMut<'w, crate::viewport::render_quality::RenderQualityUi>,
 }
 
 /// UI 専用のカメラ。3D カメラはパネルを除いた領域だけに描くので、
@@ -197,10 +196,10 @@ fn draw_ui(mut contexts: EguiContexts, mut state: UiState) -> Result {
     state.viewport.rect = Some(Rect::new(view.min.x, view.min.y, view.max.x, view.max.y));
     view_cube::show(&ctx, view, &mut state);
     status::show_notifications(&ctx, view, &mut state);
-    animation::show(&ctx, view, &mut state);
+    crate::features::animation::panel::show(&ctx, view, &mut state);
     replace::show(&ctx, &mut state);
     licenses::show(&ctx);
-    modeling::show(&ctx, &mut state);
+    crate::features::modeling::panel::show(&ctx, &mut state);
     flow::show_window(
         &ctx,
         &mut state.flow,
