@@ -137,6 +137,8 @@ pub struct UiState<'w> {
     pub walk: ResMut<'w, crate::view::walk::WalkMode>,
     /// 音の設定 (ミュート・音量)
     pub sound: ResMut<'w, crate::sound::SoundUi>,
+    /// 3D ビューの画質 (影・陰影・光のにじみ)
+    pub render_quality: ResMut<'w, crate::view::render_quality::RenderQualityUi>,
 }
 
 /// UI 専用のカメラ。3D カメラはパネルを除いた領域だけに描くので、

@@ -266,19 +266,21 @@ pub fn keyboard_free(viewport: Res<ViewportRect>, recorder: Res<Recorder>) -> bo
 
 fn spawn_camera(mut commands: Commands) {
     commands.spawn((Camera3d::default(), Transform::default()));
+    // 影は画質の設定 (render_quality.rs) が付け外しする
     commands.spawn((
+        super::render_quality::KeyLight,
         DirectionalLight {
             illuminance: 8_000.0,
             ..default()
         },
-        Transform::from_xyz(4.0, 8.0, 6.0).looking_at(Vec3::ZERO, Vec3::Y),
+        Transform::from_xyz(-4.0, 8.0, 6.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
     commands.spawn((
         DirectionalLight {
             illuminance: 2_500.0,
             ..default()
         },
-        Transform::from_xyz(-6.0, 3.0, -4.0).looking_at(Vec3::ZERO, Vec3::Y),
+        Transform::from_xyz(6.0, 3.0, -4.0).looking_at(Vec3::ZERO, Vec3::Y),
     ));
 }
 
