@@ -5,15 +5,16 @@
 //! | `cadsim_core::physics::settings` | ドメイン | 部品ごとの物理の設定 (動かない / 機構で動く / 物理で動く / 当たらない、当たり判定の形、ベルト) |
 //! | `cadsim_core::physics::cable` | ドメイン | ケーブル・ホースの紐モデルと、曲げ半径・長さ不足・接触の判定 |
 //! | `cadsim_core::physics::world` | ユースケース | 部品 → 剛体の変換、一定刻みでの進行、物理エンジンのポート `PhysicsEngine` |
-//! | `rapier.rs` | アダプター | ポートの Rapier 実装 (凸包・凸分解・メッシュの当たり判定、ベルトの接触フック)。Bevy に依存しない |
+//! | `engine.rs` | アダプター | ポートの bevy_rapier3d (Bevy の物理プラグイン) 実装。剛体はエンティティ、ベルトは接触フック |
 //! | `records.rs` | アダプター | .plantwright に書く形。Bevy に依存しない |
 //! | `mod.rs` / `panel.rs` / `sample.rs` | UI | Bevy のシステム、「物理演算」パネル、サンプルライン |
 //!
 //! このファイルのシステムは「部品と動きを集める → ユースケースを呼ぶ → 姿勢を [`PhysicsPose`] に写す」だけ。
+//! 物理を進める [`step_physics`] は、プラグインのスケジュールを走らせるため `World` を丸ごと借りる。
 //! 3D 表示 (viewport.rs) は [`displayed_matrix`] で、物理で動いた部品をその位置に描く。
 
+mod engine;
 mod panel;
-mod rapier;
 mod records;
 mod sample;
 
@@ -21,6 +22,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 
+use bevy::ecs::system::SystemState;
 use bevy::math::{DMat4, DVec3};
 use bevy::prelude::*;
 use bevy_egui::EguiPrimaryContextPass;
@@ -32,9 +34,10 @@ pub use records::{CableRecord, PartPhysicsRecord};
 use cadsim_core::physics::cable::{CableState, Obstacle};
 use cadsim_core::physics::settings;
 use cadsim_core::physics::world::{
-    BodyKey, Iso, PartGeometry, PartInput, PhysicsEngine, PhysicsRun, STEP_DT, part_body,
+    BodyDesc, BodyKey, BodyKind, Iso, PartGeometry, PartInput, PhysicsEngine, PhysicsRun, STEP_DT,
+    part_body,
 };
-use rapier::RapierEngine;
+use engine::{RapierBackendPlugin, RapierEngine};
 
 use crate::history::{History, TrackDocExt, TrackedDoc};
 use crate::input::command_line::CommandLine;
@@ -48,7 +51,8 @@ pub struct PhysicsPlugin;
 
 impl Plugin for PhysicsPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<PhysicsState>()
+        app.add_plugins(RapierBackendPlugin)
+            .init_resource::<PhysicsState>()
             .track_doc::<CablesDoc>()
             .init_resource::<PhysicsPose>()
             .init_resource::<CableSim>()
@@ -103,16 +107,18 @@ pub struct PhysicsState {
     /// サンプルラインを読み込んだら、そのまま物理演算を始める (`--physics`)
     start_after_load: bool,
     pub stats: Stats,
-    run: Option<World>,
+    run: Option<Running>,
     /// タイミングチャートの停止 (先頭へ戻す) を見つけるため、前のフレームの再生状態を覚える
     last_playback: (f64, bool),
 }
 
-/// 物理の世界1つ分
-struct World {
-    run: PhysicsRun<RapierEngine>,
+/// 動いている物理の世界1つ分 (剛体そのものはエンジンのエンティティ)
+struct Running {
+    run: PhysicsRun,
     /// 機構で動く部品 (毎刻み、動作シミュレーションの位置へ動かす)
     mechanisms: Vec<NodeId>,
+    /// 剛体にした部品 (部品が消えたら作り直す)
+    parts: Vec<NodeId>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -198,16 +204,29 @@ fn geometry<'a>(
     }
 }
 
-/// 今のモデルから物理の世界を作る。非表示の部品は入れない。
-fn build_world(
+/// 物理の世界を作るための剛体の一覧
+struct Build {
+    gravity: DVec3,
+    meters_per_unit: f64,
+    /// 部品・表示名・剛体
+    bodies: Vec<(NodeId, String, BodyDesc)>,
+    /// 当たり判定を作れなかった部品
+    skipped: Vec<String>,
+}
+
+/// 今のモデルから剛体の一覧を作る。非表示の部品は入れない。
+fn build_bodies(
     model: &Model,
     motion: &SimulationPose,
     meshes: &HashMap<u32, Arc<TriMesh>>,
-) -> (World, Stats) {
+) -> Build {
     let meters_per_unit = settings::meters_per_unit(&model.unit);
-    let mut engine = RapierEngine::new(settings::gravity(&model.unit), meters_per_unit);
-    let mut mechanisms = Vec::new();
-    let mut stats = Stats::default();
+    let mut build = Build {
+        gravity: settings::gravity(&model.unit),
+        meters_per_unit,
+        bodies: Vec::new(),
+        skipped: Vec::new(),
+    };
     for id in all_parts(model) {
         let Some(node) = model.get(id) else {
             continue;
@@ -229,24 +248,39 @@ fn build_world(
             meters_per_unit,
         };
         match part_body(&input) {
-            Some(desc) if engine.add_body(BodyKey::Part(id), &desc) => {
-                stats.bodies += 1;
-                match node.physics.mode {
-                    BodyMode::Mechanism => mechanisms.push(id),
-                    BodyMode::Dynamic => stats.dynamic += 1,
-                    _ => {}
-                }
-            }
-            _ => stats.skipped.push(model.path_label(id)),
+            Some(desc) => build.bodies.push((id, model.path_label(id), desc)),
+            None => build.skipped.push(model.path_label(id)),
         }
     }
-    (
-        World {
-            run: PhysicsRun::new(engine),
-            mechanisms,
-        },
-        stats,
-    )
+    build
+}
+
+/// 剛体の一覧をエンジンに入れて、物理の世界を作る
+fn build_world(engine: &mut RapierEngine, build: Build) -> (Running, Stats) {
+    engine.reset(build.gravity, build.meters_per_unit);
+    let mut stats = Stats {
+        skipped: build.skipped,
+        ..Default::default()
+    };
+    let mut running = Running {
+        run: PhysicsRun::new(),
+        mechanisms: Vec::new(),
+        parts: Vec::new(),
+    };
+    for (id, label, desc) in build.bodies {
+        running.parts.push(id);
+        if !engine.add_body(BodyKey::Part(id), &desc) {
+            stats.skipped.push(label);
+            continue;
+        }
+        stats.bodies += 1;
+        match desc.kind {
+            BodyKind::Kinematic => running.mechanisms.push(id),
+            BodyKind::Dynamic => stats.dynamic += 1,
+            BodyKind::Fixed => {}
+        }
+    }
+    (running, stats)
 }
 
 /// `cargo run --release -- --physics --bench 20` のように、起動してすぐサンプルラインを流す
@@ -308,17 +342,78 @@ fn load_sample(
     interference.auto = false;
 }
 
-#[allow(clippy::too_many_arguments)]
-fn step_physics(
-    time: Res<Time>,
-    model: Res<Model>,
-    motion: Res<SimulationPose>,
-    schedule: Res<ChartSchedule>,
-    mut playback: ResMut<Playback>,
-    bodies: Query<&SimBody>,
-    mut state: ResMut<PhysicsState>,
-    mut pose: ResMut<PhysicsPose>,
-) {
+type StepParams<'w, 's> = (
+    Res<'w, Time>,
+    Res<'w, Model>,
+    Res<'w, SimulationPose>,
+    Res<'w, ChartSchedule>,
+    ResMut<'w, Playback>,
+    Query<'w, 's, &'static SimBody>,
+    ResMut<'w, PhysicsState>,
+);
+
+/// このフレームで物理の世界にすること
+#[derive(Default)]
+struct Frame {
+    /// 物理の世界を消す (止めた、部品が消えた)
+    clear: bool,
+    /// 物理の世界を作る
+    build: Option<Build>,
+    /// 進める時間 (秒) と、機構で動く剛体の目標の姿勢
+    advance: Option<(f64, Vec<(BodyKey, Iso)>)>,
+}
+
+/// 物理を進める。前半で部品と動きを集めてすることを決め、後半でエンジン (プラグインのスケジュール) を動かす。
+fn step_physics(world: &mut World, params: &mut SystemState<StepParams>) {
+    let Ok(inputs) = params.get_mut(world) else {
+        return;
+    };
+    let frame = plan_frame(inputs);
+    params.apply(world);
+    let Frame {
+        clear,
+        build,
+        advance,
+    } = frame;
+    if clear {
+        RapierEngine::new(world).clear();
+        world.resource_mut::<PhysicsPose>().parts.clear();
+        return;
+    }
+    let mut running = world.resource_mut::<PhysicsState>().run.take();
+    let mut engine = RapierEngine::new(world);
+    if let Some(build) = build {
+        let (built, stats) = build_world(&mut engine, build);
+        running = Some(built);
+        let mut state = engine.world_mut().resource_mut::<PhysicsState>();
+        state.stats = Stats {
+            fps: state.stats.fps,
+            ..stats
+        };
+    }
+    if let (Some(running), Some((dt, targets))) = (running.as_mut(), advance) {
+        let started = Instant::now();
+        running.run.advance(&mut engine, dt, &targets);
+        let parts = engine
+            .dynamic_poses()
+            .into_iter()
+            .map(|(BodyKey::Part(id), iso)| (id, to_matrix(iso)))
+            .collect();
+        world.resource_mut::<PhysicsPose>().parts = parts;
+        let mut state = world.resource_mut::<PhysicsState>();
+        state.stats.time = running.run.time;
+        state.stats.frame_ms = smooth(
+            state.stats.frame_ms,
+            started.elapsed().as_secs_f64() * 1000.0,
+        );
+    }
+    world.resource_mut::<PhysicsState>().run = running;
+}
+
+/// パネルの操作とタイミングチャートの再生状態から、このフレームですることを決める
+fn plan_frame(
+    (time, model, motion, schedule, mut playback, bodies, mut state): StepParams,
+) -> Frame {
     let state = &mut *state;
     let chart_runs = schedule.cycle_time > 0.0;
 
@@ -349,69 +444,58 @@ fn step_physics(
     }
 
     // 部品が消えたら (プロジェクトを開き直したなど) 作り直す
-    let stale = state.run.as_ref().is_some_and(|w| {
-        w.run
-            .engine
-            .dynamic_poses()
-            .iter()
-            .any(|(BodyKey::Part(id), _)| model.get(*id).is_none())
-    });
+    let stale = state
+        .run
+        .as_ref()
+        .is_some_and(|r| r.parts.iter().any(|id| model.get(*id).is_none()));
     if state.state == RunState::Stopped || stale {
-        state.run = None;
-        if !pose.parts.is_empty() {
-            pose.parts.clear();
-        }
         if stale {
             state.state = RunState::Stopped;
         }
-        return;
+        return Frame {
+            clear: state.run.take().is_some(),
+            ..Default::default()
+        };
     }
 
-    if state.run.is_none() {
-        let meshes = bodies.iter().map(|b| (b.id, b.mesh.clone())).collect();
-        let (world, stats) = build_world(&model, &motion, &meshes);
-        state.run = Some(world);
-        state.stats = stats;
+    let mut frame = Frame::default();
+    let mechanisms = match &state.run {
+        Some(running) => running.mechanisms.clone(),
+        None => {
+            let meshes = bodies.iter().map(|b| (b.id, b.mesh.clone())).collect();
+            let build = build_bodies(&model, &motion, &meshes);
+            let mechanisms = build
+                .bodies
+                .iter()
+                .filter(|(_, _, desc)| desc.kind == BodyKind::Kinematic)
+                .map(|(id, _, _)| *id)
+                .collect();
+            frame.build = Some(build);
+            mechanisms
+        }
+    };
+    let dt = time.delta_secs_f64();
+    if dt > 0.0 {
+        state.stats.fps = smooth(state.stats.fps, 1.0 / dt);
     }
     // チャートで動かしているときは、チャートの一時停止に合わせて止める
     let advancing = state.state == RunState::Running && (!chart_runs || playback.playing);
-    let Some(world) = state.run.as_mut() else {
-        return;
-    };
-    let frame = time.delta_secs_f64();
-    if frame > 0.0 {
-        state.stats.fps = smooth(state.stats.fps, 1.0 / frame);
-    }
     if !advancing {
-        return;
+        return frame;
     }
-
-    let started = Instant::now();
     let empty = PhysicsPose::default();
-    let targets: Vec<(BodyKey, Iso)> = world
-        .mechanisms
-        .iter()
-        .filter(|id| model.get(**id).is_some())
-        .map(|&id| {
+    let targets = mechanisms
+        .into_iter()
+        .filter(|id| model.get(*id).is_some())
+        .map(|id| {
             (
                 BodyKey::Part(id),
                 to_iso(displayed_matrix(&model, &motion, &empty, id)),
             )
         })
         .collect();
-    world.run.advance(frame * playback.speed, &targets);
-    pose.parts = world
-        .run
-        .engine
-        .dynamic_poses()
-        .into_iter()
-        .map(|(BodyKey::Part(id), iso)| (id, to_matrix(iso)))
-        .collect();
-    state.stats.time = world.run.time;
-    state.stats.frame_ms = smooth(
-        state.stats.frame_ms,
-        started.elapsed().as_secs_f64() * 1000.0,
-    );
+    frame.advance = Some((dt * playback.speed, targets));
+    frame
 }
 
 /// 表示用の値をなめらかにする (指数移動平均)
