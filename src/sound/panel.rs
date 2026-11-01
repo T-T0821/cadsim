@@ -90,7 +90,7 @@ fn percent_slider(ui: &mut egui::Ui, value: &mut f32) {
     }
 }
 
-/// 警報が起きている間、3D ビューの上に理由とブザー停止のボタンを出す
+/// 警報が起きている間、3D ビューの下端の真ん中に (道具のパネルに重ならないように)理由とブザー停止のボタンを出す
 pub fn alarm_banner(
     mut contexts: EguiContexts,
     mut sound: ResMut<SoundUi>,
@@ -107,8 +107,8 @@ pub fn alarm_banner(
     let sounding = sound.alarm_sounding();
     let mut acknowledge = false;
     egui::Area::new(egui::Id::new("alarm_banner"))
-        .fixed_pos(egui::pos2(rect.center().x, rect.min.y + 8.0))
-        .pivot(egui::Align2::CENTER_TOP)
+        .fixed_pos(egui::pos2(rect.center().x, rect.max.y - 12.0))
+        .pivot(egui::Align2::CENTER_BOTTOM)
         .order(egui::Order::Foreground)
         .show(ctx, |ui| {
             // 鳴っている間は赤を点滅させて目立たせる
