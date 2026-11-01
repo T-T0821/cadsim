@@ -1,0 +1,51 @@
+# 依存クレートのライセンスを確かめる。
+# - cargo-deny: 許可していないライセンス・取得元の依存が入ったら失敗する (deny.toml)
+# - cargo-about: 配布物とアプリに入れるライセンス一覧 (assets/licenses) が Cargo.lock と合っているか
+# 方針は docs/licenses.md
+name: Licenses
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/licenses.yml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/*/Cargo.toml"
+      - "deny.toml"
+      - "about.toml"
+      - "tools/licenses/**"
+      - "assets/licenses/**"
+      - "assets/fonts/OFL.txt"
+      - "samples/real_robot/LICENSE-*.txt"
+  push:
+    branches: [main]
+    paths:
+      - "Cargo.lock"
+      - "deny.toml"
+      - "about.toml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deny:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check licenses sources bans
+
+  about:
+    name: ライセンス一覧が最新か
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about
+      - run: cargo fetch --locked
+      - run: tools/licenses/generate.sh --check

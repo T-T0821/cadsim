@@ -1,0 +1,28 @@
+cadsim が使っている第三者のソフトウェアのライセンス
+Third-party software licenses used by cadsim
+================================================================
+
+このファイルは tools/licenses/generate.sh で Cargo.lock から作っています。手で書き換えないでください。
+This file is generated from Cargo.lock by tools/licenses/generate.sh. Do not edit by hand.
+
+cadsim 本体は MIT License と Apache License 2.0 のデュアルライセンスです。
+同梱のフォントとサンプルの形状のライセンスは、このファイルの最後にあります。
+
+ライセンスごとの件数 / Overview
+{{#each overview}}
+- {{{name}}}: {{count}}
+{{/each}}
+
+{{#each licenses}}
+================================================================
+{{{name}}} ({{id}})
+
+使っているクレート / Used by:
+{{#each used_by}}
+- {{crate.name}} {{crate.version}}{{#if crate.repository}} ({{{crate.repository}}}){{/if}}
+{{/each}}
+----------------------------------------------------------------
+
+{{{text}}}
+
+{{/each}}

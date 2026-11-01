@@ -1037,6 +1037,7 @@ README の画面写真は `docs/screenshots/scenarios/` の手順書で撮って
 | [docs/video-export.md](docs/video-export.md) | 動画書き出しのしくみ(カメラワークのつなぎ方も) |
 | [docs/demo-line.md](docs/demo-line.md) | デモライン(`samples/demo_line.cadsim`)の中身と、作り直すスクリプトの使い方 |
 | [docs/release.md](docs/release.md) | Windows / Mac 向けの配布パッケージと Release の作り方 |
+| [docs/licenses.md](docs/licenses.md) | 依存ライブラリのライセンスの方針と確かめ方、ライセンス一覧の作り直し方、特許・商標で気をつける点 |
 | [docs/ui-check.md](docs/ui-check.md) | 画面での動作確認の自動化(手順書の書き方、基準画像の更新、結果の見かた) |
 
 ## ライセンス
@@ -1045,3 +1046,5 @@ README の画面写真は `docs/screenshots/scenarios/` の手順書で撮って
 
 ただし、同梱の日本語フォント `assets/fonts/NotoSansJP-Subset.otf` は [SIL Open Font License 1.1](assets/fonts/OFL.txt) です。
 本物の装置のサンプルの形状(`samples/real_robot/ur5e.glb` と `robotiq_2f85.glb`、アプリにも埋め込み)は BSD 3-Clause です。出典とライセンス文は [samples/real_robot](samples/real_robot/README.md) にあります。
+
+使っているライブラリ・フォント・サンプル形状のライセンスの全文は、アプリの **ヘルプ → ライセンス** で見られます。配布の zip と Mac の `.app` には `THIRD_PARTY_LICENSES.txt` として入っています。

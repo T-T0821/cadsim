@@ -24,6 +24,7 @@
 
 mod animation;
 pub mod dock;
+mod licenses;
 mod menu;
 pub mod modeling;
 pub mod playful;
@@ -194,6 +195,7 @@ fn draw_ui(mut contexts: EguiContexts, mut state: UiState) -> Result {
     status::show_notifications(&ctx, view, &mut state);
     animation::show(&ctx, view, &mut state);
     replace::show(&ctx, &mut state);
+    licenses::show(&ctx);
     modeling::show(&ctx, &mut state);
     flow::show_window(
         &ctx,
