@@ -1,0 +1,33 @@
+# 本物の装置のサンプル (UR5e + Robotiq 2F-85)
+wait_loaded
+click "空のプロジェクトから"
+wait_loaded
+wait 30
+click "★ Lv."                  # ミッションカードを隠す
+click "ファイル"
+hover "サンプルを開く"
+click "本物の装置 (UR5e + Robotiq 2F-85)"
+wait_loaded
+expect "UR5e (Universal Robots)"
+click "⏸ 一時停止"
+click "⏮ 先頭へ"
+click "安全"                     # 動作範囲 (半透明の橙) を隠して装置を見やすくする
+wait 20
+click "動作範囲を表示 (半透明の橙)"
+click "安全"
+wait 60
+scroll 770 330 6
+wait 60
+click "▶ 再生"
+wait 330                         # ワークを持ち上げて排出コンベアへ運ぶところ
+click "⏸ 一時停止"
+wait 30
+screenshot playing
+click "⏮ 先頭へ"
+scroll 800 300 8
+wait 60
+click "▶ 再生"
+wait 255                         # 指を閉じてワークを掴んだところ
+click "⏸ 一時停止"
+wait 30
+screenshot grip

@@ -434,3 +434,61 @@ fn save_as_adds_the_extension() {
     assert!(is_project_file(Path::new("a/LINE.CADSIM")));
     assert!(!is_project_file(Path::new("a/vise.step")));
 }
+
+/// 本物の装置のサンプル (tools/real_robot/make_demo.py で生成) が、読み込んだ glTF の形状と
+/// 関節の対応をすべて保ったまま開け、ロボットが教示点に届くこと
+#[test]
+fn real_robot_sample_opens_and_reaches_every_point() {
+    use cadsim_core::motion::pose::actuator_poses_for;
+    use std::collections::HashMap;
+
+    // メニューから開くときと同じく、埋め込みのファイルをフォルダに書き出して読む
+    let dir = std::env::temp_dir().join(format!("cadsim-real-robot-{}", std::process::id()));
+    let loaded = load_real_robot_sample(&dir).expect("サンプルが読める");
+    assert!(
+        dir.join("LICENSE-UR5e.txt").exists(),
+        "ライセンス文も一緒に書き出す"
+    );
+    let mut model = Model::default();
+    let opened = loaded.open(&mut model);
+    assert!(opened.warnings.is_empty(), "{:?}", opened.warnings);
+    // UR5e の 6 関節 + 指の 6 関節 + 把持の合図
+    assert_eq!(opened.chart.actuators.len(), 13);
+    assert!(
+        opened
+            .chart
+            .actuators
+            .iter()
+            .filter(|a| a.kind != cadsim_core::motion::chart::ActuatorKind::Cylinder)
+            .all(|a| !a.parts.is_empty()),
+        "関節はどれも読み込んだリンクを動かす"
+    );
+    assert_eq!(opened.conveyors.grippers.len(), 1);
+
+    let schedule = opened.chart.schedule();
+    assert_eq!(schedule.moves.len(), 4);
+    for m in &schedule.moves {
+        assert!(
+            m.reached && m.path_reached,
+            "教示点 {} に届かない: {m:?}",
+            m.point
+        );
+    }
+
+    // スクリプトで求めた「ピック上」の関節角で、TCP がちょうど教示点に来る (関節の位置と向きが正しい)
+    let robot = &opened.chart.robots[0];
+    let first = &opened.chart.steps[0];
+    let values: HashMap<u32, f64> = first
+        .actions
+        .iter()
+        .map(|a| (a.actuator, a.target))
+        .collect();
+    let poses = actuator_poses_for(&opened.chart, &values);
+    let tcp = poses[&robot.tip].transform_point(DVec3::from_array(robot.tcp));
+    let target = DVec3::from_array(robot.points[0].position);
+    assert!(
+        tcp.distance(target) < 0.5,
+        "TCP {tcp} が教示点 {target} からずれている"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

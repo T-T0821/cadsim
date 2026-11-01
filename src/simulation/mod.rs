@@ -47,7 +47,9 @@ use overlap::{OverlapRegion, overlap_region};
 pub struct SimBody {
     pub id: u32,
     /// 同じ値の部品どうしは調べない。標準部品の本体 (ロッドとチューブなど) は
-    /// 組み付いた状態で重なっているので、部品全体の id をここに入れる。ふつうは `id` と同じ。
+    /// 組み付いた状態で重なっているので、部品全体の id をここに入れる。
+    /// 「中の部品どうしの干渉を調べない」アセンブリの中ならそのアセンブリ。ふつうは `id` と同じ
+    /// (`Model::interference_group`)。
     pub group: u32,
     pub mesh: Arc<TriMesh>,
     pub pose: Pose,

@@ -251,6 +251,7 @@ impl LoadedProject {
                 .custom_part
                 .as_ref()
                 .map(CustomInstanceRecord::to_instance);
+            node.skip_inner_interference = record.skip_inner_interference;
         }
         if matches!(record.kind, NodeKindRecord::Standard { .. }) {
             library::rebuild_bodies(model, id);
@@ -281,6 +282,58 @@ pub const DEMO_LINE_NAME: &str = "デモライン";
 pub fn load_demo_line() -> Result<LoadedProject, ProjectError> {
     let file = ProjectFile::from_json(DEMO_LINE)?;
     Ok(LoadedProject::fetch_shapes(file, Path::new(".")))
+}
+
+/// 本物の装置のサンプル (UR5e と Robotiq 2F-85 のピック & プレース、`samples/real_robot`)。
+/// 形状の glTF とライセンス文も埋め込んでおき、開くときにフォルダへ書き出して読む
+/// (プロジェクトは glTF を相対パスで参照するので、同じフォルダに並べる必要がある)。
+const REAL_ROBOT_FILES: [(&str, &[u8]); 6] = [
+    (
+        REAL_ROBOT_PROJECT,
+        include_bytes!("../../samples/real_robot/ur5e_pick_place.cadsim"),
+    ),
+    (
+        "ur5e.glb",
+        include_bytes!("../../samples/real_robot/ur5e.glb"),
+    ),
+    (
+        "robotiq_2f85.glb",
+        include_bytes!("../../samples/real_robot/robotiq_2f85.glb"),
+    ),
+    (
+        "README.md",
+        include_bytes!("../../samples/real_robot/README.md"),
+    ),
+    (
+        "LICENSE-UR5e.txt",
+        include_bytes!("../../samples/real_robot/LICENSE-UR5e.txt"),
+    ),
+    (
+        "LICENSE-Robotiq-2F-85.txt",
+        include_bytes!("../../samples/real_robot/LICENSE-Robotiq-2F-85.txt"),
+    ),
+];
+const REAL_ROBOT_PROJECT: &str = "ur5e_pick_place.cadsim";
+/// 読み込み中・読み込み後の表示名
+pub const REAL_ROBOT_NAME: &str = "UR5e のピック & プレース";
+
+/// 埋め込みの本物の装置のサンプルを `dir` に書き出して読む。中身が同じファイルは書き直さない。
+pub fn load_real_robot_sample(dir: &Path) -> Result<LoadedProject, ProjectError> {
+    std::fs::create_dir_all(dir).map_err(ProjectError::Io)?;
+    for (name, bytes) in REAL_ROBOT_FILES {
+        let path = dir.join(name);
+        if std::fs::read(&path).ok().as_deref() != Some(bytes) {
+            std::fs::write(&path, bytes).map_err(ProjectError::Io)?;
+        }
+    }
+    LoadedProject::load(&dir.join(REAL_ROBOT_PROJECT))
+}
+
+/// 本物の装置のサンプルを書き出すフォルダ。設定ファイルと同じ場所の `samples/real_robot`
+pub fn real_robot_sample_dir() -> PathBuf {
+    crate::preferences_file::default_path()
+        .and_then(|p| p.parent().map(|dir| dir.join("samples").join("real_robot")))
+        .unwrap_or_else(|| std::env::temp_dir().join("cadsim").join("real_robot"))
 }
 
 /// 拡張子なしで名前を付けられたら .cadsim を付ける

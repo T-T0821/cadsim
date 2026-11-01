@@ -1,0 +1,2068 @@
+{
+  "format_version": 1,
+  "unit": "mm",
+  "step_files": [
+    {
+      "type": "File",
+      "path": "ur5e.glb"
+    },
+    {
+      "type": "File",
+      "path": "robotiq_2f85.glb"
+    }
+  ],
+  "nodes": [
+    {
+      "name": "ロボット (UR5e + 2F-85)",
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotation_deg": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "visible": true,
+      "kind": {
+        "type": "Assembly"
+      },
+      "children": [
+        {
+          "name": "UR5e (Universal Robots)",
+          "position": [
+            0.0,
+            700.0,
+            0.0
+          ],
+          "rotation_deg": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "visible": true,
+          "kind": {
+            "type": "Assembly",
+            "product": "UR5e"
+          },
+          "children": [
+            {
+              "name": "ベース",
+              "position": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_deg": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "visible": true,
+              "kind": {
+                "type": "Assembly",
+                "product": "base"
+              },
+              "children": [
+                {
+                  "name": "base_black",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 0,
+                    "product": "base_black"
+                  }
+                },
+                {
+                  "name": "base_gray",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 0,
+                    "product": "base_gray"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ショルダー",
+              "position": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_deg": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "visible": true,
+              "kind": {
+                "type": "Assembly",
+                "product": "shoulder"
+              },
+              "children": [
+                {
+                  "name": "shoulder_black",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 0,
+                    "product": "shoulder_black"
+                  }
+                },
+                {
+                  "name": "shoulder_blue",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 0,
+                    "product": "shoulder_blue"
+                  }
+                },
+                {
+                  "name": "shoulder_gray",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 0,
+                    "product": "shoulder_gray"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "上腕",
+              "position": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_deg": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "visible": true,
+              "kind": {
+                "type": "Assembly",
+                "product": "upper_arm"
+              },
+              "children": [
+                {
+                  "name": "upper_arm_black",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 0,
+                    "product": "upper_arm_black"
+                  }
+                },
+                {
+                  "name": "upper_arm_blue",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 0,
+                    "product": "upper_arm_blue"
+                  }
+                },
+                {
+                  "name": "upper_arm_gray",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 0,
+                    "product": "upper_arm_gray"
+                  }
+                },
+                {
+                  "name": "upper_arm_silver",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 0,
+                    "product": "upper_arm_silver"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "前腕",
+              "position": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_deg": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "visible": true,
+              "kind": {
+                "type": "Assembly",
+                "product": "forearm"
+              },
+              "children": [
+                {
+                  "name": "forearm_black",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 0,
+                    "product": "forearm_black"
+                  }
+                },
+                {
+                  "name": "forearm_blue",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 0,
+                    "product": "forearm_blue"
+                  }
+                },
+                {
+                  "name": "forearm_gray",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 0,
+                    "product": "forearm_gray"
+                  }
+                },
+                {
+                  "name": "forearm_silver",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 0,
+                    "product": "forearm_silver"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "手首1",
+              "position": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_deg": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "visible": true,
+              "kind": {
+                "type": "Assembly",
+                "product": "wrist_1"
+              },
+              "children": [
+                {
+                  "name": "wrist_1_black",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 0,
+                    "product": "wrist_1_black"
+                  }
+                },
+                {
+                  "name": "wrist_1_blue",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 0,
+                    "product": "wrist_1_blue"
+                  }
+                },
+                {
+                  "name": "wrist_1_gray",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 0,
+                    "product": "wrist_1_gray"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "手首2",
+              "position": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_deg": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "visible": true,
+              "kind": {
+                "type": "Assembly",
+                "product": "wrist_2"
+              },
+              "children": [
+                {
+                  "name": "wrist_2_black",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 0,
+                    "product": "wrist_2_black"
+                  }
+                },
+                {
+                  "name": "wrist_2_blue",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 0,
+                    "product": "wrist_2_blue"
+                  }
+                },
+                {
+                  "name": "wrist_2_gray",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 0,
+                    "product": "wrist_2_gray"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "手首3 (フランジ)",
+              "position": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_deg": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "visible": true,
+              "kind": {
+                "type": "Assembly",
+                "product": "wrist_3"
+              },
+              "children": [
+                {
+                  "name": "wrist_3_silver",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 0,
+                    "product": "wrist_3_silver"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "2F-85 (Robotiq)",
+          "position": [
+            491.9,
+            1187.9,
+            -133.3
+          ],
+          "rotation_deg": [
+            180.0,
+            -90.0,
+            0.0
+          ],
+          "visible": true,
+          "kind": {
+            "type": "Assembly",
+            "product": "Robotiq 2F-85"
+          },
+          "children": [
+            {
+              "name": "UR 用アダプタ",
+              "position": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_deg": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "visible": true,
+              "kind": {
+                "type": "Assembly",
+                "product": "ur_to_robotiq_adapter"
+              },
+              "children": [
+                {
+                  "name": "ur_to_robotiq_adapter_black",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 1,
+                    "product": "ur_to_robotiq_adapter_black"
+                  }
+                },
+                {
+                  "name": "ur_to_robotiq_adapter_gray",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 1,
+                    "product": "ur_to_robotiq_adapter_gray"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "本体",
+              "position": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_deg": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "visible": true,
+              "kind": {
+                "type": "Assembly",
+                "product": "robotiq_base"
+              },
+              "children": [
+                {
+                  "name": "robotiq_base_black",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 1,
+                    "product": "robotiq_base_black"
+                  }
+                },
+                {
+                  "name": "robotiq_base_silver",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 1,
+                    "product": "robotiq_base_silver"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "左 外側ナックル",
+              "position": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_deg": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "visible": true,
+              "kind": {
+                "type": "Assembly",
+                "product": "left_knuckle"
+              },
+              "children": [
+                {
+                  "name": "left_knuckle_silver",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 1,
+                    "product": "left_knuckle_silver"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "右 外側ナックル",
+              "position": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_deg": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "visible": true,
+              "kind": {
+                "type": "Assembly",
+                "product": "right_knuckle"
+              },
+              "children": [
+                {
+                  "name": "right_knuckle_silver",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 1,
+                    "product": "right_knuckle_silver"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "左 フィンガー",
+              "position": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_deg": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "visible": true,
+              "kind": {
+                "type": "Assembly",
+                "product": "left_finger"
+              },
+              "children": [
+                {
+                  "name": "left_finger_black",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 1,
+                    "product": "left_finger_black"
+                  }
+                },
+                {
+                  "name": "left_finger_silver",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 1,
+                    "product": "left_finger_silver"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "右 フィンガー",
+              "position": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_deg": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "visible": true,
+              "kind": {
+                "type": "Assembly",
+                "product": "right_finger"
+              },
+              "children": [
+                {
+                  "name": "right_finger_black",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 1,
+                    "product": "right_finger_black"
+                  }
+                },
+                {
+                  "name": "right_finger_silver",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 1,
+                    "product": "right_finger_silver"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "左 内側ナックル",
+              "position": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_deg": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "visible": true,
+              "kind": {
+                "type": "Assembly",
+                "product": "left_inner_knuckle"
+              },
+              "children": [
+                {
+                  "name": "left_inner_knuckle_black",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 1,
+                    "product": "left_inner_knuckle_black"
+                  }
+                },
+                {
+                  "name": "left_inner_knuckle_silver",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 1,
+                    "product": "left_inner_knuckle_silver"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "右 内側ナックル",
+              "position": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_deg": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "visible": true,
+              "kind": {
+                "type": "Assembly",
+                "product": "right_inner_knuckle"
+              },
+              "children": [
+                {
+                  "name": "right_inner_knuckle_black",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 1,
+                    "product": "right_inner_knuckle_black"
+                  }
+                },
+                {
+                  "name": "right_inner_knuckle_silver",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 1,
+                    "product": "right_inner_knuckle_silver"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "左 指先",
+              "position": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_deg": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "visible": true,
+              "kind": {
+                "type": "Assembly",
+                "product": "left_finger_tip"
+              },
+              "children": [
+                {
+                  "name": "left_finger_tip_black",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 1,
+                    "product": "left_finger_tip_black"
+                  }
+                },
+                {
+                  "name": "left_finger_tip_silver",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 1,
+                    "product": "left_finger_tip_silver"
+                  }
+                }
+              ]
+            },
+            {
+              "name": "右 指先",
+              "position": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "rotation_deg": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "visible": true,
+              "kind": {
+                "type": "Assembly",
+                "product": "right_finger_tip"
+              },
+              "children": [
+                {
+                  "name": "right_finger_tip_black",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 1,
+                    "product": "right_finger_tip_black"
+                  }
+                },
+                {
+                  "name": "right_finger_tip_silver",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "rotation_deg": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "visible": true,
+                  "kind": {
+                    "type": "Imported",
+                    "step_file": 1,
+                    "product": "right_finger_tip_silver"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "skip_inner_interference": true
+    },
+    {
+      "name": "セル",
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rotation_deg": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "visible": true,
+      "kind": {
+        "type": "Assembly"
+      },
+      "children": [
+        {
+          "name": "ロボット架台",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_deg": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "visible": true,
+          "kind": {
+            "type": "Box",
+            "size": [
+              320.0,
+              699.0,
+              320.0
+            ],
+            "position": [
+              0.0,
+              349.5,
+              0.0
+            ],
+            "rotation_deg": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "color": [
+            0.22,
+            0.24,
+            0.28
+          ]
+        },
+        {
+          "name": "供給コンベア",
+          "position": [
+            560.0,
+            0.0,
+            -730.0
+          ],
+          "rotation_deg": [
+            0.0,
+            -90.0,
+            0.0
+          ],
+          "visible": true,
+          "kind": {
+            "type": "Standard",
+            "part": "belt_conveyor",
+            "params": {
+              "length": 1000.0,
+              "width": 300.0,
+              "height": 750.0,
+              "speed": 300.0
+            }
+          }
+        },
+        {
+          "name": "排出コンベア",
+          "position": [
+            560.0,
+            0.0,
+            880.0
+          ],
+          "rotation_deg": [
+            0.0,
+            -90.0,
+            0.0
+          ],
+          "visible": true,
+          "kind": {
+            "type": "Standard",
+            "part": "belt_conveyor",
+            "params": {
+              "length": 1300.0,
+              "width": 300.0,
+              "height": 750.0,
+              "speed": 250.0
+            }
+          }
+        },
+        {
+          "name": "投入シュート",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_deg": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "visible": true,
+          "kind": {
+            "type": "Box",
+            "size": [
+              360.0,
+              900.0,
+              200.0
+            ],
+            "position": [
+              560.0,
+              450.0,
+              -1480.0
+            ],
+            "rotation_deg": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "color": [
+            0.25,
+            0.5,
+            0.85
+          ]
+        },
+        {
+          "name": "回収箱",
+          "position": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation_deg": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "visible": true,
+          "kind": {
+            "type": "Box",
+            "size": [
+              400.0,
+              500.0,
+              400.0
+            ],
+            "position": [
+              560.0,
+              250.0,
+              1730.0
+            ],
+            "rotation_deg": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          },
+          "color": [
+            0.3,
+            0.7,
+            0.45
+          ]
+        }
+      ]
+    }
+  ],
+  "chart": {
+    "actuators": [
+      {
+        "id": 1,
+        "name": "J1 ベース",
+        "kind": "RotaryTable",
+        "axis": "Y",
+        "stroke": 0.0,
+        "pivot": [
+          0.0,
+          862.5,
+          0.0
+        ],
+        "parts": [
+          [
+            0,
+            0,
+            1
+          ]
+        ],
+        "easing": "Smooth",
+        "default_duration": 1.0,
+        "limits": [
+          -360.0,
+          360.0
+        ]
+      },
+      {
+        "id": 2,
+        "name": "J2 ショルダー",
+        "kind": "RotaryTable",
+        "axis": "Z",
+        "stroke": 0.0,
+        "pivot": [
+          0.0,
+          862.5,
+          0.0
+        ],
+        "parts": [
+          [
+            0,
+            0,
+            2
+          ]
+        ],
+        "easing": "Smooth",
+        "default_duration": 1.0,
+        "reversed": true,
+        "mounted_on": 1,
+        "limits": [
+          -270.0,
+          450.0
+        ]
+      },
+      {
+        "id": 3,
+        "name": "J3 エルボー",
+        "kind": "RotaryTable",
+        "axis": "Z",
+        "stroke": 0.0,
+        "pivot": [
+          0.0,
+          1287.5,
+          0.0
+        ],
+        "parts": [
+          [
+            0,
+            0,
+            3
+          ]
+        ],
+        "easing": "Smooth",
+        "default_duration": 1.0,
+        "reversed": true,
+        "mounted_on": 2,
+        "limits": [
+          -450.0,
+          270.0
+        ]
+      },
+      {
+        "id": 4,
+        "name": "J4 手首1",
+        "kind": "RotaryTable",
+        "axis": "Z",
+        "stroke": 0.0,
+        "pivot": [
+          392.2,
+          1287.5,
+          -133.3
+        ],
+        "parts": [
+          [
+            0,
+            0,
+            4
+          ]
+        ],
+        "easing": "Smooth",
+        "default_duration": 1.0,
+        "reversed": true,
+        "mounted_on": 3,
+        "limits": [
+          -270.0,
+          450.0
+        ]
+      },
+      {
+        "id": 5,
+        "name": "J5 手首2",
+        "kind": "RotaryTable",
+        "axis": "X",
+        "stroke": 0.0,
+        "pivot": [
+          491.9,
+          1287.5,
+          -133.3
+        ],
+        "parts": [
+          [
+            0,
+            0,
+            5
+          ]
+        ],
+        "easing": "Smooth",
+        "default_duration": 1.0,
+        "mounted_on": 4,
+        "limits": [
+          -270.0,
+          450.0
+        ]
+      },
+      {
+        "id": 6,
+        "name": "J6 手首3",
+        "kind": "RotaryTable",
+        "axis": "Y",
+        "stroke": 0.0,
+        "pivot": [
+          491.9,
+          1187.9,
+          -133.3
+        ],
+        "parts": [
+          [
+            0,
+            0,
+            6
+          ],
+          [
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            1
+          ]
+        ],
+        "easing": "Smooth",
+        "default_duration": 1.0,
+        "reversed": true,
+        "mounted_on": 5,
+        "limits": [
+          -360.0,
+          360.0
+        ]
+      },
+      {
+        "id": 11,
+        "name": "左指 外側",
+        "kind": "RotaryTable",
+        "axis": "X",
+        "stroke": 0.0,
+        "pivot": [
+          491.9,
+          1121.995,
+          -102.699
+        ],
+        "parts": [
+          [
+            0,
+            1,
+            2
+          ],
+          [
+            0,
+            1,
+            4
+          ]
+        ],
+        "easing": "Smooth",
+        "default_duration": 0.4,
+        "mounted_on": 6,
+        "limits": [
+          0.0,
+          45.837
+        ]
+      },
+      {
+        "id": 14,
+        "name": "右指 外側",
+        "kind": "RotaryTable",
+        "axis": "X",
+        "stroke": 0.0,
+        "pivot": [
+          491.9,
+          1121.995,
+          -163.901
+        ],
+        "parts": [
+          [
+            0,
+            1,
+            3
+          ],
+          [
+            0,
+            1,
+            5
+          ]
+        ],
+        "easing": "Smooth",
+        "default_duration": 0.4,
+        "reversed": true,
+        "mounted_on": 6,
+        "limits": [
+          0.0,
+          45.837
+        ]
+      },
+      {
+        "id": 12,
+        "name": "左指 内側",
+        "kind": "RotaryTable",
+        "axis": "X",
+        "stroke": 0.0,
+        "pivot": [
+          491.9,
+          1115.48,
+          -120.6
+        ],
+        "parts": [
+          [
+            0,
+            1,
+            6
+          ]
+        ],
+        "easing": "Smooth",
+        "default_duration": 0.4,
+        "mounted_on": 6,
+        "limits": [
+          0.0,
+          45.837
+        ]
+      },
+      {
+        "id": 15,
+        "name": "右指 内側",
+        "kind": "RotaryTable",
+        "axis": "X",
+        "stroke": 0.0,
+        "pivot": [
+          491.9,
+          1115.48,
+          -146.0
+        ],
+        "parts": [
+          [
+            0,
+            1,
+            7
+          ]
+        ],
+        "easing": "Smooth",
+        "default_duration": 0.4,
+        "reversed": true,
+        "mounted_on": 6,
+        "limits": [
+          0.0,
+          45.837
+        ]
+      },
+      {
+        "id": 13,
+        "name": "左指 指先",
+        "kind": "RotaryTable",
+        "axis": "X",
+        "stroke": 0.0,
+        "pivot": [
+          491.9,
+          1078.574,
+          -65.541
+        ],
+        "parts": [
+          [
+            0,
+            1,
+            8
+          ]
+        ],
+        "easing": "Smooth",
+        "default_duration": 0.4,
+        "reversed": true,
+        "mounted_on": 11,
+        "limits": [
+          0.0,
+          45.837
+        ]
+      },
+      {
+        "id": 16,
+        "name": "右指 指先",
+        "kind": "RotaryTable",
+        "axis": "X",
+        "stroke": 0.0,
+        "pivot": [
+          491.9,
+          1078.574,
+          -201.059
+        ],
+        "parts": [
+          [
+            0,
+            1,
+            9
+          ]
+        ],
+        "easing": "Smooth",
+        "default_duration": 0.4,
+        "mounted_on": 14,
+        "limits": [
+          0.0,
+          45.837
+        ]
+      },
+      {
+        "id": 20,
+        "name": "把持 (ワークを掴む合図)",
+        "kind": "Cylinder",
+        "axis": "Y",
+        "stroke": 1.0,
+        "pivot": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "mounted_on": 6,
+        "parts": [],
+        "easing": "Smooth",
+        "default_duration": 0.4
+      }
+    ],
+    "steps": [
+      {
+        "comment": "ピック上へ (ワーク待ち)",
+        "actions": [
+          {
+            "actuator": 1,
+            "target": 12.436,
+            "duration": 1.0
+          },
+          {
+            "actuator": 2,
+            "target": 16.513,
+            "duration": 1.0
+          },
+          {
+            "actuator": 3,
+            "target": -3.641,
+            "duration": 1.0
+          },
+          {
+            "actuator": 4,
+            "target": -12.872,
+            "duration": 1.0
+          },
+          {
+            "actuator": 5,
+            "target": 0.0,
+            "duration": 1.0
+          },
+          {
+            "actuator": 6,
+            "target": 0.0,
+            "duration": 1.0
+          }
+        ],
+        "dwell": 2.23
+      },
+      {
+        "comment": "下降",
+        "moves": [
+          {
+            "robot": 1,
+            "point": 2,
+            "duration": 0.6,
+            "kind": "Linear"
+          }
+        ]
+      },
+      {
+        "comment": "把持",
+        "actions": [
+          {
+            "actuator": 11,
+            "target": 16.101,
+            "duration": 0.4
+          },
+          {
+            "actuator": 12,
+            "target": 16.101,
+            "duration": 0.4
+          },
+          {
+            "actuator": 13,
+            "target": 16.101,
+            "duration": 0.4
+          },
+          {
+            "actuator": 14,
+            "target": 16.101,
+            "duration": 0.4
+          },
+          {
+            "actuator": 15,
+            "target": 16.101,
+            "duration": 0.4
+          },
+          {
+            "actuator": 16,
+            "target": 16.101,
+            "duration": 0.4
+          },
+          {
+            "actuator": 20,
+            "target": 1.0,
+            "duration": 0.4
+          }
+        ],
+        "dwell": 0.1
+      },
+      {
+        "comment": "上昇",
+        "moves": [
+          {
+            "robot": 1,
+            "point": 1,
+            "duration": 0.6,
+            "kind": "Linear"
+          }
+        ]
+      },
+      {
+        "comment": "プレース上へ",
+        "actions": [
+          {
+            "actuator": 1,
+            "target": -52.924,
+            "duration": 1.2
+          },
+          {
+            "actuator": 2,
+            "target": 37.868,
+            "duration": 1.2
+          },
+          {
+            "actuator": 3,
+            "target": -35.617,
+            "duration": 1.2
+          },
+          {
+            "actuator": 4,
+            "target": -2.251,
+            "duration": 1.2
+          },
+          {
+            "actuator": 5,
+            "target": 0.0,
+            "duration": 1.2
+          },
+          {
+            "actuator": 6,
+            "target": 0.0,
+            "duration": 1.2
+          }
+        ]
+      },
+      {
+        "comment": "下降",
+        "moves": [
+          {
+            "robot": 1,
+            "point": 4,
+            "duration": 0.6,
+            "kind": "Linear"
+          }
+        ]
+      },
+      {
+        "comment": "解放",
+        "actions": [
+          {
+            "actuator": 11,
+            "target": 0.0,
+            "duration": 0.4
+          },
+          {
+            "actuator": 12,
+            "target": 0.0,
+            "duration": 0.4
+          },
+          {
+            "actuator": 13,
+            "target": 0.0,
+            "duration": 0.4
+          },
+          {
+            "actuator": 14,
+            "target": 0.0,
+            "duration": 0.4
+          },
+          {
+            "actuator": 15,
+            "target": 0.0,
+            "duration": 0.4
+          },
+          {
+            "actuator": 16,
+            "target": 0.0,
+            "duration": 0.4
+          },
+          {
+            "actuator": 20,
+            "target": 0.0,
+            "duration": 0.4
+          }
+        ],
+        "dwell": 0.1
+      },
+      {
+        "comment": "上昇",
+        "moves": [
+          {
+            "robot": 1,
+            "point": 3,
+            "duration": 0.6,
+            "kind": "Linear"
+          }
+        ]
+      },
+      {
+        "comment": "ホームへ",
+        "actions": [
+          {
+            "actuator": 1,
+            "target": 0.0,
+            "duration": 1.0
+          },
+          {
+            "actuator": 2,
+            "target": 0.0,
+            "duration": 1.0
+          },
+          {
+            "actuator": 3,
+            "target": 0.0,
+            "duration": 1.0
+          },
+          {
+            "actuator": 4,
+            "target": 0.0,
+            "duration": 1.0
+          },
+          {
+            "actuator": 5,
+            "target": 0.0,
+            "duration": 1.0
+          },
+          {
+            "actuator": 6,
+            "target": 0.0,
+            "duration": 1.0
+          }
+        ]
+      }
+    ],
+    "robots": [
+      {
+        "id": 1,
+        "name": "UR5e",
+        "tip": 6,
+        "tcp": [
+          491.9,
+          1042.9,
+          -133.3
+        ],
+        "tool_axis": [
+          0.0,
+          -1.0,
+          0.0
+        ],
+        "points": [
+          {
+            "id": 1,
+            "name": "ピック上",
+            "position": [
+              560.0,
+              938.0,
+              -260.0
+            ],
+            "approach": [
+              0.0,
+              -1.0,
+              0.0
+            ]
+          },
+          {
+            "id": 2,
+            "name": "ピック",
+            "position": [
+              560.0,
+              788.0,
+              -260.0
+            ],
+            "approach": [
+              0.0,
+              -1.0,
+              0.0
+            ]
+          },
+          {
+            "id": 3,
+            "name": "プレース上",
+            "position": [
+              560.0,
+              938.0,
+              520.0
+            ],
+            "approach": [
+              0.0,
+              -1.0,
+              0.0
+            ]
+          },
+          {
+            "id": 4,
+            "name": "プレース",
+            "position": [
+              560.0,
+              788.0,
+              520.0
+            ],
+            "approach": [
+              0.0,
+              -1.0,
+              0.0
+            ]
+          }
+        ],
+        "joint_speed": 180.0,
+        "accel_time": 0.2
+      }
+    ]
+  },
+  "conveyors": {
+    "kinds": [
+      {
+        "id": 1,
+        "name": "ワーク",
+        "size": [
+          60.0,
+          60.0,
+          60.0
+        ],
+        "color": [
+          0.95,
+          0.55,
+          0.15
+        ]
+      }
+    ],
+    "sources": [
+      {
+        "id": 1,
+        "name": "投入シュート",
+        "part": [
+          1,
+          3
+        ],
+        "output": {
+          "type": "Conveyor",
+          "conveyor": 1
+        },
+        "interval": 8.83,
+        "kinds": [
+          1
+        ]
+      }
+    ],
+    "sinks": [
+      {
+        "id": 1,
+        "name": "回収箱",
+        "part": [
+          1,
+          4
+        ]
+      }
+    ],
+    "conveyors": [
+      {
+        "id": 1,
+        "name": "供給コンベア",
+        "part": [
+          1,
+          1
+        ],
+        "axis": "Z",
+        "speed": 300.0,
+        "end": "Stopper"
+      },
+      {
+        "id": 2,
+        "name": "排出コンベア",
+        "part": [
+          1,
+          2
+        ],
+        "axis": "Z",
+        "speed": 250.0,
+        "end": "Discharge"
+      }
+    ],
+    "grippers": [
+      {
+        "id": 1,
+        "name": "2F-85",
+        "chuck": 20,
+        "tcp": [
+          491.9,
+          1042.9,
+          -133.3
+        ],
+        "reach": 40.0
+      }
+    ]
+  }
+}
