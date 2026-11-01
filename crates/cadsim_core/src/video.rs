@@ -158,6 +158,21 @@ impl FramePlan {
     pub fn video_seconds(&self) -> f64 {
         f64::from(self.frames) / f64::from(self.fps)
     }
+
+    /// 動画を少なくとも `seconds` 秒にする。カメラの通り道の終わりまで撮るのに使う。
+    /// 最後のフレームがちょうど `seconds` 秒目になるように 1 枚足す
+    pub fn extend_to(mut self, seconds: f64) -> Self {
+        if seconds.is_finite() && seconds > 0.0 {
+            let needed = (seconds * f64::from(self.fps) - 1e-6).ceil() as u32 + 1;
+            self.frames = self.frames.max(needed);
+        }
+        self
+    }
+
+    /// `index` 枚目のフレームの動画の頭からの秒数 (カメラの通り道の時刻)
+    pub fn video_time(&self, index: u32) -> f64 {
+        f64::from(index) / f64::from(self.fps)
+    }
 }
 
 /// 画像 1 枚の中の切り抜き範囲 (物理ピクセル)
@@ -197,6 +212,11 @@ impl<S: VideoSink> RecordingSession<S> {
     /// 次に撮るフレームのシミュレーション時刻。撮り終えたら None
     pub fn current_time(&self) -> Option<f64> {
         (self.next < self.plan.frames).then(|| self.plan.time(self.next))
+    }
+
+    /// 次に撮るフレームの動画の頭からの秒数。撮り終えたら None
+    pub fn current_video_time(&self) -> Option<f64> {
+        (self.next < self.plan.frames).then(|| self.plan.video_time(self.next))
     }
 
     /// `current_time` の時刻で撮った画像を渡す
@@ -280,6 +300,18 @@ mod tests {
         assert!((times[2] - 0.2).abs() < 1e-9);
         assert_eq!(session.progress(), (3, 3));
         assert_eq!(session.into_sink().0, vec![(4, 2); 3]);
+    }
+
+    #[test]
+    fn extend_to_covers_the_camera_path() {
+        // 動きのないモデルでも、カメラの通り道の長さだけ撮る
+        let plan = FramePlan::new(0.0, 1, 30, 1.0).extend_to(2.0);
+        assert_eq!(plan.frames, 61);
+        assert_eq!(plan.video_time(60), 2.0);
+        assert_eq!(plan.time(60), 0.0);
+        // チャートのほうが長ければそのまま
+        let long = FramePlan::new(10.0, 1, 30, 1.0);
+        assert_eq!(long.extend_to(2.0).frames, long.frames);
     }
 
     #[test]

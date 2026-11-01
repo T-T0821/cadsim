@@ -47,6 +47,7 @@ use crate::motion::{Playback, TimingChart};
 use crate::plc::{Plc, PlcRecord};
 use crate::site::model::Site;
 use crate::view::camera::CameraRequest;
+use crate::view::camera_path::CameraPathRes;
 use crate::view::recording::is_recording;
 use cadsim_core::conveyor::ConveyorConfig;
 
@@ -234,6 +235,7 @@ pub struct MotionDoc<'w> {
     animations: ResMut<'w, Animations>,
     plc: ResMut<'w, Plc>,
     conveyors: ResMut<'w, ConveyorConfigRes>,
+    camera_path: ResMut<'w, CameraPathRes>,
 }
 
 impl MotionDoc<'_> {
@@ -285,6 +287,7 @@ fn run_project_actions(
                 animations: &motion.animations,
                 plc: motion.plc.record(),
                 conveyors: &motion.conveyors,
+                camera_path: &motion.camera_path,
             }
         };
     }
@@ -311,6 +314,7 @@ fn run_project_actions(
                     loaded.file.plc.as_ref(),
                     opened.conveyors,
                 );
+                motion.camera_path.0 = opened.camera_path;
                 floor.apply(opened.floor);
                 history.clear();
                 selection.clear();
@@ -378,6 +382,7 @@ fn run_project_actions(
                 None,
                 opened.conveyors,
             );
+            motion.camera_path.0 = opened.camera_path;
             floor.apply(opened.floor);
             history.clear();
             selection.clear();
@@ -485,6 +490,7 @@ fn update_window_title(
     animations: Res<Animations>,
     plc: Res<Plc>,
     conveyors: Res<ConveyorConfigRes>,
+    camera_path: Res<CameraPathRes>,
     mut window: Single<&mut Window, With<PrimaryWindow>>,
 ) {
     let docs = ProjectDocs {
@@ -496,6 +502,7 @@ fn update_window_title(
         animations: &animations,
         plc: plc.record(),
         conveyors: &conveyors,
+        camera_path: &camera_path,
     };
     let unsaved = state.has_unsaved_changes(&docs);
     // 毎フレーム書くと変更検知が走り続けるので、変わったときだけ書く

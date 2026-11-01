@@ -21,3 +21,6 @@ hover "書き出し"
 click "シミュレーションを動画で書き出し…"
 wait 30
 screenshot video
+click "ぐるっと一周"              # カメラワーク: 注視点のまわりを一周する通り道
+wait 30
+screenshot video_camera_path

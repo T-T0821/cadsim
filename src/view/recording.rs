@@ -18,7 +18,9 @@ use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 use crate::model::Selection;
 use crate::motion::{ChartSchedule, MotionSet, Playback};
 use crate::video::encode::{EncodeSettings, EncoderThread};
-use crate::view::camera::ViewportRect;
+use crate::view::camera::{CameraSystems, OrbitCamera, ViewportRect};
+use crate::view::camera_path::{CameraPathRes, CameraPathUi, camera_path_ui};
+use cadsim_core::camera_path::{CameraPath, CameraPose};
 use cadsim_core::video::{CropRect, Format, Frame, FramePlan, RecordingSession};
 
 pub struct RecordingPlugin;
@@ -33,7 +35,8 @@ impl Plugin for RecordingPlugin {
                 Update,
                 (start_if_requested, drive_recording)
                     .chain()
-                    .before(MotionSet::Pose),
+                    .before(MotionSet::Pose)
+                    .before(CameraSystems),
             );
     }
 }
@@ -66,8 +69,26 @@ pub struct RecordSettings {
     area: Area,
     /// 書き出し前に選択を解除して、部品の色を元に戻す
     clear_selection: bool,
+    /// カメラの通り道に沿って撮る (通り道が動かせるときだけ効く)
+    use_camera_path: bool,
     /// 「書き出し開始」が押された。保存先のダイアログは Update で出す
     start_requested: bool,
+}
+
+impl RecordSettings {
+    /// 書き出しに使うカメラの通り道 (使わないなら None)
+    fn camera_path<'a>(&self, path: &'a CameraPath) -> Option<&'a CameraPath> {
+        (self.use_camera_path && path.is_playable()).then_some(path)
+    }
+
+    /// 撮るフレームの計画。カメラの通り道を使うなら、通り道の終わりまで撮る
+    fn plan(&self, cycle_time: f64, path: &CameraPath) -> FramePlan {
+        let plan = FramePlan::new(cycle_time, self.cycles, self.fps, self.speed);
+        match self.camera_path(path) {
+            Some(path) => plan.extend_to(path.duration()),
+            None => plan,
+        }
+    }
 }
 
 impl Default for RecordSettings {
@@ -81,6 +102,7 @@ impl Default for RecordSettings {
             downscale: 1,
             area: Area::View3d,
             clear_selection: true,
+            use_camera_path: false,
             start_requested: false,
         }
     }
@@ -123,6 +145,9 @@ struct Capture {
     /// 書き出し前の再生状態とウィンドウタイトル (終わったら戻す)
     saved_playback: Playback,
     saved_title: String,
+    /// カメラの通り道 (使うときだけ)。撮り終えたら `saved_pose` の視点に戻す
+    camera_path: Option<CameraPath>,
+    saved_pose: CameraPose,
 }
 
 /// 保存先を選ばせ、キャプチャを始める。ダイアログはメインスレッドで出す必要がある
@@ -135,6 +160,8 @@ fn start_if_requested(
     mut selection: ResMut<Selection>,
     viewport: Res<ViewportRect>,
     window: Single<&Window, With<PrimaryWindow>>,
+    camera_path: Res<CameraPathRes>,
+    orbit: Res<OrbitCamera>,
     _main_thread: NonSendMarker,
 ) {
     if !std::mem::take(&mut settings.start_requested) || !matches!(recorder.state, State::Idle) {
@@ -143,12 +170,7 @@ fn start_if_requested(
     let Some(path) = pick_output(settings.format) else {
         return;
     };
-    let plan = FramePlan::new(
-        schedule.cycle_time,
-        settings.cycles,
-        settings.fps,
-        settings.speed,
-    );
+    let plan = settings.plan(schedule.cycle_time, &camera_path);
     let crop = match settings.area {
         Area::Window => None,
         Area::View3d => viewport.rect.map(|r| {
@@ -183,6 +205,8 @@ fn start_if_requested(
         pending: None,
         saved_playback: *playback,
         saved_title: window.title.clone(),
+        camera_path: settings.camera_path(&camera_path).cloned(),
+        saved_pose: orbit.camera_pose(),
     }));
     recorder.result = None;
     playback.playing = false;
@@ -226,6 +250,7 @@ fn drive_recording(
     mut commands: Commands,
     mut recorder: ResMut<Recorder>,
     mut playback: ResMut<Playback>,
+    mut orbit: ResMut<OrbitCamera>,
     keys: Res<ButtonInput<KeyCode>>,
     mut window: Single<&mut Window, With<PrimaryWindow>>,
 ) {
@@ -251,7 +276,14 @@ fn drive_recording(
         State::Capturing(capture) => {
             if keys.just_pressed(KeyCode::Escape) {
                 let capture = take_capture(&mut recorder.state);
-                finish_capture(recorder, *capture, &mut playback, &mut window, true);
+                finish_capture(
+                    recorder,
+                    *capture,
+                    &mut playback,
+                    &mut orbit,
+                    &mut window,
+                    true,
+                );
                 return;
             }
 
@@ -267,20 +299,42 @@ fn drive_recording(
                 if submitted.is_err() {
                     // エンコード側が止まった (書き込み失敗など)。原因は join で受け取る
                     let capture = take_capture(&mut recorder.state);
-                    finish_capture(recorder, *capture, &mut playback, &mut window, false);
+                    finish_capture(
+                        recorder,
+                        *capture,
+                        &mut playback,
+                        &mut orbit,
+                        &mut window,
+                        false,
+                    );
                     return;
                 }
             }
 
             let Some(time) = capture.session.current_time() else {
                 let capture = take_capture(&mut recorder.state);
-                finish_capture(recorder, *capture, &mut playback, &mut window, false);
+                finish_capture(
+                    recorder,
+                    *capture,
+                    &mut playback,
+                    &mut orbit,
+                    &mut window,
+                    false,
+                );
                 return;
             };
 
             // 次のフレームの時刻に合わせて、このフレームの描画をキャプチャする
             playback.playing = false;
             playback.time = time;
+            if let Some(path) = &capture.camera_path
+                && let Some(pose) = capture
+                    .session
+                    .current_video_time()
+                    .and_then(|t| path.sample(t))
+            {
+                orbit.set_camera_pose(pose);
+            }
             let slot = Arc::new(Mutex::new(None));
             let sender = slot.clone();
             commands.spawn(Screenshot::primary_window()).observe(
@@ -313,12 +367,16 @@ fn finish_capture(
     recorder: &mut Recorder,
     capture: Capture,
     playback: &mut Playback,
+    orbit: &mut OrbitCamera,
     window: &mut Window,
     cancelled: bool,
 ) {
     let mut encoder = capture.session.into_sink();
     encoder.close();
     *playback = capture.saved_playback;
+    if capture.camera_path.is_some() {
+        orbit.set_camera_pose(capture.saved_pose);
+    }
     window.title = capture.saved_title;
     recorder.state = State::Encoding { encoder, cancelled };
 }
@@ -344,6 +402,15 @@ fn remove_output(path: &Path) {
 // 設定ウィンドウ
 // ---------------------------------------------------------------------------
 
+/// カメラワークの欄が書き換えるもの
+#[derive(bevy::ecs::system::SystemParam)]
+struct CameraWork<'w> {
+    path: ResMut<'w, CameraPathRes>,
+    ui: ResMut<'w, CameraPathUi>,
+    orbit: ResMut<'w, OrbitCamera>,
+    playback: ResMut<'w, Playback>,
+}
+
 fn recording_window(
     mut contexts: EguiContexts,
     mut settings: ResMut<RecordSettings>,
@@ -351,8 +418,9 @@ fn recording_window(
     schedule: Res<ChartSchedule>,
     viewport: Res<ViewportRect>,
     window: Single<&Window, With<PrimaryWindow>>,
+    mut camera: CameraWork,
 ) -> Result {
-    // 書き出し中のウィンドウは動画に映るので出さない
+    // 書き出し中とプレビュー中のウィンドウは動画に映るので出さない
     if !settings.open || recorder.is_capturing() {
         return Ok(());
     }
@@ -368,7 +436,14 @@ fn recording_window(
         .resizable(false)
         .collapsible(false)
         .show(ctx, |ui| {
-            settings_ui(ui, &mut settings, &recorder, &schedule, &window);
+            settings_ui(
+                ui,
+                &mut settings,
+                &recorder,
+                &schedule,
+                &window,
+                &mut camera,
+            );
         });
     if !open {
         settings.open = false;
@@ -382,6 +457,7 @@ fn settings_ui(
     recorder: &Recorder,
     schedule: &ChartSchedule,
     window: &Window,
+    camera: &mut CameraWork,
 ) {
     egui::Grid::new("record_settings")
         .num_columns(2)
@@ -446,12 +522,28 @@ fn settings_ui(
         });
     ui.checkbox(&mut settings.clear_selection, "選択を解除してから撮る");
 
-    let cycle = schedule.cycle_time;
-    let plan = FramePlan::new(cycle, settings.cycles, settings.fps, settings.speed);
     let busy = !matches!(recorder.state, State::Idle);
     ui.separator();
-    if cycle <= 0.0 {
-        ui.weak("タイミングチャートに動作がありません");
+    ui.strong("カメラワーク");
+    let speed = settings.speed;
+    camera_path_ui(
+        ui,
+        &mut camera.path,
+        &mut camera.ui,
+        &mut camera.orbit,
+        &mut camera.playback,
+        &mut settings.use_camera_path,
+        speed,
+        busy,
+    );
+
+    let cycle = schedule.cycle_time;
+    let plan = settings.plan(cycle, &camera.path);
+    let with_camera = settings.camera_path(&camera.path).is_some();
+    let can_record = cycle > 0.0 || with_camera;
+    ui.separator();
+    if !can_record {
+        ui.weak("タイミングチャートに動作がありません (カメラワークだけでも撮れます)");
     } else {
         ui.label(format!(
             "動画の長さ {:.1} 秒 ({} フレーム)",
@@ -461,7 +553,10 @@ fn settings_ui(
     }
     ui.horizontal(|ui| {
         if ui
-            .add_enabled(cycle > 0.0 && !busy, egui::Button::new("● 書き出し開始…"))
+            .add_enabled(
+                can_record && !busy && !camera.ui.is_previewing(),
+                egui::Button::new("● 書き出し開始…"),
+            )
             .on_hover_text("保存先を選ぶと書き出しを始めます")
             .clicked()
         {
