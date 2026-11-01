@@ -379,6 +379,8 @@ SampleVise
 `samples/real_robot/` の UR5e と Robotiq 2F-85 の GLB は、メーカーが ROS 向けに公開しているメッシュ(BSD 3-Clause)を `tools/real_robot/convert_meshes.py` で変換したもので、
 プロジェクト `ur5e_pick_place.cadsim` は `tools/real_robot/make_demo.py` で生成しています。どちらもアプリに埋め込んでいます。出典・関節の付け方・作り直し方は [real-robot.md](real-robot.md) を見てください。
 
+同じ UR5e を URDF で読み込むサンプル(`samples/real_robot/ur5e_urdf/`)と、URDF の読み込みの中身は [urdf.md](urdf.md) にあります。
+
 ## 日本語フォント
 
 egui の標準フォントには日本語がないため、[Noto Sans JP](https://github.com/notofonts/noto-cjk)(SIL Open Font License 1.1)を埋め込んでいます。

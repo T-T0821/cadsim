@@ -31,6 +31,68 @@ use crate::project::{ProjectAction, ProjectState, is_project_file};
 use crate::step_import::{ImportedFile, import_step};
 use crate::stress::stress_scene;
 use crate::view::camera::CameraRequest;
+use cadsim_core::motion::robot_import::RobotDescription;
+use cadsim_io::urdf::{self, UrdfImport, is_urdf_file};
+
+/// 同梱の UR5e の URDF (Universal Robots の ROS の記述、BSD 3-Clause) と見た目のメッシュ
+const URDF_SAMPLE_FILES: [(&str, &[u8]); 9] = [
+    (
+        URDF_SAMPLE,
+        include_bytes!("../samples/real_robot/ur5e_urdf/ur5e.urdf"),
+    ),
+    (
+        "base.glb",
+        include_bytes!("../samples/real_robot/ur5e_urdf/base.glb"),
+    ),
+    (
+        "shoulder.glb",
+        include_bytes!("../samples/real_robot/ur5e_urdf/shoulder.glb"),
+    ),
+    (
+        "upperarm.glb",
+        include_bytes!("../samples/real_robot/ur5e_urdf/upperarm.glb"),
+    ),
+    (
+        "forearm.glb",
+        include_bytes!("../samples/real_robot/ur5e_urdf/forearm.glb"),
+    ),
+    (
+        "wrist1.glb",
+        include_bytes!("../samples/real_robot/ur5e_urdf/wrist1.glb"),
+    ),
+    (
+        "wrist2.glb",
+        include_bytes!("../samples/real_robot/ur5e_urdf/wrist2.glb"),
+    ),
+    (
+        "wrist3.glb",
+        include_bytes!("../samples/real_robot/ur5e_urdf/wrist3.glb"),
+    ),
+    (
+        "LICENSE-UR5e.txt",
+        include_bytes!("../samples/real_robot/LICENSE-UR5e.txt"),
+    ),
+];
+const URDF_SAMPLE: &str = "ur5e.urdf";
+
+/// 同梱の URDF を書き出すフォルダ。設定ファイルと同じ場所の `samples/ur5e_urdf`
+fn urdf_sample_dir() -> PathBuf {
+    crate::preferences_file::default_path()
+        .and_then(|p| p.parent().map(|dir| dir.join("samples").join("ur5e_urdf")))
+        .unwrap_or_else(|| std::env::temp_dir().join("cadsim").join("ur5e_urdf"))
+}
+
+/// 同梱の URDF を `dir` に書き出し、URDF のパスを返す。中身が同じファイルは書き直さない
+fn write_urdf_sample(dir: &Path) -> std::io::Result<PathBuf> {
+    std::fs::create_dir_all(dir)?;
+    for (name, bytes) in URDF_SAMPLE_FILES {
+        let path = dir.join(name);
+        if std::fs::read(&path).ok().as_deref() != Some(bytes) {
+            std::fs::write(&path, bytes)?;
+        }
+    }
+    Ok(dir.join(URDF_SAMPLE))
+}
 
 /// 起動時に開くファイルを指定しなかったときに使うサンプル
 const SAMPLE_STEP: &str = include_str!("../assets/sample_assembly.step");
@@ -48,6 +110,8 @@ impl Plugin for FileIoPlugin {
 pub enum Loaded {
     Step(Box<ImportedFile>),
     Scene(Scene),
+    /// URDF のロボット (形状と関節の木)
+    Robot(Box<UrdfImport>),
 }
 
 impl Loaded {
@@ -56,8 +120,28 @@ impl Loaded {
         match self {
             Loaded::Step(file) => *file,
             Loaded::Scene(scene) => scene_to_import(&scene, name, unit),
+            Loaded::Robot(robot) => {
+                let mut file = scene_to_import(&robot.scene, name, unit);
+                file.warnings = robot.warnings;
+                file
+            }
         }
     }
+
+    /// URDF なら、ロボットの機種 (関節の木)
+    pub fn robot(&self) -> Option<&RobotDescription> {
+        match self {
+            Loaded::Robot(robot) => Some(&robot.robot),
+            _ => None,
+        }
+    }
+}
+
+/// 読み込んだ URDF のロボット。モデルに加えたあと、motion がチャートに関節を足す
+pub struct ImportedRobot {
+    /// モデルに加えたロボットのいちばん上のノード
+    pub root: NodeId,
+    pub description: RobotDescription,
 }
 
 /// 読み込みの結果 (ファイル名, 読み込み元, 形状を差し替えるノード, 中身 or エラー文)
@@ -103,6 +187,10 @@ pub struct ImportJobs {
     pub units: UnitOptions,
     /// 平面図・点群として開くファイル (site が受け取って読む)
     pub site_files: Vec<PathBuf>,
+    /// 読み込んだばかりの URDF のロボット (motion が関節をチャートに足す)
+    pub robots: Vec<ImportedRobot>,
+    /// 「URDF を読み込む」が押された (URDF だけを選ぶダイアログを出す)
+    urdf_dialog_requested: bool,
 }
 
 impl Default for ImportJobs {
@@ -120,6 +208,8 @@ impl Default for ImportJobs {
             browser_requested: false,
             units: UnitOptions::default(),
             site_files: Vec::new(),
+            robots: Vec::new(),
+            urdf_dialog_requested: false,
         }
     }
 }
@@ -143,6 +233,25 @@ impl ImportJobs {
     }
 
     /// 「開く」が押されていたら true を返して取り消す (ダイアログは input::file_dialog が出す)
+    pub fn request_urdf_dialog(&mut self) {
+        self.urdf_dialog_requested = true;
+    }
+
+    pub fn take_urdf_dialog_request(&mut self) -> bool {
+        std::mem::take(&mut self.urdf_dialog_requested)
+    }
+
+    /// 同梱の UR5e の URDF を設定ファイルと同じ場所に書き出して読み込む
+    pub fn open_urdf_sample(&mut self) {
+        let dir = urdf_sample_dir();
+        match write_urdf_sample(&dir) {
+            Ok(path) => self.open_path(path),
+            Err(e) => self
+                .messages
+                .push(format!("UR5e の URDF を書き出せませんでした: {e}")),
+        }
+    }
+
     pub fn take_dialog_request(&mut self) -> bool {
         std::mem::take(&mut self.dialog_requested)
     }
@@ -194,6 +303,9 @@ impl ImportJobs {
 /// 読み込み元を読む。STEP 以外は拡張子で形式を選び、`interchange` で読む
 pub fn load_source(source: &StepSource, units: &UnitOptions) -> Result<Loaded, String> {
     match source {
+        StepSource::File(path) if is_urdf_file(path) => {
+            urdf::import(path).map(|robot| Loaded::Robot(Box::new(robot)))
+        }
         StepSource::File(path) if !is_step(path) => {
             interchange::import_file(path, units).map(Loaded::Scene)
         }
@@ -287,6 +399,12 @@ pub fn receive_imports(
         if let Some(i) = jobs.loading.iter().position(|n| *n == name) {
             jobs.loading.remove(i);
         }
+        let robot = result
+            .as_ref()
+            .ok()
+            .and_then(Loaded::robot)
+            .filter(|_| target.is_none())
+            .cloned();
         // 単位の情報を持つシーンは、いまのモデルの単位に合わせて取り込む
         let result = result.map(|loaded| loaded.into_imported(&name, &model.unit));
         if let Some(target) = target {
@@ -312,6 +430,13 @@ pub fn receive_imports(
                     animations.add_clips(clips, &ids);
                 }
                 history.record_added(&model, root, format!("{name} を読み込み"));
+                if let Some(description) = robot.clone() {
+                    // メーカーのメッシュはリンクの継ぎ目で重なるので、ロボットの中どうしの干渉は調べない
+                    if let Some(node) = model.get_mut(root) {
+                        node.skip_inner_interference = true;
+                    }
+                    jobs.robots.push(ImportedRobot { root, description });
+                }
                 let parts = model.measure(root).part_count;
                 // 部品の色が見えるよう、読み込み直後は何も選ばない
                 selection.clear();

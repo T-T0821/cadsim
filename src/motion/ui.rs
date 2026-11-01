@@ -1633,7 +1633,18 @@ fn actuator_editor(
             });
             ui.horizontal(|ui| {
                 for axis in Axis::ALL {
-                    ui.selectable_value(&mut actuator.axis, axis, axis.label());
+                    let selected = actuator.custom_axis.is_none() && actuator.axis == axis;
+                    if ui.selectable_label(selected, axis.label()).clicked() {
+                        actuator.axis = axis;
+                        actuator.custom_axis = None;
+                    }
+                }
+                if let Some([x, y, z]) = actuator.custom_axis {
+                    let _ = ui
+                        .selectable_label(true, "斜め")
+                        .on_hover_text(format!(
+                            "URDF などから読み込んだ斜めの軸 ({x:.3}, {y:.3}, {z:.3})。\nX / Y / Z を押すとそちらに変わります"
+                        ));
                 }
                 ui.checkbox(&mut actuator.reversed, "逆向き");
             });

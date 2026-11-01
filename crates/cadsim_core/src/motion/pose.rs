@@ -80,7 +80,10 @@ impl RigidPose {
 
 /// 設計位置での動く向き (直動は移動方向、回転は回転軸の単位ベクトル)
 pub fn direction(actuator: &Actuator) -> DVec3 {
-    let direction = DVec3::from_array(actuator.axis.unit_vector());
+    let direction = actuator
+        .custom_axis
+        .and_then(|v| DVec3::from_array(v).try_normalize())
+        .unwrap_or_else(|| DVec3::from_array(actuator.axis.unit_vector()));
     if actuator.reversed {
         -direction
     } else {

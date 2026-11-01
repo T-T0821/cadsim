@@ -2526,6 +2526,7 @@ dependencies = [
  "krilla",
  "lopdf",
  "openusd",
+ "roxmltree",
  "rust_xlsxwriter",
  "serde",
  "serde_json",

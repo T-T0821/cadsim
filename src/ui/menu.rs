@@ -65,6 +65,16 @@ fn file_menu(ui: &mut egui::Ui, state: &mut UiState) {
         {
             state.jobs.request_dialog();
         }
+        if ui
+            .button("ロボット機種 (URDF) を読み込む…")
+            .on_hover_text(
+                "ROS のロボットの記述 (.urdf) を今のプロジェクトに読み込み、リンクの形状と関節・可動範囲から\n\
+                 ジョグ・教示点・逆運動学で動かせるロボットを作る",
+            )
+            .clicked()
+        {
+            state.jobs.request_urdf_dialog();
+        }
         ui.menu_button("サンプルを開く", |ui| {
             if ui
                 .button("デモライン")
@@ -85,6 +95,17 @@ fn file_menu(ui: &mut egui::Ui, state: &mut UiState) {
                 .clicked()
             {
                 state.project.request(ProjectAction::OpenRealRobot);
+                ui.close();
+            }
+            if ui
+                .button("ロボット機種 UR5e (URDF)")
+                .on_hover_text(
+                    "Universal Robots が公開している UR5e の URDF (BSD 3-Clause) を今のプロジェクトに読み込み、\n\
+                     6 軸のロボットとして置く",
+                )
+                .clicked()
+            {
+                state.jobs.open_urdf_sample();
                 ui.close();
             }
             if ui

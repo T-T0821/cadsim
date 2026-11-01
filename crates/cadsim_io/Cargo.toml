@@ -25,6 +25,8 @@ gltf = { version = "1.4", features = ["import", "names", "utils", "extras"] }
 serde_json = "1.0.154"
 stl_io = "0.11"
 tobj = { version = "4", default-features = false }
+# URDF (ロボットの機種) と COLLADA (.dae) の XML の読み込み。純 Rust
+roxmltree = "0.21"
 # OpenUSD (.usda / .usdc / .usdz) の読み書き。純 Rust
 openusd = "0.8"
 # STEP (AP203 / AP214 / AP242) の読み込みと B-rep のテッセレーション

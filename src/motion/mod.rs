@@ -13,6 +13,7 @@
 //! - `sensor_view`: 3D ビューにセンサーの光軸・検出範囲を描く
 //! - `robot_ui`: ロボットの設定・ジョグ・教示点の欄 (右のプロパティ欄) と、3D ビューへの TCP・教示点の表示
 //! - `demo`: 動作確認用のサンプル装置 (ガントリーのピック & プレース、4軸ロボット)
+//! - `urdf_robot`: 読み込んだ URDF のロボットに関節とロボットを付ける (計算は `cadsim_core::motion::robot_import`)
 //! - `export`: 1サイクルの動きを書き出し用のアニメーション (glTF / USD) にする
 //!
 //! 設計データ (Model) は書き換えず、再生中の動きは [`SimulationPose`] に出す。
@@ -44,6 +45,7 @@ mod targets;
 mod teach;
 mod ui;
 mod ur_ui;
+mod urdf_robot;
 
 use std::collections::HashMap;
 
@@ -133,6 +135,7 @@ impl Plugin for MotionPlugin {
                     .chain()
                     .in_set(MotionSet::Pose),
             )
+            .add_systems(Update, urdf_robot::attach_imported_robots)
             .add_systems(
                 Update,
                 (update_sensor_states, sensor_view::draw_sensors)

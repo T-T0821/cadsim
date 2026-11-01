@@ -147,6 +147,9 @@ pub struct Actuator {
     pub name: String,
     pub kind: ActuatorKind,
     pub axis: Axis,
+    /// X / Y / Z 以外の向きに動く関節の向き (モデル座標、設計位置)。Some なら `axis` より優先する。
+    /// URDF から読み込んだロボットの関節など、斜めの軸に使う。
+    pub custom_axis: Option<[f64; 3]>,
     /// true なら軸のマイナス方向に動く (回転なら逆回り)
     pub reversed: bool,
     /// シリンダのストローク (モデル単位)。シリンダ以外では使わない。
@@ -176,6 +179,7 @@ impl Actuator {
             name: format!("{} {id}", kind.label()),
             kind,
             axis,
+            custom_axis: None,
             reversed: false,
             stroke,
             pivot: [0.0; 3],
