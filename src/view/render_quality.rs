@@ -10,18 +10,20 @@ use bevy::anti_alias::smaa::Smaa;
 use bevy::camera::Hdr;
 use bevy::core_pipeline::prepass::{DepthPrepass, NormalPrepass};
 use bevy::light::{
-    CascadeShadowConfigBuilder, DirectionalLightShadowMap, EnvironmentMapLight,
-    GlobalAmbientLight, ShadowFilteringMethod,
+    CascadeShadowConfigBuilder, DirectionalLightShadowMap, EnvironmentMapLight, GlobalAmbientLight,
+    ShadowFilteringMethod,
 };
-use bevy::pbr::{ContactShadows, ScreenSpaceAmbientOcclusion, ScreenSpaceAmbientOcclusionQualityLevel};
+use bevy::pbr::{
+    ContactShadows, ScreenSpaceAmbientOcclusion, ScreenSpaceAmbientOcclusionQualityLevel,
+};
 use bevy::post_process::bloom::Bloom;
 use bevy::prelude::*;
 use bevy_egui::egui;
 
 use cadsim_core::library::catalog::units_per_mm;
 use cadsim_core::render_quality::{
-    AoLevel, Antialias, OcclusionScale, RenderProfile, RenderQuality, ShadowRange,
-    occlusion_scale, shadow_range, units_per_meter,
+    Antialias, AoLevel, OcclusionScale, RenderProfile, RenderQuality, ShadowRange, occlusion_scale,
+    shadow_range, units_per_meter,
 };
 use cadsim_io::render_settings;
 
@@ -38,7 +40,7 @@ const PLAIN_AMBIENT: f32 = 80.0;
 /// 環境光を使うときの全体の明るさ。周りの色は環境光が受け持つので弱くする
 const ENVIRONMENT_AMBIENT: f32 = 15.0;
 /// 環境光の強さ (cd/m²)
-const ENVIRONMENT_INTENSITY: f32 = 320.0;
+const ENVIRONMENT_INTENSITY: f32 = 240.0;
 
 pub struct RenderQualityPlugin;
 
@@ -207,7 +209,7 @@ struct FittedRanges {
 }
 
 /// カメラの距離とシーンの大きさに合わせて、影の範囲と SSAO・接地の影の長さを決める
-#[allow(clippy::type_complexity)]
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn fit_ranges(
     mut commands: Commands,
     ui: Res<RenderQualityUi>,
@@ -277,7 +279,10 @@ fn save_quality(mut ui: ResMut<RenderQualityUi>) {
     if let Some(path) = &ui.path
         && let Err(err) = render_settings::save(path, ui.quality)
     {
-        warn!("画質の設定を保存できませんでした ({}): {err}", path.display());
+        warn!(
+            "画質の設定を保存できませんでした ({}): {err}",
+            path.display()
+        );
     }
 }
 

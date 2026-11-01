@@ -4,6 +4,8 @@ click "自由にさわる"
 wait 30
 click "★ Lv."                  # ミッションカードを隠す
 wait 420                         # ミッション達成の表示が消えるのを待つ
+scroll 740 400 4                 # ロボットセルに寄る
+wait 60
 screenshot 01_high
 click "表示"
 wait 10

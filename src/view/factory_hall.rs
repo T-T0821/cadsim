@@ -7,6 +7,7 @@
 use bevy::{
     asset::RenderAssetUsages,
     image::{ImageAddressMode, ImageFilterMode, ImageSampler, ImageSamplerDescriptor},
+    light::NotShadowCaster,
     math::{DVec2, DVec3},
     mesh::{Indices, PrimitiveTopology},
     prelude::*,
@@ -222,11 +223,14 @@ fn spawn_hall(
         ))
         .with_children(|root| {
             for (mesh, material, transform, sides) in children {
+                // 床・床の線・壁は影を落とさない (屋根がないので、壁の影が床の端を暗くするだけになる)。
+                // 影を受けるのはそのまま
                 let mut e = root.spawn((
                     HallMesh,
                     Mesh3d(meshes.add(mesh)),
                     MeshMaterial3d(material),
                     transform,
+                    NotShadowCaster,
                 ));
                 if let Some(sides) = sides {
                     e.insert(HallPiece(sides));

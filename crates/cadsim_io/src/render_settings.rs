@@ -62,7 +62,13 @@ mod tests {
 
     #[test]
     fn broken_or_unknown_uses_default() {
-        for json in ["", "{", "{}", r#"{"quality": 3}"#, r#"{"quality": "ultra"}"#] {
+        for json in [
+            "",
+            "{",
+            "{}",
+            r#"{"quality": 3}"#,
+            r#"{"quality": "ultra"}"#,
+        ] {
             assert_eq!(from_json(json), RenderQuality::default(), "{json}");
         }
     }
