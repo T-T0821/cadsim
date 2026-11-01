@@ -50,7 +50,7 @@ Cargo.toml                ワークスペース兼アプリ本体 (4. UI・フ�
 src/                      アプリ本体。assets/ の場所を変えないようにルートに置いたままにする
 ├── main.rs               プラグインを並べるだけ
 ├── resources.rs          ドメインの型を包む Resource
-├── view/                 viewport, picking (Bevy の picking の backend), camera, gizmo, 干渉の表示, 動画の撮影, walk (一人称で歩く)
+├── view/                 viewport, picking (Bevy の picking の backend), camera, render_quality (画質), gizmo, 干渉の表示, 動画の撮影, walk (一人称で歩く)
 ├── input/                shortcuts, ファイルダイアログ, ドラッグ&ドロップ
 └── ui/                   menu, tree, properties, status, 各パネル, logo (ウィンドウのアイコンとロゴの画像)
 crates/
@@ -63,6 +63,7 @@ crates/
 │       │                 line (工程と AGV・コンベアの受け渡しと時間の進め方・PLC の信号表・ワークの位置),
 │       │                 line_draft (言葉で組むラインの下書き・整え方・並べ方),
 │       │                 effects (状態のエフェクトのきっかけ・見た目・煙と火花の粒),
+│       │                 render_quality (3D ビューの画質の段階・影と陰影の範囲),
 │       │                 sound (設備の音の波形・鳴らす条件・聞こえ方・警報とブザー停止),
 │       │                 ui_check (画面の自動確認の手順書・進め方・部品の探し方・画像の比べ方),
 │       │                 timeline (シミュレーションの巻き戻し: 状態の写しの記録と進め直し),
@@ -73,7 +74,7 @@ crates/
 │                         ports (SceneReader / SceneWriter / ProjectStore などのトレイト)
 └── cadsim_io/            3. アダプター (Bevy なし)
     └── src/              step, interchange (gltf / obj / stl / usd), asset_key (取り込むファイルを Bevy のアセットの鍵にする), project_file (JSON), formats (平面図・図面・帳票・動線のヒートマップの PNG など),
-                          modbus, slmp (三菱 PLC との SLMP 通信・テスト用の PLC), sound_settings (音の設定ファイル), rtde (UR の関節角度の受信), urdf (ロボット機種の URDF・COLLADA), video, xlsx (工程シミュレーションの結果), rhai (部品スクリプトのエンジン),
+                          modbus, slmp (三菱 PLC との SLMP 通信・テスト用の PLC), sound_settings (音の設定ファイル), render_settings (画質の設定ファイル), rtde (UR の関節角度の受信), urdf (ロボット機種の URDF・COLLADA), video, xlsx (工程シミュレーションの結果), rhai (部品スクリプトのエンジン),
                           claude (生成 AI の Claude API), line_draft_json (生成 AI とやり取りするラインの下書きの JSON),
                           ui_check (画面の自動確認の PNG・結果の JSON・報告書の HTML),
                           review (複数人レビューの JSON と TCP の送受信)

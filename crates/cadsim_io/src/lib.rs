@@ -12,6 +12,7 @@ pub mod interchange;
 pub mod line_draft_json;
 pub mod modeled;
 pub mod preferences_file;
+pub mod render_settings;
 pub mod review;
 pub mod rtde;
 pub mod slmp;

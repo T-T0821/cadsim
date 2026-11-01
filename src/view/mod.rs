@@ -8,5 +8,6 @@ pub mod factory_hall;
 pub mod gizmo;
 pub mod picking;
 pub mod recording;
+pub mod render_quality;
 pub mod viewport;
 pub mod walk;
