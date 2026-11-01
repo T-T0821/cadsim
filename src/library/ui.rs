@@ -20,6 +20,7 @@ use crate::history::History;
 use crate::model::{Model, NodeId, NodeKind, Selection};
 use crate::ui::UiState;
 use crate::view::camera::{OrbitCamera, ViewportRect};
+use crate::view::factory_hall::HallMesh;
 
 /// ドロップ位置を丸める刻み (mm)
 const DROP_SNAP_MM: f64 = 10.0;
@@ -142,6 +143,9 @@ fn place(
 }
 
 /// パレットからドラッグ中の部品を、カーソル下の面 (なければ床) に置く
+/// 部品を落とす先にしない 3D のもの (作業者・AGV の体と、背景の工場の建屋)
+type NotDropTarget = Or<(With<FloorFigure>, With<HallMesh>)>;
+
 #[allow(clippy::too_many_arguments)]
 pub fn drop_on_viewport(
     mut contexts: EguiContexts,
@@ -149,7 +153,7 @@ pub fn drop_on_viewport(
     camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
     viewport: Res<ViewportRect>,
     mut ray_cast: MeshRayCast,
-    figures: Query<(), With<FloorFigure>>,
+    figures: Query<(), NotDropTarget>,
     mut gizmos: Gizmos,
     mut model: ResMut<Model>,
     mut selection: ResMut<Selection>,
@@ -177,7 +181,7 @@ pub fn drop_on_viewport(
     let Ok(ray) = camera.viewport_to_world(camera_transform, cursor) else {
         return Ok(());
     };
-    // 作業者・AGV の体の上には置かない
+    // 作業者・AGV の体と、背景の工場の壁・柱・床の上には置かない (床は下の on_floor で拾う)
     let not_figure = |e: Entity| !figures.contains(e);
     let on_part = ray_cast
         .cast_ray(

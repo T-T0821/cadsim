@@ -45,7 +45,9 @@ use crate::physics::{PhysicsPose, PhysicsSet};
 use crate::simulation::{self, InterferenceCheck, Pose, SimBody, TriMesh, measure::not_measuring};
 use crate::step_import::ImportedShape;
 use crate::view::camera::{ViewportRect, alt_pressed, pointer_in_3d_view};
+use crate::view::factory_hall;
 use crate::view::gizmo::gizmo_not_focused;
+use cadsim_core::factory_hall::HallSettings;
 
 /// 箱のテッセレーションの許容誤差 (モデル単位)
 const BOX_TESSELLATION_TOL: f64 = 0.005;
@@ -60,7 +62,8 @@ impl Plugin for ViewportPlugin {
             .init_resource::<RenderStats>()
             .init_resource::<ViewsRebuilt>()
             .init_resource::<Defeaturing>()
-            .add_systems(Startup, create_palette)
+            .init_resource::<factory_hall::Hall>()
+            .add_systems(Startup, (create_palette, factory_hall::create_materials))
             .add_systems(
                 Update,
                 (
@@ -77,6 +80,8 @@ impl Plugin for ViewportPlugin {
                     sync_views.after(MotionSet::Pose).after(PhysicsSet::Step),
                     update_level_of_detail,
                     update_face_overlay,
+                    factory_hall::sync_hall,
+                    factory_hall::hide_near_walls,
                     draw_grid_and_bounds,
                 )
                     .chain(),
@@ -104,6 +109,8 @@ pub struct ViewSettings {
     pub defeature_hole: f32,
     /// この半径以下のフィレットを消す (モデルの単位)
     pub defeature_fillet: f32,
+    /// 背景の工場の建屋 (床・通路の線・壁・柱・高窓)
+    pub hall: HallSettings,
     /// 状態のエフェクト (詰まり・故障の光と煙、溶接と干渉の火花)
     pub effects: EffectSettings,
 }
@@ -131,6 +138,7 @@ impl Default for ViewSettings {
             defeature: false,
             defeature_hole: 20.0,
             defeature_fillet: 5.0,
+            hall: HallSettings::default(),
             effects: EffectSettings::default(),
         }
     }
@@ -872,9 +880,16 @@ fn draw_grid_and_bounds(
     selection: Res<Selection>,
     settings: Res<ViewSettings>,
     cache: Res<SceneCache>,
+    hall: Res<factory_hall::Hall>,
 ) {
     if settings.show_grid {
-        draw_grid(&mut gizmos, cache.scene_bounds);
+        // 工場の床があればメートルのグリッドを床いっぱいに。小さな部品ならモデルの周りに細かいグリッドも重ねる
+        let on_hall = factory_hall::draw_hall_grid(&mut gizmos, &hall);
+        draw_grid(
+            &mut gizmos,
+            cache.scene_bounds,
+            on_hall.then_some(hall.scale * 1000.0),
+        );
     }
 
     if settings.show_bounds
@@ -903,7 +918,8 @@ fn draw_grid_and_bounds(
 }
 
 /// 床のグリッド。間隔はモデルの大きさに合わせて 1, 10, 100 ... と切り替える。
-fn draw_grid(gizmos: &mut Gizmos, scene_bounds: Option<Aabb>) {
+/// `skip_from` があれば、間隔がそれ以上のとき (工場の床のメートルのグリッドで足りるとき) は線を引かない。
+fn draw_grid(gizmos: &mut Gizmos, scene_bounds: Option<Aabb>, skip_from: Option<f64>) {
     let extent = scene_bounds
         .map(|b| b.size().x.max(b.size().z) as f32)
         .unwrap_or(10.0)
@@ -920,7 +936,8 @@ fn draw_grid(gizmos: &mut Gizmos, scene_bounds: Option<Aabb>) {
     let floor = scene_bounds.map_or(0.0, |b| b.min.y.min(0.0) as f32);
 
     let grid = Color::srgba(0.5, 0.5, 0.5, 0.35);
-    for i in 0..=count {
+    let fine_enough = skip_from.is_some_and(|s| step as f64 >= s * 0.999);
+    for i in (0..=count).filter(|_| !fine_enough) {
         let t = -half + step * i as f32;
         gizmos.line(
             Vec3::new(cx + t, floor, cz - half),
