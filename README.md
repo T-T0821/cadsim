@@ -45,6 +45,15 @@ cargo run --release -- --physics      # 物理演算のサンプルライン(ワ
 
 初回はビルドに数分かかります。Linux では先に `libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev` を入れてください。
 
+Rust を入れずに Docker だけでビルドすることもできます。VS Code の「Dev Containers: Reopen in Container」でこのフォルダを開くか、ホストの端末で次を実行します。
+
+```sh
+make docker-build             # 開発コンテナの中でビルド
+make docker-test              # 開発コンテナの中でテスト
+make docker-package-windows   # Windows 向けの exe と zip を dist/ に作る
+make help                     # ほかの目標の一覧
+```
+
 ## 最初の5分
 
 起動すると、ロボットセル・コンベア・安全柵・AGV・作業者を並べた **デモライン** が動いた状態で開き、はじめての起動では **ようこそ画面** が出ます。
@@ -980,6 +989,8 @@ cargo clippy --all-targets --locked -- -D warnings
 cargo test --locked
 ```
 
+`make check` でも同じ確認をまとめて流せます。Rust を入れていなければ `make docker-check` で開発コンテナの中で流せます(開発コンテナと Makefile の使い方は [docs/dev-environment.md](docs/dev-environment.md))。
+
 画面に関わる変更をしたら、画面での動作確認も流してください。主な操作 (部品の選択、表示の切り替え、タイミングチャートの再生、工程シミュレーション、部品ライブラリ、PLC 連携、動画の書き出し、言葉でラインを組む、保存と読み込みなど) を自動で操作して画面を撮り、前に撮った基準画像と見比べます。結果は `target/ui-check/index.html` で見られます。
 
 ```sh
@@ -992,6 +1003,7 @@ README の画面写真は `docs/screenshots/scenarios/` の手順書で撮って
 | 資料 | 内容 |
 | --- | --- |
 | [docs/architecture.md](docs/architecture.md) | コードのレイヤー分けと依存の向き |
+| [docs/dev-environment.md](docs/dev-environment.md) | 開発コンテナ(Dev Containers)と Makefile の目標、Windows 向けのクロスビルド |
 | [docs/urdf.md](docs/urdf.md) | URDF の読み込み、関節への直し方、同梱の UR5e と公開されている機種のライセンス |
 | [docs/internals.md](docs/internals.md) | 使っているライブラリ、各機能のしくみ、サンプルとフォントの作り方 |
 | [docs/simulation.md](docs/simulation.md) | 干渉チェック・距離計測・結果の CSV 出力の設計 |

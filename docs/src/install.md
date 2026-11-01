@@ -32,4 +32,6 @@ cargo run --release -- path/to/line.cadsim # 保存したプロジェクトを�
 
 初回はビルドに数分かかります。Linux では先に `libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev` を入れてください。
 
+Rust を入れずに Docker だけでビルドすることもできます。`make docker-build` で開発コンテナの中でビルドし、`make help` でほかの目標が見られます(詳しくは `docs/dev-environment.md`)。
+
 起動すると、サンプルのアセンブリ(万力風の小さな組立品)が開いた画面になります。
