@@ -7,3 +7,4 @@ pub mod camera_path;
 pub mod gizmo;
 pub mod recording;
 pub mod viewport;
+pub mod walk;

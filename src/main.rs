@@ -9,7 +9,7 @@
 //! - `file_io`     別スレッドでの読み込み・書き出し、形状の差し替え
 //! - `project`     プロジェクトファイル (.cadsim) の保存と読み込み
 //! - `animation`   ファイルから取り込んだアニメーションの再生
-//! - `view`        3D 表示: `viewport` (表示・選択の強調・クリック選択)、`camera`、`gizmo`、`recording` (動画書き出しの画面とキャプチャ)
+//! - `view`        3D 表示: `viewport` (表示・選択の強調・クリック選択)、`camera`、`gizmo`、`recording` (動画書き出しの画面とキャプチャ)、`walk` (一人称で歩く)
 //! - `input`       入力: `shortcuts` (キー)、`file_dialog` (ダイアログ・ドラッグ&ドロップ)、`command_line` (起動時の引数)
 //! - `part_mesh`   部品1つ分の表示用メッシュ (面をまとめたもの・簡略形状)
 //! - `bvh`         クリック選択を速くする外接箱の木
@@ -93,7 +93,7 @@ mod view;
 
 use bevy::{diagnostic::FrameTimeDiagnosticsPlugin, prelude::*};
 use bevy_egui::EguiPlugin;
-use view::{camera, camera_path, gizmo, recording, viewport};
+use view::{camera, camera_path, gizmo, recording, viewport, walk};
 
 fn main() {
     // `--ui-check` なら手順書ごとにアプリを起動し直して流し、結果を返して終わる
@@ -131,6 +131,7 @@ fn main() {
                 scripting::ScriptPlugin,
                 recording::RecordingPlugin,
                 camera_path::CameraPathPlugin,
+                walk::WalkPlugin,
             ),
             (
                 flow::FlowPlugin,

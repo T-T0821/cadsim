@@ -8,6 +8,7 @@ use crate::model::{Model, Selection};
 use crate::project::{ProjectAction, ProjectState};
 use crate::view::camera::{CameraRequest, StandardView, alt_pressed, keyboard_free};
 use crate::view::gizmo::{GizmoTool, Tool};
+use crate::view::walk::not_walking;
 
 pub struct ShortcutsPlugin;
 
@@ -15,7 +16,12 @@ impl Plugin for ShortcutsPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (keyboard_shortcuts, project_shortcuts).run_if(keyboard_free),
+            (
+                // 歩行モードの間は WASD などを歩くのに使う
+                keyboard_shortcuts.run_if(not_walking),
+                project_shortcuts,
+            )
+                .run_if(keyboard_free),
         );
     }
 }

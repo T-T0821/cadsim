@@ -433,6 +433,7 @@ fn view_menu(ui: &mut egui::Ui, state: &mut UiState) {
             }
         });
         projection_buttons(ui, state);
+        walk_button(ui, state);
         ui.separator();
         ui.checkbox(&mut state.settings.show_edges, "稜線を表示");
         ui.checkbox(&mut state.settings.show_grid, "グリッドを表示");
@@ -710,9 +711,13 @@ fn toolbar(ui: &mut egui::Ui, state: &mut UiState) {
                         state.camera.write(CameraRequest::View(view));
                     }
                 }
+                ui.separator();
+                walk_button(ui, state);
             })
             .response
-            .on_hover_text("正面・上面・等角などの標準ビュー (右上のビューキューブでも選べます)");
+            .on_hover_text(
+                "正面・上面・等角などの標準ビューと、一人称で歩く (右上のビューキューブでも選べます)",
+            );
             if ui
                 .button("⛶ 全体")
                 .on_hover_text("全体を表示 (Home)")
@@ -781,6 +786,23 @@ fn level_pill(ui: &mut egui::Ui, state: &mut UiState) {
         .clicked()
     {
         state.playful.set_show_missions(!shown);
+    }
+}
+
+/// 一人称で歩く (歩行モード) の入り・出 (メニューとツールバーで共通)
+fn walk_button(ui: &mut egui::Ui, state: &mut UiState) {
+    let label = if state.walk.active() {
+        "🚶 歩くのをやめる"
+    } else {
+        "🚶 一人称で歩く"
+    };
+    if ui
+        .add(egui::Button::new(label).shortcut_text(if state.walk.active() { "Esc" } else { "" }))
+        .on_hover_text("作業者の目の高さで工場を歩き、通路の幅・手の届く範囲・見通しを確かめる")
+        .clicked()
+    {
+        state.walk.toggle();
+        ui.close();
     }
 }
 

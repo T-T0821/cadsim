@@ -19,10 +19,11 @@ use crate::math::Aabb;
 use crate::model::{Model, Selection};
 use crate::view::gizmo::gizmo_not_focused;
 use crate::view::recording::Recorder;
+use crate::view::walk::not_walking;
 use cadsim_core::camera_path::CameraPose;
 
 /// 透視投影の縦の画角 (Bevy の既定値と同じ 45°)
-const FOV_Y: f32 = FRAC_PI_4;
+pub const FOV_Y: f32 = FRAC_PI_4;
 
 /// 平行投影で描く奥行 (カメラの前後それぞれ、注視点までの距離の何倍まで描くか)。
 /// 広すぎると深度の精度が落ちて、面の上の稜線が面に埋もれやすくなる。
@@ -41,10 +42,12 @@ impl Plugin for CameraPlugin {
                 (
                     mouse_camera_input
                         .run_if(pointer_in_3d_view)
-                        .run_if(gizmo_not_focused),
-                    fly_camera_input.run_if(keyboard_free),
+                        .run_if(gizmo_not_focused)
+                        .run_if(not_walking),
+                    fly_camera_input.run_if(keyboard_free).run_if(not_walking),
                     handle_camera_requests,
-                    animate_and_apply_camera,
+                    // 歩行モードの間は walk.rs がカメラを置く
+                    animate_and_apply_camera.run_if(not_walking),
                     fit_camera_viewport,
                 )
                     .chain()
@@ -366,7 +369,7 @@ fn fly_camera_input(
     orbit.focus += dir.normalize() * speed * time.delta_secs();
 }
 
-fn handle_camera_requests(
+pub(crate) fn handle_camera_requests(
     mut requests: MessageReader<CameraRequest>,
     mut orbit: ResMut<OrbitCamera>,
     model: Res<Model>,

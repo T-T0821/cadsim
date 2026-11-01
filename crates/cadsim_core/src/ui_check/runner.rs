@@ -279,7 +279,11 @@ impl Runner {
                     Command::Inputs(vec![Scroll(*lines)])
                 }
             }
-            Step::Key(chord) => {
+            Step::Key(chord) | Step::Hold(chord, _) => {
+                let held = match step {
+                    Step::Hold(_, frames) => *frames,
+                    _ => 0,
+                };
                 let phase = self.phase;
                 self.phase += 1;
                 match phase {
@@ -289,6 +293,8 @@ impl Runner {
                         key: chord.key,
                         pressed: true,
                     }]),
+                    // hold は押したまま待つ
+                    p if p < 2 + held => Command::Idle,
                     _ => {
                         let mut inputs = vec![Key {
                             key: chord.key,
@@ -527,6 +533,33 @@ mod tests {
                 Command::Inputs(vec![k(Key::Letter('Z'), false), k(Key::Ctrl, false)]),
             ]
         );
+    }
+
+    #[test]
+    fn holdは押したままフレーム数だけ待ってから離す() {
+        let mut runner = Runner::new(parse("hold w 30").unwrap());
+        let k = |key, pressed| Input::Key { key, pressed };
+        let mut frames = Vec::new();
+        loop {
+            let obs = Observation {
+                busy: false,
+                capturing: false,
+                widgets: &[],
+            };
+            match runner.tick(&obs) {
+                Command::Finished => break,
+                c => frames.push(c),
+            }
+        }
+        let down = frames
+            .iter()
+            .position(|c| *c == Command::Inputs(vec![k(Key::Letter('W'), true)]))
+            .unwrap();
+        let up = frames
+            .iter()
+            .position(|c| *c == Command::Inputs(vec![k(Key::Letter('W'), false)]))
+            .unwrap();
+        assert_eq!(up - down, 31, "押してから 30 フレーム待って離す");
     }
 
     #[test]
