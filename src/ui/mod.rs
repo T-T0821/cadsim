@@ -133,6 +133,8 @@ pub struct UiState<'w> {
     pub safety: Res<'w, crate::safety::SafetyState>,
     /// 一人称で歩く
     pub walk: ResMut<'w, crate::view::walk::WalkMode>,
+    /// 音の設定 (ミュート・音量)
+    pub sound: ResMut<'w, crate::sound::SoundUi>,
 }
 
 /// UI 専用のカメラ。3D カメラはパネルを除いた領域だけに描くので、

@@ -1,0 +1,20 @@
+# 非常停止で鳴る警報の帯と、音の設定
+wait_loaded
+click "自由にさわる"
+wait 30
+click "★ Lv."                  # ミッションカードを隠す
+scroll 760 420 4
+wait 420                         # ミッション達成の表示が消えるのを待つ
+click "安全"                      # ツールレールで安全パネルを開く
+wait 30
+scroll 540 380 -10               # 機器の一覧を下まで送って非常停止ボタンを出す
+wait 30
+click "押す"                      # 非常停止ボタンを押す
+wait 60
+expect "ブザー停止"
+screenshot alarm
+click "安全"                      # 安全パネルを閉じる
+click "表示"
+click "音の設定…"
+wait 30
+screenshot settings
