@@ -11,7 +11,7 @@ cadsim は Clean Architecture をもとに、コードを4つの層に分けま�
 │  ┌────────────────────────────────────────────────────┐  │
 │  │ 3. アダプター (io)                                   │  │
 │  │    STEP / glTF / OBJ / STL / USD の読み書き、          │  │
-│  │    .cadsim の JSON、Modbus TCP、動画のエンコード          │  │
+│  │    .cadsim の JSON、Modbus TCP、SLMP、動画のエンコード    │  │
 │  │  ┌──────────────────────────────────────────────┐  │  │
 │  │  │ 2. ユースケース (core::usecase)                 │  │  │
 │  │  │    開く・保存・取り込み・書き出し・編集・            │  │  │
@@ -56,7 +56,7 @@ src/                      アプリ本体。assets/ の場所を変えないよ�
 crates/
 ├── cadsim_core/          1. ドメイン + 2. ユースケース (Bevy なし)
 │   └── src/
-│       ├── domain/       model, math, selection, remap (形状の差し替えの対応づけ), simulation (幾何・干渉・計測),
+│       ├── domain/       model, math, melsec (三菱 PLC のデバイス), selection, remap (形状の差し替えの対応づけ), simulation (幾何・干渉・計測),
 │       │                 motion (チャート・姿勢・運動学), plc (シーケンス・I/O 表), flow, conveyor,
 │       │                 staffing (作業者の名簿・スキル・シフト・人数の比較),
 │       │                 safety (安全機器・検知・安全距離), floor (作業者・AGV・床の幾何・作業者と AGV の 3D の形),
@@ -68,7 +68,7 @@ crates/
 │                         ports (SceneReader / SceneWriter / ProjectStore などのトレイト)
 └── cadsim_io/            3. アダプター (Bevy なし)
     └── src/              step, interchange (gltf / obj / stl / usd), project_file (JSON),
-                          modbus, rtde (UR の関節角度の受信), video, xlsx (工程シミュレーションの結果), rhai (部品スクリプトのエンジン),
+                          modbus, slmp (三菱 PLC との SLMP 通信・テスト用の PLC), rtde (UR の関節角度の受信), video, xlsx (工程シミュレーションの結果), rhai (部品スクリプトのエンジン),
                           claude (生成 AI の Claude API), line_draft_json (生成 AI とやり取りするラインの下書きの JSON),
                           ui_check (画面の自動確認の PNG・結果の JSON・報告書の HTML)
 ```
@@ -93,7 +93,7 @@ crates/
 新しく足した機能のうち、すでに層を分けてあるもの:
 
 - `src/result_export/report/` … ユースケース層 (CSV の作成)。Bevy の ECS・egui・ファイルシステムに依存しない。移行時は `usecase/report` へ移す。`src/result_export/plugin.rs` は UI 層。
-- PLC 連携(`src/plc/`)は先に `domain` / `usecase` / `adapter` / UI に分けてあるので、移行時はディレクトリごと core / io へ移せます。
+- PLC 連携(`src/plc/`)は先に `domain` / `usecase` / `adapter` / UI に分けてあるので、移行時はディレクトリごと core / io へ移せます。三菱 PLC との SLMP 通信は、デバイスの型を `cadsim_core::melsec`、電文とクライアントを `cadsim_io::slmp` に置き、`src/plc/domain/device_map.rs`(信号 → デバイス)と `src/plc/adapter/slmp.rs`(`PlcLink` の実装)がそれを使う。
 - 部品スクリプト(`src/scripting/`)は、`runner.rs`(実行とポート `ScriptHost`)と `controller.rs`(PLC 連携の I/O へのつなぎ)がユースケース層、`rhai_engine.rs` がアダプター層、`mod.rs`・`ui.rs` が UI 層。`controller.rs` は PLC の I/O の型を使うので、PLC 連携と一緒に core へ移す。
 
 - 自作部品は、ノードに付けるしるしと公開パラメータの型(`CustomInstance`・`ParamTarget`)を `cadsim_core::custom_part` に置いた。アプリの `src/custom_part/` のうち `param.rs`(公開パラメータのチャートへの読み書き)と `place.rs`(置くときの名前の頭と id の付け替え)がユースケース層、`file.rs`(`part.cadpart` の JSON とフォルダへの保存)がアダプター層、`mod.rs`・`ui.rs` が UI 層。`param.rs`・`place.rs` はタイミングチャートの型を使うので、チャートを core へ移すときに一緒に移す。

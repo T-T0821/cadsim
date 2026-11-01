@@ -1,0 +1,25 @@
+# PLC 連携: 外部PLC で三菱 (SLMP) を選び、接続先とデバイスの割り当てを見る
+# 実機はないので接続はしない (通信はテスト用の PLC 相手の単体テストで確かめている)
+wait_loaded
+click "空のプロジェクトから"        # ようこそ画面を閉じて空から始める
+wait_loaded
+wait 30
+click "サンプル装置"
+click "PLC"                       # 左のツールレール
+expect "内蔵の模擬PLC"
+
+click "外部PLC"
+wait 10
+expect "Modbus TCP"
+click "三菱 (SLMP)"
+wait 10
+expect "デバイスの割り当て"
+expect "出力ビット (PLC → 設備)"
+expect "M100"                     # I/O モニタの番号がデバイスで出る
+screenshot 01_slmp_settings
+
+click "UDP"
+click "4E"
+click "ASCII"
+wait 10
+screenshot 02_udp_4e_ascii
