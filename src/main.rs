@@ -40,6 +40,7 @@
 //! - `physics`     物理演算 (重力・接触・摩擦、ベルトコンベア、ケーブル・ホース)
 //! - `video`       動画のエンコード (MP4 / GIF / PNG。Bevy に依存しない)
 //! - `effects`     状態のエフェクト (詰まり・故障・安全停止の光と煙、溶接と干渉の火花。判断は `cadsim_core::effects`)
+//! - `sound`       設備の稼働音・エアの排気音・停止の警報 (波形と鳴らし方の判断は `cadsim_core::sound`)
 //! - `ui_check`    画面での動作確認の自動化 (`--ui-check`。手順書どおりに操作して画面を撮り、基準画像と比べる)
 
 // Windows のリリースビルドでは、起動時に黒いコンソール窓を出さない
@@ -84,6 +85,7 @@ mod scripting;
 mod sequence_gen;
 mod simulation;
 mod site;
+mod sound;
 mod step_import;
 mod stress;
 mod ui;
@@ -150,6 +152,7 @@ fn main() {
                 site::SitePlugin,
                 documents::DocumentsPlugin,
                 result_export::ResultExportPlugin,
+                sound::SoundPlugin,
             ),
             (
                 physics::PhysicsPlugin,

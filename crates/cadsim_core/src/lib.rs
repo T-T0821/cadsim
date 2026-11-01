@@ -30,6 +30,7 @@ pub mod safety;
 pub mod shape;
 pub mod simulation;
 pub mod site;
+pub mod sound;
 pub mod staffing;
 pub mod timeline;
 pub mod ui_check;
