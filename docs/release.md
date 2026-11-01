@@ -41,3 +41,7 @@ Mac の `.app` に入れる `Info.plist` のひな形は [`packaging/macos/Info.
 
 - 「Run workflow」で「Release を作成する」のチェックを外すか、`main` 以外のブランチで実行すると、ビルドだけ行います。結果はその実行の **Artifacts** からダウンロードできます。
 - このワークフロー・`Cargo.toml`・`Cargo.lock`・`packaging/`・`.cargo/` を変える PR でも、同じようにビルドだけ行います。
+
+## 手元で配布物を作る
+
+`make docker-package-windows` で、開発コンテナの中で MinGW を使って Windows 向けの `.exe` と `.zip` を `dist/` に作れます(名前と中身は Release と同じ)。MSVC ではないので正式な配布には Release ワークフローを使ってください。詳しくは [dev-environment.md](dev-environment.md)。

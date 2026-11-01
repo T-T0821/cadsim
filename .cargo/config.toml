@@ -3,6 +3,12 @@
 [target.x86_64-pc-windows-msvc]
 rustflags = ["-C", "target-feature=+crt-static"]
 
+# Linux から MinGW で Windows 向けにクロスビルドするとき (`make windows`。docs/dev-environment.md)。
+# MSVC と同じく exe 1つで動くよう C ランタイムを静的リンクし (libstdc++ の静的リンクは開発コンテナの側で)、MinGW の静的ライブラリに付いてくる
+# デバッグ情報で exe が数百 MB にならないよう、シンボルを落とす。
+[target.x86_64-pc-windows-gnu]
+rustflags = ["-C", "target-feature=+crt-static", "-C", "strip=symbols"]
+
 # xz (liblzma) はシステムのものを探さず、ソースからビルドして静的リンクする。
 # macOS の CI では Homebrew の liblzma.dylib に依存してしまい、Homebrew のない Mac で起動できなくなるため。
 [env]

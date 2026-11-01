@@ -9,7 +9,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 cargo build --locked
-app=target/debug/cad_proto
+app="${CARGO_TARGET_DIR:-target}/debug/cad_proto"
 
 lvp=/usr/share/vulkan/icd.d/lvp_icd.json
 if [[ "$(uname)" == Linux && -f "$lvp" && -z "${CADSIM_UI_CHECK_GPU:-}" ]]; then

@@ -12,6 +12,7 @@ cargo ui-check --only chart                     # 名前に chart を含む手�
 cargo ui-check tests/ui/03_timing_chart.scenario
 cargo ui-check --update                         # 基準画像を今回の写真で置き換える
 tools/ui_check.sh                               # Linux: 画面がなければ仮想画面 (Xvfb) で流す
+make docker-ui-check                            # Docker の開発コンテナの中で流す (dev-environment.md)
 ```
 
 `cargo ui-check` は `cargo run --locked -- --ui-check` の別名です (`.cargo/config.toml`)。
