@@ -14,3 +14,7 @@ wait_loaded
 wait 30
 expect "スループット"
 screenshot 02_result
+click "⏮ 詰まりの直前へ"          # 時間スライダーで、最後に詰まり始めた直前へ巻き戻す
+wait 10
+expect "詰まり始めます"
+screenshot 03_rewind_to_jam

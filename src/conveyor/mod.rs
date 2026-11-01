@@ -126,6 +126,18 @@ impl WorkState {
         self.linked
     }
 
+    /// ライン連携で進めているワーク搬送の状態 (巻き戻しの写しに取る)
+    pub(crate) fn line_sim(&self) -> Option<&ConveyorSim> {
+        self.linked.then_some(&self.sim)
+    }
+
+    /// 巻き戻しで、ライン連携のワーク搬送を写しの状態に戻す
+    pub(crate) fn restore_line_sim(&mut self, sim: &ConveyorSim) {
+        if self.linked {
+            self.sim = sim.clone();
+        }
+    }
+
     /// ワーク搬送の経過時刻 (ライン連携中はラインの時刻と同じ)
     pub(crate) fn line_time(&self) -> f64 {
         self.sim.time

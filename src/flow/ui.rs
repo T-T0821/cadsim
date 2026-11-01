@@ -22,7 +22,7 @@ use super::plan_ui::{PlanUiState, plan_tab};
 use super::scenario_ui::{ScenarioUiState, scenario_tab};
 use super::sim::{Report, State, WorkerState};
 use super::staff_ui::{StaffUiState, staff_tab};
-use super::{ColorMode, FlowRes, FlowRun};
+use super::{ColorMode, FlowRes, FlowRun, rewind};
 use crate::model::{Model, Selection};
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
@@ -48,6 +48,8 @@ pub struct FlowUiState {
     scenarios: ScenarioUiState,
     factory: FactoryUiState,
     plan: PlanUiState,
+    /// 「詰まりの直前へ」で飛んだときの説明
+    jam_note: Option<String>,
 }
 
 #[derive(SystemParam)]
@@ -212,15 +214,7 @@ fn run_controls(ui: &mut egui::Ui, state: &mut FlowUi) {
         }
     });
 
-    if let Some(sim) = &run.sim {
-        let duration = sim.settings().duration;
-        let progress = (sim.now() / duration) as f32;
-        ui.add(egui::ProgressBar::new(progress).text(format!(
-            "{} / {}",
-            hours(sim.now()),
-            hours(duration)
-        )));
-    }
+    time_slider(ui, flow, run, ui_state);
     if run.is_stale(flow) {
         ui.colored_label(
             Color32::from_rgb(230, 170, 60),
@@ -230,6 +224,91 @@ fn run_controls(ui: &mut egui::Ui, state: &mut FlowUi) {
     for p in &ui_state.problems {
         ui.colored_label(Color32::from_rgb(230, 90, 90), format!("⚠ {p}"));
     }
+}
+
+/// 時間スライダー: 回した結果のどの時刻にも戻せる。詰まり始めの直前へ飛ぶボタン付き。
+fn time_slider(ui: &mut egui::Ui, flow: &FlowModel, run: &mut FlowRun, ui_state: &mut FlowUiState) {
+    let Some(sim) = &run.sim else {
+        ui_state.jam_note = None;
+        return;
+    };
+    let duration = sim.settings().duration;
+    let now = sim.now();
+    if sim.is_linked() {
+        // ライン連携が進めている間は、ライン連携のウィンドウのスライダーで戻す
+        let progress = (now / duration) as f32;
+        ui.add(egui::ProgressBar::new(progress).text(format!(
+            "{} / {}",
+            clock(now),
+            hours(duration)
+        )));
+        return;
+    }
+    let model = run.ran_with.as_ref().unwrap_or(flow);
+    let samples = run.furthest_samples();
+    let previous = rewind::previous_jam(model, samples, now);
+    let next = rewind::next_jam(model, samples, now);
+    let mut target = None;
+    let mut jumped = None;
+    ui.horizontal(|ui| {
+        if ui
+            .add_enabled(previous.is_some(), egui::Button::new("⏮ 詰まりの直前へ"))
+            .on_hover_text("今より前で、どこかの設備が詰まり始めた直前の時刻に戻す")
+            .clicked()
+        {
+            jumped = previous.clone();
+        }
+        let mut t = now;
+        let width = (ui.available_width() - 130.0).max(120.0);
+        ui.spacing_mut().slider_width = width;
+        let response = ui
+            .add(
+                egui::Slider::new(&mut t, 0.0..=duration)
+                    .show_value(false)
+                    .clamping(egui::SliderClamping::Always),
+            )
+            .on_hover_text(
+                "ドラッグすると、その時刻のシミュレーションの状態に巻き戻す・早送りする",
+            );
+        if response.changed() && (t - now).abs() > 1e-9 {
+            target = Some(t);
+        }
+        if ui
+            .add_enabled(next.is_some(), egui::Button::new("⏭"))
+            .on_hover_text("今より後で、どこかの設備が詰まり始めた直前の時刻へ進める")
+            .clicked()
+        {
+            jumped = next.clone();
+        }
+    });
+    ui.label(format!("{} / {}", clock(now), hours(duration)));
+    if let Some(mark) = jumped {
+        let names: Vec<&str> = mark
+            .elements
+            .iter()
+            .filter_map(|&id| model.get(id).map(|e| e.name.as_str()))
+            .collect();
+        ui_state.jam_note = Some(format!(
+            "{} が {} までに詰まり始めます。ここから ▶ で進めて様子を見られます",
+            names.join("・"),
+            clock(mark.at)
+        ));
+        target = Some(mark.before);
+    } else if target.is_some() {
+        ui_state.jam_note = None;
+    }
+    if let Some(t) = target {
+        run.seek(t);
+    }
+    if let Some(note) = &ui_state.jam_note {
+        ui.colored_label(Color32::from_rgb(230, 170, 60), note);
+    }
+}
+
+/// 時:分:秒
+fn clock(seconds: f64) -> String {
+    let s = seconds.max(0.0).floor() as u64;
+    format!("{}:{:02}:{:02}", s / 3600, s / 60 % 60, s % 60)
 }
 
 /// 実行を始める。`speed` を渡すとその速度にする (最後までなら ∞)。
@@ -248,10 +327,7 @@ fn start(
     ui_state.problems.clear();
     if speed == Some(f64::INFINITY) {
         // 早送りの速度設定は変えずに、今回だけ最後まで回す
-        if let Some(sim) = run.sim.as_mut() {
-            sim.advance(f64::INFINITY, usize::MAX);
-            run.report = Some(sim.report());
-        }
+        run.advance_to(f64::INFINITY);
         run.playing = false;
         ui_state.tab = Tab::Results;
     } else {
