@@ -37,7 +37,8 @@ lopdf = "0.46"
 krilla = "0.8"
 rust_xlsxwriter = "0.102"
 e57 = "0.11"
-rapier3d = "0.36"
+# 物理演算: Bevy の物理プラグイン (中身は Rapier)。描画やピッキングの機能は使わない
+bevy_rapier3d = { version = "0.37", default-features = false, features = ["dim3"] }
 # PLC との OPC UA 通信 (クライアントのみ)。純 Rust
 async-opcua = { version = "0.19", default-features = false, features = ["client"] }
 tokio = { version = "1", features = ["rt", "time"] }

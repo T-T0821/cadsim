@@ -118,7 +118,7 @@ crates/
 | 2D 図面 | `drawing` | `formats::drawing_out` | `documents.rs` |
 | 部品表 | `bom` | `formats::bom_out` | `documents.rs` |
 | モデリング | `modeling`(B-rep の詰め方のポート `SolidStore`) | `modeled`(B-rep ⇔ JSON) | `ui/modeling.rs` |
-| 物理演算 | `physics::{settings, cable}`(ドメイン)、`physics::world`(ユースケース。物理エンジンのポート `PhysicsEngine`) | `physics::{rapier, records}`(Rapier と .plantwright の形) | `physics/{mod, panel, sample}` |
+| 物理演算 | `physics::{settings, cable}`(ドメイン)、`physics::world`(ユースケース。物理エンジンのポート `PhysicsEngine`) | `physics::{engine, records}`(Bevy の物理プラグイン bevy_rapier3d と .plantwright の形。`engine` はプラグインを使うので `cadsim_io` には移さない) | `physics/{mod, panel, sample}` |
 | 背景の工場の建屋 | `factory_hall`(床・通路の線・壁・柱・グリッドの配置、コンクリートの模様) | — | `view/factory_hall.rs`(メッシュにして置く・手前の壁を隠す) |
 | 動画書き出し | `video`(撮る時刻・切り抜き・書き込み先のポート `VideoSink`) | `video::{encode, mp4}`(MP4 / GIF / PNG) | `view/recording.rs`(画面のキャプチャ・設定ウィンドウ) |
 | 紹介動画のカメラワーク | `camera_path`(視点の通り道と補間) | `cadsim_io::formats::camera_path_record`(.plantwright の形) | `view/camera_path.rs`(カメラワークの欄・通り道の線・プレビュー) |

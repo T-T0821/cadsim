@@ -31,7 +31,7 @@
 | parry3d-f64(干渉チェックとクリック選択の検索木 `Bvh`) | 0.31 |
 | krilla(図面の PDF 書き出し) | 0.8 |
 | rust_xlsxwriter(部品表・工程シミュレーションの Excel 書き出し) | 0.102 |
-| rapier3d(物理演算。Bevy に依存しない) | 0.36 |
+| bevy_rapier3d(物理演算。Bevy の物理プラグイン、中身は Rapier 0.36) | 0.37 |
 | glam(Bevy に依存しない層のベクトル・行列。Bevy と同じ版) | 0.33 |
 | openh264(動画書き出しの H.264。同梱の C++ ソースをビルド) | 0.9 |
 | gif / image(動画書き出しの GIF・PNG) | 0.14 / 0.25 |
@@ -129,7 +129,7 @@ src/                  アプリ本体 (Bevy + egui)
 │   └── ui.rs         工程シミュレーションのウィンドウ
 ├── safety/          安全機器の表示・パネル・動作範囲の確認 (計算は cadsim_core::safety。docs/safety-and-floor.md)
 ├── floor/           作業者と AGV の 3D モデル・経路の表示・パネル (計算は cadsim_core::floor。docs/safety-and-floor.md)
-├── physics/         物理演算の配線・パネル・サンプルライン、Rapier のアダプター、保存形式 (詳しくは docs/physics.md)
+├── physics/         物理演算の配線・パネル・サンプルライン、bevy_rapier3d のアダプター、保存形式 (詳しくは docs/physics.md)
 └── ui/
     ├── mod.rs        画面の割り付け (上 → 下 → 左 → 右 → 残りが 3D ビュー)
     ├── menu.rs       メニューバーとツールバー

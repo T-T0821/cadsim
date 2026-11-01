@@ -324,7 +324,8 @@ mod tests {
 
     use super::*;
     use crate::math::euler_deg_to_quat;
-    use crate::physics::rapier::RapierEngine;
+    use crate::physics::engine::{RapierEngine, headless_app};
+    use bevy::app::App;
     use bevy::math::DVec3;
     use cadsim_core::physics::settings::{gravity, meters_per_unit};
     use cadsim_core::physics::world::{
@@ -332,11 +333,12 @@ mod tests {
     };
 
     /// サンプルラインの部品を、アプリと同じ手順で剛体にする
-    fn sample_world() -> (Model, PhysicsRun<RapierEngine>, Vec<NodeId>) {
+    fn sample_world() -> (Model, App, PhysicsRun, Vec<NodeId>) {
         let mut model = Model::default();
         let mut chart = TimingChart::default();
         load_sample_line(&mut model, &mut chart);
-        let mut engine = RapierEngine::new(gravity(&model.unit), meters_per_unit(&model.unit));
+        let mut app = headless_app(gravity(&model.unit), meters_per_unit(&model.unit));
+        let mut engine = RapierEngine::new(app.world_mut());
         let mut works = Vec::new();
         for id in super::super::all_parts(&model) {
             let node = model.get(id).unwrap();
@@ -361,15 +363,15 @@ mod tests {
                 works.push(id);
             }
         }
-        (model, PhysicsRun::new(engine), works)
+        (model, app, PhysicsRun::new(), works)
     }
 
     /// ワークの中心 (箱の位置 + 剛体の姿勢)
-    fn work_center(model: &Model, run: &PhysicsRun<RapierEngine>, id: NodeId) -> DVec3 {
+    fn work_center(model: &Model, app: &mut App, id: NodeId) -> DVec3 {
         let NodeKind::Box(part) = &model.get(id).unwrap().kind else {
             unreachable!()
         };
-        run.engine
+        RapierEngine::new(app.world_mut())
             .pose(BodyKey::Part(id))
             .unwrap()
             .apply(DVec3::from(part.position))
@@ -393,7 +395,7 @@ mod tests {
     /// 100 個を 1 フレーム (60 fps = 16.7 ms) の中で十分速く計算できることも確かめる。
     #[test]
     fn works_flow_into_the_bin() {
-        let (model, mut run, works) = sample_world();
+        let (model, mut app, mut run, works) = sample_world();
         let stopper = super::super::all_parts(&model)
             .into_iter()
             .find(|id| model.get(*id).unwrap().name == "ストッパ")
@@ -402,7 +404,11 @@ mod tests {
         let frames = 40 * 60;
         let started = Instant::now();
         for _ in 0..frames {
-            run.advance(1.0 / 60.0, &[(BodyKey::Part(stopper), down)]);
+            run.advance(
+                &mut RapierEngine::new(app.world_mut()),
+                1.0 / 60.0,
+                &[(BodyKey::Part(stopper), down)],
+            );
         }
         let per_frame_ms = started.elapsed().as_secs_f64() * 1000.0 / f64::from(frames);
         println!(
@@ -412,12 +418,13 @@ mod tests {
 
         let mut in_bin = 0;
         for &id in &works {
-            let c = work_center(&model, &run, id);
+            let c = work_center(&model, &mut app, id);
             assert!(c.y > -100.0, "ワークが床をすり抜けた: {c}");
             if c.x > 3560.0 && c.x < 4740.0 && c.z.abs() < 440.0 && c.y < 400.0 {
                 in_bin += 1;
             }
         }
+        println!("回収箱に入ったワーク: {in_bin} 個");
         assert!(
             in_bin >= WORK_COUNT * 9 / 10,
             "回収箱に入ったのは {in_bin} 個"
@@ -431,18 +438,19 @@ mod tests {
     /// ストッパが上がっていれば、ワークはストッパの手前で止まる
     #[test]
     fn the_raised_stopper_holds_the_works() {
-        let (model, mut run, works) = sample_world();
+        let (model, mut app, mut run, works) = sample_world();
         for _ in 0..(10 * 60) {
-            run.advance(1.0 / 60.0, &[]);
+            run.advance(&mut RapierEngine::new(app.world_mut()), 1.0 / 60.0, &[]);
         }
         for &id in &works {
-            let c = work_center(&model, &run, id);
+            let c = work_center(&model, &mut app, id);
             assert!(c.x < 900.0, "ストッパを越えた: {c}");
         }
         let near_stopper = works
             .iter()
-            .filter(|&&id| work_center(&model, &run, id).x > 700.0)
+            .filter(|&&id| work_center(&model, &mut app, id).x > 700.0)
             .count();
+        println!("ストッパの前に溜まったワーク: {near_stopper} 個");
         assert!(
             near_stopper >= 3,
             "ストッパの前に溜まったのは {near_stopper} 個"

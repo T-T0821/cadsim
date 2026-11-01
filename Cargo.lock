@@ -1742,6 +1742,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "845b9f43ea7e4be1a19b93673325d47c091df8e3a57a2cd30dd003d0972796be"
 
 [[package]]
+name = "bevy_rapier3d"
+version = "0.37.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "549d1806101690b7b3076189dfaa6e2aec392d601dfea3249c6c18fb1105dafa"
+dependencies = [
+ "bevy",
+ "bitflags 2.13.2",
+ "log",
+ "nalgebra",
+ "rapier3d",
+]
+
+[[package]]
 name = "bevy_reflect"
 version = "0.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6251,6 +6264,7 @@ dependencies = [
  "async-opcua",
  "bevy",
  "bevy_egui",
+ "bevy_rapier3d",
  "cadsim_core",
  "cadsim_io",
  "e57",
@@ -6261,7 +6275,6 @@ dependencies = [
  "krilla",
  "lopdf",
  "openh264",
- "rapier3d",
  "rfd",
  "rhai",
  "rust_xlsxwriter",

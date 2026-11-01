@@ -2,7 +2,7 @@
 //!
 //! 物理エンジンそのものはポート [`PhysicsEngine`] の向こうにあり、ここは
 //! 「部品の設定から剛体を作る」「一定の刻みで進める」「機構で動く部品を目標の位置へ動かす」だけを受け持つ。
-//! エンジンの実装はアプリ側の `physics/rapier.rs` (アダプター)。
+//! エンジンの実装はアプリ側の `physics/engine.rs` (アダプター。Bevy の物理プラグイン bevy_rapier3d を使う)。
 
 use std::collections::HashMap;
 
@@ -102,7 +102,7 @@ pub struct BodyDesc {
     pub belt_velocity: Option<DVec3>,
 }
 
-/// 物理エンジンのポート。アダプター (`rapier.rs`) が実装する。
+/// 物理エンジンのポート。アダプター (`engine.rs`) が実装する。
 pub trait PhysicsEngine {
     /// 剛体を足す。形が作れなかったら (頂点が足りないなど) false。同じ名前があれば置き換える。
     fn add_body(&mut self, key: BodyKey, desc: &BodyDesc) -> bool;
@@ -122,8 +122,10 @@ pub const STEP_DT: f64 = 1.0 / 120.0;
 const MAX_STEPS_PER_ADVANCE: u32 = 8;
 
 /// 一定の刻みで物理を進める。画面のフレームの長さが揺れても、結果は刻みの数だけで決まる。
-pub struct PhysicsRun<E> {
-    pub engine: E,
+///
+/// エンジンは持たず、進めるたびに借りる (アダプターが Bevy の `World` を借りて動くため)。
+#[derive(Default)]
+pub struct PhysicsRun {
     /// 開始からの時刻 (秒)
     pub time: f64,
     pub steps: u64,
@@ -132,20 +134,19 @@ pub struct PhysicsRun<E> {
     last_targets: HashMap<BodyKey, Iso>,
 }
 
-impl<E: PhysicsEngine> PhysicsRun<E> {
-    pub fn new(engine: E) -> Self {
-        Self {
-            engine,
-            time: 0.0,
-            steps: 0,
-            accumulator: 0.0,
-            last_targets: HashMap::new(),
-        }
+impl PhysicsRun {
+    pub fn new() -> Self {
+        Self::default()
     }
 
-    /// `dt` 秒進める。`targets` は機構で動く剛体の、この時間の終わりでの姿勢。
+    /// `engine` を `dt` 秒進める。`targets` は機構で動く剛体の、この時間の終わりでの姿勢。
     /// 進めた刻みの数を返す。
-    pub fn advance(&mut self, dt: f64, targets: &[(BodyKey, Iso)]) -> u32 {
+    pub fn advance(
+        &mut self,
+        engine: &mut impl PhysicsEngine,
+        dt: f64,
+        targets: &[(BodyKey, Iso)],
+    ) -> u32 {
         self.accumulator += dt.max(0.0);
         let wanted = (self.accumulator / STEP_DT + 1e-9).floor() as u32;
         let steps = wanted.min(MAX_STEPS_PER_ADVANCE);
@@ -164,12 +165,11 @@ impl<E: PhysicsEngine> PhysicsRun<E> {
                     .last_targets
                     .get(&key)
                     .copied()
-                    .or_else(|| self.engine.pose(key))
+                    .or_else(|| engine.pose(key))
                     .unwrap_or(target);
-                self.engine
-                    .set_kinematic_target(key, Iso::lerp(from, target, t));
+                engine.set_kinematic_target(key, Iso::lerp(from, target, t));
             }
-            self.engine.step(STEP_DT);
+            engine.step(STEP_DT);
             self.time += STEP_DT;
             self.steps += 1;
         }
@@ -348,32 +348,34 @@ mod tests {
 
     #[test]
     fn advances_in_fixed_steps_and_keeps_the_remainder() {
-        let mut run = PhysicsRun::new(Recorder::default());
-        assert_eq!(run.advance(STEP_DT * 0.6, &[]), 0);
-        assert_eq!(run.advance(STEP_DT * 0.6, &[]), 1);
-        assert_eq!(run.advance(STEP_DT * 2.0, &[]), 2);
-        assert!(run.engine.steps.iter().all(|&dt| dt == STEP_DT));
+        let mut engine = Recorder::default();
+        let mut run = PhysicsRun::new();
+        assert_eq!(run.advance(&mut engine, STEP_DT * 0.6, &[]), 0);
+        assert_eq!(run.advance(&mut engine, STEP_DT * 0.6, &[]), 1);
+        assert_eq!(run.advance(&mut engine, STEP_DT * 2.0, &[]), 2);
+        assert!(engine.steps.iter().all(|&dt| dt == STEP_DT));
         assert_eq!(run.steps, 3);
     }
 
     #[test]
     fn long_frames_are_capped() {
-        let mut run = PhysicsRun::new(Recorder::default());
-        assert_eq!(run.advance(1.0, &[]), MAX_STEPS_PER_ADVANCE);
+        let mut engine = Recorder::default();
+        let mut run = PhysicsRun::new();
+        assert_eq!(run.advance(&mut engine, 1.0, &[]), MAX_STEPS_PER_ADVANCE);
         // 捨てた分は次に持ち越さない
-        assert_eq!(run.advance(0.0, &[]), 0);
+        assert_eq!(run.advance(&mut engine, 0.0, &[]), 0);
     }
 
     #[test]
     fn kinematic_targets_are_interpolated_between_frames() {
         let key = BodyKey::Part(1);
-        let mut run = PhysicsRun::new(Recorder::default());
-        run.advance(STEP_DT, &[(key, Iso::IDENTITY)]);
-        run.engine.targets.clear();
+        let mut engine = Recorder::default();
+        let mut run = PhysicsRun::new();
+        run.advance(&mut engine, STEP_DT, &[(key, Iso::IDENTITY)]);
+        engine.targets.clear();
         let goal = Iso::from_translation(DVec3::new(4.0, 0.0, 0.0));
-        run.advance(STEP_DT * 4.0, &[(key, goal)]);
-        let xs: Vec<f64> = run
-            .engine
+        run.advance(&mut engine, STEP_DT * 4.0, &[(key, goal)]);
+        let xs: Vec<f64> = engine
             .targets
             .iter()
             .map(|(_, p)| p.translation.x)
