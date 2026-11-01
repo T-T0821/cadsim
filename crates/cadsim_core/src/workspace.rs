@@ -44,6 +44,7 @@ pub enum Tool {
     Interference,
     Annotation,
     Physics,
+    Review,
     Conveyor,
     Floor,
     Safety,
@@ -57,12 +58,13 @@ pub enum Tool {
 
 impl Tool {
     /// ツールレールとメニューに並べる順
-    pub const ALL: [Tool; 14] = [
+    pub const ALL: [Tool; 15] = [
         Tool::Library,
         Tool::Modeling,
         Tool::Interference,
         Tool::Annotation,
         Tool::Physics,
+        Tool::Review,
         Tool::Conveyor,
         Tool::Floor,
         Tool::Safety,
@@ -77,7 +79,9 @@ impl Tool {
     pub fn group(self) -> ToolGroup {
         match self {
             Tool::Library | Tool::Modeling => ToolGroup::Build,
-            Tool::Interference | Tool::Annotation | Tool::Physics => ToolGroup::Check,
+            Tool::Interference | Tool::Annotation | Tool::Physics | Tool::Review => {
+                ToolGroup::Check
+            }
             Tool::Conveyor
             | Tool::Floor
             | Tool::Safety
@@ -97,6 +101,7 @@ impl Tool {
             Tool::Interference => "干渉チェック・計測",
             Tool::Annotation => "寸法・注記",
             Tool::Physics => "物理演算",
+            Tool::Review => "複数人でレビュー",
             Tool::Conveyor => "ワーク搬送",
             Tool::Floor => "作業者・AGV",
             Tool::Safety => "安全",
@@ -117,6 +122,7 @@ impl Tool {
             Tool::Interference => "干渉",
             Tool::Annotation => "寸法",
             Tool::Physics => "物理",
+            Tool::Review => "レビュー",
             Tool::Conveyor => "搬送",
             Tool::Floor => "作業者",
             Tool::Safety => "安全",
@@ -139,6 +145,9 @@ impl Tool {
             Tool::Interference => "部品どうしの干渉・接触を調べ、2点の距離を測る",
             Tool::Annotation => "3D 上に寸法と注記を置く",
             Tool::Physics => "重力・接触・摩擦で部品を動かす。ケーブルやホースのたるみも見る",
+            Tool::Review => {
+                "離れた人と同じ工場に入り、互いの視点と指した場所を見ながらレビューする"
+            }
             Tool::Conveyor => "コンベアでワークを流し、グリッパでつかんで放す",
             Tool::Floor => "作業者の動線と AGV の走行を床の上で動かす",
             Tool::Safety => "ライトカーテン・エリアセンサ・安全柵・非常停止を置き、停止を確かめる",

@@ -1,0 +1,32 @@
+# 複数人でレビュー: パネルを開き、ホストになってチャットを書き、やめる
+wait_loaded
+click "空のプロジェクトから"        # ようこそ画面を閉じて空から始める
+wait_loaded
+open assets/sample_assembly.step
+wait_loaded
+wait 60
+click "隠す"                       # チュートリアルのカードを隠す
+wait 30
+click "レビュー"                   # 左のツールレール
+expect "ホストになる"
+screenshot 01_setup
+
+click_at 480 222                   # 名前の入力欄
+type "田中"
+click "ホストになる" 2             # 見出しの次にあるボタン
+wait 10
+expect "● ホスト中"
+expect "田中 (自分)"
+expect "まだ誰もいません"
+click_at 450 485                   # チャットの入力欄
+type "よろしくお願いします"
+click "送信"
+wait 5
+expect "田中:"
+mask 340 196 320 36                # このパソコンのアドレス (マシンごとに違う)
+screenshot 02_hosting
+clear_masks
+
+click "ホストをやめる"
+wait 5
+expect "● 未接続"
