@@ -59,7 +59,7 @@ crates/
 │       ├── domain/       model, math, selection, remap (形状の差し替えの対応づけ), simulation (幾何・干渉・計測),
 │       │                 motion (チャート・姿勢・運動学), plc (シーケンス・I/O 表), flow, conveyor,
 │       │                 staffing (作業者の名簿・スキル・シフト・人数の比較),
-│       │                 safety (安全機器・検知・安全距離), floor (作業者・AGV・床の幾何),
+│       │                 safety (安全機器・検知・安全距離), floor (作業者・AGV・床の幾何・作業者と AGV の 3D の形),
 │       │                 line (工程と AGV の受け渡し・PLC の信号表・ワークの位置),
 │       │                 line_draft (言葉で組むラインの下書き・整え方・並べ方),
 │       │                 ui_check (画面の自動確認の手順書・進め方・部品の探し方・画像の比べ方)
