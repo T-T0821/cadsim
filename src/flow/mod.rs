@@ -8,16 +8,19 @@
 //! - `xlsx`    結果の Excel 書き出し (rust_xlsxwriter)
 //! - `ui`      「工程シミュレーション」ウィンドウ
 //! - `staff_ui` そのウィンドウの「人員」タブ (シフト・名簿・スキル表・人数の比較)
+//! - `factory_ui` 「工場」タブ (ラインの一覧・取り込み・ラインごとの結果)
+//! - `scenario_ui` 「案の比較」タブ
 //!
 //! このファイルは Bevy とのつなぎ: 工程モデルを包む Resource、早送りの再生、
 //! 3D の部品に塗る色 ([`FlowColors`]、viewport.rs が使う) を受け持つ。
 
 pub use cadsim_io::flow::{record, xlsx};
+mod factory_ui;
 mod scenario_ui;
 mod staff_ui;
 mod ui;
 
-pub use cadsim_core::flow::{model, palette, scenario, sim};
+pub use cadsim_core::flow::{factory, model, palette, scenario, sim};
 
 use std::collections::HashMap;
 use std::path::PathBuf;

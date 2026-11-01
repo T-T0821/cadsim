@@ -179,6 +179,9 @@ pub fn line_signals(
                     n >= capacity as usize,
                 );
             }
+            ElementKind::Transport { .. } => {
+                table.word(&format!("{name}.搬送中"), content(e.id) as i32);
+            }
             ElementKind::Source { .. } | ElementKind::Sink => {}
         }
     }

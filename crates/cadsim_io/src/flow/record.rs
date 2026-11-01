@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use cadsim_core::staffing::model::{AssignRule, Break, Shift, Skill, Staffing, Worker};
 
 use cadsim_core::flow::model::{
-    AgvCall, Element, ElementKind, Energy, Failure, FlowModel, Labor, RunSettings,
+    AgvCall, Element, ElementKind, Energy, Failure, FlowModel, Labor, Line, RunSettings,
 };
 use cadsim_core::flow::scenario::Scenario;
 
@@ -25,9 +25,18 @@ pub struct FlowRecord {
     /// 作業者の名簿とシフト (なければ書かない)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub staffing: Option<StaffingRecord>,
+    /// ラインのまとまり (なければ書かない)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub lines: Vec<LineRecord>,
     /// 比べるために取っておいた案 (なければ書かない)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub scenarios: Vec<ScenarioRecord>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct LineRecord {
+    pub id: u32,
+    pub name: String,
 }
 
 /// 名前つきの設定の写し。中身は工程モデルと同じ形 (案の中に案は持たない)
@@ -67,6 +76,9 @@ pub struct ElementRecord {
     /// 工程に人が要るか (要らなければ書かない)
     #[serde(default, skip_serializing_if = "LaborRecord::is_none")]
     pub labor: LaborRecord,
+    /// 属するラインの id (なければ書かない)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line: Option<u32>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
@@ -275,6 +287,10 @@ pub enum KindRecord {
         capacity: u32,
     },
     Sink,
+    Transport {
+        travel_time: f64,
+        capacity: u32,
+    },
 }
 
 /// 保存する形にする。`part_path` はノード ID を木の中の位置にする (部品が消えていれば None)。
@@ -326,6 +342,13 @@ fn model_record(model: &FlowModel, part_path: &dyn Fn(u32) -> Option<Vec<usize>>
                         capacity: *capacity,
                     },
                     ElementKind::Sink => KindRecord::Sink,
+                    ElementKind::Transport {
+                        travel_time,
+                        capacity,
+                    } => KindRecord::Transport {
+                        travel_time: *travel_time,
+                        capacity: *capacity,
+                    },
                 },
                 next: e.next.clone(),
                 part: e.part.and_then(part_path),
@@ -338,9 +361,18 @@ fn model_record(model: &FlowModel, part_path: &dyn Fn(u32) -> Option<Vec<usize>>
                 }),
                 starts_chart: e.starts_chart,
                 labor: e.labor.into(),
+                line: e.line,
             })
             .collect(),
         staffing: staffing_record(&model.staffing),
+        lines: model
+            .lines
+            .iter()
+            .map(|l| LineRecord {
+                id: l.id,
+                name: l.name.clone(),
+            })
+            .collect(),
         scenarios: Vec::new(),
     }
 }
@@ -419,6 +451,13 @@ fn model_from_record(
                 capacity: *capacity,
             },
             KindRecord::Sink => ElementKind::Sink,
+            KindRecord::Transport {
+                travel_time,
+                capacity,
+            } => ElementKind::Transport {
+                travel_time: *travel_time,
+                capacity: *capacity,
+            },
         };
         let inserted = model.insert_with_id(Element {
             id: r.id,
@@ -437,6 +476,7 @@ fn model_from_record(
             }),
             starts_chart: r.starts_chart,
             labor: r.labor.into(),
+            line: r.line.filter(|l| record.lines.iter().any(|k| k.id == *l)),
         });
         if !inserted {
             warnings.push(format!(
@@ -448,6 +488,14 @@ fn model_from_record(
     if let Some(staffing) = &record.staffing {
         model.staffing = staffing_from_record(staffing, &mut warnings);
     }
+    model.lines = record
+        .lines
+        .iter()
+        .map(|l| Line {
+            id: l.id,
+            name: l.name.clone(),
+        })
+        .collect();
     (model, warnings)
 }
 
@@ -508,6 +556,19 @@ mod tests {
             warnings.iter().any(|w| w.starts_with("案「今のまま」")),
             "{warnings:?}"
         );
+    }
+
+    #[test]
+    fn round_trip_keeps_the_factory() {
+        let model = cadsim_core::flow::factory::sample_factory();
+        let record = to_record(&model, |_| None);
+        let json = serde_json::to_string(&record).unwrap();
+        assert!(json.contains("\"type\":\"Transport\""), "{json}");
+        assert!(json.contains("\"lines\""), "{json}");
+        let parsed: FlowRecord = serde_json::from_str(&json).unwrap();
+        let (restored, warnings) = from_record(&parsed, |_| None);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(restored, model);
     }
 
     #[test]

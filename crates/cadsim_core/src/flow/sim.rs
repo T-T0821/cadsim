@@ -108,8 +108,10 @@ struct Runtime {
     remaining: f64,
     /// 工程: 次の故障までの加工時間
     time_to_failure: f64,
-    /// バッファ
+    /// バッファ・搬送 (搬送は運んでいるワーク)
     queue: VecDeque<Work>,
+    /// 搬送: `queue` の各ワークが届く時刻 (先頭ほど早い)
+    ready: VecDeque<f64>,
     /// 生成した数 (上限の判定用。立ち上がりも含む)
     created: u32,
     /// 集計期間に送り出した数 (排出は受け取った数)
@@ -138,6 +140,7 @@ impl Runtime {
             remaining: 0.0,
             time_to_failure: f64::INFINITY,
             queue: VecDeque::new(),
+            ready: VecDeque::new(),
             created: 0,
             count: 0,
             failures: 0,
@@ -233,8 +236,12 @@ struct WorkerRt {
     speed: Vec<Option<f64>>,
     /// 持ち場 (要素の添字)
     primary: Option<usize>,
+    /// 持ち場のライン。ほかのラインの作業は応援として数える
+    home_line: Option<super::model::LineId>,
     /// 集計期間に終えた作業の数
     tasks: u32,
+    /// そのうち、持ち場のライン以外での作業の数
+    support_tasks: u32,
     /// 集計期間に歩いた回数
     walks: u32,
 }
@@ -255,6 +262,8 @@ enum EventKind {
     WorkerArrive,
     /// 投入・段取りが終わって、工程の作業者の手が空く
     OperatorRelease,
+    /// 搬送しているワークが届く
+    TransportArrive,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -621,6 +630,7 @@ impl Simulation {
             ElementKind::Source { .. } => usize::from(rt.slot.is_some()),
             ElementKind::Process { .. } => usize::from(rt.done),
             ElementKind::Buffer { .. } => rt.queue.len(),
+            ElementKind::Transport { .. } => rt.ready.iter().filter(|&&t| t <= self.now).count(),
             ElementKind::Sink => 0,
         }
     }
@@ -750,6 +760,7 @@ impl Simulation {
                 }
             }
             EventKind::OperatorRelease => self.release_operator(i),
+            EventKind::TransportArrive => self.update_transport_state(i),
         }
     }
 
@@ -812,7 +823,20 @@ impl Simulation {
             ElementKind::Source { .. } => rt.slot.is_some(),
             ElementKind::Process { .. } => rt.done,
             ElementKind::Buffer { .. } => !rt.queue.is_empty(),
+            ElementKind::Transport { .. } => rt.ready.front().is_some_and(|&t| t <= self.now),
             ElementKind::Sink => false,
+        }
+    }
+
+    /// 搬送の状態: 空なら待ち、先頭が届いていて送れなければ詰まり、それ以外は運搬中 (稼働)
+    fn update_transport_state(&mut self, i: usize) {
+        let state = match self.runtime[i].ready.front() {
+            None => State::Waiting,
+            Some(&t) if t <= self.now => State::Blocked,
+            Some(_) => State::Working,
+        };
+        if self.runtime[i].state != state {
+            self.set_state(i, state);
         }
     }
 
@@ -821,7 +845,9 @@ impl Simulation {
         match self.model.elements[i].kind {
             ElementKind::Source { .. } => false,
             ElementKind::Process { .. } => rt.slot.is_none(),
-            ElementKind::Buffer { capacity } => rt.queue.len() < capacity as usize,
+            ElementKind::Buffer { capacity } | ElementKind::Transport { capacity, .. } => {
+                rt.queue.len() < capacity as usize
+            }
             ElementKind::Sink => true,
         }
     }
@@ -864,6 +890,12 @@ impl Simulation {
                 }
                 work
             }
+            ElementKind::Transport { .. } => {
+                let work = rt.queue.pop_front().expect("transport carries a work");
+                rt.ready.pop_front();
+                self.update_transport_state(i);
+                work
+            }
             ElementKind::Sink => unreachable!("sink never sends"),
         }
     }
@@ -888,6 +920,13 @@ impl Simulation {
             ElementKind::Buffer { .. } => {
                 self.runtime[i].queue.push_back(work);
                 self.set_state(i, State::Working);
+            }
+            ElementKind::Transport { travel_time, .. } => {
+                let at = self.now + travel_time;
+                self.runtime[i].queue.push_back(work);
+                self.runtime[i].ready.push_back(at);
+                self.schedule(at, i, EventKind::TransportArrive);
+                self.update_transport_state(i);
             }
             ElementKind::Sink => {
                 self.output_total += 1;
@@ -934,7 +973,9 @@ impl Simulation {
                 shift,
                 speed,
                 primary: w.primary.and_then(|p| self.model.index_of(p)),
+                home_line: w.primary.and_then(|p| self.model.get(p)?.line),
                 tasks: 0,
+                support_tasks: 0,
                 walks: 0,
             });
         }
@@ -1076,7 +1117,12 @@ impl Simulation {
             return;
         };
         if self.measuring() {
-            self.workers[w].tasks += 1;
+            let line = self.model.elements[i].line;
+            let wr = &mut self.workers[w];
+            wr.tasks += 1;
+            if wr.home_line.is_some() && line != wr.home_line {
+                wr.support_tasks += 1;
+            }
         }
         if self.workers[w].on_duty {
             self.set_worker_state(w, WorkerState::Idle);
@@ -1203,6 +1249,7 @@ impl Simulation {
                     name: w.name.clone(),
                     times,
                     tasks: w.tasks,
+                    support_tasks: w.support_tasks,
                     walks: w.walks,
                 }
             })
@@ -1247,6 +1294,8 @@ pub struct WorkerStats {
     pub times: WorkerTimes,
     /// 終えた作業の数
     pub tasks: u32,
+    /// そのうち、持ち場のライン以外 (応援) での作業の数
+    pub support_tasks: u32,
     /// 別の工程へ歩いた回数
     pub walks: u32,
 }
