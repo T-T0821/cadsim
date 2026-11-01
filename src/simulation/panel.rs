@@ -1,7 +1,7 @@
 //! 右上の「シミュレーション」パネル: 干渉チェックの設定・結果一覧と、距離計測の一覧
 
 use crate::ui::dock::{self, Dock};
-use cadsim_core::workspace::Tool;
+use plantwright_core::workspace::Tool;
 use std::collections::HashMap;
 
 use bevy::prelude::*;
@@ -11,10 +11,10 @@ use crate::view::camera::ViewportRect;
 
 use super::{
     InterferenceCheck, SimBody,
-    interference::PairStatus,
     measure::{MeasureTool, label_text},
     view::{CONTACT_COLOR, INTERFERENCE_COLOR, NEAR_COLOR},
 };
+use plantwright_core::simulation::interference::PairStatus;
 
 pub fn simulation_panel(
     mut contexts: EguiContexts,

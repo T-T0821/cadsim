@@ -3,12 +3,14 @@
 use bevy::prelude::*;
 
 use crate::file_io::ImportJobs;
-use crate::history::{History, Request};
-use crate::model::{Model, Selection};
+use crate::history::History;
+use crate::model::Selection;
 use crate::project::{ProjectAction, ProjectState};
 use crate::view::camera::{CameraRequest, StandardView, alt_pressed, keyboard_free};
 use crate::view::gizmo::{GizmoTool, Tool};
 use crate::view::walk::not_walking;
+use plantwright_core::history::Request;
+use plantwright_core::model::Model;
 
 pub struct ShortcutsPlugin;
 

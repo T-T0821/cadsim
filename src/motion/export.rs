@@ -7,10 +7,15 @@ use std::collections::HashMap;
 
 use bevy::math::{DAffine3, DMat4};
 
-use super::chart::{Schedule, TimingChart};
 use super::{SimulationPose, pose::part_poses};
-use crate::interchange::{Animation, NodeTransform, Track, model_io::meters_per_unit};
-use crate::model::{Model, NodeId};
+use plantwright_core::formats::Animation;
+use plantwright_core::formats::NodeTransform;
+use plantwright_core::formats::Track;
+use plantwright_core::formats::model_io::meters_per_unit;
+use plantwright_core::model::Model;
+use plantwright_core::model::NodeId;
+use plantwright_core::motion::chart::Schedule;
+use plantwright_core::motion::chart::TimingChart;
 
 /// 1秒あたりのキーの数
 const KEYS_PER_SECOND: f64 = 30.0;
@@ -93,8 +98,8 @@ pub fn chart_animation(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::interchange::model_io::model_to_scene;
     use crate::motion::demo::load_demo;
+    use plantwright_core::formats::model_io::model_to_scene;
 
     #[test]
     fn demo_cycle_becomes_keyframes() {

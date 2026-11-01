@@ -1,6 +1,7 @@
 //! サイクルタイムの CSV: タイミングチャートのステップごとの時刻と所要時間
 
-use crate::motion::{Schedule, TimingChart};
+use plantwright_core::motion::chart::Schedule;
+use plantwright_core::motion::chart::TimingChart;
 
 use super::csv::{Csv, seconds};
 
@@ -77,7 +78,9 @@ pub fn cycle_time_csv(chart: &TimingChart, schedule: &Schedule) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::motion::chart::{Action, ActuatorKind, Step};
+    use plantwright_core::motion::chart::Action;
+    use plantwright_core::motion::chart::ActuatorKind;
+    use plantwright_core::motion::chart::Step;
 
     #[test]
     fn one_row_per_step_and_a_total() {

@@ -8,11 +8,14 @@ use std::collections::HashMap;
 use bevy::math::DMat4;
 use bevy::prelude::*;
 
-use crate::formats::chart_record::{
+use plantwright_core::formats::Animation;
+use plantwright_core::formats::Track;
+use plantwright_core::formats::model_io::meters_per_unit;
+use plantwright_core::model::Model;
+use plantwright_core::model::NodeId;
+use plantwright_core::motion::record::{
     AnimationRecord, ClipData, animations_from_records, animations_to_records,
 };
-use crate::interchange::{Animation, Track, model_io::meters_per_unit};
-use crate::model::{Model, NodeId};
 
 pub struct AnimationPlugin;
 
@@ -194,8 +197,9 @@ fn play_animations(time: Res<Time>, mut animations: ResMut<Animations>, mut mode
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::interchange::{model_io::scene_to_import, test_util::sample_scene};
-    use crate::model::StepSource;
+    use plantwright_core::formats::model_io::scene_to_import;
+    use plantwright_core::formats::test_util::sample_scene;
+    use plantwright_core::model::StepSource;
 
     #[test]
     fn plays_imported_clip_and_exports_it_back() {
@@ -224,7 +228,7 @@ mod tests {
         let y = model.get(ids[2]).unwrap().placement.w_axis.y;
         assert!((y - 2000.0).abs() < 1e-6, "{y}");
 
-        let (_, index_of) = crate::interchange::model_io::model_to_scene(model, &[]);
+        let (_, index_of) = plantwright_core::formats::model_io::model_to_scene(model, &[]);
         let anims = app
             .world()
             .resource::<Animations>()

@@ -15,9 +15,9 @@ use bevy::{
 };
 
 use super::PlanTool;
-use super::underlay::{PlanContent, Underlay};
-use crate::model::Model;
 use crate::simulation::view::SimulationGizmos;
+use plantwright_core::model::Model;
+use plantwright_core::site::underlay::{PlanContent, Underlay};
 
 /// GPU に載せられる画像の一辺の上限
 const MAX_TEXTURE_SIZE: u32 = 8192;

@@ -19,22 +19,28 @@ use std::sync::{
 use bevy::prelude::*;
 
 use crate::animation::Animations;
-use crate::formats::is_plan_file;
-use crate::formats::pointcloud_read::is_cloud_file;
-use crate::history::{History, ModelChange};
-use crate::interchange::{
-    self, Scene, UnitOptions,
-    model_io::{model_to_scene, scene_to_import},
-};
-use crate::model::{Model, NodeId, Selection, StepSource};
-use crate::modeling::ModeledSourceExt;
-use crate::motion::{Schedule, TimingChart, chart_animation};
+use crate::history::History;
+use crate::model::Selection;
+use crate::motion::chart_animation;
 use crate::project::{ProjectAction, ProjectState, is_project_file};
-use crate::step_import::{ImportedFile, import_step};
 use crate::stress::stress_scene;
 use crate::view::camera::CameraRequest;
-use cadsim_core::motion::robot_import::RobotDescription;
-use cadsim_io::urdf::{self, UrdfImport, is_urdf_file};
+use plantwright_core::formats;
+use plantwright_core::formats::Scene;
+use plantwright_core::formats::UnitOptions;
+use plantwright_core::formats::model_io::{model_to_scene, scene_to_import};
+use plantwright_core::formats::step::ImportedFile;
+use plantwright_core::formats::step::import_step;
+use plantwright_core::history::ModelChange;
+use plantwright_core::model::Model;
+use plantwright_core::model::NodeId;
+use plantwright_core::model::StepSource;
+use plantwright_core::motion::chart::Schedule;
+use plantwright_core::motion::chart::TimingChart;
+use plantwright_core::motion::robot_import::RobotDescription;
+use plantwright_core::motion::urdf::{self, UrdfImport, is_urdf_file};
+use plantwright_core::site::plan_file::is_plan_file;
+use plantwright_core::site::pointcloud_read::is_cloud_file;
 
 /// 同梱の UR5e の URDF (Universal Robots の ROS の記述、BSD 3-Clause) と見た目のメッシュ
 const URDF_SAMPLE_FILES: [(&str, &[u8]); 9] = [
@@ -79,7 +85,7 @@ const URDF_SAMPLE: &str = "ur5e.urdf";
 
 /// 同梱の URDF を書き出すフォルダ。設定ファイルと同じ場所の `samples/ur5e_urdf`
 fn urdf_sample_dir() -> PathBuf {
-    crate::preferences_file::default_path()
+    plantwright_core::preferences::default_path()
         .and_then(|p| p.parent().map(|dir| dir.join("samples").join("ur5e_urdf")))
         .unwrap_or_else(|| std::env::temp_dir().join("plantwright").join("ur5e_urdf"))
 }
@@ -357,7 +363,7 @@ pub fn asset_loadable(path: &Path) -> Option<PathBuf> {
         return None;
     }
     let readable =
-        is_step(path) || interchange::format_for_path(path).is_some_and(|f| f.import.is_some());
+        is_step(path) || formats::format_for_path(path).is_some_and(|f| f.import.is_some());
     if !readable {
         return None;
     }
@@ -371,7 +377,7 @@ pub fn load_source(source: &StepSource, units: &UnitOptions) -> Result<Loaded, S
             urdf::import(path).map(|robot| Loaded::Robot(Box::new(robot)))
         }
         StepSource::File(path) if !is_step(path) => {
-            interchange::import_file(path, units).map(Loaded::Scene)
+            formats::import_file(path, units).map(Loaded::Scene)
         }
         StepSource::Modeled(modeled) => modeled
             .to_imported()
@@ -405,8 +411,6 @@ pub fn read_step(source: &StepSource) -> Result<String, String> {
 pub fn source_name(source: &StepSource) -> String {
     source.display_name()
 }
-
-pub use cadsim_core::model::file_name;
 
 /// 拡張子を見て、プロジェクトなら開き直し、STEP なら今のモデルに取り込む
 pub fn open_any(path: PathBuf, jobs: &mut ImportJobs, project: &mut ProjectState) {
@@ -443,7 +447,7 @@ pub fn export_model(
             scene.animations.insert(0, motion);
         }
     }
-    interchange::export_file(&scene, &path, units)
+    formats::export_file(&scene, &path, units)
 }
 
 /// 読み込みが終わったファイルをモデルに加え、選択して全体が見えるようにする

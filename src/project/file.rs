@@ -20,19 +20,24 @@ use crate::animation::Animations;
 use crate::annotation::{AnnotationRecord, Annotations, node_path, to_records};
 use crate::custom_part::CustomInstanceRecord;
 use crate::floor_record::FloorRecord;
-use crate::flow::{self, model::FlowModel, record::FlowRecord};
-use crate::formats::camera_path_record::{self, CameraPathRecord};
-use crate::formats::chart_record::{AnimationRecord, ChartRecord, chart_to_record};
-use crate::formats::conveyor_record::{self, ConveyorsRecord};
-use crate::formats::site_record::{CloudRecord, UnderlayRecord};
 use crate::library::PartKind;
-use crate::math::{quat_to_euler_deg, split_placement};
-use crate::model::{Model, NodeId, NodeKind, StepSource};
 use crate::physics::{CableRecord, PartPhysicsRecord};
 use crate::plc::PlcRecord;
-use cadsim_core::camera_path::CameraPath;
-use cadsim_core::conveyor::ConveyorConfig;
-use cadsim_core::motion::TimingChart;
+use plantwright_core::camera_path::CameraPath;
+use plantwright_core::camera_path::record::CameraPathRecord;
+use plantwright_core::conveyor::ConveyorConfig;
+use plantwright_core::conveyor::record::ConveyorsRecord;
+use plantwright_core::flow::model::FlowModel;
+use plantwright_core::flow::record::FlowRecord;
+use plantwright_core::math::quat_to_euler_deg;
+use plantwright_core::math::split_placement;
+use plantwright_core::model::Model;
+use plantwright_core::model::NodeId;
+use plantwright_core::model::NodeKind;
+use plantwright_core::model::StepSource;
+use plantwright_core::motion::TimingChart;
+use plantwright_core::motion::record::{AnimationRecord, ChartRecord, chart_to_record};
+use plantwright_core::site::record::{CloudRecord, UnderlayRecord};
 
 /// ファイル形式のバージョン。古いファイルを開けなくなる変更をしたときだけ上げる。
 pub const FORMAT_VERSION: u32 = 1;
@@ -213,8 +218,8 @@ impl ProjectFile {
                 .collect(),
             nodes,
             annotations: Vec::new(),
-            underlays: crate::formats::site_record::to_records(&model.site, base_dir),
-            point_clouds: crate::formats::site_record::cloud_records(&model.site, base_dir),
+            underlays: plantwright_core::site::record::to_records(&model.site, base_dir),
+            point_clouds: plantwright_core::site::record::cloud_records(&model.site, base_dir),
             flow: None,
             floor: None,
             cables: model
@@ -263,13 +268,13 @@ impl ProjectFile {
             floor: (!docs.floor.is_empty()).then(|| docs.floor.clone()),
             annotations: to_records(docs.annotations, model),
             flow: (!docs.flow.is_empty() || !docs.flow.scenarios.is_empty())
-                .then(|| flow::record::to_record(docs.flow, path_of)),
+                .then(|| plantwright_core::flow::record::to_record(docs.flow, path_of)),
             chart: (!chart.actuators.is_empty() || !chart.steps.is_empty())
                 .then(|| chart_to_record(chart, path_of)),
             animations: docs.animations.to_records(path_of),
             plc: docs.plc.clone(),
-            conveyors: conveyor_record::to_record(docs.conveyors, path_of),
-            camera_path: camera_path_record::to_record(docs.camera_path),
+            conveyors: plantwright_core::conveyor::record::to_record(docs.conveyors, path_of),
+            camera_path: plantwright_core::camera_path::record::to_record(docs.camera_path),
             ..Self::from_model(model, base_dir)
         }
     }
@@ -446,8 +451,8 @@ impl StepFileRecord {
             &StepFileRecord::Stress { parts } => StepSource::Stress(parts),
             StepFileRecord::File { path } => StepSource::File(base_dir.join(path)),
             StepFileRecord::Modeled { name, solid } => {
-                StepSource::Modeled(Arc::new(crate::model::ModeledSource {
-                    id: crate::step_import::next_shape_id(),
+                StepSource::Modeled(Arc::new(plantwright_core::model::ModeledSource {
+                    id: plantwright_core::formats::step::next_shape_id(),
                     name: name.clone(),
                     json: solid.clone(),
                 }))

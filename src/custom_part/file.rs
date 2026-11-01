@@ -11,12 +11,14 @@ use std::path::{Path, PathBuf};
 use bevy::math::DVec3;
 use serde::{Deserialize, Serialize};
 
-use super::param::{CustomInstance, ParamTarget, PartParam, TargetOnChart};
+use super::param::TargetOnChart;
 use crate::annotation::node_path;
-use crate::formats::chart_record::chart_to_record;
-use crate::model::{Model, NodeId};
-use crate::motion::TimingChart;
 use crate::project::{ProjectFile, StepFileRecord};
+use plantwright_core::custom_part::{CustomInstance, ParamTarget, PartParam};
+use plantwright_core::model::Model;
+use plantwright_core::model::NodeId;
+use plantwright_core::motion::chart::TimingChart;
+use plantwright_core::motion::record::chart_to_record;
 
 /// ファイル形式の版
 const FORMAT_VERSION: u32 = 1;
@@ -83,11 +85,11 @@ pub fn build(
     let (actuators, sensors) = attached(model, chart, root);
     let subtree: HashSet<NodeId> = model.subtree(root).into_iter().collect();
 
-    let mut sub = TimingChart(cadsim_core::motion::TimingChart {
+    let mut sub = TimingChart {
         next_actuator_id: chart.next_actuator_id,
         next_sensor_id: chart.next_sensor_id,
         ..Default::default()
-    });
+    };
     // 置いた自作部品をもう一度保存するときは、名前の頭 ("<部品名> 1/") を外す
     let prefix = model
         .get(root)

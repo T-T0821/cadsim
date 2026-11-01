@@ -24,7 +24,7 @@ pub use rhai_engine::API_HELP;
 pub use runner::ScriptState;
 pub use ui::{script_controls, script_section};
 
-use crate::model::Model;
+use plantwright_core::model::Model;
 
 /// 実行中の部品スクリプト。止めている間は None。
 #[derive(Resource, Default)]

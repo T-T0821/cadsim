@@ -14,12 +14,12 @@ use bevy::{
     tasks::{AsyncComputeTaskPool, Task, block_on, poll_once},
 };
 
-use super::pointcloud::{
-    CloudHit, LOD_LEVELS, PlacedCloud, PointCloud, check_body, lod_fraction, lod_level,
-};
-use crate::model::Model;
 use crate::simulation::view::SimulationGizmos;
 use crate::simulation::{Pose, SimBody, TriMesh};
+use plantwright_core::model::Model;
+use plantwright_core::site::pointcloud::{
+    CloudHit, LOD_LEVELS, PlacedCloud, PointCloud, check_body, lod_fraction, lod_level,
+};
 
 /// 点群1つの表示
 #[derive(Component)]

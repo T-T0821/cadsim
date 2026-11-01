@@ -13,7 +13,7 @@
 //! - `sensor_view`: 3D ビューにセンサーの光軸・検出範囲を描く
 //! - `robot_ui`: ロボットの設定・ジョグ・教示点の欄 (右のプロパティ欄) と、3D ビューへの TCP・教示点の表示
 //! - `demo`: 動作確認用のサンプル装置 (ガントリーのピック & プレース、4軸ロボット)
-//! - `urdf_robot`: 読み込んだ URDF のロボットに関節とロボットを付ける (計算は `cadsim_core::motion::robot_import`)
+//! - `urdf_robot`: 読み込んだ URDF のロボットに関節とロボットを付ける (計算は `plantwright_core::motion::robot_import`)
 //! - `export`: 1サイクルの動きを書き出し用のアニメーション (glTF / USD) にする
 //!
 //! 設計データ (Model) は書き換えず、再生中の動きは [`SimulationPose`] に出す。
@@ -27,19 +27,18 @@
 //! `builder::transformed(&part.build_solid(), pose.to_truck_matrix())` で動いた後の
 //! B-rep を作って判定すればよい (動かない部品は `parts` に入っていない)。
 
-pub mod chart;
 mod demo;
 mod export;
-use cadsim_core::motion::kinematics;
+use plantwright_core::motion::kinematics;
 mod live_joints;
 mod melfa;
-use cadsim_core::motion::path_interference;
-use cadsim_core::motion::pose;
-use cadsim_core::motion::profile;
-use cadsim_core::motion::robot_path;
-use cadsim_core::motion::robot_time;
+use plantwright_core::motion::path_interference;
+use plantwright_core::motion::pose;
+use plantwright_core::motion::profile;
+use plantwright_core::motion::robot_path;
+use plantwright_core::motion::robot_time;
 mod robot_ui;
-use cadsim_core::motion::sensor;
+use plantwright_core::motion::sensor;
 mod sensor_view;
 mod targets;
 mod teach;
@@ -51,19 +50,18 @@ use std::collections::HashMap;
 
 use bevy::prelude::*;
 
-pub use cadsim_core::motion::pose::{
-    RigidPose, actuator_poses, actuator_poses_for, part_poses, part_poses_for,
-};
-pub use chart::{Action, Actuator, ActuatorKind, Axis, Schedule, Step, TimingChart};
 #[cfg(test)]
 pub use demo::load_demo;
 pub use export::chart_animation;
+use plantwright_core::motion::chart::{Schedule, TimingChart};
+use plantwright_core::motion::pose::RigidPose;
 pub use robot_ui::{show_robot_section, teach_tool_off};
 pub use ui::{MotionUi, show_panel};
 
 use crate::history::{TrackDocExt, TrackedDoc};
-use crate::model::{Model, NodeId};
 use crate::plc::plc_active;
+use plantwright_core::model::Model;
+use plantwright_core::model::NodeId;
 use targets::{design_targets, extra_targets_at};
 
 /// タイミングチャートの編集を元に戻す履歴に載せる

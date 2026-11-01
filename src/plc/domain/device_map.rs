@@ -9,7 +9,7 @@
 
 use std::collections::HashMap;
 
-use cadsim_core::melsec::{Device, DeviceRef};
+use plantwright_core::plc::melsec::{Device, DeviceRef};
 
 use super::io::{AddressPlan, AreaStarts, IoPoint, IoTable};
 
@@ -129,8 +129,9 @@ impl DeviceMap {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::motion::{ActuatorKind, TimingChart};
     use crate::plc::domain::io::{Point, PointSettings};
+    use plantwright_core::motion::chart::ActuatorKind;
+    use plantwright_core::motion::chart::TimingChart;
 
     fn chart() -> (TimingChart, u32, u32) {
         let mut chart = TimingChart::default();

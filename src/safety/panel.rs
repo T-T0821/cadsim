@@ -3,13 +3,13 @@
 use crate::ui::dock::{self, Dock};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
-use cadsim_core::workspace::Tool;
+use plantwright_core::workspace::Tool;
 
-use super::device::DeviceKind;
 use super::{SafetyLayoutRes, SafetyState};
-use crate::model::Model;
 use crate::ui::widgets;
 use crate::view::camera::ViewportRect;
+use plantwright_core::model::Model;
+use plantwright_core::safety::device::DeviceKind;
 
 pub fn safety_panel(
     mut contexts: EguiContexts,
@@ -70,7 +70,7 @@ fn status_section(ui: &mut egui::Ui, state: &mut SafetyState) {
 /// 機器の追加・一覧・選んだ機器の編集。配置が変わったら true。
 fn device_list(
     ui: &mut egui::Ui,
-    layout: &mut super::device::SafetyLayout,
+    layout: &mut plantwright_core::safety::device::SafetyLayout,
     state: &mut SafetyState,
     model: &Model,
 ) -> bool {

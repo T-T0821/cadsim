@@ -18,16 +18,25 @@
 use std::collections::HashMap;
 
 use bevy::math::{DMat4, DQuat, DVec3};
-use cadsim_core::conveyor::ConveyorConfig;
-use cadsim_core::library::catalog::{PartKind, Spec, body, units_per_mm};
-use cadsim_core::line_draft::layout::{CONVEYOR_WIDTH, Placed, work_point};
-use cadsim_core::line_draft::{EquipmentKind, Verb};
-use cadsim_core::usecase::compose_line::ComposedLine;
+use plantwright_core::conveyor::ConveyorConfig;
+use plantwright_core::library::catalog::{PartKind, Spec, body, units_per_mm};
+use plantwright_core::line_draft::compose::ComposedLine;
+use plantwright_core::line_draft::layout::{CONVEYOR_WIDTH, Placed, work_point};
+use plantwright_core::line_draft::{EquipmentKind, Verb};
 
 use crate::library::{body_node, local_to_world, rebuild_bodies};
-use crate::model::{BoxPart, Model, NodeId, NodeKind};
-use crate::motion::TimingChart;
-use crate::motion::chart::{Action, ActuatorKind, Axis, Interlock, Sensor, SensorKind, Step};
+use plantwright_core::model::BoxPart;
+use plantwright_core::model::Model;
+use plantwright_core::model::NodeId;
+use plantwright_core::model::NodeKind;
+use plantwright_core::motion::chart::Action;
+use plantwright_core::motion::chart::ActuatorKind;
+use plantwright_core::motion::chart::Axis;
+use plantwright_core::motion::chart::Interlock;
+use plantwright_core::motion::chart::Sensor;
+use plantwright_core::motion::chart::SensorKind;
+use plantwright_core::motion::chart::Step;
+use plantwright_core::motion::chart::TimingChart;
 
 /// ロボットの腕の高さ (下面, mm)
 const ARM_HEIGHT: f64 = 1000.0;
@@ -459,7 +468,7 @@ pub fn free_offset(model: &Model, line: &ComposedLine) -> [f64; 2] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cadsim_core::usecase::compose_line::compose_line;
+    use plantwright_core::line_draft::compose::compose_line;
 
     fn composed(text: &str) -> ComposedLine {
         compose_line(text, None).unwrap()
@@ -555,7 +564,7 @@ mod tests {
     fn sizes_follow_the_model_unit() {
         let line = composed("コンベア1本、ロボット1台、センサー1個で移載");
         let mut model = Model::default();
-        model.0.unit = "m".into();
+        model.unit = "m".into();
         let mut chart = TimingChart::default();
         let mut conveyors = ConveyorConfig::default();
         apply(&mut model, &mut chart, &mut conveyors, &line, [0.0, 0.0]);

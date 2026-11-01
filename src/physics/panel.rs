@@ -6,14 +6,16 @@ use crate::ui::dock::{self, Dock};
 use bevy::math::DVec3;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
-use cadsim_core::workspace::Tool;
+use plantwright_core::workspace::Tool;
 
 use super::{CableSim, PhysicsState, RunRequest, RunState};
-use crate::model::{Model, NodeId, Selection};
+use crate::model::Selection;
 use crate::ui::widgets::{length, round_for_display, xyz_editor};
 use crate::view::camera::ViewportRect;
-use cadsim_core::physics::cable::{Cable, CableAnchor, CableKind, CableReport};
-use cadsim_core::physics::settings::meters_per_unit;
+use plantwright_core::model::Model;
+use plantwright_core::model::NodeId;
+use plantwright_core::physics::cable::{Cable, CableAnchor, CableKind, CableReport};
+use plantwright_core::physics::settings::meters_per_unit;
 
 pub fn physics_panel(
     mut contexts: EguiContexts,

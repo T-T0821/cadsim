@@ -5,14 +5,15 @@ use super::*;
 use crate::annotation::node_at_path;
 use crate::file_io::{read_step, source_name};
 use crate::floor_record::FloorRecord;
-use crate::flow::{self, model::FlowModel};
-use crate::formats::chart_record::chart_from_record;
-use crate::formats::conveyor_record;
+
 use crate::library::{self, PartKind};
-use crate::math::euler_deg_to_quat;
-use crate::model::{NodeKind, StepSource};
-use crate::step_import::import_step;
-use cadsim_core::camera_path::{CameraPath, CameraPose};
+use plantwright_core::camera_path::{CameraPath, CameraPose};
+use plantwright_core::flow::model::FlowModel;
+use plantwright_core::formats::step::import_step;
+use plantwright_core::math::euler_deg_to_quat;
+use plantwright_core::model::NodeKind;
+use plantwright_core::model::StepSource;
+use plantwright_core::motion::record::chart_from_record;
 
 /// 同梱のデモライン (tools/make_demo_line.py で生成) が今の形式で読めること
 #[test]
@@ -274,7 +275,7 @@ fn flow_model_is_saved_with_the_project() {
     let model = sample_model();
     let part = model.roots[0];
     let mut docs = Docs {
-        flow: crate::flow::model::sample_line(),
+        flow: plantwright_core::flow::model::sample_line(),
         ..Default::default()
     };
     docs.flow.elements[1].part = Some(part);
@@ -282,9 +283,10 @@ fn flow_model_is_saved_with_the_project() {
     let file = ProjectFile::capture(&docs.of(&model), None);
     let parsed = ProjectFile::from_json(&file.to_json()).unwrap();
     let restored = reload(&parsed);
-    let (flow, warnings) = flow::record::from_record(parsed.flow.as_ref().unwrap(), |p| {
-        node_at_path(&restored, p)
-    });
+    let (flow, warnings) =
+        plantwright_core::flow::record::from_record(parsed.flow.as_ref().unwrap(), |p| {
+            node_at_path(&restored, p)
+        });
     assert!(warnings.is_empty());
     assert_eq!(flow.elements.len(), line.elements.len());
     assert_eq!(flow.elements[1].part, Some(restored.roots[0]));
@@ -329,8 +331,11 @@ fn annotations_are_saved_with_the_project() {
 
 #[test]
 fn chart_and_animations_are_saved_with_the_project() {
-    use crate::interchange::{NodeTransform, Track};
-    use crate::motion::{Action, ActuatorKind, Step};
+    use plantwright_core::formats::NodeTransform;
+    use plantwright_core::formats::Track;
+    use plantwright_core::motion::chart::Action;
+    use plantwright_core::motion::chart::ActuatorKind;
+    use plantwright_core::motion::chart::Step;
     let model = sample_model();
     let part = model.roots[1];
     let mut docs = Docs::default();
@@ -378,7 +383,8 @@ fn chart_and_animations_are_saved_with_the_project() {
     assert!(warnings.is_empty());
     assert_eq!(chart.actuators[0].parts, vec![restored.roots[1]]);
     assert_eq!(chart.steps, docs.chart.steps);
-    let (conveyors, warnings) = conveyor_record::from_record(parsed.conveyors.as_ref(), find);
+    let (conveyors, warnings) =
+        plantwright_core::conveyor::record::from_record(parsed.conveyors.as_ref(), find);
     assert!(warnings.is_empty());
     assert_eq!(conveyors.conveyors[0].part, Some(restored.roots[1]));
     let (animations, missing) = Animations::from_records(&parsed.animations, find);
@@ -387,7 +393,7 @@ fn chart_and_animations_are_saved_with_the_project() {
     assert_eq!(animations.clips[0].tracks[0].0, restored.roots[1]);
     // 開き直した状態をもう一度保存しても同じ内容になる (未保存の印が付かない)
     let reopened = Docs {
-        chart: TimingChart(chart),
+        chart,
         animations,
         conveyors,
         ..Default::default()
@@ -444,7 +450,7 @@ fn save_as_adds_the_extension() {
 /// 関節の対応をすべて保ったまま開け、ロボットが教示点に届くこと
 #[test]
 fn real_robot_sample_opens_and_reaches_every_point() {
-    use cadsim_core::motion::pose::actuator_poses_for;
+    use plantwright_core::motion::pose::actuator_poses_for;
     use std::collections::HashMap;
 
     // メニューから開くときと同じく、埋め込みのファイルをフォルダに書き出して読む
@@ -464,7 +470,7 @@ fn real_robot_sample_opens_and_reaches_every_point() {
             .chart
             .actuators
             .iter()
-            .filter(|a| a.kind != cadsim_core::motion::chart::ActuatorKind::Cylinder)
+            .filter(|a| a.kind != plantwright_core::motion::chart::ActuatorKind::Cylinder)
             .all(|a| !a.parts.is_empty()),
         "関節はどれも読み込んだリンクを動かす"
     );

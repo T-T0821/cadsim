@@ -12,7 +12,6 @@ use bevy::math::DVec3;
 use bevy::prelude::*;
 use bevy_egui::egui;
 
-use super::chart::{MoveKind, Robot, RobotMove, TeachPoint, TimingChart};
 use super::kinematics::{self, Tcp};
 use super::melfa;
 use super::path_interference::{PathBody, PathHit, robot_path_interference};
@@ -22,9 +21,14 @@ use super::teach::{self, point_on_surface};
 use super::ui::MotionUi;
 use super::ui::{ChartUiState, ERROR_COLOR, WARN_COLOR};
 use super::{ChartSchedule, JogPose, SimulationPose};
-use crate::model::Model;
 use crate::simulation::{InterferenceCheck, SimBody};
 use crate::view::picking::PartUnderPointer;
+use plantwright_core::model::Model;
+use plantwright_core::motion::chart::MoveKind;
+use plantwright_core::motion::chart::Robot;
+use plantwright_core::motion::chart::RobotMove;
+use plantwright_core::motion::chart::TeachPoint;
+use plantwright_core::motion::chart::TimingChart;
 
 /// 移動中の干渉を調べる時刻の間隔 (秒)
 const INTERFERENCE_INTERVAL: f64 = 0.05;
@@ -211,7 +215,7 @@ fn robot_panel(
             ui.label(&actuator.name);
             let mut value = current(id);
             let range = actuator.limits.unwrap_or(match actuator.kind {
-                super::chart::ActuatorKind::RotaryTable => [-180.0, 180.0],
+                plantwright_core::motion::chart::ActuatorKind::RotaryTable => [-180.0, 180.0],
                 _ => [-2.0 * reach, 2.0 * reach],
             });
             let slider = egui::Slider::new(&mut value, range[0]..=range[1])
@@ -742,7 +746,7 @@ pub fn draw_robots(
                 .and_then(|p| pose.actuators.get(&p).copied())
                 .unwrap_or_default();
             let axis = parent.rotation * super::pose::direction(actuator);
-            if actuator.kind == super::chart::ActuatorKind::RotaryTable {
+            if actuator.kind == plantwright_core::motion::chart::ActuatorKind::RotaryTable {
                 let pivot = parent.transform_point(DVec3::from_array(actuator.pivot));
                 gizmos.line(
                     v(pivot - axis * 0.08 * k),

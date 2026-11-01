@@ -1,8 +1,8 @@
 //! 動作確認用のサンプル: 部品棚とラインを往復する作業者と、十字の通路を走る AGV
 
-use super::agv_sim::{AgvParams, Flow};
-use super::operator_plan::OperatorTask;
 use super::{AgvLayoutRes, FloorState, OperatorsRes};
+use plantwright_core::floor::agv_sim::{AgvParams, Flow};
+use plantwright_core::floor::operator_plan::OperatorTask;
 
 pub fn load(operators: &mut OperatorsRes, layout: &mut AgvLayoutRes, state: &mut FloorState) {
     *operators = OperatorsRes::default();

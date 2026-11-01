@@ -17,7 +17,7 @@ use openh264::encoder::{
 use openh264::formats::{RgbaSliceU8, YUVBuffer};
 
 use super::mp4::Mp4Writer;
-use cadsim_core::video::{Format, Frame, VideoSink};
+use plantwright_core::video::{Format, Frame, VideoSink};
 
 /// 書き出しの設定
 #[derive(Clone, Debug)]

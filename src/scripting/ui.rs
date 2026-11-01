@@ -4,7 +4,9 @@ use bevy_egui::egui;
 
 use super::{API_HELP, ScriptRun, ScriptState, check, scripts_of};
 use crate::history::History;
-use crate::model::{Model, NodeId, Selection};
+use crate::model::Selection;
+use plantwright_core::model::Model;
+use plantwright_core::model::NodeId;
 
 const OK_COLOR: egui::Color32 = egui::Color32::from_rgb(90, 200, 120);
 const ERROR_COLOR: egui::Color32 = egui::Color32::from_rgb(235, 100, 90);

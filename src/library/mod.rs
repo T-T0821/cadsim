@@ -18,7 +18,7 @@
 //! - コンベア: [`Spec::conveying_surface`] が搬送面の中心・向き・長さ・幅・速度を返す。
 //! - PLC の I/O 割付け: [`io_table`] が全機器の I/O 点を返す。
 
-pub use cadsim_core::library::{catalog, geometry};
+use plantwright_core::library::{catalog, geometry};
 mod ui;
 
 use std::collections::HashMap;
@@ -32,8 +32,12 @@ use truck_modeling::builder;
 pub use catalog::{IoDir, Motion, PartKind, Spec};
 pub use ui::{add_menu, drop_on_viewport, io_list_window, palette_window, properties_section};
 
-use crate::model::{Model, NodeId, NodeKind};
-use crate::step_import::{ImportedShape, mesh_stats, next_shape_id};
+use plantwright_core::formats::step::ImportedShape;
+use plantwright_core::formats::step::mesh_stats;
+use plantwright_core::formats::step::next_shape_id;
+use plantwright_core::model::Model;
+use plantwright_core::model::NodeId;
+use plantwright_core::model::NodeKind;
 
 /// 標準部品のテッセレーションの許容誤差 (mm)。小さな円柱が多いので細かめにする。
 const TESSELLATION_TOL_MM: f64 = 0.3;
@@ -160,7 +164,7 @@ fn tessellate(solid: &truck_modeling::Solid, color: [f32; 3], tol: f64) -> Impor
     }
     let mut stats = mesh_stats(&faces);
     stats.edge_count = edges.len();
-    let mesh = Arc::new(crate::part_mesh::PartMesh::new(&faces, &edges));
+    let mesh = Arc::new(plantwright_core::part_mesh::PartMesh::new(&faces, &edges));
     ImportedShape {
         id: next_shape_id(),
         breps: Vec::new(),
@@ -368,7 +372,7 @@ mod tests {
     #[test]
     fn bodies_are_scaled_to_the_model_unit() {
         let mut model = Model::default();
-        model.0.unit = "m".into();
+        model.unit = "m".into();
         let id = add_standard(&mut model, PartKind::BeltConveyor, DVec3::ZERO);
         let bounds = model.world_bounds(id).unwrap();
         // 搬送面の高さ 700 mm = 0.7 m (フレームが 15 mm 上に出る)
@@ -431,5 +435,20 @@ mod tests {
             DVec3::new(115.0, 25.0, 0.0)
         );
         assert_eq!(dir_to_world(&model, id, s.direction), DVec3::X);
+    }
+
+    #[test]
+    fn standard_parts_are_counted_as_whole_parts() {
+        use bevy::math::DVec3;
+        use plantwright_core::bom::make_bom;
+        let mut model = Model::default();
+        add_standard(&mut model, PartKind::AirCylinder, DVec3::ZERO);
+        add_standard(&mut model, PartKind::AirCylinder, DVec3::X * 500.0);
+        let bom = make_bom(&model);
+        // 本体 (チューブ・ロッドなど) は数えず、同じ寸法のシリンダ2本で1行
+        assert_eq!(bom.rows.len(), 1);
+        assert_eq!(bom.rows[0].quantity, 2);
+        assert_eq!(bom.rows[0].kind, "標準部品");
+        assert!(bom.rows[0].size.iter().all(|&v| v > 0.0));
     }
 }

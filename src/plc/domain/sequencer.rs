@@ -9,7 +9,9 @@
 //! 時刻表どおりに動くチャート再生と違い、設備が遅れれば次のステップも待つ。
 
 use super::io::{IoValues, Point};
-use crate::motion::{Action, ActuatorKind, TimingChart};
+use plantwright_core::motion::chart::Action;
+use plantwright_core::motion::chart::ActuatorKind;
+use plantwright_core::motion::chart::TimingChart;
 
 /// 位置決め完了とみなす、現在位置と指令位置の差
 const POSITION_TOLERANCE: f64 = 1e-6;
@@ -111,8 +113,8 @@ fn action_done(chart: &TimingChart, action: &Action, io: &IoValues) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::motion::chart::Step;
     use crate::plc::domain::plant::Plant;
+    use plantwright_core::motion::chart::Step;
 
     /// シリンダを出して戻すだけのチャート
     fn out_and_back() -> (TimingChart, u32) {

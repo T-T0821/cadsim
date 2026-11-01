@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 
 use super::AiAssistant;
-use cadsim_io::claude::{DEFAULT_MODEL, MODELS};
+use plantwright_core::assistant::claude::{DEFAULT_MODEL, MODELS};
 
 pub fn settings_window(mut contexts: EguiContexts, mut ai: ResMut<AiAssistant>) -> Result {
     if !ai.settings_open {

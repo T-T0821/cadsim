@@ -11,8 +11,11 @@ use bevy::math::{DMat4, DVec3};
 use truck_meshalgo::prelude::*;
 use truck_modeling::{Solid, builder};
 
-use crate::part_mesh::shell_edges;
-use crate::step_import::{ImportNode, ImportedFile, ImportedShape, tessellation_tolerance};
+use plantwright_core::formats::step::ImportNode;
+use plantwright_core::formats::step::ImportedFile;
+use plantwright_core::formats::step::ImportedShape;
+use plantwright_core::formats::step::tessellation_tolerance;
+use plantwright_core::part_mesh::shell_edges;
 
 /// 1ユニットの部品数 (板1 + 脚4 + モーター1 + ローラー8 + ボルト16)
 pub const PARTS_PER_STATION: usize = 30;
@@ -212,7 +215,8 @@ fn tessellate(solids: &[Solid], color: [f32; 3]) -> ImportedShape {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{Model, StepSource};
+    use plantwright_core::model::Model;
+    use plantwright_core::model::StepSource;
 
     #[test]
     fn scene_has_requested_part_count() {

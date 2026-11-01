@@ -2,7 +2,7 @@
 //!
 //! 生成 AI はポート [`LlmClient`] で受け取る。Bevy・egui に依存しない。
 
-use cadsim_core::usecase::llm::{Effort, LlmClient, LlmError, LlmRequest};
+use plantwright_core::assistant::llm::{Effort, LlmClient, LlmError, LlmRequest};
 
 use super::json;
 use super::log_events::LogSummary;
@@ -138,7 +138,7 @@ fn check_size(text: &str) -> Result<(), LlmError> {
 mod tests {
     use super::*;
     use crate::sequence_gen::spec::tests::sample_spec;
-    use cadsim_core::usecase::llm::ScriptedLlm;
+    use plantwright_core::assistant::llm::ScriptedLlm;
 
     #[test]
     fn generate_sends_current_chart_and_schema_and_parses_reply() {

@@ -1,21 +1,22 @@
 //! 上部のメニューバーとツールバー
 
 use bevy_egui::egui;
-use cadsim_core::factory_hall::HallSize;
+use plantwright_core::factory_hall::HallSize;
 
 use super::UiState;
 use super::dock;
 use super::modeling::Tab;
 use super::theme::palette;
 use crate::file_io::ExportScope;
-use crate::history::Request;
-use crate::interchange::{FORMATS, LENGTH_UNITS};
 use crate::project::ProjectAction;
 use crate::result_export::ResultKind;
 use crate::view::camera::{CameraRequest, StandardView};
 use crate::view::gizmo::Tool as Tool3d;
-use cadsim_core::usecase::help::SHORTCUTS;
-use cadsim_core::workspace::{Tool, ToolGroup};
+use plantwright_core::assistant::help::SHORTCUTS;
+use plantwright_core::formats::FORMATS;
+use plantwright_core::formats::LENGTH_UNITS;
+use plantwright_core::history::Request;
+use plantwright_core::workspace::{Tool, ToolGroup};
 
 pub fn show(root: &mut egui::Ui, state: &mut UiState) {
     egui::Panel::top("menu_bar")
@@ -798,7 +799,7 @@ fn level_pill(ui: &mut egui::Ui, state: &mut UiState) {
         "★ Lv.{}  {}/{}",
         level.level,
         progress.done_count(),
-        cadsim_core::gamify::MISSIONS.len()
+        plantwright_core::gamify::MISSIONS.len()
     ))
     .color(palette::YELLOW);
     let shown = state.playful.prefs.show_missions;

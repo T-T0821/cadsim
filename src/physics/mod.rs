@@ -2,9 +2,9 @@
 //!
 //! | ファイル | 層 | 役割 |
 //! | --- | --- | --- |
-//! | `cadsim_core::physics::settings` | ドメイン | 部品ごとの物理の設定 (動かない / 機構で動く / 物理で動く / 当たらない、当たり判定の形、ベルト) |
-//! | `cadsim_core::physics::cable` | ドメイン | ケーブル・ホースの紐モデルと、曲げ半径・長さ不足・接触の判定 |
-//! | `cadsim_core::physics::world` | ユースケース | 部品 → 剛体の変換、一定刻みでの進行、物理エンジンのポート `PhysicsEngine` |
+//! | `plantwright_core::physics::settings` | ドメイン | 部品ごとの物理の設定 (動かない / 機構で動く / 物理で動く / 当たらない、当たり判定の形、ベルト) |
+//! | `plantwright_core::physics::cable` | ドメイン | ケーブル・ホースの紐モデルと、曲げ半径・長さ不足・接触の判定 |
+//! | `plantwright_core::physics::world` | ユースケース | 部品 → 剛体の変換、一定刻みでの進行、物理エンジンのポート `PhysicsEngine` |
 //! | `engine.rs` | アダプター | ポートの bevy_rapier3d (Bevy の物理プラグイン) 実装。剛体はエンティティ、ベルトは接触フック |
 //! | `records.rs` | アダプター | .plantwright に書く形。Bevy に依存しない |
 //! | `mod.rs` / `panel.rs` / `sample.rs` | UI | Bevy のシステム、「物理演算」パネル、サンプルライン |
@@ -27,25 +27,28 @@ use bevy::math::{DMat4, DVec3};
 use bevy::prelude::*;
 use bevy_egui::EguiPrimaryContextPass;
 
-pub use cadsim_core::physics::cable::{Cable, CableAnchor, CableKind, CableReport};
-pub use cadsim_core::physics::settings::{BeltDrive, BodyMode, ColliderShape, LocalAxis};
+use plantwright_core::physics::cable::{Cable, CableAnchor, CableKind, CableReport};
+use plantwright_core::physics::settings::BodyMode;
 pub use records::{CableRecord, PartPhysicsRecord};
 
-use cadsim_core::physics::cable::{CableState, Obstacle};
-use cadsim_core::physics::settings;
-use cadsim_core::physics::world::{
+use engine::{RapierBackendPlugin, RapierEngine};
+use plantwright_core::physics::cable::{CableState, Obstacle};
+use plantwright_core::physics::settings;
+use plantwright_core::physics::world::{
     BodyDesc, BodyKey, BodyKind, Iso, PartGeometry, PartInput, PhysicsEngine, PhysicsRun, STEP_DT,
     part_body,
 };
-use engine::{RapierBackendPlugin, RapierEngine};
 
 use crate::history::{History, TrackDocExt, TrackedDoc};
 use crate::input::command_line::CommandLine;
-use crate::math::euler_deg_to_quat;
-use crate::model::{Model, NodeId, NodeKind};
-use crate::motion::{ChartSchedule, MotionSet, Playback, SimulationPose, TimingChart};
+use crate::motion::{ChartSchedule, MotionSet, Playback, SimulationPose};
 use crate::simulation::{InterferenceCheck, SimBody, TriMesh};
 use crate::view::camera::CameraRequest;
+use plantwright_core::math::euler_deg_to_quat;
+use plantwright_core::model::Model;
+use plantwright_core::model::NodeId;
+use plantwright_core::model::NodeKind;
+use plantwright_core::motion::chart::TimingChart;
 
 pub struct PhysicsPlugin;
 

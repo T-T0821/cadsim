@@ -7,12 +7,12 @@ use std::collections::HashMap;
 
 use bevy::prelude::*;
 
-use super::TimingChart;
 use super::ui::ChartUiState;
 use crate::file_io::{ImportJobs, ImportedRobot};
-use crate::interchange::model_io::meters_per_unit;
-use crate::model::Model;
-use cadsim_core::motion::robot_import::{self, AddedRobot, PlacedLink};
+use plantwright_core::formats::model_io::meters_per_unit;
+use plantwright_core::model::Model;
+use plantwright_core::motion::chart::TimingChart;
+use plantwright_core::motion::robot_import::{self, AddedRobot, PlacedLink};
 
 /// 読み込んだばかりのロボットの関節をチャートに足し、ロボットの欄で選ぶ
 pub fn attach_imported_robots(
@@ -86,9 +86,9 @@ mod tests {
 
     use super::*;
     use crate::file_io::load_source;
-    use crate::interchange::UnitOptions;
-    use crate::model::StepSource;
-    use cadsim_core::motion::kinematics;
+    use plantwright_core::formats::UnitOptions;
+    use plantwright_core::model::StepSource;
+    use plantwright_core::motion::kinematics;
 
     /// 同梱の UR5e の URDF をモデルに置き、関節を付ける
     fn ur5e() -> (Model, TimingChart, AddedRobot) {

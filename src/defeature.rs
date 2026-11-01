@@ -20,8 +20,9 @@ use bevy::math::DVec3;
 use truck_meshalgo::prelude::*;
 use truck_topology::compress::{CompressedEdgeIndex, CompressedShell};
 
-use crate::part_mesh::PartMesh;
-use crate::step_import::{Brep, brep_tolerance};
+use plantwright_core::formats::step::Brep;
+use plantwright_core::formats::step::brep_tolerance;
+use plantwright_core::part_mesh::PartMesh;
 
 /// どこまで小さいものを消すか (モデルの単位)
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -642,7 +643,7 @@ fn collapse_fillets<C, S>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::step_import::mesh_stats;
+    use plantwright_core::formats::step::mesh_stats;
     use std::f64::consts::{FRAC_PI_4, TAU};
     use truck_modeling::{Solid, builder};
 
@@ -838,7 +839,7 @@ mod tests {
         let solid = bracket().compress();
         let text =
             CompleteStepDisplay::new(StepModel::from(&solid), Default::default()).to_string();
-        let file = crate::step_import::import_step(&text, "bracket.step").unwrap();
+        let file = plantwright_core::formats::step::import_step(&text, "bracket.step").unwrap();
         let shape = find_shape(&file.root).expect("形状がある");
 
         let options = DefeatureOptions {
@@ -893,8 +894,8 @@ mod tests {
     }
 
     fn find_shape(
-        node: &crate::step_import::ImportNode,
-    ) -> Option<std::sync::Arc<crate::step_import::ImportedShape>> {
+        node: &plantwright_core::formats::step::ImportNode,
+    ) -> Option<std::sync::Arc<plantwright_core::formats::step::ImportedShape>> {
         node.shape
             .clone()
             .or_else(|| node.children.iter().find_map(find_shape))

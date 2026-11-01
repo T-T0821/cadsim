@@ -6,9 +6,9 @@
 //!   形状を差し替える (動きの設定は残る。1回の「元に戻す」で戻せる)
 //!
 //! どこにあるファイルでも読めるよう、専用のアセットの読み元 ([`SOURCE`]) を足し、絶対パスと単位を
-//! `cadsim_io::asset_key` で相対パスの形に詰めて呼ぶ。ファイルの中身を読んでモデルの形にするのは
+//! `plantwright_core::formats::asset_key` で相対パスの形に詰めて呼ぶ。ファイルの中身を読んでモデルの形にするのは
 //! `file_io::load_source` (Bevy に依存しない) で、読み終わったものは別スレッドの結果と同じ
-//! `file_io::receive_imports` がモデルに加える。更新の見張りの判断は `cadsim_core::usecase::file_watch`。
+//! `file_io::receive_imports` がモデルに加える。更新の見張りの判断は `plantwright_core::file_watch`。
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -21,12 +21,13 @@ use bevy::asset::io::{
 use bevy::asset::{AssetLoadFailedEvent, AssetLoader, AssetPath, LoadContext};
 use bevy::prelude::*;
 use bevy::tasks::AsyncComputeTaskPool;
-use cadsim_core::usecase::file_watch::FileWatch;
-use cadsim_io::asset_key;
+use plantwright_core::file_watch::FileWatch;
+use plantwright_core::formats::asset_key;
 
 use crate::file_io::{ImportJobs, ImportTarget, Loaded, asset_loadable, load_source, source_name};
-use crate::interchange::UnitOptions;
-use crate::model::{Model, StepSource};
+use plantwright_core::formats::UnitOptions;
+use plantwright_core::model::Model;
+use plantwright_core::model::StepSource;
 
 /// 取り込むファイルのアセットの読み元の名前 (`plantwright-file://<鍵>`)
 pub const SOURCE: &str = "plantwright-file";

@@ -8,19 +8,22 @@ use bevy::{
     window::PrimaryWindow,
 };
 use bevy_egui::{EguiContexts, egui};
-use cadsim_core::workspace::Tool;
+use plantwright_core::workspace::Tool;
 
-use super::catalog::{Category, IoDir, Motion, PartKind, units_per_mm};
 use super::{Jog, add_standard, dir_to_world, io_capacity, io_table, local_to_world};
 use super::{rebuild_bodies, standard_nodes};
 use crate::custom_part::{CustomDrag, CustomLibrary};
 use crate::file_io::ImportJobs;
 use crate::floor::figures::FloorFigure;
 use crate::history::History;
-use crate::model::{Model, NodeId, NodeKind, Selection};
+use crate::model::Selection;
 use crate::ui::UiState;
 use crate::view::camera::{OrbitCamera, ViewportRect};
 use crate::view::factory_hall::HallMesh;
+use plantwright_core::library::catalog::{Category, IoDir, Motion, PartKind, units_per_mm};
+use plantwright_core::model::Model;
+use plantwright_core::model::NodeId;
+use plantwright_core::model::NodeKind;
 
 /// ドロップ位置を丸める刻み (mm)
 const DROP_SNAP_MM: f64 = 10.0;

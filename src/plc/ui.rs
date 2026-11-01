@@ -3,9 +3,9 @@
 use crate::ui::dock::{self, Dock};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
-use cadsim_core::melsec::Device;
-use cadsim_core::workspace::Tool;
-use cadsim_io::slmp::{Encoding, FrameKind, Transport};
+use plantwright_core::plc::melsec::Device;
+use plantwright_core::plc::slmp::{Encoding, FrameKind, Transport};
+use plantwright_core::workspace::Tool;
 
 use super::adapter::modbus::{ModbusClient, ModbusSettings};
 use super::adapter::opcua::{OpcUaClient, OpcUaSettings};
@@ -15,10 +15,12 @@ use super::domain::io::{AddressPlan, IoPoint};
 use super::domain::io_csv::CsvReport;
 use super::usecase::{LinkStatus, PlcLink, PlcMode, PlcSession};
 use super::{Plc, Protocol};
-use crate::model::{Model, Selection};
-use crate::motion::{Playback, TimingChart};
+use crate::model::Selection;
+use crate::motion::Playback;
 use crate::scripting::{ScriptRun, script_controls};
 use crate::view::camera::ViewportRect;
+use plantwright_core::model::Model;
+use plantwright_core::motion::chart::TimingChart;
 
 const OK_COLOR: egui::Color32 = egui::Color32::from_rgb(90, 200, 120);
 const WARN_COLOR: egui::Color32 = egui::Color32::from_rgb(240, 170, 60);
@@ -477,7 +479,10 @@ fn io_csv_buttons(
                 .save_file()
         {
             *notice = Some(
-                match std::fs::write(&path, cadsim_io::csv_text::write(plc.export_io_rows())) {
+                match std::fs::write(
+                    &path,
+                    plantwright_core::formats::csv_text::write(plc.export_io_rows()),
+                ) {
                     Ok(()) => format!("{} に書き出しました", path.display()),
                     Err(e) => format!("書き出せませんでした: {e}"),
                 },
@@ -490,7 +495,9 @@ fn io_csv_buttons(
         {
             *notice = Some(match std::fs::read(&path) {
                 Ok(bytes) => {
-                    let rows = cadsim_io::csv_text::parse(&String::from_utf8_lossy(&bytes));
+                    let rows = plantwright_core::formats::csv_text::parse(
+                        &String::from_utf8_lossy(&bytes),
+                    );
                     match plc.import_io_rows(&rows, chart) {
                         Ok(report) => import_summary(&report),
                         Err(e) => e,
@@ -594,14 +601,14 @@ fn io_monitor(ui: &mut egui::Ui, plc: &mut PlcSession, devices: Option<&DeviceMa
         });
 }
 
-fn device_label(device: Option<cadsim_core::melsec::DeviceRef>) -> String {
+fn device_label(device: Option<plantwright_core::plc::melsec::DeviceRef>) -> String {
     device.map_or_else(|| "(置けません)".to_string(), |d| d.to_string())
 }
 
 /// I/O 一覧をタブ区切りの文字列にする。`devices` があれば三菱 PLC のデバイスの列も付ける。
 fn io_list_text(
     points: &[IoPoint],
-    devices: Option<&[Option<cadsim_core::melsec::DeviceRef>]>,
+    devices: Option<&[Option<plantwright_core::plc::melsec::DeviceRef>]>,
 ) -> String {
     let mut text = String::from("向き\t信号\t種類\t番号\tModbus番地");
     if devices.is_some() {

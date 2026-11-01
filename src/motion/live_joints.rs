@@ -5,8 +5,10 @@
 
 use std::collections::HashMap;
 
-use super::chart::{ActuatorKind, Robot, TimingChart};
 use super::kinematics;
+use plantwright_core::motion::chart::ActuatorKind;
+use plantwright_core::motion::chart::Robot;
+use plantwright_core::motion::chart::TimingChart;
 
 /// 受け取る角度の数
 pub const JOINT_COUNT: usize = 6;
@@ -72,7 +74,7 @@ pub fn live_joint_values(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::motion::chart::Axis;
+    use plantwright_core::motion::chart::Axis;
 
     /// 根元の回転関節 → 直動軸 → 手首の回転関節
     fn arm() -> (TimingChart, u32, [u32; 3]) {

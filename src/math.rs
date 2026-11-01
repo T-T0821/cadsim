@@ -1,9 +1,7 @@
-//! f64 の設計データを f32 の表示データ (Bevy) に橋渡しする。計算そのものは `cadsim_core::math`。
+//! f64 の設計データを f32 の表示データ (Bevy) に橋渡しする。計算そのものは `plantwright_core::math`。
 
 use bevy::math::DMat4;
 use bevy::prelude::*;
-
-pub use cadsim_core::math::*;
 
 /// f64 の配置行列を Bevy の Transform (f32) にする
 pub fn to_transform(m: DMat4) -> Transform {

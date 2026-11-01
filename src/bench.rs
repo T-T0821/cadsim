@@ -8,8 +8,8 @@ use bevy::prelude::*;
 
 use crate::file_io::ImportJobs;
 use crate::input::command_line::CommandLine;
-use crate::model::Model;
 use crate::view::camera::OrbitCamera;
+use plantwright_core::model::Model;
 
 /// 読み込み後、カメラの「全体を表示」アニメーションが落ち着くまで待つ時間 (秒)
 const WARM_UP_SECS: f32 = 2.0;

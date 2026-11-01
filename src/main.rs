@@ -33,16 +33,16 @@
 //! - `stress`      負荷テスト用の数千部品のシーン
 //! - `bench`       `--bench` で FPS を測って終了する
 //! - `line`        ライン連携 (工程・AGV・作業者・チャート・安全停止を1つの時計で動かす、PLC の信号表)
-//! - `line_compose` 言葉でラインを組む (文から設備の配置とタイミングチャートの下書きを作る。中身は `cadsim_core::line_draft`)
+//! - `line_compose` 言葉でラインを組む (文から設備の配置とタイミングチャートの下書きを作る。中身は `plantwright_core::line_draft`)
 //! - `floor`       作業者と AGV (床の上を動くもの)、床の上の幾何計算
 //! - `floor_record` 安全機器・作業者・AGV の .plantwright での形
 //! - `safety`      安全機器 (ライトカーテン・エリアセンサ・安全柵・非常停止) と動作範囲
-//! - `preferences_file` 見た目とミッションの設定の読み書き (中身は `cadsim_core::gamify`)
-//! - `review`      複数人で同じ工場をレビューする (互いの視点・指さし・チャット。中身は `cadsim_core::review`)
+//! - `preferences_file` 見た目とミッションの設定の読み書き (中身は `plantwright_core::gamify`)
+//! - `review`      複数人で同じ工場をレビューする (互いの視点・指さし・チャット。中身は `plantwright_core::review`)
 //! - `physics`     物理演算 (重力・接触・摩擦、ベルトコンベア、ケーブル・ホース)
 //! - `video`       動画のエンコード (MP4 / GIF / PNG。Bevy に依存しない)
-//! - `effects`     状態のエフェクト (詰まり・故障・安全停止の光と煙、溶接と干渉の火花。判断は `cadsim_core::effects`)
-//! - `sound`       設備の稼働音・エアの排気音・停止の警報 (波形と鳴らし方の判断は `cadsim_core::sound`)
+//! - `effects`     状態のエフェクト (詰まり・故障・安全停止の光と煙、溶接と干渉の火花。判断は `plantwright_core::effects`)
+//! - `sound`       設備の稼働音・エアの排気音・停止の警報 (波形と鳴らし方の判断は `plantwright_core::sound`)
 //! - `ui_check`    画面での動作確認の自動化 (`--ui-check`。手順書どおりに操作して画面を撮り、基準画像と比べる)
 
 // Windows のリリースビルドでは、起動時に黒いコンソール窓を出さない
@@ -52,22 +52,18 @@ mod animation;
 mod annotation;
 mod assistant;
 mod bench;
-mod bom;
-mod bvh;
 mod conveyor;
 mod custom_part;
 mod defeature;
+mod dev;
 mod documents;
-mod drawing;
 mod effects;
 mod file_io;
 mod floor;
 mod floor_record;
 mod flow;
-mod formats;
 mod history;
 mod input;
-mod interchange;
 mod japanese_font;
 mod library;
 mod line;
@@ -76,10 +72,8 @@ mod math;
 mod model;
 mod modeling;
 mod motion;
-mod part_mesh;
 mod physics;
 mod plc;
-mod preferences_file;
 mod project;
 mod result_export;
 mod review;
@@ -90,7 +84,6 @@ mod sequence_gen;
 mod simulation;
 mod site;
 mod sound;
-mod step_import;
 mod stress;
 mod ui;
 mod ui_check;
@@ -119,7 +112,7 @@ fn main() {
         }))
         .add_plugins((EguiPlugin::default(), FrameTimeDiagnosticsPlugin::default()))
         .insert_resource(ClearColor(Color::srgb(0.16, 0.17, 0.19)))
-        .init_resource::<model::Model>()
+        .init_resource::<plantwright_core::model::Model>()
         .init_resource::<model::Selection>()
         .init_resource::<gizmo::GizmoTool>()
         .add_plugins((

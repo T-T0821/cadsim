@@ -14,18 +14,27 @@
 use bevy::{ecs::system::SystemParam, prelude::*};
 use bevy_egui::egui;
 
-use super::chart::{
-    Action, Actuator, ActuatorKind, Axis, Easing, INTERLOCK_TIMEOUT, MoveKind, RobotMove, Schedule,
-    Step, TimingChart,
-};
 use super::robot_ui::RobotUiState;
 use super::sensor::SensorKind;
 use super::{ChartSchedule, JogPose, Playback, SensorStates, SensorTimeline, SimulationPose, demo};
 use crate::conveyor::ConveyorConfigRes;
 use crate::history::History;
-use crate::model::{Model, NodeId, Selection};
+use crate::model::Selection;
 use crate::view::camera::CameraRequest;
 use crate::view::recording::Recorder;
+use plantwright_core::model::Model;
+use plantwright_core::model::NodeId;
+use plantwright_core::motion::chart::Action;
+use plantwright_core::motion::chart::Actuator;
+use plantwright_core::motion::chart::ActuatorKind;
+use plantwright_core::motion::chart::Axis;
+use plantwright_core::motion::chart::Easing;
+use plantwright_core::motion::chart::INTERLOCK_TIMEOUT;
+use plantwright_core::motion::chart::MoveKind;
+use plantwright_core::motion::chart::RobotMove;
+use plantwright_core::motion::chart::Schedule;
+use plantwright_core::motion::chart::Step;
+use plantwright_core::motion::chart::TimingChart;
 
 const NAME_WIDTH: f32 = 150.0;
 const HEADER_HEIGHT: f32 = 34.0;
@@ -351,7 +360,7 @@ fn toolbar(
 
 /// インターロックの条件待ち・異常停止を知らせる
 fn interlock_status(ui: &mut egui::Ui, chart: &TimingChart, schedule: &Schedule, play: &Playback) {
-    let describe = |interlocks: &[super::chart::Interlock]| {
+    let describe = |interlocks: &[plantwright_core::motion::chart::Interlock]| {
         interlocks
             .iter()
             .map(|i| {

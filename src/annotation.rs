@@ -15,7 +15,7 @@
 //! 部品の削除を元に戻せば寸法も戻る (保存するときは部品のない寸法を書かない)。
 
 use crate::ui::dock::{self, Dock};
-use cadsim_core::workspace::Tool;
+use plantwright_core::workspace::Tool;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -31,13 +31,17 @@ use truck_modeling::Solid;
 
 use crate::history::{Command, History};
 use crate::japanese_font::install_japanese_font;
-use crate::math::euler_deg_to_quat;
-use crate::model::{BoxPart, Model, NodeId, NodeKind, Selection};
+use crate::model::Selection;
 use crate::simulation::measure::MeasureTool;
 use crate::ui::widgets::length;
 use crate::view::camera::{ViewportRect, alt_pressed, keyboard_free};
 use crate::view::gizmo::transform_gizmo_system;
 use crate::view::picking::PartUnderPointer;
+use plantwright_core::math::euler_deg_to_quat;
+use plantwright_core::model::BoxPart;
+use plantwright_core::model::Model;
+use plantwright_core::model::NodeId;
+use plantwright_core::model::NodeKind;
 
 /// 吸着する距離 (画面上のピクセル)
 const SNAP_PX: f32 = 12.0;
@@ -1511,7 +1515,7 @@ fn annotation_panel(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::step_import::import_step;
+    use plantwright_core::formats::step::import_step;
 
     fn approx(a: DVec3, b: DVec3) -> bool {
         a.distance(b) < 1e-9
@@ -1662,7 +1666,11 @@ mod tests {
         )
         .unwrap();
         let mut model = Model::default();
-        model.add_imported(file.root, file.unit, crate::model::StepSource::Sample);
+        model.add_imported(
+            file.root,
+            file.unit,
+            plantwright_core::model::StepSource::Sample,
+        );
         let mut cache = GeometryCache::default();
         cache.update(&model);
         let parts = part_ids(&model);
@@ -1722,7 +1730,11 @@ mod tests {
         )
         .unwrap();
         let mut model = Model::default();
-        model.add_imported(file.root, file.unit, crate::model::StepSource::Sample);
+        model.add_imported(
+            file.root,
+            file.unit,
+            plantwright_core::model::StepSource::Sample,
+        );
         let box_id = model.add_box([10.0; 3], [300.0, 5.0, 0.0]);
         let deep = part_ids(&model)
             .into_iter()
@@ -1790,9 +1802,9 @@ mod tests {
             before,
             &after,
         );
-        crate::history::run(world, crate::history::Request::Undo);
+        crate::history::run(world, plantwright_core::history::Request::Undo);
         assert!(world.resource::<Annotations>().items.is_empty());
-        crate::history::run(world, crate::history::Request::Redo);
+        crate::history::run(world, plantwright_core::history::Request::Redo);
         assert_eq!(world.resource::<Annotations>().items, after);
     }
 

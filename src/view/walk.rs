@@ -1,6 +1,6 @@
 //! 一人称で工場を歩く (歩行モード) の UI 層
 //!
-//! 入力 (WASD・矢印キー・右ドラッグ) を集めて `cadsim_core::walk` に渡し、
+//! 入力 (WASD・矢印キー・右ドラッグ) を集めて `plantwright_core::walk` に渡し、
 //! 返ってきた位置と向きを 3D カメラに写す。通路幅・前方の距離・手の届く部品は
 //! 3D ビューの左上の表示と、床の線 (ギズモ) に出す。
 //! 歩いている間はカメラのオービット操作とキーのショートカットを止める。
@@ -9,19 +9,19 @@
 
 use bevy::{input::mouse::AccumulatedMouseMotion, prelude::*};
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
-use cadsim_core::floor::geom::{Rect2, Zone};
-use cadsim_core::math::Aabb;
-use cadsim_core::safety::device::DeviceKind;
-use cadsim_core::walk::{self, Survey, WalkBody, WalkInput, Walker};
 use glam::{DVec2, DVec3};
+use plantwright_core::floor::geom::{Rect2, Zone};
+use plantwright_core::math::Aabb;
+use plantwright_core::safety::device::DeviceKind;
+use plantwright_core::walk::{self, Survey, WalkBody, WalkInput, Walker};
 
-use crate::model::Model;
 use crate::safety::{Intruder, SafetyIntruders, SafetyLayoutRes, SafetySet};
-use crate::site::underlay::unit_in_mm;
 use crate::view::camera::{
     CameraRequest, FOV_Y, OrbitCamera, ViewportRect, handle_camera_requests, keyboard_free,
     pointer_in_3d_view,
 };
+use plantwright_core::model::Model;
+use plantwright_core::site::underlay::unit_in_mm;
 
 /// 歩いているときの縦の画角 (人の視野に近づけて、普段の 45° より広くする)
 const WALK_FOV_Y: f32 = 65f32.to_radians();

@@ -38,18 +38,21 @@ use bevy_egui::egui;
 use crate::animation::Animations;
 use crate::annotation::Annotations;
 use crate::conveyor::ConveyorConfigRes;
-use crate::file_io::{ImportJobs, file_name, receive_imports};
+use crate::file_io::{ImportJobs, receive_imports};
 use crate::floor::{FloorDoc, FloorView};
 use crate::flow::{FlowRes, FlowRun};
 use crate::history::History;
-use crate::model::{Model, Selection};
-use crate::motion::{Playback, TimingChart};
+use crate::model::Selection;
+use crate::motion::Playback;
 use crate::plc::{Plc, PlcRecord};
-use crate::site::model::Site;
 use crate::view::camera::CameraRequest;
 use crate::view::camera_path::CameraPathRes;
 use crate::view::recording::is_recording;
-use cadsim_core::conveyor::ConveyorConfig;
+use plantwright_core::conveyor::ConveyorConfig;
+use plantwright_core::model::Model;
+use plantwright_core::model::file_name;
+use plantwright_core::motion::chart::TimingChart;
+use plantwright_core::site::model::Site;
 
 /// ウィンドウタイトルの先頭 (後ろにファイル名を付ける)
 const APP_TITLE: &str = "plantwright";
@@ -309,7 +312,7 @@ fn run_project_actions(
                 flow.0 = opened.flow;
                 flow_run.stop();
                 motion.replace(
-                    TimingChart(opened.chart),
+                    opened.chart,
                     opened.animations,
                     loaded.file.plc.as_ref(),
                     opened.conveyors,
@@ -376,12 +379,7 @@ fn run_project_actions(
             *annotations = opened.annotations;
             flow.0 = opened.flow;
             flow_run.stop();
-            motion.replace(
-                TimingChart(opened.chart),
-                opened.animations,
-                None,
-                opened.conveyors,
-            );
+            motion.replace(opened.chart, opened.animations, None, opened.conveyors);
             motion.camera_path.0 = opened.camera_path;
             floor.apply(opened.floor);
             history.clear();

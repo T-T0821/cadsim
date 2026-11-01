@@ -54,7 +54,7 @@ use crate::file_io::ImportJobs;
 use crate::flow::{self, FlowUi};
 use crate::history::History;
 use crate::japanese_font::install_japanese_font;
-use crate::model::{Model, Selection};
+use crate::model::Selection;
 use crate::motion::{self, MotionUi, at_design_pose};
 use crate::physics::physics_stopped;
 use crate::plc::plc_active;
@@ -64,6 +64,7 @@ use crate::view::camera::{CameraRequest, OrbitCamera, ViewportRect};
 use crate::view::gizmo::{GizmoTool, transform_gizmo_system};
 use crate::view::recording::RecordSettings;
 use crate::view::viewport::{Defeaturing, RenderStats, ViewSettings};
+use plantwright_core::model::Model;
 
 pub struct UiPlugin;
 
@@ -230,8 +231,8 @@ fn draw_ui(mut contexts: EguiContexts, mut state: UiState) -> Result {
 
 /// 左端のツールレール。押した道具のパネルを開け閉めする。
 fn tool_rail(root: &mut egui::Ui, state: &mut UiState) {
-    use cadsim_core::workspace::Tool;
     use dock::{Badge, RailItem};
+    use plantwright_core::workspace::Tool;
 
     let interfering = state
         .interference
@@ -241,7 +242,7 @@ fn tool_rail(root: &mut egui::Ui, state: &mut UiState) {
         .filter(|p| {
             matches!(
                 p.status,
-                crate::simulation::interference::PairStatus::Interfering { .. }
+                plantwright_core::simulation::interference::PairStatus::Interfering { .. }
             )
         })
         .count();

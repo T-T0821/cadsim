@@ -4,14 +4,14 @@
 use crate::ui::dock::{self, Dock};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
-use cadsim_core::workspace::Tool;
+use plantwright_core::workspace::Tool;
 
 use super::cloud_view::{CloudCheck, CloudDisplay};
 use super::{PlanTool, format_count};
-use crate::drawing::format_length;
-use crate::model::Model;
 use crate::simulation::SimBody;
 use crate::view::camera::ViewportRect;
+use plantwright_core::drawing::format_length;
+use plantwright_core::model::Model;
 
 #[allow(clippy::too_many_arguments)]
 pub fn site_panel(
@@ -235,7 +235,7 @@ fn clouds_ui(
 fn calibration_ui(
     ui: &mut egui::Ui,
     tool: &mut PlanTool,
-    underlay: &mut super::underlay::Underlay,
+    underlay: &mut plantwright_core::site::underlay::Underlay,
     unit: &str,
 ) {
     ui.group(|ui| {

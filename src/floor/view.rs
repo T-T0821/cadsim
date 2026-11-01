@@ -6,9 +6,9 @@ use bevy::math::DVec2;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
-use super::operator_plan::{Activity, OperatorTask};
 use super::{AgvLayoutRes, FloorState, FloorTool, OperatorsRes};
 use crate::view::camera::ViewportRect;
+use plantwright_core::floor::operator_plan::{Activity, OperatorTask};
 
 const PATH_COLOR: Color = Color::srgb(0.3, 0.75, 1.0);
 const EDGE_COLOR: Color = Color::srgb(0.55, 0.55, 0.6);

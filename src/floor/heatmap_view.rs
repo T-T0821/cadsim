@@ -1,8 +1,8 @@
 //! 人と AGV の動線のヒートマップの表示と書き出し (UI 層)
 //!
-//! 数え方と色付けは `cadsim_core::floor::heatmap` が決める。ここでは毎フレーム、
+//! 数え方と色付けは `plantwright_core::floor::heatmap` が決める。ここでは毎フレーム、
 //! 作業者と AGV の位置を集めて渡し、結果の画像を床に敷いた板のテクスチャに写すだけにする。
-//! PNG への書き出しは `cadsim_io::formats::heatmap_png`。
+//! PNG への書き出しは `plantwright_core::floor::heatmap_png`。
 
 use bevy::asset::RenderAssetUsages;
 use bevy::ecs::system::NonSendMarker;
@@ -12,10 +12,12 @@ use bevy::mesh::{Indices, PrimitiveTopology};
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 
-use super::heatmap::{HeatImage, HeatMetric, MoverFilter, MoverId, TrafficHeatmap};
 use super::{AgvLayoutRes, FloorClock, FloorState, OperatorsRes, figures::FloorFigure};
 use crate::file_io::ImportJobs;
-use crate::formats::heatmap_png;
+use plantwright_core::floor::heatmap::{
+    HeatImage, HeatMetric, MoverFilter, MoverId, TrafficHeatmap,
+};
+use plantwright_core::floor::heatmap_png;
 
 /// 床からの高さ (mm)。経路の線 (3〜5 mm) より下に敷く
 const OVERLAY_Y: f32 = 1.0;

@@ -1,0 +1,52 @@
+[package]
+name = "plantwright_core"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "plantwright のうち Bevy の描画・egui を使わないもの全部 (データの型・計算・ファイル形式・通信)"
+
+[features]
+# アプリ側のテストからテスト用のシーン (formats::test_util) を使う
+test-util = []
+
+[dependencies]
+# Bevy の Resource を設計データの型に直接付ける。描画を含まない ECS だけで、アプリの bevy と同じ版
+bevy_ecs = "0.20"
+# Bevy 0.20 (bevy_math) と同じ版にして、ベクトル・行列の型をそのまま受け渡せるようにする
+glam = { version = "0.33", features = ["serde"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+# 干渉チェックの検索木 (三角形の外接箱の BVH)。純 Rust
+parry3d-f64 = "0.31"
+# 形状カーネル (B-rep とテッセレーション)、STEP (AP203 / AP214 / AP242) の読み込み
+truck-meshalgo = "0.4"
+truck-modeling = "0.6"
+truck-stepio = "0.3"
+truck-topology = "0.6"
+# ブーリアン (和・差・積)
+truck-shapeops = { version = "0.4", default-features = false }
+# 点群の LAS / LAZ (圧縮した LAS) の読み込み。純 Rust
+las = { version = "0.11", features = ["laz"] }
+# 画像 (PNG / JPEG) の読み書き
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+# PDF の読み書き、Excel の書き出し、点群 (E57)
+lopdf = "0.46"
+krilla = "0.8"
+rust_xlsxwriter = "0.102"
+e57 = "0.11"
+# 3D ファイルの読み書き (glTF / GLB, OBJ, STL)。すべて純 Rust
+gltf = { version = "1.4", features = ["import", "names", "utils", "extras"] }
+stl_io = "0.11"
+tobj = { version = "4", default-features = false }
+# URDF (ロボットの機種) と COLLADA (.dae) の XML の読み込み。純 Rust
+roxmltree = "0.21"
+# OpenUSD (.usda / .usdc / .usdz) の読み書き。純 Rust
+openusd = "0.8"
+# 生成 AI (Claude API) への HTTPS の問い合わせ。純 Rust (rustls)
+ureq = "3"
+# 生産計画の Excel (xlsx / xls / ods) の読み込み。純 Rust
+calamine = { version = "0.30", default-features = false }
+# 日本語の Excel が書く CSV (Shift_JIS) の読み込み
+encoding_rs = "0.8"
+# CSV / TSV の読み書き
+csv = "1"

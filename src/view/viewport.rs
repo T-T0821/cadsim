@@ -27,24 +27,30 @@ use bevy::{
     prelude::*,
     tasks::{AsyncComputeTaskPool, Task, block_on, poll_once},
 };
-use cadsim_core::effects::EffectSettings;
+use plantwright_core::effects::EffectSettings;
 use truck_meshalgo::prelude::*;
 // truck の prelude にも Transform トレイトがあるため Bevy 側を明示する
 use bevy::prelude::Transform;
 
-use crate::bvh::{Bounds, Bvh};
 use crate::defeature::{DefeatureOptions, DefeatureStats, defeature_shape};
 use crate::flow::FlowColors;
 use crate::library;
-use crate::math::{Aabb, to_transform};
-use crate::model::{Model, NodeId, NodeKind, Selection};
+use crate::math::to_transform;
+use crate::model::Selection;
 use crate::motion::{MotionSet, SimulationPose};
-use crate::part_mesh::{PartMesh, shell_edges};
 use crate::physics::{PhysicsPose, PhysicsSet};
 use crate::simulation::{self, InterferenceCheck, Pose, SimBody, TriMesh};
-use crate::step_import::ImportedShape;
 use crate::view::factory_hall;
-use cadsim_core::factory_hall::HallSettings;
+use plantwright_core::bvh::Bounds;
+use plantwright_core::bvh::Bvh;
+use plantwright_core::factory_hall::HallSettings;
+use plantwright_core::formats::step::ImportedShape;
+use plantwright_core::math::Aabb;
+use plantwright_core::model::Model;
+use plantwright_core::model::NodeId;
+use plantwright_core::model::NodeKind;
+use plantwright_core::part_mesh::PartMesh;
+use plantwright_core::part_mesh::shell_edges;
 
 /// 箱のテッセレーションの許容誤差 (モデル単位)
 const BOX_TESSELLATION_TOL: f64 = 0.005;

@@ -6,9 +6,9 @@
 
 use bevy::prelude::*;
 
-use super::device::{DeviceKind, SafetyDevice};
 use super::{SafetyLayoutRes, SafetyState};
-use crate::floor::geom::Rect2;
+use plantwright_core::floor::geom::Rect2;
+use plantwright_core::safety::device::{DeviceKind, SafetyDevice};
 
 const OK_COLOR: Color = Color::srgb(0.2, 0.85, 0.35);
 const ALERT_COLOR: Color = Color::srgb(0.95, 0.15, 0.15);

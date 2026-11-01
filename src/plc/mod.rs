@@ -19,9 +19,7 @@ use bevy::prelude::*;
 use bevy_egui::EguiPrimaryContextPass;
 
 use crate::history::{TrackDocExt, TrackedDoc};
-use crate::motion::{
-    MotionSet, SensorStates, SimulationPose, TimingChart, actuator_poses_for, part_poses_for,
-};
+use crate::motion::{MotionSet, SensorStates, SimulationPose};
 use crate::scripting::ScriptRun;
 use adapter::Protocol;
 pub use adapter::record::PlcRecord;
@@ -29,6 +27,9 @@ use adapter::record::PlcSettings;
 pub use domain::io::{AddressPlan, IoTable, IoValues, Point};
 #[cfg(test)]
 pub use domain::plant::Plant;
+use plantwright_core::motion::chart::TimingChart;
+use plantwright_core::motion::pose::actuator_poses_for;
+use plantwright_core::motion::pose::part_poses_for;
 use usecase::{PlcMode, PlcSession};
 
 pub struct PlcPlugin;
@@ -115,7 +116,7 @@ impl Plc {
     /// 1つ目の戻り値は I/O 表が作り直されたか。
     pub(crate) fn exchange_line(
         &mut self,
-        signals: &[cadsim_core::line::Signal],
+        signals: &[plantwright_core::line::Signal],
         chart: &TimingChart,
     ) -> (bool, Option<Vec<(String, bool)>>) {
         let changed = self.session.set_line_signals(signals, chart);

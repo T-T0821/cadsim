@@ -16,20 +16,22 @@
 //! [`TrackedDoc`] を実装して `app.track_doc::<…>()` で登録する。編集する場所ごとに履歴を積む代わりに、
 //! マウスを離して入力欄からも抜けたときに前の状態と比べ、変わっていれば1件の履歴にする。
 //!
-//! 履歴の山・モデルの変更・ドラッグ中の編集のまとめ方は `cadsim_core::history` にあり、
+//! 履歴の山・モデルの変更・ドラッグ中の編集のまとめ方は `plantwright_core::history` にあり、
 //! ここは `World` を相手にする部分 (Bevy のリソースの書き換え・システム) だけを持つ。
 
 use std::marker::PhantomData;
 
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass};
-use cadsim_core::history::{ModelEdits, UndoStack};
-use cadsim_core::usecase::edit_tracker::EditTracker;
+use plantwright_core::history::edit_tracker::EditTracker;
+use plantwright_core::history::{ModelEdits, UndoStack};
 
-pub use cadsim_core::history::{ModelChange, Request};
+use plantwright_core::history::{ModelChange, Request};
 
-use crate::model::{Model, NodeId, Selection};
+use crate::model::Selection;
 use crate::view::gizmo::transform_gizmo_system;
+use plantwright_core::model::Model;
+use plantwright_core::model::NodeId;
 
 pub struct HistoryPlugin;
 
@@ -321,8 +323,9 @@ impl<D: TrackedDoc> Command for DocChange<D> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{NodeKind, StepSource};
-    use crate::step_import::import_step;
+    use plantwright_core::formats::step::import_step;
+    use plantwright_core::model::NodeKind;
+    use plantwright_core::model::StepSource;
 
     fn world() -> World {
         let mut world = World::new();
@@ -435,13 +438,17 @@ mod tests {
         let id = add_box(&mut world, 1.0);
         edit(&mut world, |m, h| {
             h.begin_edit(m, id);
-            m.get_mut(id).unwrap().physics.mode = crate::physics::BodyMode::Dynamic;
+            m.get_mut(id).unwrap().physics.mode =
+                plantwright_core::physics::settings::BodyMode::Dynamic;
             h.finish_edit(m);
         });
         assert_eq!(world.resource::<History>().stack.undo_len(), 2);
         assert!(run(&mut world, Request::Undo));
         let mode = world.resource::<Model>().get(id).unwrap().physics.mode;
-        assert_eq!(mode, crate::physics::BodyMode::Mechanism);
+        assert_eq!(
+            mode,
+            plantwright_core::physics::settings::BodyMode::Mechanism
+        );
     }
 
     #[test]

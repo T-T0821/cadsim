@@ -5,10 +5,13 @@
 
 use bevy::math::{DQuat, DVec3};
 
-use super::chart::{Schedule, TimingChart};
 use super::sensor::{DesignTarget, TargetBox};
-use crate::math::euler_deg_to_quat;
-use crate::model::{Model, NodeId, NodeKind};
+use plantwright_core::math::euler_deg_to_quat;
+use plantwright_core::model::Model;
+use plantwright_core::model::NodeId;
+use plantwright_core::model::NodeKind;
+use plantwright_core::motion::chart::Schedule;
+use plantwright_core::motion::chart::TimingChart;
 
 /// 設計位置の部品を、センサーの検知対象にする。
 /// アクチュエータが動かす部品 (またはそれを含むアセンブリ) には、そのアクチュエータを付ける。
@@ -69,7 +72,7 @@ pub fn extra_targets_at(_schedule: &Schedule, _t: f64) -> Vec<TargetBox> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::motion::chart::ActuatorKind;
+    use plantwright_core::motion::chart::ActuatorKind;
 
     #[test]
     fn box_part_becomes_world_box_with_its_actuator() {

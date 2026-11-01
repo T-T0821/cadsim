@@ -8,12 +8,13 @@ use std::{collections::HashMap, sync::Arc};
 
 use bevy::math::DMat4;
 
-use crate::model::NodeId;
-use crate::motion::{RigidPose, Schedule, TimingChart, part_poses};
-use crate::simulation::{
-    Pose, TriMesh,
-    interference::{Body, CheckSettings, PairStatus, check_all},
-};
+use crate::simulation::{Pose, TriMesh};
+use plantwright_core::model::NodeId;
+use plantwright_core::motion::chart::Schedule;
+use plantwright_core::motion::chart::TimingChart;
+use plantwright_core::motion::pose::RigidPose;
+use plantwright_core::motion::pose::part_poses;
+use plantwright_core::simulation::interference::{Body, CheckSettings, PairStatus, check_all};
 
 use super::csv::{Csv, seconds};
 
@@ -247,8 +248,12 @@ fn intervals_csv(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::motion::chart::{Action, ActuatorKind, Axis, Easing, Step};
     use bevy::math::DVec3;
+    use plantwright_core::motion::chart::Action;
+    use plantwright_core::motion::chart::ActuatorKind;
+    use plantwright_core::motion::chart::Axis;
+    use plantwright_core::motion::chart::Easing;
+    use plantwright_core::motion::chart::Step;
 
     /// テスト用: 辺の長さ `size` の立方体を `offset` だけずらしたメッシュ
     fn cube_mesh(offset: DVec3, size: f64) -> TriMesh {

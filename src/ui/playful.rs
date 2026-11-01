@@ -22,24 +22,26 @@ use crate::flow::FlowRun;
 use crate::history::History;
 use crate::line::LineState;
 use crate::line_compose::ComposeUi;
-use crate::model::NodeKind;
-use crate::model::{Model, Selection};
-use crate::motion::{Playback, TimingChart};
+use crate::model::Selection;
+use crate::motion::Playback;
 use crate::plc::Plc;
-use crate::preferences_file;
 use crate::project::ProjectState;
 use crate::safety::SafetyState;
 use crate::sequence_gen::SequenceGen;
 use crate::simulation::InterferenceCheck;
-use crate::simulation::interference::PairStatus;
 use crate::simulation::measure::MeasureTool;
 use crate::view::camera::{OrbitCamera, ViewportRect};
 use crate::view::recording::Recorder;
 use crate::view::walk::WalkMode;
-use cadsim_core::gamify::{
+use plantwright_core::gamify::{
     Achievement, ConfettiPiece, MissionId, Observation, Part, Preferences, confetti, level_title,
     mission,
 };
+use plantwright_core::model::Model;
+use plantwright_core::model::NodeKind;
+use plantwright_core::motion::chart::TimingChart;
+use plantwright_core::preferences;
+use plantwright_core::simulation::interference::PairStatus;
 
 /// お祝いの表示時間 (秒)
 const TOAST_SECONDS: f64 = 3.2;
@@ -69,11 +71,8 @@ pub struct PlayfulUi {
 
 impl PlayfulUi {
     fn load() -> Self {
-        let path = preferences_file::default_path();
-        let prefs = path
-            .as_deref()
-            .map(preferences_file::load)
-            .unwrap_or_default();
+        let path = preferences::default_path();
+        let prefs = path.as_deref().map(preferences::load).unwrap_or_default();
         Self {
             prefs,
             path,
@@ -173,7 +172,7 @@ impl ToolSignals<'_> {
     /// `now` の道具の欄を埋める
     fn fill(&self, now: &mut Observation) {
         now.flow_has_result = self.flow.report.is_some();
-        let chart = &self.chart.0;
+        let chart = &*self.chart;
         now.actuated_part_count = chart.actuators.iter().map(|a| a.parts.len()).sum();
         now.step_count = chart.steps.len();
         now.sensor_count = chart.sensors.len();
@@ -262,7 +261,7 @@ fn save_preferences(mut ui: ResMut<PlayfulUi>) {
     }
     ui.dirty = false;
     if let Some(path) = &ui.path
-        && let Err(err) = preferences_file::save(path, &ui.prefs)
+        && let Err(err) = preferences::save(path, &ui.prefs)
     {
         warn!("設定を保存できませんでした ({}): {err}", path.display());
     }
@@ -479,7 +478,7 @@ fn mission_list(ui: &mut egui::Ui, state: &mut PlayfulUi, tutorial: &mut Tutoria
 fn mission_row(
     ui: &mut egui::Ui,
     state: &PlayfulUi,
-    m: &'static cadsim_core::gamify::Mission,
+    m: &'static plantwright_core::gamify::Mission,
     current: Option<MissionId>,
     retry: &mut Option<MissionId>,
     focus: &mut Option<MissionId>,

@@ -1,6 +1,6 @@
 //! 3D ビューの背景の工場の建屋 (UI 層): コンクリートの床・通路の線・壁・柱・高窓と、メートルのグリッド
 //!
-//! 形は `cadsim_core::factory_hall` が決め、ここではメッシュにして置くだけにする。
+//! 形は `plantwright_core::factory_hall` が決め、ここではメッシュにして置くだけにする。
 //! 形が変わったとき (広さの設定・モデルの外接箱が 5 m の区切りをまたいだとき) だけ作り直す。
 //! 建屋は mm で作り、モデルの単位に合わせて親の Transform で縮める。
 
@@ -13,14 +13,14 @@ use bevy::{
     prelude::*,
     render::render_resource::{Extent3d, TextureDimension, TextureFormat},
 };
-use cadsim_core::factory_hall::{
+use plantwright_core::factory_hall::{
     self, COLUMN_GUARD_HEIGHT, COLUMN_SIZE, CONCRETE_TILE, HallLayout, MarkingKind, PanelKind,
     Side, Sides, WALL_HEIGHT,
 };
-use cadsim_core::library::catalog::units_per_mm;
-use cadsim_core::math::Aabb;
+use plantwright_core::library::catalog::units_per_mm;
+use plantwright_core::math::Aabb;
 
-use crate::model::Model;
+use plantwright_core::model::Model;
 
 /// 建屋のメッシュの目印。ライブラリの部品を落とす先の判定などから外す
 #[derive(Component)]

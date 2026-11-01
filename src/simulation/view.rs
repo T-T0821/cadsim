@@ -12,11 +12,9 @@
 
 use bevy::{asset::RenderAssetUsages, mesh::PrimitiveTopology, prelude::*};
 
-use super::{
-    InterferenceCheck,
-    geometry::{Triangle, triangle_normal},
-    interference::PairStatus,
-};
+use super::InterferenceCheck;
+use plantwright_core::simulation::geometry::{Triangle, triangle_normal};
+use plantwright_core::simulation::interference::PairStatus;
 
 pub const INTERFERENCE_COLOR: Color = Color::srgb(0.95, 0.15, 0.15);
 pub const CONTACT_COLOR: Color = Color::srgb(1.0, 0.55, 0.1);

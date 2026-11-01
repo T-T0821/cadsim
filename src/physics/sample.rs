@@ -15,10 +15,17 @@
 
 use bevy::math::DMat4;
 
-use crate::model::{BoxPart, Model, NodeId, NodeKind};
-use crate::motion::{Action, ActuatorKind, Axis, Step, TimingChart};
-use cadsim_core::physics::cable::{Cable, CableAnchor, CableKind};
-use cadsim_core::physics::settings::{BeltDrive, BodyMode, LocalAxis, PartPhysics};
+use plantwright_core::model::BoxPart;
+use plantwright_core::model::Model;
+use plantwright_core::model::NodeId;
+use plantwright_core::model::NodeKind;
+use plantwright_core::motion::chart::Action;
+use plantwright_core::motion::chart::ActuatorKind;
+use plantwright_core::motion::chart::Axis;
+use plantwright_core::motion::chart::Step;
+use plantwright_core::motion::chart::TimingChart;
+use plantwright_core::physics::cable::{Cable, CableAnchor, CableKind};
+use plantwright_core::physics::settings::{BeltDrive, BodyMode, LocalAxis, PartPhysics};
 
 /// サンプルのワークの数
 pub const WORK_COUNT: usize = 100;
@@ -323,12 +330,12 @@ mod tests {
     use std::time::Instant;
 
     use super::*;
-    use crate::math::euler_deg_to_quat;
     use crate::physics::engine::{RapierEngine, headless_app};
     use bevy::app::App;
     use bevy::math::DVec3;
-    use cadsim_core::physics::settings::{gravity, meters_per_unit};
-    use cadsim_core::physics::world::{
+    use plantwright_core::math::euler_deg_to_quat;
+    use plantwright_core::physics::settings::{gravity, meters_per_unit};
+    use plantwright_core::physics::world::{
         BodyKey, Iso, PartGeometry, PartInput, PhysicsEngine, PhysicsRun, part_body,
     };
 
@@ -460,7 +467,7 @@ mod tests {
     /// ストッパのエアホースは、ストッパが上がっていても下がっていても無理なく垂れる
     #[test]
     fn the_hose_is_fine_in_both_stopper_positions() {
-        use cadsim_core::physics::cable::{CableState, Obstacle};
+        use plantwright_core::physics::cable::{CableState, Obstacle};
         let mut model = Model::default();
         let mut chart = TimingChart::default();
         load_sample_line(&mut model, &mut chart);

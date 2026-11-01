@@ -12,10 +12,10 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-use cadsim_core::ui_check::report::ScenarioResult;
-use cadsim_core::ui_check::runner::Failure;
-use cadsim_io::preferences_file::CONFIG_DIR_ENV;
-use cadsim_io::ui_check as files;
+use plantwright_core::preferences::CONFIG_DIR_ENV;
+use plantwright_core::ui_check::files;
+use plantwright_core::ui_check::report::ScenarioResult;
+use plantwright_core::ui_check::runner::Failure;
 
 use super::scenario_name;
 
@@ -296,7 +296,7 @@ mod tests {
         assert!(!list.is_empty());
         for path in list {
             let text = std::fs::read_to_string(&path).unwrap();
-            if let Err(e) = cadsim_core::ui_check::scenario::parse(&text) {
+            if let Err(e) = plantwright_core::ui_check::scenario::parse(&text) {
                 panic!("{}: {e}", path.display());
             }
         }

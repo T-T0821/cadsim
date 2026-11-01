@@ -3,14 +3,19 @@
 use crate::ui::dock::{self, Dock};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
-use cadsim_core::workspace::Tool;
+use plantwright_core::workspace::Tool;
 
-use cadsim_core::conveyor::{BeltAxis, ConveyorConfig, ConveyorEnd, Counts, Exit, SourceOutput};
+use plantwright_core::conveyor::{
+    BeltAxis, ConveyorConfig, ConveyorEnd, Counts, Exit, SourceOutput,
+};
 
 use super::{ConveyorConfigRes, WorkState};
-use crate::model::{Model, NodeId, Selection};
-use crate::motion::{ActuatorKind, TimingChart};
+use crate::model::Selection;
 use crate::view::camera::ViewportRect;
+use plantwright_core::model::Model;
+use plantwright_core::model::NodeId;
+use plantwright_core::motion::chart::ActuatorKind;
+use plantwright_core::motion::chart::TimingChart;
 
 /// 長さの入力の上限 (モデル単位)
 const MAX_LENGTH: f64 = 100_000.0;

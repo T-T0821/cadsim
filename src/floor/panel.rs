@@ -3,16 +3,16 @@
 use crate::ui::dock::{self, Dock};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
-use cadsim_core::workspace::Tool;
+use plantwright_core::workspace::Tool;
 
-use super::agv_sim::{Flow, compare_fleets};
-use super::heatmap::{self, HeatMetric, MoverFilter, MoverKind};
 use super::heatmap_view::HeatmapRes;
-use super::operator_plan::OperatorTask;
 use super::{AgvLayoutRes, FloorClock, FloorState, FloorTool, OperatorsRes, sample};
 use crate::safety::SafetyState;
 use crate::ui::widgets::round_for_display;
 use crate::view::camera::ViewportRect;
+use plantwright_core::floor::agv_sim::{Flow, compare_fleets};
+use plantwright_core::floor::heatmap::{self, HeatMetric, MoverFilter, MoverKind};
+use plantwright_core::floor::operator_plan::OperatorTask;
 
 const RED: egui::Color32 = egui::Color32::from_rgb(230, 60, 60);
 

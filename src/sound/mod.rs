@@ -2,8 +2,8 @@
 //!
 //! | ファイル | 役割 |
 //! | --- | --- |
-//! | `cadsim_core::sound` | 波形の合成、何をどの大きさ・向きで鳴らすか、ブザー停止 (Bevy なし) |
-//! | `cadsim_io::sound_settings` | ミュートと音量の設定ファイル |
+//! | `plantwright_core::sound` | 波形の合成、何をどの大きさ・向きで鳴らすか、ブザー停止 (Bevy なし) |
+//! | `plantwright_core::sound::settings_file` | ミュートと音量の設定ファイル |
 //! | `source.rs` | 作った波形を Bevy の音として鳴らす |
 //! | `panel.rs` | 「音の設定」ウィンドウと、警報が鳴っている間の帯 (ブザー停止) |
 //!
@@ -21,21 +21,22 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_egui::EguiPrimaryContextPass;
 
-use cadsim_core::simulation::interference::PairStatus;
-use cadsim_core::sound::{
+use plantwright_core::simulation::interference::PairStatus;
+use plantwright_core::sound::settings_file;
+use plantwright_core::sound::{
     AlarmLatch, AlarmReason, Emitter, InterferenceWatch, Listener, MachineFrame, MotionTracker,
     SoundKind, SoundPlan, SoundSettings, VoiceKey, interlock_stopped, plan_sounds, synthesize,
 };
-use cadsim_io::sound_settings;
 
 use crate::conveyor::ConveyorConfigRes;
 use crate::line::LineState;
-use crate::model::Model;
-use crate::motion::{ChartSchedule, MotionSet, Playback, SimulationPose, TimingChart};
+use crate::motion::{ChartSchedule, MotionSet, Playback, SimulationPose};
 use crate::safety::{SafetySet, SafetyState};
 use crate::simulation::InterferenceCheck;
 use crate::view::camera::OrbitCamera;
 use crate::view::walk::WalkMode;
+use plantwright_core::model::Model;
+use plantwright_core::motion::chart::TimingChart;
 use source::{SynthSound, VoiceControls};
 
 pub use panel::show_menu_items;
@@ -75,11 +76,8 @@ pub struct SoundUi {
 
 impl SoundUi {
     fn load() -> Self {
-        let path = sound_settings::default_path();
-        let settings = path
-            .as_deref()
-            .map(sound_settings::load)
-            .unwrap_or_default();
+        let path = settings_file::default_path();
+        let settings = path.as_deref().map(settings_file::load).unwrap_or_default();
         Self {
             saved: settings.clone(),
             settings,
@@ -111,7 +109,11 @@ struct SoundEngine {
     tracker: MotionTracker,
     interference: InterferenceWatch,
     /// アクチュエータとコンベアの設計位置での中心 (モデルかチャートが変わったら作り直す)
-    actuator_centers: Vec<(u32, cadsim_core::motion::ActuatorKind, bevy::math::DVec3)>,
+    actuator_centers: Vec<(
+        u32,
+        plantwright_core::motion::ActuatorKind,
+        bevy::math::DVec3,
+    )>,
     conveyor_centers: Vec<(u32, bevy::math::DVec3)>,
 }
 
@@ -256,7 +258,7 @@ fn refresh_centers(engine: &mut SoundEngine, machine: &Machine) {
         parts
             .filter(|&id| machine.model.is_shown(id))
             .filter_map(|id| machine.model.world_bounds(id))
-            .reduce(crate::math::Aabb::union)
+            .reduce(plantwright_core::math::Aabb::union)
             .map(|b| b.center())
     };
     engine.actuator_centers = machine
@@ -323,7 +325,7 @@ fn apply_plan(
             return true;
         }
         let since = *active.fading_since.get_or_insert_with(|| {
-            active.controls.set(cadsim_core::sound::Placement {
+            active.controls.set(plantwright_core::sound::Placement {
                 gain: 0.0,
                 pan: 0.0,
             });
@@ -357,7 +359,7 @@ fn save_settings(mut ui: ResMut<SoundUi>) {
     }
     ui.saved = ui.settings.clone();
     if let Some(path) = &ui.path
-        && let Err(err) = sound_settings::save(path, &ui.settings)
+        && let Err(err) = settings_file::save(path, &ui.settings)
     {
         warn!("音の設定を保存できませんでした ({}): {err}", path.display());
     }

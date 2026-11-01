@@ -23,11 +23,12 @@ use bevy::{
 };
 
 use crate::annotation::annotate_tool_off;
-use crate::model::{Model, Selection};
+use crate::model::Selection;
 use crate::simulation::measure::not_measuring;
 use crate::view::camera::{alt_pressed, pointer_in_3d_view};
 use crate::view::gizmo::gizmo_not_focused;
 use crate::view::viewport::{PartHit, PartPicker};
+use plantwright_core::model::Model;
 
 pub struct PartPickingPlugin;
 
