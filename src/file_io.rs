@@ -3,8 +3,10 @@
 //! どのファイルを開くか (ダイアログ・ドラッグ&ドロップ・起動時の引数) は `input::file_dialog` が集めて、
 //! [`ImportJobs`] に頼む。
 //!
-//! 読み込み (STEP のテッセレーションなど) は重いので別スレッドで行い、
-//! 終わったものを毎フレーム受け取ってモデルに加える。
+//! 読み込み (STEP のテッセレーションなど) は重いので画面を止めずに行い、
+//! 終わったものを毎フレーム受け取ってモデルに加える。ファイル 1つで読める形式 (STEP / glTF / OBJ /
+//! STL / USD) は Bevy のアセットとして読み (`scene_asset`。ファイルを直すと開いたまま読み直す)、
+//! それ以外 (URDF・サンプル・負荷テスト・作成メニューの形状) は別スレッドで読む。
 //! STEP 以外 (glTF / OBJ / STL など) は `interchange` の中間表現を経由する。
 //! プロジェクトファイル (.cadsim) が選ばれたときは project.rs に渡す。
 
@@ -144,8 +146,28 @@ pub struct ImportedRobot {
     pub description: RobotDescription,
 }
 
-/// 読み込みの結果 (ファイル名, 読み込み元, 形状を差し替えるノード, 中身 or エラー文)
-type ImportResult = (String, StepSource, Option<NodeId>, Result<Loaded, String>);
+/// 読んだものをどうするか
+#[derive(Clone, Debug, PartialEq)]
+pub enum ImportTarget {
+    /// モデルに加える
+    Add,
+    /// このノードの形状を差し替える (メニューの「形状を差し替え」)
+    Replace(NodeId),
+    /// ファイルが更新されたので、このファイルから取り込んだ木を読み直す
+    Refresh(PathBuf),
+}
+
+/// 読み込みの結果 (ファイル名, 読み込み元, どうするか, 中身 or エラー文)
+pub type ImportResult = (String, StepSource, ImportTarget, Result<Loaded, String>);
+
+/// Bevy のアセットとして読むファイル (`scene_asset` が受け取って読み始める)
+pub struct AssetRequest {
+    pub name: String,
+    pub path: PathBuf,
+    pub target: ImportTarget,
+    /// 頼んだときの OBJ / STL の単位と上方向
+    pub units: UnitOptions,
+}
 
 /// 形状の差し替えの結果。対応がつかなかったものを画面に一覧で出す。
 pub struct ReplaceSummary {
@@ -191,6 +213,8 @@ pub struct ImportJobs {
     pub robots: Vec<ImportedRobot>,
     /// 「URDF を読み込む」が押された (URDF だけを選ぶダイアログを出す)
     urdf_dialog_requested: bool,
+    /// Bevy のアセットとして読むファイル (`scene_asset` が取り出す)
+    pub asset_requests: Vec<AssetRequest>,
 }
 
 impl Default for ImportJobs {
@@ -210,6 +234,7 @@ impl Default for ImportJobs {
             site_files: Vec::new(),
             robots: Vec::new(),
             urdf_dialog_requested: false,
+            asset_requests: Vec::new(),
         }
     }
 }
@@ -268,7 +293,7 @@ impl ImportJobs {
         std::mem::take(&mut self.browser_requested)
     }
 
-    /// 選んだファイルの形状で `target` を差し替える (読み込みは別スレッド)
+    /// 選んだファイルの形状で `target` を差し替える (読み込みは画面を止めずに行う)
     pub fn replace_from(&mut self, path: PathBuf, target: NodeId) {
         self.spawn(StepSource::File(path), Some(target));
     }
@@ -286,10 +311,28 @@ impl ImportJobs {
         self.spawn(StepSource::Stress(part_count), None);
     }
 
-    /// 別スレッドで読み込む。`target` があれば、読んだ形状でそのノードを差し替える。
+    /// 読み込みを始める。`target` があれば、読んだ形状でそのノードを差し替える。
+    /// ファイル 1つで読める形式は Bevy のアセットとして、それ以外は別スレッドで読む
     fn spawn(&mut self, source: StepSource, target: Option<NodeId>) {
         let name = source_name(&source);
         self.loading.push(name.clone());
+        let target = target.map_or(ImportTarget::Add, ImportTarget::Replace);
+        if let StepSource::File(path) = &source
+            && let Some(path) = asset_loadable(path)
+        {
+            self.asset_requests.push(AssetRequest {
+                name,
+                path,
+                target,
+                units: self.units,
+            });
+            return;
+        }
+        self.spawn_thread(name, source, target);
+    }
+
+    /// 別スレッドで読み込む (`name` は読み込み中の一覧に入れてあるもの)
+    pub fn spawn_thread(&self, name: String, source: StepSource, target: ImportTarget) {
         let sender = self.sender.clone();
         let units = self.units;
         std::thread::spawn(move || {
@@ -298,6 +341,27 @@ impl ImportJobs {
             let _ = sender.send((name, source, target, result));
         });
     }
+}
+
+impl ImportJobs {
+    /// ほかの読み方 (Bevy のアセット) で読み終わったものを、別スレッドの結果と同じように受け取らせる
+    pub fn deliver(&self, result: ImportResult) {
+        let _ = self.sender.send(result);
+    }
+}
+
+/// Bevy のアセットとして読めるファイルなら、その絶対パス。
+/// URDF (メッシュを別のファイルから読む) と、読み込みに対応していない形式は None
+pub fn asset_loadable(path: &Path) -> Option<PathBuf> {
+    if is_urdf_file(path) {
+        return None;
+    }
+    let readable =
+        is_step(path) || interchange::format_for_path(path).is_some_and(|f| f.import.is_some());
+    if !readable {
+        return None;
+    }
+    std::path::absolute(path).ok()
 }
 
 /// 読み込み元を読む。STEP 以外は拡張子で形式を選び、`interchange` で読む
@@ -403,59 +467,83 @@ pub fn receive_imports(
             .as_ref()
             .ok()
             .and_then(Loaded::robot)
-            .filter(|_| target.is_none())
+            .filter(|_| target == ImportTarget::Add)
             .cloned();
         // 単位の情報を持つシーンは、いまのモデルの単位に合わせて取り込む
         let result = result.map(|loaded| loaded.into_imported(&name, &model.unit));
-        if let Some(target) = target {
-            match result {
-                Ok(file) => {
-                    replace_geometry(&mut jobs, &mut model, &mut history, target, file, source)
-                }
-                Err(err) => {
-                    error!("{name}: {err}");
-                    jobs.messages.push(format!("{name}: {err}"));
-                }
-            }
-            continue;
-        }
-        match result {
-            Ok(file) => {
-                let warnings = file.warnings.len();
-                let clips = file.animations;
-                let root = model.add_imported(file.root, file.unit, source);
-                if !clips.is_empty() {
-                    // トラックの番号は取り込んだ木を深さ優先でたどった順 = subtree の順
-                    let ids = model.subtree(root);
-                    animations.add_clips(clips, &ids);
-                }
-                history.record_added(&model, root, format!("{name} を読み込み"));
-                if let Some(description) = robot.clone() {
-                    // メーカーのメッシュはリンクの継ぎ目で重なるので、ロボットの中どうしの干渉は調べない
-                    if let Some(node) = model.get_mut(root) {
-                        node.skip_inner_interference = true;
-                    }
-                    jobs.robots.push(ImportedRobot { root, description });
-                }
-                let parts = model.measure(root).part_count;
+        match (&target, result) {
+            (ImportTarget::Add, Ok(file)) => {
+                add_imported(
+                    &mut jobs,
+                    &mut model,
+                    &mut animations,
+                    &mut history,
+                    &name,
+                    source,
+                    file,
+                    robot,
+                );
                 // 部品の色が見えるよう、読み込み直後は何も選ばない
                 selection.clear();
                 camera.write(CameraRequest::FitAll);
-                let mut message = format!("{name} を読み込みました (部品 {parts} 個)");
-                if warnings > 0 {
-                    message += &format!("。読めなかった形状が {warnings} 件あります");
-                }
-                for warning in &file.warnings {
-                    warn!("{warning}");
-                }
-                jobs.messages.push(message);
             }
-            Err(err) => {
+            (ImportTarget::Replace(target), Ok(file)) => {
+                replace_geometry(&mut jobs, &mut model, &mut history, *target, file, source)
+            }
+            (ImportTarget::Refresh(path), Ok(file)) => {
+                refresh_geometry(&mut jobs, &mut model, &mut history, path, file, source)
+            }
+            (ImportTarget::Refresh(_), Err(err)) => {
+                warn!("{name}: {err}");
+                jobs.messages.push(format!(
+                    "{name} が更新されましたが、読み直せませんでした (前の形状のままです): {err}"
+                ));
+            }
+            (_, Err(err)) => {
                 error!("{name}: {err}");
                 jobs.messages.push(format!("{name}: {err}"));
             }
         }
     }
+}
+
+/// 読み込んだファイルをモデルに加える
+#[allow(clippy::too_many_arguments)]
+fn add_imported(
+    jobs: &mut ImportJobs,
+    model: &mut Model,
+    animations: &mut Animations,
+    history: &mut History,
+    name: &str,
+    source: StepSource,
+    file: ImportedFile,
+    robot: Option<RobotDescription>,
+) {
+    let warnings = file.warnings.len();
+    let clips = file.animations;
+    let root = model.add_imported(file.root, file.unit, source);
+    if !clips.is_empty() {
+        // トラックの番号は取り込んだ木を深さ優先でたどった順 = subtree の順
+        let ids = model.subtree(root);
+        animations.add_clips(clips, &ids);
+    }
+    history.record_added(model, root, format!("{name} を読み込み"));
+    if let Some(description) = robot {
+        // メーカーのメッシュはリンクの継ぎ目で重なるので、ロボットの中どうしの干渉は調べない
+        if let Some(node) = model.get_mut(root) {
+            node.skip_inner_interference = true;
+        }
+        jobs.robots.push(ImportedRobot { root, description });
+    }
+    let parts = model.measure(root).part_count;
+    let mut message = format!("{name} を読み込みました (部品 {parts} 個)");
+    if warnings > 0 {
+        message += &format!("。読めなかった形状が {warnings} 件あります");
+    }
+    for warning in &file.warnings {
+        warn!("{warning}");
+    }
+    jobs.messages.push(message);
 }
 
 /// 読み込んだ形状で `target` 以下を差し替え、元に戻せるよう履歴に積む
@@ -500,6 +588,54 @@ fn replace_geometry(
         unmatched: paths(&report.unmatched),
         added: paths(&report.added),
     });
+}
+
+/// 更新されたファイルから取り込んだ木を、読み直した形状に差し替える (1回の「元に戻す」で戻せる)
+fn refresh_geometry(
+    jobs: &mut ImportJobs,
+    model: &mut Model,
+    history: &mut History,
+    path: &Path,
+    file: ImportedFile,
+    source: StepSource,
+) {
+    let roots = model.roots_from_file(path);
+    if roots.is_empty() {
+        return;
+    }
+    let file_name = source_name(&source);
+    let mut changes = Vec::new();
+    let (mut matched, mut unmatched, mut added) = (0, 0, 0);
+    for root in roots {
+        let Some(before) = model.snapshot(root) else {
+            continue;
+        };
+        let Some(report) = model.replace_geometry(root, file.root.clone(), source.clone()) else {
+            continue;
+        };
+        matched += report.matched;
+        unmatched += report.unmatched.len();
+        added += report.added.len();
+        changes.push((Some(before), model.snapshot(root)));
+    }
+    if changes.is_empty() {
+        return;
+    }
+    let label = format!("更新された {file_name} を読み直し");
+    history.push(ModelChange {
+        label: label.clone(),
+        changes,
+    });
+    let mut message = format!("{file_name} が更新されたので読み直しました (対応 {matched} 件");
+    if unmatched > 0 {
+        message += &format!("、見つからない {unmatched} 件");
+    }
+    if added > 0 {
+        message += &format!("、追加 {added} 件");
+    }
+    message += ")";
+    info!("{message}");
+    jobs.messages.push(message);
 }
 
 #[cfg(test)]

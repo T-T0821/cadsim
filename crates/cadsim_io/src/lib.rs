@@ -3,6 +3,7 @@
 //! ファイル形式など外部とのやり取りを、ドメインの型や形式に依存しない中間表現に変換する。
 //! Bevy・egui には依存しない (docs/architecture.md)。
 
+pub mod asset_key;
 pub mod claude;
 pub mod csv_text;
 pub mod flow;

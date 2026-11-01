@@ -4,7 +4,7 @@
 //! 「取り込んだ部品」のどれか。各ノードは親から見た配置 (f64 の行列) を持つ。
 //! Bevy には依存しない。アプリ側は `Model` を Bevy の Resource で包み、表示は viewport.rs が後から追いかける。
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -572,6 +572,74 @@ impl Model {
     }
 
     /// 自分と子孫の id (深さ優先、自分が先頭)
+    /// ファイルから取り込んだ部品の読み込み元 (重なりなし)。ファイルの更新を見張るのに使う
+    pub fn file_sources(&self) -> BTreeSet<PathBuf> {
+        self.nodes
+            .values()
+            .filter_map(|node| match &node.kind {
+                NodeKind::Imported {
+                    source: StepSource::File(path),
+                    ..
+                } => Some(path.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// `path` から取り込んだ木のいちばん上のノード。ファイルが更新されたら、ここを差し替える。
+    ///
+    /// 中の部品がすべてそのファイルから取り込んだもので、部品が 1つ以上あるノードのうち、
+    /// 親がそうでないもの。ただし、親の下にそのファイルの部品がほかにもある (取り込んだ木に
+    /// 別の部品を足した) ときは、木の一部だけを差し替えることになるので含めない。
+    pub fn roots_from_file(&self, path: &Path) -> Vec<NodeId> {
+        // 子から先に数える: (そのファイルの部品の数, ほかの部品の数)
+        fn count(
+            model: &Model,
+            id: NodeId,
+            path: &Path,
+            counts: &mut HashMap<NodeId, (usize, usize)>,
+        ) -> (usize, usize) {
+            let Some(node) = model.nodes.get(&id) else {
+                return (0, 0);
+            };
+            let mut result = match &node.kind {
+                NodeKind::Imported {
+                    source: StepSource::File(p),
+                    ..
+                } if p == path => (1, 0),
+                NodeKind::Assembly { .. } => (0, 0),
+                _ => (0, 1),
+            };
+            for &child in &node.children {
+                let (file, other) = count(model, child, path, counts);
+                result = (result.0 + file, result.1 + other);
+            }
+            counts.insert(id, result);
+            result
+        }
+        let mut counts = HashMap::new();
+        for (&id, node) in &self.nodes {
+            if node.parent.is_none() {
+                count(self, id, path, &mut counts);
+            }
+        }
+        let pure = |id: &NodeId| {
+            counts
+                .get(id)
+                .is_some_and(|&(file, other)| file > 0 && other == 0)
+        };
+        self.nodes
+            .iter()
+            .filter(|(id, node)| {
+                pure(id)
+                    && node.parent.is_none_or(|p| {
+                        !pure(&p) && counts.get(&p).map(|c| c.0) == counts.get(id).map(|c| c.0)
+                    })
+            })
+            .map(|(&id, _)| id)
+            .collect()
+    }
+
     pub fn subtree(&self, id: NodeId) -> Vec<NodeId> {
         let mut out = Vec::new();
         let mut stack = vec![id];
@@ -852,6 +920,43 @@ mod tests {
             DMat4::IDENTITY,
             NodeKind::Box(part),
         )
+    }
+
+    fn imported(model: &mut Model, parent: Option<NodeId>, file: &str) -> NodeId {
+        let shape = Arc::new(ImportedShape::new(Vec::new(), Vec::new(), Vec::new(), None));
+        model.add_node(
+            parent,
+            "部品".into(),
+            DMat4::IDENTITY,
+            NodeKind::Imported {
+                product: "部品".into(),
+                shape,
+                source: StepSource::File(PathBuf::from(file)),
+            },
+        )
+    }
+
+    #[test]
+    fn roots_from_file_finds_the_topmost_trees_of_that_file() {
+        let mut model = Model::default();
+        // a.glb を 2回取り込み、1つ目には箱を足した。b.glb は別の木
+        let first = assembly(&mut model, None, "a 1");
+        let sub = assembly(&mut model, Some(first), "中");
+        imported(&mut model, Some(sub), "a.glb");
+        imported(&mut model, Some(first), "a.glb");
+        part(&mut model, first);
+        let second = assembly(&mut model, None, "a 2");
+        imported(&mut model, Some(second), "a.glb");
+        let other = assembly(&mut model, None, "b");
+        imported(&mut model, Some(other), "b.glb");
+        assert_eq!(
+            model.file_sources().into_iter().collect::<Vec<_>>(),
+            vec![PathBuf::from("a.glb"), PathBuf::from("b.glb")]
+        );
+        // 箱を足した 1つ目は、一部だけを差し替えることになるので含めない
+        assert_eq!(model.roots_from_file(Path::new("a.glb")), vec![second]);
+        assert_eq!(model.roots_from_file(Path::new("b.glb")), vec![other]);
+        assert!(model.roots_from_file(Path::new("c.glb")).is_empty());
     }
 
     #[test]

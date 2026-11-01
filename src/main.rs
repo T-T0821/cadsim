@@ -6,7 +6,8 @@
 //! - `model`       設計データ (アセンブリの木, f64) と選択状態
 //! - `step_import` STEP ファイル → アセンブリの木と B-rep (Bevy に依存しない)
 //! - `interchange` glTF / OBJ / STL などの読み書き (形式に依存しない中間表現を経由)
-//! - `file_io`     別スレッドでの読み込み・書き出し、形状の差し替え
+//! - `file_io`     読み込み・書き出し、形状の差し替え (URDF などは別スレッドで読む)
+//! - `scene_asset` STEP / glTF / OBJ / STL / USD を Bevy のアセットとして読み、ファイルの更新で読み直す
 //! - `project`     プロジェクトファイル (.cadsim) の保存と読み込み
 //! - `animation`   ファイルから取り込んだアニメーションの再生
 //! - `view`        3D 表示: `viewport` (表示・選択の強調・クリック選択)、`camera`、`gizmo`、`recording` (動画書き出しの画面とキャプチャ)、`walk` (一人称で歩く)
@@ -83,6 +84,7 @@ mod project;
 mod result_export;
 mod review;
 mod safety;
+mod scene_asset;
 mod scripting;
 mod sequence_gen;
 mod simulation;
@@ -105,6 +107,8 @@ fn main() {
         std::process::exit(code);
     }
     App::new()
+        // 取り込むファイルのアセットの読み元は AssetPlugin (DefaultPlugins) より前に足す
+        .add_plugins(scene_asset::SceneSourcePlugin)
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "CADプロトタイプ".into(),
@@ -122,7 +126,7 @@ fn main() {
             camera::CameraPlugin,
             animation::AnimationPlugin,
             (viewport::ViewportPlugin, view::picking::PartPickingPlugin),
-            file_io::FileIoPlugin,
+            (file_io::FileIoPlugin, scene_asset::SceneAssetPlugin),
             project::ProjectPlugin,
             input::InputPlugin,
             history::HistoryPlugin,

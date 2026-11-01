@@ -188,6 +188,22 @@ fn swing_down(from: DVec3, angle: f64, length: f64) -> DVec3 {
 
 /// 作業者の形。ローカルでは前が +X、左右が ±Z。
 pub fn person_parts(pose: &PersonPose) -> Vec<FigurePart> {
+    place_parts(person_local_parts(pose), pose.position, pose.heading)
+}
+
+/// 形を床の位置と向きに置く
+pub fn place_parts(parts: Vec<FigurePart>, position: DVec2, heading: DVec2) -> Vec<FigurePart> {
+    let origin = floor(position);
+    let rotation = heading_rotation(heading);
+    parts
+        .into_iter()
+        .map(|p| p.placed(origin, rotation))
+        .collect()
+}
+
+/// 床に置く前の作業者の形 (足元の中心が原点、前が +X)。`position` と `heading` は使わない。
+/// 表示側はこれを 1体ぶんの子として並べ、体全体の位置と向きは親に持たせる。
+pub fn person_local_parts(pose: &PersonPose) -> Vec<FigurePart> {
     let walking = matches!(pose.activity, Activity::Walk);
     let working = matches!(pose.activity, Activity::Work);
     let amount = if walking { 1.0 } else { 0.0 };
@@ -357,13 +373,7 @@ pub fn person_parts(pose: &PersonPose) -> Vec<FigurePart> {
         )
         .scaled(DVec3::new(0.9, 0.8, 1.05)),
     );
-
-    let origin = floor(pose.position);
-    let rotation = heading_rotation(pose.heading);
     parts
-        .into_iter()
-        .map(|p| p.placed(origin, rotation))
-        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -394,13 +404,16 @@ pub struct AgvPose {
     pub status: AgvStatus,
     /// 荷を積んでいる
     pub loaded: bool,
+    /// 荷を天板からどれだけ持ち上げているか (mm)。積み込み・荷降ろしの途中で荷が上下して見える
+    pub cargo_lift: f64,
     /// 走った距離 (mm)。車輪の回転に使う
     pub distance: f64,
     /// 時刻 (秒)。ランプの点滅に使う
     pub time: f64,
 }
 
-const WHEEL_RADIUS: f64 = 75.0;
+/// 駆動輪の半径 (mm)
+pub const WHEEL_RADIUS: f64 = 75.0;
 const CASTER_RADIUS: f64 = 38.0;
 const CLEARANCE: f64 = 25.0;
 
@@ -422,6 +435,11 @@ pub fn agv_lamp(status: AgvStatus, time: f64) -> Paint {
 
 /// AGV の形。ローカルでは前が +X、左右が ±Z。
 pub fn agv_parts(pose: &AgvPose) -> Vec<FigurePart> {
+    place_parts(agv_local_parts(pose), pose.position, pose.heading)
+}
+
+/// 床に置く前の AGV の形 (車体の中心の真下が原点、前が +X)。`position` と `heading` は使わない。
+pub fn agv_local_parts(pose: &AgvPose) -> Vec<FigurePart> {
     let l = pose.length.max(200.0);
     let w = pose.width.max(200.0);
     let h = pose.height.max(120.0);
@@ -560,17 +578,11 @@ pub fn agv_parts(pose: &AgvPose) -> Vec<FigurePart> {
                 size: DVec3::new(l * 0.55, cargo, w * 0.7),
             },
             Paint::Cargo,
-            DVec3::new(-l * 0.05, h + cargo / 2.0, 0.0),
+            DVec3::new(-l * 0.05, h + cargo / 2.0 + pose.cargo_lift.max(0.0), 0.0),
         )
         .shown(pose.loaded),
     );
-
-    let origin = floor(pose.position);
-    let rotation = heading_rotation(pose.heading);
     parts
-        .into_iter()
-        .map(|p| p.placed(origin, rotation))
-        .collect()
 }
 
 /// 形の上端 (表示の確認やテストに使う)。
@@ -722,6 +734,7 @@ mod tests {
             height: 400.0,
             status,
             loaded,
+            cargo_lift: 0.0,
             distance: 0.0,
             time: 0.0,
         }

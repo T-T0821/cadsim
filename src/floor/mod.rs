@@ -4,7 +4,8 @@
 //! | --- | --- |
 //! | `cadsim_core::floor` | 床の上の長方形・距離 (geom)、作業者の時刻表 (operator_plan)、AGV の配車 (agv_sim) |
 //! | `cadsim_core::floor::figure` | 作業者と AGV の 3D の形・歩く動き・向き |
-//! | `figures.rs` | 作業者と AGV の 3D モデルの表示 (形の計算結果をメッシュに写す) |
+//! | `cadsim_core::floor::figure_motion` | 動きのクリップ (歩く・作業・待つ、車輪・荷) と切り替えで混ぜる重み |
+//! | `figures.rs` | 作業者と AGV の 3D モデルの表示 (形をメッシュに、動きのクリップを Bevy のアニメーションに写す) |
 //! | `view.rs` | 歩行経路・AGV の通路の線と、床をクリックして点を置く操作 |
 //! | `heatmap_view.rs` | 人と AGV の動線のヒートマップ (床に敷く色と PNG の書き出し) |
 //! | `panel.rs` | 「作業者・AGV」パネル |
@@ -12,7 +13,7 @@
 //! 作業者と AGV はタイミングチャートとは別の時計 ([`FloorClock`]) で動く。
 //! どちらも安全機器の検知の対象 (`SafetyIntruders`) に入り、AGV は安全停止中は止まる。
 
-pub use cadsim_core::floor::{agv_sim, figure, geom, heatmap, operator_plan};
+pub use cadsim_core::floor::{agv_sim, figure, figure_motion, geom, heatmap, operator_plan};
 pub(crate) mod figures;
 mod heatmap_view;
 mod panel;
