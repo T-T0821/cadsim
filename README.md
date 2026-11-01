@@ -1033,7 +1033,7 @@ README の画面写真は `docs/screenshots/scenarios/` の手順書で撮って
 
 | 資料 | 内容 |
 | --- | --- |
-| [docs/architecture.md](docs/architecture.md) | コードのレイヤー分けと依存の向き |
+| [docs/architecture.md](docs/architecture.md) | コードの構成 (機能ごとのフォルダ、ファイル名の決まり) |
 | [docs/dev-environment.md](docs/dev-environment.md) | 開発コンテナ(Dev Containers)と Makefile の目標、Windows 向けのクロスビルド |
 | [docs/urdf.md](docs/urdf.md) | URDF の読み込み、関節への直し方、同梱の UR5e と公開されている機種のライセンス |
 | [docs/internals.md](docs/internals.md) | 使っているライブラリ、各機能のしくみ、サンプルとフォントとアイコンの作り方 |

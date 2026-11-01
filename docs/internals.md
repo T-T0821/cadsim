@@ -1,7 +1,7 @@
 # plantwright の内部のしくみ
 
 開発者向けの資料です。使い方は [README](../README.md) を見てください。
-レイヤーの分け方は [architecture.md](architecture.md) にまとめています。
+コードの構成 (機能ごとのフォルダ) は [architecture.md](architecture.md) にまとめています。
 
 ## 動作確認したバージョン
 
@@ -38,7 +38,7 @@
 
 ## コードの構成
 
-層の分け方は [architecture.md](architecture.md) を見てください。
+機能ごとのフォルダの分け方とファイル名の決まりは [architecture.md](architecture.md) を見てください。
 
 ```text
 crates/cadsim_core/   Bevy に依存しないドメイン (cargo test -p cadsim_core で単体テスト)

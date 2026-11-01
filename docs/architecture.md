@@ -1,145 +1,68 @@
-# アーキテクチャ
+# コードの構成
 
-plantwright は Clean Architecture をもとに、コードを4つの層に分けます。
-**依存は外側から内側へだけ向けます。** 内側の層は外側の層(Bevy、egui、ファイル形式のライブラリなど)を知りません。
+plantwright のコードは **機能ごとのフォルダ** に分けます。1つの機能は、同じ名前のフォルダ2つにまとまります。
 
-```text
-┌──────────────────────────────────────────────────────────┐
-│ 4. UI・フレームワーク (app)                                 │
-│    Bevy のプラグインとシステム、egui のパネル、3D 表示、       │
-│    カメラ、ギズモ、ショートカット、ファイルダイアログ          │
-│  ┌────────────────────────────────────────────────────┐  │
-│  │ 3. アダプター (io)                                   │  │
-│  │    STEP / glTF / OBJ / STL / USD の読み書き、          │  │
-│  │    .plantwright の JSON、Modbus TCP、SLMP、動画のエンコード    │  │
-│  │  ┌──────────────────────────────────────────────┐  │  │
-│  │  │ 2. ユースケース (core::usecase)                 │  │  │
-│  │  │    開く・保存・取り込み・書き出し・編集・            │  │  │
-│  │  │    元に戻す・干渉チェックの実行・チャートの再生       │  │  │
-│  │  │  ┌────────────────────────────────────────┐  │  │  │
-│  │  │  │ 1. ドメイン (core::domain)                │  │  │  │
-│  │  │  │    アセンブリの木・部品・箱・選択、          │  │  │  │
-│  │  │  │    幾何計算、干渉判定、タイミングチャート、    │  │  │  │
-│  │  │  │    運動学、PLC のシーケンス                  │  │  │  │
-│  │  │  └────────────────────────────────────────┘  │  │  │
-│  │  └──────────────────────────────────────────────┘  │  │
-│  └────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────┘
-```
+| 場所 | 置くもの |
+| --- | --- |
+| `crates/plantwright_core/src/<機能>/` | Bevy・egui を使わないもの全部。データの型、計算、プロジェクトファイルの JSON の形、ファイル形式、通信。単体テストもここ |
+| `src/features/<機能>/` | Bevy のプラグイン・システム・3D 表示と、egui の画面 |
 
-## 各層の決まり
+たとえば工程シミュレーションを読むなら `crates/plantwright_core/src/flow/` と `src/features/flow/` の2か所だけを開けば足ります。
 
-| 層 | 置くもの | 依存してよいもの | 依存してはいけないもの |
-| --- | --- | --- | --- |
-| 1. ドメイン | 設計データの型とその規則。純粋な計算 | `glam`(f64 のベクトル・行列)、`truck`(形状カーネル。B-rep の曲線・曲面の型だけ `truck-stepio` から使う)、標準ライブラリ | Bevy、egui、ファイル形式・通信のライブラリ、ファイルシステム |
-| 2. ユースケース | 「ユーザーがしたいこと」1つ = 関数 1つ。必要な外部 I/O はトレイト(ポート)で受け取る | ドメイン | Bevy、egui、具体的なファイル形式 |
-| 3. アダプター | ポートの実装。ファイル形式・通信・エンコードの変換 | ドメイン、ユースケース(ポート)、`ruststep`・`gltf`・`openusd`・`serde_json` など | Bevy、egui |
-| 4. UI・フレームワーク | Bevy の `Resource` / `Component` / システム、egui の画面。入力をユースケースの呼び出しに変え、結果を画面に写す | すべての内側の層 | — |
-
-- Bevy の `Resource` や `Component` はドメインの型に直接付けず、UI 層で包みます(例: `struct ModelRes(Model)` に `Deref` を付ける)。
-- UI 層のシステムは薄く保ちます。判断や計算は内側に置き、システムは「入力を集める → ユースケースを呼ぶ → 結果を表示に写す」だけにします。
-- 内側の層は Bevy なしで `cargo test` できるようにします。新しい計算処理には内側の層で単体テストを付けます。
-- 新しいファイル形式は、アダプター層に読み書きを足し、ユースケースのポートにつなぎます。UI からは形式の一覧を見るだけにします。
-
-## 目標のディレクトリ構成
-
-Cargo のワークスペースに分け、依存の向きをコンパイラに守らせます(内側の crate の `Cargo.toml` に Bevy を書かなければ、使おうとした時点でビルドが通りません)。
+## 全体の地図
 
 ```text
-Cargo.toml                ワークスペース兼アプリ本体 (4. UI・フレームワーク)
-src/                      アプリ本体。assets/ の場所を変えないようにルートに置いたままにする
-├── main.rs               プラグインを並べるだけ
-├── resources.rs          ドメインの型を包む Resource
-├── view/                 viewport, picking (Bevy の picking の backend), camera, render_quality (画質), gizmo, 干渉の表示, 動画の撮影, walk (一人称で歩く)
-├── input/                shortcuts, ファイルダイアログ, ドラッグ&ドロップ
-└── ui/                   menu, tree, properties, status, 各パネル, logo (ウィンドウのアイコンとロゴの画像)
+Cargo.toml                 ワークスペース + アプリ (package 名 plantwright)
+src/                       アプリ (Bevy・egui)。assets/ の場所を変えないようにルートに置く
+├── main.rs                App を作り、土台と機能のプラグインを足すだけ
+├── document/              土台: モデルの Resource・選択・元に戻す・開く/保存・取り込み・ファイルのダイアログ
+├── viewport/              土台: 3D 表示・カメラ・ギズモ・クリックでの選択・画質・工場の建屋・歩行・ショートカット
+├── ui/                    土台: 画面の枠 (メニュー・ツールレール・部品の木・プロパティ・状態表示・テーマ・共通部品・フォント)
+├── features/              機能ごと。1 フォルダ = 1 プラグイン
+│   ├── mod.rs             FeaturePlugins (機能のプラグインを並べるだけ)
+│   └── motion/ plc/ flow/ conveyor/ line/ floor/ safety/ physics/ annotation/ drawing/ site/ ...
+└── dev/                   開発用: 負荷テストのシーン、FPS の計測
 crates/
-├── cadsim_core/          1. ドメイン + 2. ユースケース (Bevy なし)
-│   └── src/
-│       ├── domain/       model, math, camera_path (紹介動画のカメラの通り道), melsec (三菱 PLC のデバイス), selection, remap (形状の差し替えの対応づけ), simulation (幾何・干渉・計測),
-│       │                 motion (チャート・姿勢・運動学・URDF の機種の関節への直し方), plc (シーケンス・I/O 表), flow, conveyor,
-│       │                 staffing (作業者の名簿・スキル・シフト・人数の比較),
-│       │                 safety (安全機器・検知・安全距離), floor (作業者・AGV・床の幾何・作業者と AGV の 3D の形と動きのクリップ・動線のヒートマップ),
-│       │                 line (工程と AGV・コンベアの受け渡しと時間の進め方・PLC の信号表・ワークの位置),
-│       │                 line_draft (言葉で組むラインの下書き・整え方・並べ方),
-│       │                 effects (状態のエフェクトのきっかけ・見た目・煙と火花の粒),
-│       │                 render_quality (3D ビューの画質の段階・影と陰影の範囲),
-│       │                 sound (設備の音の波形・鳴らす条件・聞こえ方・警報とブザー停止),
-│       │                 ui_check (画面の自動確認の手順書・進め方・部品の探し方・画像の比べ方),
-│       │                 timeline (シミュレーションの巻き戻し: 状態の写しの記録と進め直し),
-│       │                 walk (一人称で歩く: 体の寸法・ぶつかり・通路幅と手の届く範囲),
-│       │                 review (複数人レビューのメッセージ・ホストの配り役・相手の様子・配置の変更の見つけ方)
-│       └── usecase/      document (開く・保存・取り込み・書き出し), edit, history, compose_line (言葉でラインを組む), file_watch (取り込んだファイルの更新を見つける),
-│                         report (シミュレーション結果の CSV), llm (生成 AI のポート LlmClient), help (使い方を AI に聞く), script (部品スクリプトの実行と ScriptHost ポート),
-│                         ports (SceneReader / SceneWriter / ProjectStore などのトレイト)
-└── cadsim_io/            3. アダプター (Bevy なし)
-    └── src/              step, interchange (gltf / obj / stl / usd), asset_key (取り込むファイルを Bevy のアセットの鍵にする), project_file (JSON), formats (平面図・図面・帳票・動線のヒートマップの PNG など),
-                          modbus, slmp (三菱 PLC との SLMP 通信・テスト用の PLC), sound_settings (音の設定ファイル), render_settings (画質の設定ファイル), rtde (UR の関節角度の受信), urdf (ロボット機種の URDF・COLLADA), video, xlsx (工程シミュレーションの結果), rhai (部品スクリプトのエンジン),
-                          claude (生成 AI の Claude API), line_draft_json (生成 AI とやり取りするラインの下書きの JSON),
-                          ui_check (画面の自動確認の PNG・結果の JSON・報告書の HTML),
-                          review (複数人レビューの JSON と TCP の送受信)
+└── plantwright_core/      Bevy・egui を使わないもの全部
+    └── src/
+        ├── document/      Model・Node・形状・BVH・表示用メッシュ・元に戻す履歴
+        ├── formats/       機能をまたぐ 3D の形式 (STEP・glTF・OBJ・STL・USD・Web ビューア)
+        └── motion/ plc/ flow/ conveyor/ line/ ...   アプリの features/ と同じ名前
 ```
 
-ルートの `Cargo.toml` の `default-members` に全 crate を並べているので、引数なしの `cargo test` / `cargo clippy` でワークスペース全体を確かめられます。
+## 決まり
 
-## いまのコードからの移し方
+1. **crate は「Bevy・egui を使うかどうか」だけで分ける。** 計算も JSON・Excel・Modbus も、Bevy を使わなければ `plantwright_core`。この線のおかげで、計算のテストは Bevy をビルドせずに速く回り、アプリを直したときの再コンパイルも小さく済む。
+2. **再公開で中継しない。** アプリは `use plantwright_core::flow::sim;` のように実体の場所をそのまま書く。
+3. **`Resource` は core の型に直接付ける。** `plantwright_core` は `bevy_ecs`(描画を含まない ECS だけ)に依存してよい。`Resource` を付けるためだけの包み型は作らない。
+4. **トレイトは本当に入れ替えるものだけ。** PLC との接続 (Modbus・SLMP・OPC UA)、生成 AI、テストで偽物を差すものなど。実装が1つなら普通の関数・メソッドにする。
+5. **機能同士の受け渡しは Bevy の Event か core の型で。** ほかの機能の `systems.rs` を直接 `use` しない。
+6. **プラグインは自分の Resource を自分で登録する。**
 
-機能追加の PR(タイミングチャート、ロボット、PLC、センサー、動画書き出し、搬送など)が落ち着いてから、動作を変えずに次の順で少しずつ移します。
-1つの PR は1段だけにし、毎回 `cargo fmt` / `clippy` / `test` が通る状態でマージします。
+## 機能フォルダの中のファイル名
 
-1. **ワークスペース化と純粋な計算を core へ。** ✅ ルートをワークスペースにして `cadsim_core` を作り、`math` と `simulation` の幾何・干渉の計算を移した。`bevy::math` は同じ版の `glam` に置き換え、アプリ側の `math` / `simulation` から再公開しているので呼び出し側は変わらない。
-   - ゲーム風 UI の判定(`gamify`)は最初から `cadsim_core` に置いた。道具の一覧と開け閉め(ツールレール)の `workspace` も `cadsim_core` に置き、UI 層の `ui::dock` が Resource に包む。設定ファイルの読み書きは `cadsim_io::preferences_file` に移した。
-2. **残りの純粋な計算を core へ。** 標準部品の `library/catalog.rs`(種類・パラメータ・I/O 点・動作)と `library/geometry.rs`(形状)はすでに Bevy に依存しないので、そのまま移せる。そのほか `motion` のチャート・姿勢・運動学、PLC のシーケンスなど。進行中の機能ブランチが触っているので、それらが入ってから移す。 🔶 タイミングチャートと動きの計算 (`motion::{chart, profile, pose, kinematics, robot_path, robot_time, path_interference, sensor}`) を `cadsim_core::motion` に移した。アプリ側の `motion::chart::TimingChart` は `#[derive(Resource, Deref, DerefMut)] struct TimingChart(cadsim_core::motion::TimingChart)` という包み型。
-3. **ファイル形式を io へ。** 🔶 `cadsim_io` を作り、3D ファイル形式の読み書き (`interchange` の Scene・glTF・OBJ・STL・USD・Web ビューア) を移した。アプリ側の `interchange` から再公開しているので呼び出し側は変わらない。`Scene` ⇔ `Model` の変換 (`model_io`) も、手順 4 で `Model` が core に移ったあと io へ移した。続いて STEP の読み込みを `cadsim_io::step` に移し、取り込んだ形状とアセンブリの木の型 (`ImportedShape` など) は `cadsim_core::shape`、表示用メッシュ (`part_mesh`)・BVH・アニメーションの型 (`Animation` など) は `cadsim_core` に移した (io → core の向き)。さらに平面図・点群・図面の形式 (`formats::{dxf, pdf_plan, pointcloud_read, site_record, drawing_out, conveyor_record}`)、工程シミュレーションの記録と Excel 書き出し (`flow::{record, xlsx}`)、設定ファイル (`preferences_file`) を `cadsim_io` に移した。アプリ側の `formats` / `flow` / `preferences_file` から再公開している。部品表の書き出し (`formats::bom_out`) も io。タイミングチャートとアニメーションの保存形式 (`formats::chart_record`) も io。`.plantwright` の JSON の構造体はまだアプリ側。
-4. **設計データを core へ。** 🔶 `Model` と `Node`・`NodeKind`・`BoxPart` などを `cadsim_core::model` に移した。アプリ側の `model::Model` は `#[derive(Resource, Deref, DerefMut)] struct Model(cadsim_core::model::Model)` という包み型で、`Res<Model>` やメソッド呼び出しはそのまま使える。標準部品の種類・パラメータ・形状 (`library::{catalog, geometry}`) と、モデリングで作った形状の出どころ `ModeledSource` も core に置き、JSON との変換は `cadsim_io::modeled` の `ModeledSourceExt` に置いた。`Selection` は画面の状態なので UI 層 (アプリ側) のまま。`Model` のテストはサンプルの STEP (io) を読むのでアプリ側に残した。部品表の計算 (`bom`) も core に移した (テストはサンプルの STEP を読むのでアプリ側)。読み込み元の表示名は `StepSource::display_name`。モデリング (円柱・押し出し・穴あけ・ブーリアン) も `cadsim_core::modeling` に移し、B-rep を JSON に詰める部分はポート `SolidStore` にして io (`JsonSolids`) が実装する。
-5. **ユースケースを切り出す。** 開く・保存・取り込み・書き出し・削除・元に戻すを `usecase` の関数にし、Bevy のシステムからはそれを呼ぶだけにする。元に戻す履歴は `World` ではなくドキュメント(モデル + チャートなど)を書き換える形にする。 🔶 まず履歴の山 (`UndoStack`)・モデルの変更 (`ModelChange`)・ドラッグ中の編集のまとめ方 (`ModelEdits`) を `cadsim_core::history` に移した。アプリ側の `History` (Resource) はそれを持ち、`Command` で `World` を書き換える部分と見張る文書 (`TrackedDoc`) だけを持つ。
-6. **UI 層を整理する。** 残った Bevy / egui のコードを `view` / `input` / `ui` に分ける。 🔶 3D 表示の `viewport`・`camera`・`gizmo`・`recording` を `src/view/` に、キーのショートカット `shortcuts` を `src/input/` に移した。`main.rs` はそれらを `use` してプラグインを並べる。ファイルのダイアログ・ドラッグ&ドロップ・起動時の引数も `input::{file_dialog, command_line}` に分け、`file_io` には別スレッドでの読み込みとモデルへの追加・書き出しだけを残した。プロジェクトの開く・保存も `src/project/` で層に分けた。`file.rs` が .plantwright の形 (アダプター層)、`document.rs` が開く・保存の手順 (ユースケース層。ファイルを読んで STEP の形状を読み直す `LoadedProject::load`、モデルと寸法・工程・チャート・床などの文書を作り直す `LoadedProject::open`、書く `save_project`)、`mod.rs` が UI 層 (頼まれた操作を受け、結果を Resource に写す)。どちらも Bevy に依存しないが、寸法 (`annotation`)・アニメーション・床の配置などの型がまだアプリ側にあるので、それらが core / io に移ったら `cadsim_core::usecase::document` と `cadsim_io::project_file` に移す。
+| 場所 | ファイル | 中身 |
+| --- | --- | --- |
+| core | `mod.rs` | 機能の説明 (`//!`) と、外へ出す型の `pub use` だけ |
+| | `model.rs` | データの型 |
+| | 中身を表す名前 (`sim.rs`・`kinematics.rs` など) | 計算。テストは同じファイルの `#[cfg(test)]` |
+| | `record.rs` | プロジェクトファイルの JSON の形 (serde) |
+| | 形式の名前 (`xlsx.rs`・`slmp.rs` など) | その機能だけが使うファイル形式・通信 |
+| アプリ | `mod.rs` | `XxxPlugin` と、その機能の Resource・Event の登録。ここを読めば何がいつ動くか分かる |
+| | `systems.rs` | 毎フレームの Bevy システム |
+| | `view.rs` | 3D に置くもの (メッシュ・線・色) |
+| | `panel.rs` または `panel/` | egui のウィンドウ。複数あれば `panel/staff.rs` のように分ける |
 
-安全機器と作業者・AGV は、`device.rs`・`geom.rs`・`operator_plan.rs`・`agv_sim.rs` を `cadsim_core::{safety, floor}` に移した。動作範囲と距離の確認 (`check.rs`) も、チャートが core に移ったあと `cadsim_core::safety` に移した。`src/safety/`・`src/floor/` の `mod.rs`・`view.rs`・`panel.rs` が UI 層です。
+- 合わないものは無理に作らず、要るファイルだけ置く。
+- `ui.rs`・`*_ui.rs`・`usecase.rs`・`domain/`・`adapter/` という名前は使わない。
+- 1ファイルはおよそ 800 行まで。超えたら画面の区切りや計算の段階で分ける。
 
-新しく足した機能のうち、すでに層を分けてあるもの:
+## 移行の状況
 
-- `src/result_export/report/` … ユースケース層 (CSV に書く表の作成。文字への変換は `cadsim_io::csv_text`)。Bevy の ECS・egui・ファイルシステムに依存しない。移行時は `usecase/report` へ移す。`src/result_export/plugin.rs` は UI 層。
-- PLC 連携(`src/plc/`)は先に `domain` / `usecase` / `adapter` / UI に分けてあるので、移行時はディレクトリごと core / io へ移せます。三菱 PLC との SLMP 通信は、デバイスの型を `cadsim_core::melsec`、電文とクライアントを `cadsim_io::slmp` に置き、`src/plc/domain/device_map.rs`(信号 → デバイス)と `src/plc/adapter/slmp.rs`(`PlcLink` の実装)がそれを使う。I/O 対応表の CSV は、ドメインの `io_csv` が表 (行 × 欄の文字) を作って解釈し、CSV の文字との変換は UI 層が `cadsim_io::csv_text` で行う。
-- 部品スクリプト(`src/scripting/`)は、`runner.rs`(実行とポート `ScriptHost`)と `controller.rs`(PLC 連携の I/O へのつなぎ)がユースケース層、`rhai_engine.rs` がアダプター層、`mod.rs`・`ui.rs` が UI 層。`controller.rs` は PLC の I/O の型を使うので、PLC 連携と一緒に core へ移す。
+前の構成 (Clean Architecture の4層、`cadsim_core` / `cadsim_io` の2つの crate) から、動作を変えずに次の順で移します。
 
-- 自作部品は、ノードに付けるしるしと公開パラメータの型(`CustomInstance`・`ParamTarget`)を `cadsim_core::custom_part` に置いた。アプリの `src/custom_part/` のうち `param.rs`(公開パラメータのチャートへの読み書き)と `place.rs`(置くときの名前の頭と id の付け替え)がユースケース層、`file.rs`(`part.cadpart` の JSON とフォルダへの保存)がアダプター層、`mod.rs`・`ui.rs` が UI 層。`param.rs`・`place.rs` はタイミングチャートの型を使うので、チャートを core へ移すときに一緒に移す。
-
-各段の終わりに、この文書の「目標のディレクトリ構成」と実際の構成の差を更新します。
-
-### すでに層を分けて書いてあるもの
-
-- 工程シミュレーション: ドメイン(工程モデル・離散事象シミュレーション・色・工場のライン・品種と生産計画・案の比較)は `cadsim_core::flow` に置いた。`.plantwright` の形 (`record`)、Excel 書き出し (`xlsx`)、生産計画の表の読み込み (`plan_table`。Excel・ODS は `calamine`、CSV は Shift_JIS も `encoding_rs` で読み、区切りと引用符は `cadsim_io::csv_text` (`csv` クレート) に任せる) は `cadsim_io::flow`。アプリの `src/flow/` の `mod.rs`・`ui.rs`・`staff_ui.rs`・`factory_ui.rs`・`plan_ui.rs`・`scenario_ui.rs` が UI 層。
-
-### 移行の途中で足した機能の置き場所
-
-| 機能 | ドメイン(`cadsim_core`) | アダプター(いまはアプリ側、手順 3 で `cadsim_io` へ。3D ファイル形式は移動済み) | UI(アプリ側) |
-| --- | --- | --- | --- |
-| 平面図の下敷き・点群 | `site::{underlay, pointcloud, model}` | `formats::{dxf, pdf_plan, pointcloud_read, site_record}` | `site/`(表示・パネル・縮尺合わせ) |
-| 2D 図面 | `drawing` | `formats::drawing_out` | `documents.rs` |
-| 部品表 | `bom` | `formats::bom_out` | `documents.rs` |
-| モデリング | `modeling`(B-rep の詰め方のポート `SolidStore`) | `modeled`(B-rep ⇔ JSON) | `ui/modeling.rs` |
-| 物理演算 | `physics::{settings, cable}`(ドメイン)、`physics::world`(ユースケース。物理エンジンのポート `PhysicsEngine`) | `physics::{engine, records}`(Bevy の物理プラグイン bevy_rapier3d と .plantwright の形。`engine` はプラグインを使うので `cadsim_io` には移さない) | `physics/{mod, panel, sample}` |
-| 背景の工場の建屋 | `factory_hall`(床・通路の線・壁・柱・グリッドの配置、コンクリートの模様) | — | `view/factory_hall.rs`(メッシュにして置く・手前の壁を隠す) |
-| 動画書き出し | `video`(撮る時刻・切り抜き・書き込み先のポート `VideoSink`) | `video::{encode, mp4}`(MP4 / GIF / PNG) | `view/recording.rs`(画面のキャプチャ・設定ウィンドウ) |
-| 紹介動画のカメラワーク | `camera_path`(視点の通り道と補間) | `cadsim_io::formats::camera_path_record`(.plantwright の形) | `view/camera_path.rs`(カメラワークの欄・通り道の線・プレビュー) |
-| タイミングチャート・アニメーションの保存 | `motion::chart` | `formats::chart_record` | `project/` |
-| 文書の変更を元に戻す履歴にまとめる | `usecase::edit_tracker`(前に確定した状態との比較) | — | `history.rs` の `TrackedDoc`(各プラグインで登録) |
-| ロボット機種 (URDF) の読み込み | `motion::robot_import`(機種の型 `RobotDescription` と、チャートの関節・ロボットへの直し方) | `cadsim_io::urdf`(URDF と COLLADA の XML) | `file_io.rs`(別スレッドでの読み込み)、`motion/urdf_robot.rs`(リンクの位置を集めて関節を付ける) |
-| 一人称で歩く | `walk`(体の寸法、障害物との押し戻し、段の乗り越え、通路幅・前方の距離・手の届く部品の測定) | — | `view/walk.rs`(キーとマウスを集めてカメラに写す、左上の表示、床の線) |
-| 実機ロボット (UR) の関節角度の受信 | —(角度から関節の値への直し方 `motion::live_joints` は Bevy 非依存。`motion::chart` と一緒に手順 2 で core へ) | `cadsim_io::rtde`(RTDE の読み書きと通信スレッド) | `motion/ur_ui.rs` |
-| 生成 AI の呼び出し | `usecase::llm`(ポート `LlmClient`) | `cadsim_io::claude`(Claude API) | `assistant/`(`settings_file.rs`・`job.rs` は Bevy 非依存) |
-| チャート・ラダーの自動生成 | —(`TimingChart` がアプリ側なので `sequence_gen/{spec, ladder, log_events, usecase}.rs` はアプリ側。Bevy 非依存で、チャートと一緒に手順 2 で core へ) | `sequence_gen/json.rs`(下書き ⇔ JSON) | `sequence_gen/{mod, ui}.rs` |
-| ライン連携 | `line::{coupler, signals, stepper, workpieces}`、`flow::sim` と `conveyor::sim` の連携の口 | — | `line/`(毎フレームの進め方・3D のワーク・ウィンドウ) |
-| 画面での動作確認の自動化 | `ui_check::{scenario, runner, widget, compare, report}` | `cadsim_io::ui_check`(PNG・JSON・HTML) | `ui_check/mod.rs`(入力を流して撮る Bevy のシステム)、`ui_check/suite.rs`(手順書ごとにアプリを起動し直す。Bevy なし) |
-| 巻き戻しと時間スライダー | `timeline`(写しの記録・間引き・進め直し)、`flow::rewind`(工程シミュレーションの戻し方・詰まり始めの探し方)、`line::rewind`(ライン一式の写し) | — | `flow/{mod, ui}.rs`、`line/{mod, panel}.rs` |
-| 言葉でラインを組む | `line_draft::{model, check, layout, rules}`(ドメイン)、`usecase::compose_line`(生成 AI のポート `LineDraftAi`) | `cadsim_io::line_draft_json`(AI への指示と返答の JSON) | `line_compose/`(`apply.rs` は Bevy 非依存。`TimingChart` が core に移ったら一緒に移す) |
-| 状態のエフェクト (詰まり・故障の光と煙、溶接と干渉の火花) | `effects`(きっかけと見た目・出す場所の決め方)、`effects::particles`(煙と火花の粒) | — | `effects/mod.rs`(状態を集めて光・煙・火花に写す)、表示メニュー (`ui/menu.rs`) |
-| 設備の音と警報 | `sound::{synth, settings, spatial, cues, alarm}` | `cadsim_io::sound_settings`(`sound.json`) | `sound/`(`mod.rs` が状態を集めて音を出し入れ、`source.rs` が波形を Bevy の音に、`panel.rs` が設定ウィンドウと警報の帯) |
-| 最初の5分 (ようこそ画面・章立てのチュートリアル) | `gamify`(基本編・応用編の章・ミッションの手順・使う道具 `workspace::Tool`・とばす・一覧からの挑戦・判定) | `cadsim_io::preferences_file`(とばしたミッション・ようこそ画面を閉じたか) | `ui/tutorial.rs`(ようこそ画面・カードの手順・矢印)、`ui/playful.rs`、起動時のデモラインは `project/mod.rs` の `ProjectAction::OpenDemoLine` |
-| ライセンス一覧 (ヘルプ → ライセンス) | — | — (一覧は `tools/licenses/generate.sh` が作る `assets/licenses/THIRD_PARTY_LICENSES.txt` を埋め込む) | `ui/licenses.rs`(ウィンドウ)、ヘルプメニュー (`ui/menu.rs`) |
-| 取り込むファイルを Bevy のアセットとして読み、更新で読み直す | `usecase::file_watch`(更新の見つけ方)、`Model::{file_sources, roots_from_file}`(見張るファイルと差し替える木) | `cadsim_io::asset_key`(絶対パスと単位 ⇔ アセットの鍵) | `scene_asset.rs`(アセットの読み元・読み込み・見張り)、モデルへの反映は `file_io.rs` の `receive_imports` |
-| 作業者と AGV の動き (Bevy のアニメーション) | `floor::figure_motion`(クリップのキー・切り替えで混ぜる重み・クリップの時刻) | — | `floor/figures.rs`(クリップを `AnimationClip` / `AnimationGraph` にし、毎フレーム時刻と重みを写す) |
-| 複数人でレビュー | `review::{Message, Hub, ReviewSession, SendThrottle, PlacementTracker}` | `cadsim_io::review`(1 行の JSON・TCP の待ち受けと接続のスレッド `ReviewLink`) | `review/`(送受信のシステム・アバターの表示・パネル)。docs/review.md |
-
-`drawing/collect.rs` と `motion::live_joints` は Bevy に依存しない書き方にしてあり、次の手順で core に移します。
+1. ✅ この文書と CLAUDE.md を新しい決まりに書き換える。
+2. `cadsim_io` を `cadsim_core` に統合し、`plantwright_core` に改名する。ファイル形式は機能の隣に置く。
+3. アプリ側の再公開だけのモジュールと、`Model`・`TimingChart` の包み型をなくす。
+4. アプリ側を `document/`・`viewport/`・`ui/`・`features/`・`dev/` に移し、ファイル名をそろえる。
+5. 大きすぎるファイルを分け、この文書の地図を実際の形に合わせる。
