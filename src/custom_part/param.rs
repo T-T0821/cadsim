@@ -3,9 +3,10 @@
 //! 部品を置いたあとで変えられる値 (シリンダのストローク、動作時間、可動範囲、センサーの検出距離)。
 //! どの値もタイミングチャートのアクチュエータ・センサーの項目を指す。Bevy に依存しない。
 
-pub use cadsim_core::custom_part::{CustomInstance, ParamTarget, PartParam};
+use plantwright_core::custom_part::{CustomInstance, ParamTarget};
 
-use crate::motion::{ActuatorKind, TimingChart};
+use plantwright_core::motion::chart::ActuatorKind;
+use plantwright_core::motion::chart::TimingChart;
 
 /// 置いた自作部品のパラメータをチャートに書く
 pub trait InstanceOnChart {
@@ -141,7 +142,7 @@ pub fn candidates(chart: &TimingChart, actuators: &[u32], sensors: &[u32]) -> Ve
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::motion::chart::SensorKind;
+    use plantwright_core::motion::chart::SensorKind;
 
     #[test]
     fn candidates_follow_actuator_kind_and_limits() {

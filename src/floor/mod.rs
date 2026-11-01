@@ -2,9 +2,9 @@
 //!
 //! | ファイル | 役割 |
 //! | --- | --- |
-//! | `cadsim_core::floor` | 床の上の長方形・距離 (geom)、作業者の時刻表 (operator_plan)、AGV の配車 (agv_sim) |
-//! | `cadsim_core::floor::figure` | 作業者と AGV の 3D の形・歩く動き・向き |
-//! | `cadsim_core::floor::figure_motion` | 動きのクリップ (歩く・作業・待つ、車輪・荷) と切り替えで混ぜる重み |
+//! | `plantwright_core::floor` | 床の上の長方形・距離 (geom)、作業者の時刻表 (operator_plan)、AGV の配車 (agv_sim) |
+//! | `plantwright_core::floor::figure` | 作業者と AGV の 3D の形・歩く動き・向き |
+//! | `plantwright_core::floor::figure_motion` | 動きのクリップ (歩く・作業・待つ、車輪・荷) と切り替えで混ぜる重み |
 //! | `figures.rs` | 作業者と AGV の 3D モデルの表示 (形をメッシュに、動きのクリップを Bevy のアニメーションに写す) |
 //! | `view.rs` | 歩行経路・AGV の通路の線と、床をクリックして点を置く操作 |
 //! | `heatmap_view.rs` | 人と AGV の動線のヒートマップ (床に敷く色と PNG の書き出し) |
@@ -13,7 +13,7 @@
 //! 作業者と AGV はタイミングチャートとは別の時計 ([`FloorClock`]) で動く。
 //! どちらも安全機器の検知の対象 (`SafetyIntruders`) に入り、AGV は安全停止中は止まる。
 
-pub use cadsim_core::floor::{agv_sim, figure, figure_motion, geom, heatmap, operator_plan};
+use plantwright_core::floor::{agv_sim, operator_plan};
 pub(crate) mod figures;
 mod heatmap_view;
 mod panel;
@@ -29,11 +29,11 @@ use bevy_egui::EguiPrimaryContextPass;
 
 use crate::floor_record::{FloorLayout, FloorRecord};
 use crate::history::{TrackDocExt, TrackedDoc};
-use crate::math::Aabb;
 use crate::safety::{Intruder, SafetyIntruders, SafetyLayoutRes, SafetySet, SafetyState};
 use crate::view::camera::pointer_in_3d_view;
 use agv_sim::{AgvGraph, AgvParams, AgvSim, FleetResult, Flow};
 use operator_plan::{Operator, OperatorPlan};
+use plantwright_core::math::Aabb;
 
 /// 作業者の体の大きさ (mm)
 const PERSON_RADIUS: f64 = 300.0;

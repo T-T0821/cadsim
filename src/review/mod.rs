@@ -3,8 +3,8 @@
 //! 1人がホストになって待ち受け、ほかの人が参加する。互いの視点 (アバター)・マウスで指している点・
 //! 「ここを見て」の印・選んだ部品・チャットを見せ合う。配置の変更を共有することもできる。
 //!
-//! - 受け渡しの規則と相手の様子の組み立ては `cadsim_core::review`
-//! - TCP と JSON は `cadsim_io::review`
+//! - 受け渡しの規則と相手の様子の組み立ては `plantwright_core::review`
+//! - TCP と JSON は `plantwright_core::review`
 //! - ここは「入力を集めて送る → 届いたものを Resource とカメラ・モデルに写す」だけ。
 //!   3D の表示は `view.rs`、パネルは `panel.rs`。
 
@@ -17,17 +17,18 @@ use bevy::{input::mouse::AccumulatedMouseScroll, prelude::*, window::PrimaryWind
 use bevy_egui::EguiPrimaryContextPass;
 use std::f32::consts::FRAC_PI_2;
 
-use cadsim_core::camera_path::CameraPose;
-use cadsim_core::model::NodeId;
-use cadsim_core::review::{
+use plantwright_core::camera_path::CameraPose;
+use plantwright_core::model::NodeId;
+use plantwright_core::review::{
     self as core_review, DEFAULT_PORT, Effect, Hub, Message, PROTOCOL_VERSION, PlacementTracker,
     ReviewSession, SendThrottle, ViewPose,
 };
-use cadsim_io::review::{LinkEvent, ReviewLink, local_addresses, parse_address};
+use plantwright_core::review::{LinkEvent, ReviewLink, local_addresses, parse_address};
 
-use crate::model::{Model, Selection};
+use crate::model::Selection;
 use crate::view::camera::{OrbitCamera, ViewportRect, alt_pressed};
 use crate::view::picking::PartUnderPointer;
+use plantwright_core::model::Model;
 
 pub struct ReviewPlugin;
 

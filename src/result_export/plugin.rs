@@ -13,9 +13,12 @@ use bevy::{
 };
 
 use crate::file_io::ImportJobs;
-use crate::model::Model;
-use crate::motion::{ChartSchedule, Schedule, TimingChart};
-use crate::simulation::{InterferenceCheck, SimBody, interference::CheckSettings};
+use crate::motion::ChartSchedule;
+use crate::simulation::{InterferenceCheck, SimBody};
+use plantwright_core::model::Model;
+use plantwright_core::motion::chart::Schedule;
+use plantwright_core::motion::chart::TimingChart;
+use plantwright_core::simulation::interference::CheckSettings;
 
 use super::report::{self, SweepBody};
 

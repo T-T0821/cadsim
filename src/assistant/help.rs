@@ -1,6 +1,6 @@
 //! 「AI に聞く」ウィンドウ: 使い方を会話で質問する
 //!
-//! 質問の組み立てと返事の読み取りは `cadsim_core::usecase::help`。
+//! 質問の組み立てと返事の読み取りは `plantwright_core::assistant::help`。
 //! ここは画面の様子を集めて渡し、答えと「開く」ボタンを出すだけにする。
 //! 他の画面からは [`HelpChat::ask`] で質問文を入れた状態で開ける。
 
@@ -9,15 +9,16 @@ use bevy_egui::{EguiContexts, egui};
 
 use super::AiAssistant;
 use super::job::LlmJob;
-use crate::model::{Model, Selection};
-use crate::motion::TimingChart;
+use crate::model::Selection;
 use crate::ui::dock::{self, Dock};
 use crate::ui::playful::PlayfulUi;
 use crate::ui::theme::palette;
 use crate::view::camera::ViewportRect;
-use cadsim_core::usecase::help::{self, Answer, HelpContext};
-use cadsim_core::usecase::llm::LlmMessage;
-use cadsim_core::workspace::Tool;
+use plantwright_core::assistant::help::{self, Answer, HelpContext};
+use plantwright_core::assistant::llm::LlmMessage;
+use plantwright_core::model::Model;
+use plantwright_core::motion::chart::TimingChart;
+use plantwright_core::workspace::Tool;
 
 /// 質問の例 (会話が空のときにボタンで出す)
 const EXAMPLES: [&str; 4] = [

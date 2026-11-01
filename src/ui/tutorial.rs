@@ -1,6 +1,6 @@
 //! 最初の5分の体験: ようこそ画面、ミッションカードの手順、操作する場所を指す矢印
 //!
-//! ミッションの中身 (章・手順・使うキー・操作する場所) は `cadsim_core::gamify` にあり、
+//! ミッションの中身 (章・手順・使うキー・操作する場所) は `plantwright_core::gamify` にあり、
 //! ここはそれを画面に出し、ボタンの操作を `PlayfulUi` と各 Resource に伝えるだけにする。
 
 use bevy::prelude::*;
@@ -17,7 +17,7 @@ use crate::assistant::help::HelpChat;
 use crate::motion::Playback;
 use crate::project::{ProjectAction, ProjectState};
 use crate::view::camera::ViewportRect;
-use cadsim_core::gamify::{Chapter, MISSIONS, Mission, Part, Place};
+use plantwright_core::gamify::{Chapter, MISSIONS, Mission, Part, Place};
 
 /// 手順を出しているときのミッションカードの幅
 pub const CARD_WIDTH_WITH_STEPS: f32 = 310.0;

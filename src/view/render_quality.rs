@@ -1,8 +1,8 @@
 //! 3D ビューの描画の質 (UI 層): 影・環境光・SSAO・ブルーム・アンチエイリアス
 //!
-//! どの段階で何を使うか、影や陰影をどの範囲に落とすかは `cadsim_core::render_quality` が決め、
+//! どの段階で何を使うか、影や陰影をどの範囲に落とすかは `plantwright_core::render_quality` が決め、
 //! ここではそれを 3D カメラと主光源のコンポーネントに写すだけにする。
-//! 選んだ段階は `cadsim_io::render_settings` で設定フォルダの `render.json` に保存する。
+//! 選んだ段階は `plantwright_core::render_settings` で設定フォルダの `render.json` に保存する。
 
 use std::path::PathBuf;
 
@@ -18,16 +18,16 @@ use bevy::post_process::bloom::Bloom;
 use bevy::prelude::*;
 use bevy_egui::egui;
 
-use cadsim_core::library::catalog::units_per_mm;
-use cadsim_core::render_quality::{
+use plantwright_core::library::catalog::units_per_mm;
+use plantwright_core::render_quality::{
     Antialias, AoLevel, OcclusionScale, RenderProfile, RenderQuality, ShadowRange, occlusion_scale,
     shadow_range, units_per_meter,
 };
-use cadsim_io::render_settings;
+use plantwright_core::render_settings;
 
 use super::camera::{CameraSystems, OrbitCamera};
 use super::viewport::SceneCache;
-use crate::model::Model;
+use plantwright_core::model::Model;
 
 /// 影を落とす主光源 (太陽の代わりの平行光)
 #[derive(Component)]

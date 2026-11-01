@@ -21,9 +21,12 @@ use transform_gizmo::{
 };
 
 use crate::history::History;
-use crate::math::{euler_deg_to_quat, quat_to_euler_deg};
-use crate::model::{Model, NodeKind, Selection};
+use crate::model::Selection;
 use crate::view::camera::{ViewportRect, alt_pressed};
+use plantwright_core::math::euler_deg_to_quat;
+use plantwright_core::math::quat_to_euler_deg;
+use plantwright_core::model::Model;
+use plantwright_core::model::NodeKind;
 
 /// 箱の寸法の下限 (スケールで潰れないようにする)
 const MIN_SIZE: f64 = 0.01;

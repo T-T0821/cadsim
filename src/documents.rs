@@ -8,12 +8,14 @@ use std::path::Path;
 use bevy::{ecs::system::NonSendMarker, prelude::*};
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 
-use crate::bom::make_bom;
-use crate::drawing::{DrawingOptions, collect::drawing_input, make_sheet};
-use crate::file_io::{ImportJobs, file_name};
-use crate::formats::{bom_out, drawing_out};
-use crate::model::Model;
+use crate::file_io::ImportJobs;
 use crate::project::ProjectState;
+use plantwright_core::bom::make_bom;
+use plantwright_core::drawing::DrawingOptions;
+use plantwright_core::drawing::collect::drawing_input;
+use plantwright_core::drawing::make_sheet;
+use plantwright_core::model::Model;
+use plantwright_core::model::file_name;
 
 pub struct DocumentsPlugin;
 
@@ -182,8 +184,8 @@ pub fn save_drawing(
         drawing_input(model, title.to_owned(), today()).ok_or("表示中の部品がありません")?;
     let sheet = make_sheet(&input, options);
     let bytes = match extension(path).as_str() {
-        "dxf" => drawing_out::write_dxf(&sheet, &model.unit).into_bytes(),
-        _ => drawing_out::write_pdf(&sheet)?,
+        "dxf" => plantwright_core::drawing::out::write_dxf(&sheet, &model.unit).into_bytes(),
+        _ => plantwright_core::drawing::out::write_pdf(&sheet)?,
     };
     let path = if path.extension().is_none() {
         path.with_extension("pdf")
@@ -199,8 +201,8 @@ pub fn save_bom(model: &Model, path: &Path) -> Result<(), String> {
         return Err("部品がありません".into());
     }
     let bytes = match extension(path).as_str() {
-        "csv" => bom_out::write_csv(&bom).into_bytes(),
-        _ => bom_out::write_xlsx(&bom)?,
+        "csv" => plantwright_core::bom::out::write_csv(&bom).into_bytes(),
+        _ => plantwright_core::bom::out::write_xlsx(&bom)?,
     };
     let path = if path.extension().is_none() {
         path.with_extension("xlsx")

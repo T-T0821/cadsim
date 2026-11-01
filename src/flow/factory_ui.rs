@@ -5,16 +5,16 @@
 //! - サンプル工場
 //! - 回した結果のラインごとの表
 //!
-//! 計算は `cadsim_core::flow::factory` にあり、ここは入力を集めて結果を表に写すだけ。
+//! 計算は `plantwright_core::flow::factory` にあり、ここは入力を集めて結果を表に写すだけ。
 
 use std::path::Path;
 
 use bevy_egui::egui::{self, Color32};
 
 use super::FlowRun;
-use super::factory::{line_summaries, sample_factory};
-use super::model::FlowModel;
-use super::record::from_record;
+use plantwright_core::flow::factory::{line_summaries, sample_factory};
+use plantwright_core::flow::model::FlowModel;
+use plantwright_core::flow::record::from_record;
 
 /// 工場タブだけが使う状態
 pub struct FactoryUiState {

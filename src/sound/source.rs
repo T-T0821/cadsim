@@ -11,7 +11,7 @@ use std::time::Duration;
 use bevy::audio::{ChannelCount, Decodable, SampleRate, Source};
 use bevy::prelude::*;
 
-use cadsim_core::sound::{Placement, SAMPLE_RATE};
+use plantwright_core::sound::{Placement, SAMPLE_RATE};
 
 /// 左右の大きさ (目標)。音を鳴らす側のスレッドから読む。
 #[derive(Default)]

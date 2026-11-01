@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 
-use cadsim_core::sound::SoundCategory;
+use plantwright_core::sound::SoundCategory;
 
 use super::SoundUi;
 use crate::view::camera::ViewportRect;

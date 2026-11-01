@@ -23,7 +23,7 @@ use bevy_rapier3d::prelude::{
 };
 use bevy_rapier3d::rapier::prelude::ColliderHandle;
 
-use cadsim_core::physics::world::{
+use plantwright_core::physics::world::{
     BodyDesc, BodyKey, BodyKind, Iso, PhysicsEngine, STEP_DT, ShapeDesc,
 };
 
@@ -301,7 +301,7 @@ pub fn headless_app(gravity: DVec3, meters_per_unit: f64) -> App {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cadsim_core::physics::world::{PhysicsRun, STEP_DT, box_triangles, indexed_mesh};
+    use plantwright_core::physics::world::{PhysicsRun, STEP_DT, box_triangles, indexed_mesh};
 
     fn cuboid(kind: BodyKind, center: DVec3, half: DVec3) -> BodyDesc {
         BodyDesc {

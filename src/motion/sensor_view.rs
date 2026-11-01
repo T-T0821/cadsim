@@ -7,10 +7,10 @@
 
 use bevy::prelude::*;
 
-use super::chart::TimingChart;
 use super::sensor::SensorKind;
 use super::ui::ChartUiState;
 use super::{SensorStates, SimulationPose, actuator_poses_of};
+use plantwright_core::motion::chart::TimingChart;
 
 const ON_COLOR: Color = Color::srgb(0.2, 0.9, 0.3);
 const BEAM_OFF_COLOR: Color = Color::srgb(0.95, 0.25, 0.2);

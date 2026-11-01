@@ -2480,48 +2480,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
-name = "cadsim_core"
-version = "0.1.0"
-dependencies = [
- "glam 0.33.12",
- "parry3d-f64",
- "truck-meshalgo",
- "truck-modeling",
- "truck-shapeops",
- "truck-stepio",
- "truck-topology",
-]
-
-[[package]]
-name = "cadsim_io"
-version = "0.1.0"
-dependencies = [
- "cadsim_core",
- "calamine",
- "csv",
- "e57",
- "encoding_rs",
- "glam 0.33.12",
- "gltf",
- "image",
- "krilla",
- "las",
- "lopdf",
- "openusd",
- "roxmltree",
- "rust_xlsxwriter",
- "serde",
- "serde_json",
- "stl_io",
- "tobj",
- "truck-meshalgo",
- "truck-modeling",
- "truck-stepio",
- "truck-topology",
- "ureq",
-]
-
-[[package]]
 name = "calamine"
 version = "0.30.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6265,8 +6223,6 @@ dependencies = [
  "bevy",
  "bevy_egui",
  "bevy_rapier3d",
- "cadsim_core",
- "cadsim_io",
  "e57",
  "encoding_rs",
  "gif",
@@ -6275,6 +6231,7 @@ dependencies = [
  "krilla",
  "lopdf",
  "openh264",
+ "plantwright_core",
  "rfd",
  "rhai",
  "rust_xlsxwriter",
@@ -6291,6 +6248,37 @@ dependencies = [
  "truck-topology",
  "winit",
  "winresource",
+]
+
+[[package]]
+name = "plantwright_core"
+version = "0.1.0"
+dependencies = [
+ "bevy_ecs",
+ "calamine",
+ "csv",
+ "e57",
+ "encoding_rs",
+ "glam 0.33.12",
+ "gltf",
+ "image",
+ "krilla",
+ "las",
+ "lopdf",
+ "openusd",
+ "parry3d-f64",
+ "roxmltree",
+ "rust_xlsxwriter",
+ "serde",
+ "serde_json",
+ "stl_io",
+ "tobj",
+ "truck-meshalgo",
+ "truck-modeling",
+ "truck-shapeops",
+ "truck-stepio",
+ "truck-topology",
+ "ureq",
 ]
 
 [[package]]

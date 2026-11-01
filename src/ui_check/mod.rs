@@ -4,9 +4,9 @@
 //! 書いてある操作を流して画面を撮り、基準画像と比べる (suite.rs)。
 //!
 //! 起動されたアプリの側 (このファイル) は、毎フレーム
-//! 「画面の様子を集める → `cadsim_core::ui_check::runner` に渡す → 返ってきた入力を流す・写真を撮る」
-//! だけをする。手順の進め方・部品の探し方・画像の比べ方は `cadsim_core::ui_check`、
-//! PNG・報告書の読み書きは `cadsim_io::ui_check`。
+//! 「画面の様子を集める → `plantwright_core::ui_check::runner` に渡す → 返ってきた入力を流す・写真を撮る」
+//! だけをする。手順の進め方・部品の探し方・画像の比べ方は `plantwright_core::ui_check`、
+//! PNG・報告書の読み書きは `plantwright_core::ui_check::files`。
 //!
 //! 入力は本物のマウス・キーボードと同じ Bevy のメッセージとして流すので、
 //! egui の画面もショートカットも 3D ビューのクリックも、手で触ったときと同じ経路を通る。
@@ -31,13 +31,13 @@ use bevy_egui::{
     EguiContexts, EguiInput, EguiOutput, EguiPreUpdateSet, EguiPrimaryContextPass,
     PrimaryEguiContext, egui,
 };
-use cadsim_core::ui_check::Rect as CheckRect;
-use cadsim_core::ui_check::compare::{Image as RgbaImage, Tolerance};
-use cadsim_core::ui_check::report::{ScenarioResult, ShotResult, judge};
-use cadsim_core::ui_check::runner::{Command, Failure, Input, Observation, Runner};
-use cadsim_core::ui_check::scenario::{self, Key, MouseButton as CheckButton};
-use cadsim_core::ui_check::widget::{self, Widget};
-use cadsim_io::ui_check as files;
+use plantwright_core::ui_check::Rect as CheckRect;
+use plantwright_core::ui_check::compare::{Image as RgbaImage, Tolerance};
+use plantwright_core::ui_check::files;
+use plantwright_core::ui_check::report::{ScenarioResult, ShotResult, judge};
+use plantwright_core::ui_check::runner::{Command, Failure, Input, Observation, Runner};
+use plantwright_core::ui_check::scenario::{self, Key, MouseButton as CheckButton};
+use plantwright_core::ui_check::widget::{self, Widget};
 
 use crate::file_io::{ImportJobs, open_any};
 use crate::input::command_line::{CommandLine, UiCheckRun};
@@ -378,7 +378,7 @@ fn save_shot(
     name: &str,
     actual: &RgbaImage,
     masks: &[CheckRect],
-) -> Result<cadsim_core::ui_check::report::ShotStatus, String> {
+) -> Result<plantwright_core::ui_check::report::ShotStatus, String> {
     let dir = scenario_dir(run);
     let baseline_file = baseline_path(run, name);
     let baseline = baseline_file

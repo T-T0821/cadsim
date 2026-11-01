@@ -1,7 +1,7 @@
 //! ファイルを選ぶ・落とす (UI 層の入力): ダイアログ、ドラッグ&ドロップ、起動時の引数
 //!
 //! ユーザーが選んだファイルを集めて、読み込み (`file_io`) やプロジェクト (`project`) に渡すだけにする。
-//! 読み込み・書き出しの処理そのものは `file_io` と `cadsim_io` にある。
+//! 読み込み・書き出しの処理そのものは `file_io` と `plantwright_core` にある。
 
 use std::path::Path;
 
@@ -9,13 +9,17 @@ use bevy::{ecs::system::NonSendMarker, prelude::*};
 
 use super::command_line::CommandLine;
 use crate::animation::Animations;
-use crate::file_io::{ExportScope, ImportJobs, export_model, file_name, open_any};
-use crate::formats::PLAN_EXTENSIONS;
-use crate::formats::pointcloud_read::CLOUD_EXTENSIONS;
-use crate::interchange::FORMATS;
-use crate::model::{Model, NodeId, Selection};
-use crate::motion::{ChartSchedule, TimingChart};
+use crate::file_io::{ExportScope, ImportJobs, export_model, open_any};
+use crate::model::Selection;
+use crate::motion::ChartSchedule;
 use crate::project::{OPEN_EXTENSIONS, ProjectAction, ProjectState};
+use plantwright_core::formats::FORMATS;
+use plantwright_core::model::Model;
+use plantwright_core::model::NodeId;
+use plantwright_core::model::file_name;
+use plantwright_core::motion::chart::TimingChart;
+use plantwright_core::site::plan_file::PLAN_EXTENSIONS;
+use plantwright_core::site::pointcloud_read::CLOUD_EXTENSIONS;
 
 pub struct FileDialogPlugin;
 

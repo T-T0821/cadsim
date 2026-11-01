@@ -8,11 +8,13 @@ use std::collections::HashMap;
 use bevy::math::{DMat4, DVec3};
 
 use super::file::CustomPart;
-use super::param::{CustomInstance, PartParam, TargetOnChart};
-use crate::formats::chart_record::chart_from_record;
-use crate::model::{Model, NodeId};
-use crate::motion::TimingChart;
+use super::param::TargetOnChart;
 use crate::project::LoadedProject;
+use plantwright_core::custom_part::{CustomInstance, PartParam};
+use plantwright_core::model::Model;
+use plantwright_core::model::NodeId;
+use plantwright_core::motion::chart::TimingChart;
+use plantwright_core::motion::record::chart_from_record;
 
 /// 置いた結果
 pub struct Placed {
@@ -82,7 +84,7 @@ pub fn place(
         for a in sub.actuators {
             let id = actuator_ids[&a.id];
             if let Some(slot) = chart.actuator_mut(id) {
-                *slot = crate::motion::Actuator {
+                *slot = plantwright_core::motion::chart::Actuator {
                     id,
                     name: format!("{prefix}{}", a.name),
                     pivot: (DVec3::from(a.pivot) + at).to_array(),
@@ -98,7 +100,7 @@ pub fn place(
         for s in sub.sensors {
             let id = sensor_ids[&s.id];
             if let Some(slot) = chart.sensors.iter_mut().find(|x| x.id == id) {
-                *slot = crate::motion::chart::Sensor {
+                *slot = plantwright_core::motion::chart::Sensor {
                     id,
                     name: format!("{prefix}{}", s.name),
                     position: (DVec3::from(s.position) + at).to_array(),
@@ -152,11 +154,13 @@ mod tests {
 
     use super::*;
     use crate::custom_part::file::{SaveRequest, build};
-    use crate::custom_part::param::{InstanceOnChart, ParamTarget};
-    use crate::model::{BoxPart, NodeKind};
-    use crate::motion::ActuatorKind;
-    use crate::motion::chart::SensorKind;
+    use crate::custom_part::param::InstanceOnChart;
     use crate::project::ProjectFile;
+    use plantwright_core::custom_part::ParamTarget;
+    use plantwright_core::model::BoxPart;
+    use plantwright_core::model::NodeKind;
+    use plantwright_core::motion::chart::ActuatorKind;
+    use plantwright_core::motion::chart::SensorKind;
 
     fn cube(model: &mut Model, parent: NodeId, name: &str, x: f64) -> NodeId {
         let part = BoxPart {

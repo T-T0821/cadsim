@@ -3,7 +3,7 @@
 //! 生成・工程・バッファ・排出をノーコードで並べ、ラインを数時間分早回しして、
 //! 設備ごとの稼働・待ち・詰まり・故障の割合、サイクルタイム、仕掛数、電力量・エア消費量を集計する。
 //!
-//! - `model` / `sim` / `palette` 工程モデル・シミュレーション・色 (`cadsim_core::flow` のドメイン)
+//! - `model` / `sim` / `palette` 工程モデル・シミュレーション・色 (`plantwright_core::flow` のドメイン)
 //! - `record`  プロジェクトファイルに書く形 (serde)
 //! - `xlsx`    結果の Excel 書き出し (rust_xlsxwriter)
 //! - `ui`      「工程シミュレーション」ウィンドウ
@@ -15,14 +15,14 @@
 //! このファイルは Bevy とのつなぎ: 工程モデルを包む Resource、早送りの再生、
 //! 3D の部品に塗る色 ([`FlowColors`]、viewport.rs が使う) を受け持つ。
 
-pub use cadsim_io::flow::{record, xlsx};
+use plantwright_core::flow::xlsx;
 mod factory_ui;
 mod plan_ui;
 mod scenario_ui;
 mod staff_ui;
 mod ui;
 
-pub use cadsim_core::flow::{factory, model, palette, plan, rewind, scenario, sim};
+use plantwright_core::flow::{model, palette, rewind, sim};
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -34,7 +34,8 @@ pub use ui::{FlowUi, show_window};
 
 use crate::file_io::ImportJobs;
 use crate::history::{TrackDocExt, TrackedDoc};
-use crate::model::{Model, NodeId};
+use plantwright_core::model::Model;
+use plantwright_core::model::NodeId;
 
 /// 工程モデルの編集を元に戻す履歴に載せる
 struct FlowDoc;

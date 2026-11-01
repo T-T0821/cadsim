@@ -6,15 +6,19 @@
 //! - 割り当てのルールと持ち場
 //! - 人数の比較 (1〜N 人で回して並べる)、ルールの比較 (同じ人で3つのルールを並べる)
 //!
-//! 計算は `cadsim_core::staffing` にあり、ここは入力を集めて結果を表に写すだけ。
+//! 計算は `plantwright_core::staffing` にあり、ここは入力を集めて結果を表に写すだけ。
 
 use bevy_egui::egui::{self, Color32};
-use cadsim_core::staffing::compare::{
+use plantwright_core::staffing::compare::{
     HeadcountComparison, RuleRow, compare_headcount, compare_rules, move_worker,
 };
-use cadsim_core::staffing::model::{AssignRule, Break, DAY, MAX_SPEED, MIN_SPEED, clock_label};
+use plantwright_core::staffing::model::{
+    AssignRule, Break, DAY, MAX_SPEED, MIN_SPEED, clock_label,
+};
 
-use super::model::{ElementId, FlowModel, KindTag, apply_sample_staffing, sample_line};
+use plantwright_core::flow::model::{
+    ElementId, FlowModel, KindTag, apply_sample_staffing, sample_line,
+};
 
 /// 人員タブだけが使う状態
 pub struct StaffUiState {

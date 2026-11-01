@@ -20,9 +20,11 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, HashMap};
 
 use super::runner::{ScriptHost, ScriptRunner, ScriptState};
-use crate::model::NodeId;
-use crate::motion::{Actuator, ActuatorKind, TimingChart};
 use crate::plc::{IoTable, IoValues, Point};
+use plantwright_core::model::NodeId;
+use plantwright_core::motion::chart::Actuator;
+use plantwright_core::motion::chart::ActuatorKind;
+use plantwright_core::motion::chart::TimingChart;
 
 /// 位置が着いたとみなす許容差 (PLC 連携の設備モデルと同じ)
 const TOLERANCE: f64 = 1e-6;

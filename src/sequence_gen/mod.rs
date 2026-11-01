@@ -13,7 +13,7 @@
 //! - このファイルと `ui`: Bevy のリソースと egui のウィンドウ
 //!
 //! チャートの型 (`TimingChart`) がまだアプリ側にあるので、ここもアプリ側に置いている。
-//! チャートが `cadsim_core` に移ったら、`spec`・`ladder`・`log_events`・`usecase` も一緒に移す。
+//! チャートが `plantwright_core` に移ったら、`spec`・`ladder`・`log_events`・`usecase` も一緒に移す。
 
 mod json;
 pub mod ladder;

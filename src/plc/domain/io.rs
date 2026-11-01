@@ -7,7 +7,7 @@
 //! | シリンダ | 出 (ON で出、OFF で戻) | 出端、戻端 |
 //! | 直動軸・回転テーブル | 指令位置 (ワード) | 現在位置 (ワード)、位置決め完了 |
 //!
-//! ライン連携 (`cadsim_core::line::signals`) の信号 (工程・AGV・安全の状態、運転・投入許可) も
+//! ライン連携 (`plantwright_core::line::signals`) の信号 (工程・AGV・安全の状態、運転・投入許可) も
 //! 同じ表の後ろに並べる。番号はライン連携の信号表の番号 (200 番台・300 番台) をそのまま使う。
 //!
 //! ビットはコイル、ワードは保持レジスタに割り付ける。番号は「出力ビット」「出力ワード」
@@ -15,9 +15,10 @@
 
 use std::collections::HashMap;
 
-use cadsim_core::line::{Direction, Signal, Value};
+use plantwright_core::line::{Direction, Signal, Value};
 
-use crate::motion::{ActuatorKind, TimingChart};
+use plantwright_core::motion::chart::ActuatorKind;
+use plantwright_core::motion::chart::TimingChart;
 
 /// 信号の意味。中の数値はアクチュエータの id。
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]

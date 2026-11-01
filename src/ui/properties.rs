@@ -5,12 +5,18 @@ use bevy_egui::egui;
 
 use super::UiState;
 use super::widgets::{length, round_for_display, row, xyz_editor};
-use crate::math::{euler_deg_to_quat, quat_to_euler_deg, split_placement};
-use crate::model::{NodeId, NodeKind};
 use crate::motion;
-use crate::physics::{BeltDrive, BodyMode, ColliderShape, LocalAxis};
 use crate::view::camera::CameraRequest;
 use crate::view::gizmo::snap_settings_ui;
+use plantwright_core::math::euler_deg_to_quat;
+use plantwright_core::math::quat_to_euler_deg;
+use plantwright_core::math::split_placement;
+use plantwright_core::model::NodeId;
+use plantwright_core::model::NodeKind;
+use plantwright_core::physics::settings::BeltDrive;
+use plantwright_core::physics::settings::BodyMode;
+use plantwright_core::physics::settings::ColliderShape;
+use plantwright_core::physics::settings::LocalAxis;
 
 pub fn show(root: &mut egui::Ui, state: &mut UiState) {
     egui::Panel::right("properties")
@@ -174,9 +180,9 @@ fn general_section(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
             ui.horizontal(|ui| {
                 let mut rgb = color.unwrap_or(match &node.kind {
                     NodeKind::Imported { shape, .. } | NodeKind::StandardBody { shape, .. } => {
-                        shape.color.unwrap_or(crate::model::DEFAULT_PART_COLOR)
+                        shape.color.unwrap_or(plantwright_core::model::DEFAULT_PART_COLOR)
                     }
-                    _ => crate::model::DEFAULT_PART_COLOR,
+                    _ => plantwright_core::model::DEFAULT_PART_COLOR,
                 });
                 if ui.color_edit_button_rgb(&mut rgb).changed() {
                     color = Some(rgb);

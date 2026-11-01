@@ -15,12 +15,13 @@ use bevy::{
     window::PrimaryWindow,
 };
 
-use crate::math::Aabb;
-use crate::model::{Model, Selection};
+use crate::model::Selection;
 use crate::view::gizmo::gizmo_not_focused;
 use crate::view::recording::Recorder;
 use crate::view::walk::not_walking;
-use cadsim_core::camera_path::CameraPose;
+use plantwright_core::camera_path::CameraPose;
+use plantwright_core::math::Aabb;
+use plantwright_core::model::Model;
 
 /// 透視投影の縦の画角 (Bevy の既定値と同じ 45°)
 pub const FOV_Y: f32 = FRAC_PI_4;

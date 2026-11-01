@@ -1,6 +1,6 @@
 //! 紹介動画のカメラワーク (UI 層)
 //!
-//! 通り道の計算は `cadsim_core::camera_path` が受け持つ。ここでは
+//! 通り道の計算は `plantwright_core::camera_path` が受け持つ。ここでは
 //! - 通り道を Resource に包み、元に戻す履歴に載せる
 //! - 動画の書き出し窓の「カメラワーク」欄 (視点を足す・時刻を変える・見る・消す、自動で作る)
 //! - 3D ビューに通り道を線で描く
@@ -15,7 +15,7 @@ use crate::history::{TrackDocExt, TrackedDoc};
 use crate::motion::{ChartSchedule, MotionSet, Playback};
 use crate::view::camera::{CameraSystems, OrbitCamera};
 use crate::view::recording::{RecordSettings, Recorder};
-use cadsim_core::camera_path::{CameraPath, CameraPose, Interpolation};
+use plantwright_core::camera_path::{CameraPath, CameraPose, Interpolation};
 
 pub struct CameraPathPlugin;
 

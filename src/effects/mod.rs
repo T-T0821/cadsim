@@ -1,6 +1,6 @@
 //! 状態のエフェクト (UI 層): 詰まり・故障・安全停止を光と煙で、溶接と干渉 (チャートの再生中) を火花で 3D ビューに出す
 //!
-//! どこに・どの見た目を出すか、粒の動きは `cadsim_core::effects`。ここでは毎フレーム
+//! どこに・どの見た目を出すか、粒の動きは `plantwright_core::effects`。ここでは毎フレーム
 //! 「工程・安全機器・干渉の状態を集める → 出す場所を決めて粒を進める → 表示に写す」だけをする。
 //!
 //! - 光: 加算合成の球 (きっかけごとに材質を 1 つ持ち、脈打つ強さを毎フレーム書き換える)
@@ -15,18 +15,18 @@ use std::collections::HashMap;
 use bevy::light::NotShadowCaster;
 use bevy::prelude::*;
 
-use cadsim_core::effects::{
+use plantwright_core::effects::{
     Cue, Emitter, EmitterKey, ParticleField, ParticleKind, collision_point, flow_emitters,
     ripple_phase, safety_beacon,
 };
-use cadsim_core::simulation::interference::PairStatus;
+use plantwright_core::simulation::interference::PairStatus;
 
 use crate::flow::{FlowRes, FlowRun};
-use crate::model::Model;
 use crate::motion::Playback;
 use crate::safety::{SafetyLayoutRes, SafetyState};
 use crate::simulation::InterferenceCheck;
 use crate::view::viewport::ViewSettings;
+use plantwright_core::model::Model;
 
 /// 煙の球の入れ物の上限 (粒の上限とは別に、描く数を抑える)
 const MAX_SMOKE_VISUALS: usize = 300;

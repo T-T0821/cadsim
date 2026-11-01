@@ -6,16 +6,16 @@
 //! - 回した結果: 納期達成率、注文ごとの完了時刻と遅れ、品種ごとの排出数、段取り替えの回数
 //!
 //! 品種ごとの加工時間・段取り替え・通る工程は「工程」タブの要素の設定で入れる。
-//! 計算は `cadsim_core::flow::plan` にあり、ここは入力を集めて結果を表に写すだけ。
+//! 計算は `plantwright_core::flow::plan` にあり、ここは入力を集めて結果を表に写すだけ。
 
 use bevy_egui::egui::{self, Color32};
-use cadsim_core::staffing::model::clock_label;
+use plantwright_core::staffing::model::clock_label;
 
 use super::FlowRun;
-use super::factory::sample_factory;
-use super::model::{FlowModel, KindTag, Order};
-use super::plan::{OrderStatus, apply_sample_plan, on_time_ratio, plan_from_rows};
-use cadsim_io::flow::plan_table::read_table;
+use plantwright_core::flow::factory::sample_factory;
+use plantwright_core::flow::model::{FlowModel, KindTag, Order};
+use plantwright_core::flow::plan::{OrderStatus, apply_sample_plan, on_time_ratio, plan_from_rows};
+use plantwright_core::flow::plan_table::read_table;
 
 /// 計画タブだけが使う状態
 #[derive(Default)]

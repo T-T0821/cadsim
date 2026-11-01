@@ -1,6 +1,6 @@
 //! I/O 対応表の CSV 書き出しと読み戻し (表の中身の組み立てと解釈)
 //!
-//! ここでは表を「行 × 欄の文字」で扱う。CSV の文字との変換は UI 層が `cadsim_io::csv_text` で行う。
+//! ここでは表を「行 × 欄の文字」で扱う。CSV の文字との変換は UI 層が `plantwright_core::formats::csv_text` で行う。
 //!
 //! 書き出した CSV を Excel などで編集し (番号・スケール・OPC UA ノード・ログの列名を PLC 側に合わせる)、
 //! 読み込むと各信号の個別設定 ([`PointSettings`]) になる。行は「信号」列の名前で突き合わせる。
@@ -141,8 +141,9 @@ pub fn apply_rows(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::motion::{ActuatorKind, TimingChart};
     use crate::plc::domain::io::Point;
+    use plantwright_core::motion::chart::ActuatorKind;
+    use plantwright_core::motion::chart::TimingChart;
 
     fn chart() -> (TimingChart, u32, u32) {
         let mut chart = TimingChart::default();

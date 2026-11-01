@@ -18,20 +18,24 @@ use crate::annotation::{Annotations, node_at_path};
 use crate::custom_part::CustomInstanceRecord;
 use crate::file_io::{load_source, source_name};
 use crate::floor_record::{FloorLayout, FloorRecord};
-use crate::flow::{self, model::FlowModel};
-use crate::formats::chart_record::chart_from_record;
-use crate::formats::conveyor_record;
-use crate::formats::site_record::load_site;
-use crate::interchange::UnitOptions;
 use crate::library::{self, PartKind, Spec};
-use crate::math::euler_deg_to_quat;
-use crate::model::{BoxPart, Model, NodeId, NodeKind, StepSource};
 use crate::physics::PartPhysicsRecord;
-use crate::site::model::Site;
-use crate::step_import::{ImportNode, ImportedShape};
-use cadsim_core::camera_path::CameraPath;
-use cadsim_core::conveyor::ConveyorConfig;
-use cadsim_core::motion::TimingChart;
+use plantwright_core::camera_path::CameraPath;
+use plantwright_core::conveyor::ConveyorConfig;
+use plantwright_core::flow::model::FlowModel;
+use plantwright_core::formats::UnitOptions;
+use plantwright_core::formats::step::ImportNode;
+use plantwright_core::formats::step::ImportedShape;
+use plantwright_core::math::euler_deg_to_quat;
+use plantwright_core::model::BoxPart;
+use plantwright_core::model::Model;
+use plantwright_core::model::NodeId;
+use plantwright_core::model::NodeKind;
+use plantwright_core::model::StepSource;
+use plantwright_core::motion::TimingChart;
+use plantwright_core::motion::record::chart_from_record;
+use plantwright_core::site::model::Site;
+use plantwright_core::site::record::load_site;
 
 /// 読み込みの終わったプロジェクト。形状は STEP から読み直してある。
 pub struct LoadedProject {
@@ -84,7 +88,7 @@ impl LoadedProject {
             &file.underlays,
             &file.point_clouds,
             base_dir,
-            crate::site::underlay::unit_in_mm(&file.unit),
+            plantwright_core::site::underlay::unit_in_mm(&file.unit),
             &mut warnings,
         );
         Self {
@@ -141,7 +145,7 @@ impl LoadedProject {
         let file = &self.file;
         let (annotations, skipped) = Annotations::from_records(&file.annotations, model);
         let (flow, flow_warnings) = match &file.flow {
-            Some(record) => flow::record::from_record(record, |path| {
+            Some(record) => plantwright_core::flow::record::from_record(record, |path| {
                 node_at_path(model, path).filter(|&id| model.get(id).is_some())
             }),
             None => (FlowModel::default(), Vec::new()),
@@ -160,7 +164,7 @@ impl LoadedProject {
             ));
         }
         let (conveyors, conveyor_warnings) =
-            conveyor_record::from_record(file.conveyors.as_ref(), find);
+            plantwright_core::conveyor::record::from_record(file.conveyors.as_ref(), find);
         warnings.extend(conveyor_warnings);
         let floor = file
             .floor
@@ -173,7 +177,7 @@ impl LoadedProject {
             ));
         }
         let camera_path =
-            crate::formats::camera_path_record::from_record(file.camera_path.as_ref());
+            plantwright_core::camera_path::record::from_record(file.camera_path.as_ref());
         OpenedDocs {
             camera_path,
             annotations,
@@ -335,7 +339,7 @@ pub fn load_real_robot_sample(dir: &Path) -> Result<LoadedProject, ProjectError>
 
 /// 本物の装置のサンプルを書き出すフォルダ。設定ファイルと同じ場所の `samples/real_robot`
 pub fn real_robot_sample_dir() -> PathBuf {
-    crate::preferences_file::default_path()
+    plantwright_core::preferences::default_path()
         .and_then(|p| p.parent().map(|dir| dir.join("samples").join("real_robot")))
         .unwrap_or_else(|| std::env::temp_dir().join("plantwright").join("real_robot"))
 }

@@ -3,7 +3,7 @@
 use crate::ui::dock::{self, Dock};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
-use cadsim_core::workspace::Tool;
+use plantwright_core::workspace::Tool;
 
 use super::ladder::{self, Direction};
 use super::log_events;
@@ -12,7 +12,7 @@ use super::usecase::{self, ExplainSource};
 use super::{SequenceGen, SourceKind, Tab};
 use crate::assistant::AiAssistant;
 use crate::assistant::job::LlmJob;
-use crate::motion::TimingChart;
+use plantwright_core::motion::chart::TimingChart;
 
 /// ログから取り出す変化の上限
 const MAX_LOG_EVENTS: usize = 3000;

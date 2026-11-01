@@ -16,10 +16,14 @@ use std::fmt::Write;
 
 use bevy::math::{DQuat, DVec3, EulerRot};
 
-use super::chart::{ActuatorKind, MoveKind, Robot, Schedule, TimingChart};
 use super::kinematics;
 use super::pose;
 use super::robot_time;
+use plantwright_core::motion::chart::ActuatorKind;
+use plantwright_core::motion::chart::MoveKind;
+use plantwright_core::motion::chart::Robot;
+use plantwright_core::motion::chart::Schedule;
+use plantwright_core::motion::chart::TimingChart;
 
 /// 出力信号の先頭番号 (ロボット以外のアクチュエータ)
 const OUTPUT_BASE: usize = 10;
@@ -344,8 +348,8 @@ pub fn unit_to_mm(unit: &str) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::Model;
     use crate::motion::demo;
+    use plantwright_core::model::Model;
 
     #[test]
     fn downward_tool_is_180_0_0() {

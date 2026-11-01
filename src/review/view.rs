@@ -8,11 +8,11 @@
 
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
-use cadsim_core::review::{PeerId, peer_color};
+use plantwright_core::review::{PeerId, peer_color};
 
 use super::Review;
-use crate::model::Model;
 use crate::view::camera::{OrbitCamera, ViewportRect};
+use plantwright_core::model::Model;
 
 /// チャットの吹き出しを出しておく秒数
 const BUBBLE_SECONDS: f64 = 6.0;

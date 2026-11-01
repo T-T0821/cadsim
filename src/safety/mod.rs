@@ -2,8 +2,8 @@
 //!
 //! | ファイル | 役割 |
 //! | --- | --- |
-//! | `cadsim_core::safety::device` | 機器のデータ、侵入の検知、停止信号のラッチ、ISO 13855 の安全距離 |
-//! | `cadsim_core::safety::check` | 動作範囲 (危険源) と、柵・ライトカーテンの距離の確認 |
+//! | `plantwright_core::safety::device` | 機器のデータ、侵入の検知、停止信号のラッチ、ISO 13855 の安全距離 |
+//! | `plantwright_core::safety::check` | 動作範囲 (危険源) と、柵・ライトカーテンの距離の確認 |
 //! | `view.rs` | 機器と動作範囲の 3D 表示 |
 //! | `panel.rs` | 「安全」パネル |
 //!
@@ -11,7 +11,7 @@
 //! ほかの機能は `SafetySet::Intruders` の中で書き足す。検知すると停止信号 ([`SafetyState::is_stopped`])
 //! を出し、タイミングチャートの再生を止める。リセットするまで再生できない。
 
-pub use cadsim_core::safety::{check, device};
+use plantwright_core::safety::{check, device};
 mod panel;
 mod view;
 
@@ -22,11 +22,12 @@ use bevy_egui::EguiPrimaryContextPass;
 
 pub use device::Intruder;
 
-use crate::math::Aabb;
-use crate::model::Model;
-use crate::motion::{ChartSchedule, MotionSet, Playback, SimulationPose, TimingChart};
+use crate::motion::{ChartSchedule, MotionSet, Playback, SimulationPose};
 use check::{Clearance, Envelope, check_clearances, motion_envelopes};
 use device::{Detection, SafetyLayout, SafetyMonitor, detect};
+use plantwright_core::math::Aabb;
+use plantwright_core::model::Model;
+use plantwright_core::motion::chart::TimingChart;
 
 pub struct SafetyPlugin;
 

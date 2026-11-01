@@ -3,10 +3,10 @@
 //! - `settings_file`: API キーとモデルの保存 (Bevy なし)
 //! - `job`: 問い合わせを別スレッドで走らせて結果を待つ (Bevy なし)
 //! - このファイルと `ui`: 設定を持つ Resource と「AI の設定」ウィンドウ
-//! - `help`: 「AI に聞く」ウィンドウ (使い方を会話で質問する。中身は `cadsim_core::usecase::help`)
+//! - `help`: 「AI に聞く」ウィンドウ (使い方を会話で質問する。中身は `plantwright_core::assistant::help`)
 //!
-//! 問い合わせ口のポート (`LlmClient`) は `cadsim_core::usecase::llm`、
-//! Claude API での実装は `cadsim_io::claude`。各機能は [`AiAssistant::client`] で呼び出し口を受け取り、
+//! 問い合わせ口のポート (`LlmClient`) は `plantwright_core::assistant::llm`、
+//! Claude API での実装は `plantwright_core::assistant::claude`。各機能は [`AiAssistant::client`] で呼び出し口を受け取り、
 //! [`job::LlmJob`] で別スレッドに投げる。
 
 pub mod help;
@@ -20,8 +20,8 @@ use std::sync::Arc;
 use bevy::prelude::*;
 use bevy_egui::EguiPrimaryContextPass;
 
-use cadsim_core::usecase::llm::LlmClient;
-use cadsim_io::claude::ClaudeClient;
+use plantwright_core::assistant::claude::ClaudeClient;
+use plantwright_core::assistant::llm::LlmClient;
 pub use settings_file::AiSettings;
 
 pub struct AssistantPlugin;

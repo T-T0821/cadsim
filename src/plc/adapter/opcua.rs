@@ -480,8 +480,9 @@ mod tests {
     #[test]
     #[ignore]
     fn exchanges_io_with_a_real_server() {
-        use crate::motion::{ActuatorKind, TimingChart};
         use crate::plc::domain::io::{AddressPlan, Point, PointSettings};
+        use plantwright_core::motion::chart::ActuatorKind;
+        use plantwright_core::motion::chart::TimingChart;
 
         let endpoint =
             std::env::var("PLANTWRIGHT_OPCUA_ENDPOINT").expect("PLANTWRIGHT_OPCUA_ENDPOINT");

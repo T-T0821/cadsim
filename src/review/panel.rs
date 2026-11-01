@@ -2,8 +2,8 @@
 
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
-use cadsim_core::review::{DEFAULT_PORT, peer_color};
-use cadsim_core::workspace::Tool;
+use plantwright_core::review::{DEFAULT_PORT, peer_color};
+use plantwright_core::workspace::Tool;
 
 use super::Review;
 use crate::project::ProjectState;
@@ -163,7 +163,7 @@ fn connected(ui: &mut egui::Ui, review: &mut Review, orbit: &OrbitCamera, projec
         ui.colored_label(color32(peer_color(me)), "●");
         ui.label(format!(
             "{} (自分)",
-            cadsim_core::review::clean_name(&review.form.name)
+            plantwright_core::review::clean_name(&review.form.name)
         ));
     });
     let mut follow = None;
@@ -171,7 +171,7 @@ fn connected(ui: &mut egui::Ui, review: &mut Review, orbit: &OrbitCamera, projec
         ui.horizontal(|ui| {
             ui.colored_label(color32(peer.info.color), "●");
             ui.label(&peer.info.name);
-            if peer.info.id == cadsim_core::review::HOST_ID {
+            if peer.info.id == plantwright_core::review::HOST_ID {
                 ui.weak("ホスト");
             }
             let following = review.session.following == Some(peer.info.id);

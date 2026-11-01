@@ -28,12 +28,14 @@ pub use ui::{CustomDrag, SaveDialog, palette_section, properties_section, save_w
 
 use crate::file_io::ImportJobs;
 use crate::history::History;
-use crate::library::catalog::units_per_mm;
-use crate::model::{Model, NodeId, Selection};
-use crate::motion::TimingChart;
+use crate::model::Selection;
 use crate::project::LoadedProject;
 use file::CustomPart;
 use param::InstanceOnChart;
+use plantwright_core::library::catalog::units_per_mm;
+use plantwright_core::model::Model;
+use plantwright_core::model::NodeId;
+use plantwright_core::motion::chart::TimingChart;
 
 /// 置く位置を丸める刻み (mm)。標準部品と同じ。
 const DROP_SNAP_MM: f64 = 10.0;
@@ -82,7 +84,7 @@ impl Default for CustomLibrary {
 
 /// 設定ファイルと同じ場所の `parts` フォルダ (例: ~/.config/plantwright/parts)
 fn default_dir() -> Option<PathBuf> {
-    let prefs = crate::preferences_file::default_path()?;
+    let prefs = plantwright_core::preferences::default_path()?;
     Some(prefs.parent()?.join("parts"))
 }
 

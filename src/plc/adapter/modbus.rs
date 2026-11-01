@@ -293,8 +293,9 @@ mod server_tests {
     use tokio_modbus::{ExceptionCode, Request, Response};
 
     use super::*;
-    use crate::motion::{ActuatorKind, TimingChart};
     use crate::plc::domain::io::{AddressPlan, Point};
+    use plantwright_core::motion::chart::ActuatorKind;
+    use plantwright_core::motion::chart::TimingChart;
 
     /// コイルと保持レジスタを 200 点ずつ持つだけの PLC
     #[derive(Clone, Default)]

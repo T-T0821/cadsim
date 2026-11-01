@@ -6,12 +6,15 @@ use bevy::math::DVec3;
 use bevy_egui::egui;
 
 use super::UiState;
-use crate::model::NodeId;
-use crate::modeling::{
-    BooleanOp, HoleAxis, HoleSpec, add_solid, apply_boolean, cylinder, drill_hole, extrude,
-    node_solid, parse_outline,
-};
-use cadsim_core::workspace::Tool;
+use crate::modeling::{add_solid, apply_boolean, drill_hole, node_solid};
+use plantwright_core::model::NodeId;
+use plantwright_core::modeling::BooleanOp;
+use plantwright_core::modeling::HoleAxis;
+use plantwright_core::modeling::HoleSpec;
+use plantwright_core::modeling::cylinder;
+use plantwright_core::modeling::extrude;
+use plantwright_core::modeling::parse_outline;
+use plantwright_core::workspace::Tool;
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub enum Tab {

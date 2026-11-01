@@ -1,6 +1,6 @@
 //! 動画書き出しの UI 層: 設定ウィンドウと画面のキャプチャ
 //!
-//! 撮る時刻と枚数は `cadsim_core::video` が決める。ここでは再生位置をその時刻に合わせて描画し、
+//! 撮る時刻と枚数は `plantwright_core::video` が決める。ここでは再生位置をその時刻に合わせて描画し、
 //! キャプチャが届くまで次の時刻に進まない (PC の速さや描画の重さに関係なく同じ動画になる)。
 //!
 //! 書き出し中は設定ウィンドウを隠し、進み具合はウィンドウのタイトルに出す。
@@ -20,8 +20,8 @@ use crate::motion::{ChartSchedule, MotionSet, Playback};
 use crate::video::encode::{EncodeSettings, EncoderThread};
 use crate::view::camera::{CameraSystems, OrbitCamera, ViewportRect};
 use crate::view::camera_path::{CameraPathRes, CameraPathUi, camera_path_ui};
-use cadsim_core::camera_path::{CameraPath, CameraPose};
-use cadsim_core::video::{CropRect, Format, Frame, FramePlan, RecordingSession};
+use plantwright_core::camera_path::{CameraPath, CameraPose};
+use plantwright_core::video::{CropRect, Format, Frame, FramePlan, RecordingSession};
 
 pub struct RecordingPlugin;
 

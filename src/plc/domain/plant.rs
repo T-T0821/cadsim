@@ -6,7 +6,9 @@
 use std::collections::HashMap;
 
 use super::io::{IoValues, Point};
-use crate::motion::{Actuator, ActuatorKind, TimingChart};
+use plantwright_core::motion::chart::Actuator;
+use plantwright_core::motion::chart::ActuatorKind;
+use plantwright_core::motion::chart::TimingChart;
 
 /// 位置が一致しているとみなす許容差 (シリンダは 0..1、直動はモデル単位、回転は度)
 const TOLERANCE: f64 = 1e-6;
@@ -107,7 +109,8 @@ pub fn travel_speed(chart: &TimingChart, actuator: &Actuator) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::motion::{Action, chart::Step};
+    use plantwright_core::motion::chart::Action;
+    use plantwright_core::motion::chart::Step;
 
     #[test]
     fn cylinder_reaches_end_switch_after_its_duration() {

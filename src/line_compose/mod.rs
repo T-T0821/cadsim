@@ -14,19 +14,20 @@ pub mod apply;
 use crate::ui::dock::{self, Dock};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
-use cadsim_core::workspace::Tool;
+use plantwright_core::workspace::Tool;
 
-use cadsim_core::line_draft::EquipmentKind;
-use cadsim_core::usecase::compose_line::{ComposedLine, LineDraftAi, compose_line};
-use cadsim_io::line_draft_json::LlmLineDrafter;
+use plantwright_core::line_draft::EquipmentKind;
+use plantwright_core::line_draft::compose::{ComposedLine, LineDraftAi, compose_line};
+use plantwright_core::line_draft::json::LlmLineDrafter;
 
 use crate::assistant::AiAssistant;
 use crate::assistant::job::LlmJob;
 
 use crate::conveyor::ConveyorConfigRes;
 use crate::history::History;
-use crate::model::{Model, Selection};
-use crate::motion::TimingChart;
+use crate::model::Selection;
+use plantwright_core::model::Model;
+use plantwright_core::motion::chart::TimingChart;
 
 pub struct LineComposePlugin;
 

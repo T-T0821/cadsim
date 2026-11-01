@@ -1,13 +1,13 @@
 //! 画面左端のツールレールと、3D ビューに浮かべるパネルの開け閉め
 //!
-//! 道具の一覧と「どれを開いているか」は `cadsim_core::workspace` が持つ。
+//! 道具の一覧と「どれを開いているか」は `plantwright_core::workspace` が持つ。
 //! ここはそれを Bevy の Resource に包み、レールのボタンとパネルの枠を描くだけにする。
 
 use bevy::prelude::*;
 use bevy_egui::egui::{self, Align2, Color32, CornerRadius, Stroke, pos2, vec2};
 
 use super::theme::palette;
-use cadsim_core::workspace::{Tool, ToolGroup, Workspace};
+use plantwright_core::workspace::{Tool, ToolGroup, Workspace};
 
 /// 開いている道具 (UI 層の包み)
 #[derive(Resource, Default, Deref, DerefMut)]

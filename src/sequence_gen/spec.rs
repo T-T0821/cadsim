@@ -5,8 +5,12 @@
 //!
 //! Bevy・egui・ファイル形式に依存しない。
 
-use crate::motion::chart::{Interlock, SensorKind};
-use crate::motion::{Action, ActuatorKind, Step, TimingChart};
+use plantwright_core::motion::chart::Action;
+use plantwright_core::motion::chart::ActuatorKind;
+use plantwright_core::motion::chart::Interlock;
+use plantwright_core::motion::chart::SensorKind;
+use plantwright_core::motion::chart::Step;
+use plantwright_core::motion::chart::TimingChart;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ActuatorSpec {

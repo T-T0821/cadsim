@@ -5,8 +5,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use cadsim_core::physics::cable::{Cable, CableAnchor, CableKind};
-use cadsim_core::physics::settings::{BeltDrive, BodyMode, ColliderShape, LocalAxis, PartPhysics};
+use plantwright_core::physics::cable::{Cable, CableAnchor, CableKind};
+use plantwright_core::physics::settings::{
+    BeltDrive, BodyMode, ColliderShape, LocalAxis, PartPhysics,
+};
 
 /// 部品1つ分の物理の設定。既定値の項目は省く。
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]

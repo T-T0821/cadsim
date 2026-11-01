@@ -5,7 +5,7 @@
 
 use bevy::math::DVec3;
 
-use super::chart::Robot;
+use plantwright_core::motion::chart::Robot;
 
 /// この角度 (度) より軸に近い向きは、軸の向きにそろえる
 pub const AXIS_SNAP_DEGREES: f64 = 10.0;

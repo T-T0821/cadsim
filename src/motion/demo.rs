@@ -21,11 +21,18 @@
 //! 旋回 (J1) + 肩・肘・手首 (J2〜J4) のアームと、手首に載ったグリッパのシリンダ。
 //! コンベア上の教示点から置き台の上の教示点へ、工具を下向きにしたまま運ぶ。
 
-use super::chart::{Action, ActuatorKind, Axis, Interlock, MoveKind, RobotMove, Step, TimingChart};
 use super::sensor::SensorKind;
-use cadsim_core::conveyor::{BeltAxis, ConveyorConfig, ConveyorEnd, SourceOutput};
+use plantwright_core::conveyor::{BeltAxis, ConveyorConfig, ConveyorEnd, SourceOutput};
+use plantwright_core::motion::chart::Action;
+use plantwright_core::motion::chart::ActuatorKind;
+use plantwright_core::motion::chart::Axis;
+use plantwright_core::motion::chart::Interlock;
+use plantwright_core::motion::chart::MoveKind;
+use plantwright_core::motion::chart::RobotMove;
+use plantwright_core::motion::chart::Step;
+use plantwright_core::motion::chart::TimingChart;
 
-use crate::model::Model;
+use plantwright_core::model::Model;
 
 /// 寸法は mm。下の数値は 100 mm 単位で考えたものを `add` などで掛けている。
 const S: f64 = 100.0;

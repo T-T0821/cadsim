@@ -1,6 +1,6 @@
 //! ワーク搬送 (投入口・コンベア・グリッパ・排出口) のアプリ側
 //!
-//! 計算は `cadsim_core::conveyor` にあり、ここは次だけを行う。
+//! 計算は `plantwright_core::conveyor` にあり、ここは次だけを行う。
 //! - 入力を集める: 設定、投入口・排出口・ベルトにする部品の外接箱、タイミングチャートの再生位置
 //! - `ConveyorSim::seek` を呼ぶ (グリッパと動く台は [`ChartMotion`] がチャートから求める)
 //!   ライン連携で再生している間は、ラインの時計で前へだけ進める ([`WorkState::with_line`])
@@ -21,19 +21,22 @@ use std::collections::HashMap;
 
 use bevy::prelude::*;
 use bevy_egui::EguiPrimaryContextPass;
-use cadsim_core::conveyor::{
+use glam::DVec3;
+use plantwright_core::conveyor::{
     Bounds, Carrier, ConveyorConfig, ConveyorInputs, ConveyorSim, Counts, CycleClock, Gripper,
     GripperState, MachineMotion, Place, Pose, Work,
 };
-use cadsim_core::line::ConveyorLink;
-use glam::DVec3;
+use plantwright_core::line::ConveyorLink;
 
 use crate::history::{TrackDocExt, TrackedDoc};
-use crate::model::{Model, NodeId};
-use crate::motion::{
-    ActuatorKind, ChartSchedule, MotionSet, Playback, RigidPose, Schedule, TimingChart,
-    actuator_poses,
-};
+use crate::motion::{ChartSchedule, MotionSet, Playback};
+use plantwright_core::model::Model;
+use plantwright_core::model::NodeId;
+use plantwright_core::motion::chart::ActuatorKind;
+use plantwright_core::motion::chart::Schedule;
+use plantwright_core::motion::chart::TimingChart;
+use plantwright_core::motion::pose::RigidPose;
+use plantwright_core::motion::pose::actuator_poses;
 
 pub struct ConveyorPlugin;
 

@@ -1,6 +1,6 @@
 //! 結果の CSV を 1 行ずつ積む入れ物
 //!
-//! 文字への変換 (BOM 付き UTF-8・CRLF・必要な欄だけ引用符) は [`cadsim_io::csv_text::write`] がする。
+//! 文字への変換 (BOM 付き UTF-8・CRLF・必要な欄だけ引用符) は [`plantwright_core::formats::csv_text::write`] がする。
 
 /// 1行ずつ積んで、最後に文字列にする CSV
 #[derive(Default)]
@@ -22,7 +22,7 @@ impl Csv {
     }
 
     pub fn into_string(self) -> String {
-        cadsim_io::csv_text::write(self.rows)
+        plantwright_core::formats::csv_text::write(self.rows)
     }
 }
 

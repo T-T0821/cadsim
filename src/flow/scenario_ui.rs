@@ -4,12 +4,14 @@
 //! - 案の読み込み・名前の変更・削除
 //! - 繰り返しの回数を決めて、今の設定とすべての案を回して並べる
 //!
-//! 計算は `cadsim_core::flow::scenario` にあり、ここは入力を集めて結果を表に写すだけ。
+//! 計算は `plantwright_core::flow::scenario` にあり、ここは入力を集めて結果を表に写すだけ。
 
 use bevy_egui::egui::{self, Color32};
 
-use super::model::FlowModel;
-use super::scenario::{MAX_REPLICATIONS, ScenarioComparison, Summary, compare_scenarios};
+use plantwright_core::flow::model::FlowModel;
+use plantwright_core::flow::scenario::{
+    MAX_REPLICATIONS, ScenarioComparison, Summary, compare_scenarios,
+};
 
 /// 案の比較タブだけが使う状態
 pub struct ScenarioUiState {

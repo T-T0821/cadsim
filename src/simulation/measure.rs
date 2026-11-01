@@ -118,7 +118,8 @@ fn snap(
     let local_hit = to_local.apply(hit.as_dvec3());
     // 吸着の候補は、クリック位置の周りの三角形の頂点だけ
     let radius = camera_transform.translation().distance(hit) as f64 * 0.05;
-    let region = super::geometry::Aabb::from_points([local_hit]).expanded(radius);
+    let region =
+        plantwright_core::simulation::geometry::Aabb::from_points([local_hit]).expanded(radius);
     let mut best: Option<(f32, DVec3)> = None;
     body.mesh.for_each_in(&region, |triangle| {
         for &vertex in triangle {

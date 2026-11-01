@@ -6,8 +6,8 @@
 use serde::{Deserialize, Serialize};
 
 use super::spec::{ActionSpec, ActuatorSpec, InterlockSpec, SensorSpec, SequenceSpec, StepSpec};
-use crate::motion::ActuatorKind;
-use crate::motion::chart::SensorKind;
+use plantwright_core::motion::chart::ActuatorKind;
+use plantwright_core::motion::chart::SensorKind;
 
 /// 生成 AI に渡す JSON Schema (構造化出力の決まりに合わせ、すべての項目を必須・余分な項目なしにする)
 pub const SCHEMA: &str = r#"{
@@ -156,7 +156,7 @@ fn parse_kind(name: &str) -> Option<ActuatorKind> {
 
 /// 生成 AI の返事 (JSON) を下書きにする。前後に文章やコードブロックが付いていてもよい。
 pub fn parse(text: &str) -> Result<SequenceSpec, String> {
-    let json = cadsim_core::usecase::llm::extract_json(text)
+    let json = plantwright_core::assistant::llm::extract_json(text)
         .ok_or_else(|| "返事に JSON がありませんでした".to_string())?;
     let record: SpecRecord =
         serde_json::from_str(json).map_err(|e| format!("JSON の形が違います: {e}"))?;

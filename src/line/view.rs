@@ -1,6 +1,6 @@
 //! ライン連携中のワークの 3D 表示
 //!
-//! 位置の計算は `cadsim_core::line::workpieces`。ここではギズモの立方体で描くだけ。
+//! 位置の計算は `plantwright_core::line::workpieces`。ここではギズモの立方体で描くだけ。
 //! 毎フレーム数も位置も変わるので、メッシュは作らない。
 
 use std::collections::HashMap;
@@ -8,13 +8,13 @@ use std::collections::HashMap;
 use bevy::math::DVec3;
 use bevy::prelude::*;
 
-use cadsim_core::line::workpieces::{arc, element_anchors, stack};
+use plantwright_core::line::workpieces::{arc, element_anchors, stack};
 
 use super::LineState;
-use crate::floor::agv_sim::AgvSim;
 use crate::floor::{AGV_HEIGHT, AgvLayoutRes, FloorState};
 use crate::flow::{FlowRes, FlowRun};
-use crate::model::Model;
+use plantwright_core::floor::agv_sim::AgvSim;
+use plantwright_core::model::Model;
 
 /// ワークの一辺 (mm)
 const WORK_SIZE: f64 = 150.0;

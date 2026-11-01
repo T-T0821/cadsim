@@ -11,8 +11,10 @@ use bevy::ecs::change_detection::DetectChangesMut;
 use bevy_egui::egui;
 
 use super::UiState;
-use crate::model::{Model, NodeId, NodeKind};
 use crate::view::camera::CameraRequest;
+use plantwright_core::model::Model;
+use plantwright_core::model::NodeId;
+use plantwright_core::model::NodeKind;
 
 pub fn show(root: &mut egui::Ui, state: &mut UiState) {
     // ホバーは毎フレーム付け直す。値が変わったときだけ「選択が変わった」扱いにする

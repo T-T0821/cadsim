@@ -2,9 +2,9 @@
 //!
 //! | ファイル | 役割 |
 //! | --- | --- |
-//! | `cadsim_core::site::underlay` | 下敷きの配置と縮尺合わせの計算 (ドメイン) |
-//! | `cadsim_core::site::pointcloud` | 点群の間引き・LOD・設備との干渉と距離 (ドメイン) |
-//! | `cadsim_core::site::model` | プロジェクトに属する現場データの入れ物 (ドメイン) |
+//! | `plantwright_core::site::underlay` | 下敷きの配置と縮尺合わせの計算 (ドメイン) |
+//! | `plantwright_core::site::pointcloud` | 点群の間引き・LOD・設備との干渉と距離 (ドメイン) |
+//! | `plantwright_core::site::model` | プロジェクトに属する現場データの入れ物 (ドメイン) |
 //! | `cloud_view.rs` | 点群の 3D 表示 (LOD) と、干渉チェックの実行・表示 |
 //! | `view.rs` | 下敷きの 3D 表示 |
 //! | `panel.rs` | 「平面図」パネル |
@@ -16,7 +16,7 @@ mod cloud_view;
 mod panel;
 mod view;
 
-pub use cadsim_core::site::{model, pointcloud, underlay};
+use plantwright_core::site::{model, pointcloud, underlay};
 
 use std::path::PathBuf;
 use std::sync::{
@@ -29,13 +29,14 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use bevy_egui::EguiPrimaryContextPass;
 
-use crate::file_io::{ImportJobs, file_name};
-use crate::formats::pointcloud_read::{default_settings, is_cloud_file, read_cloud};
-use crate::formats::read_plan_file;
+use crate::file_io::ImportJobs;
 use crate::history::{TrackDocExt, TrackedDoc};
-use crate::model::Model;
 use crate::view::camera::{CameraRequest, ViewportRect, alt_pressed, pointer_in_3d_view};
 use model::Site;
+use plantwright_core::model::Model;
+use plantwright_core::model::file_name;
+use plantwright_core::site::plan_file::read_plan_file;
+use plantwright_core::site::pointcloud_read::{default_settings, is_cloud_file, read_cloud};
 use pointcloud::{CloudSettings, PlacedCloud, PointCloud};
 use underlay::{PlanContent, Underlay, unit_in_mm};
 
@@ -170,7 +171,7 @@ fn receive_loaded(
                     "{name} を点群として読み込みました ({} 点 → {} 点に間引き、間隔 {} {})",
                     format_count(seen),
                     format_count(kept as u64),
-                    crate::drawing::format_length(spacing),
+                    plantwright_core::drawing::format_length(spacing),
                     model.unit
                 )
             }
@@ -180,7 +181,7 @@ fn receive_loaded(
                 continue;
             }
         };
-        dock.set_open(cadsim_core::workspace::Tool::Site, true);
+        dock.set_open(plantwright_core::workspace::Tool::Site, true);
         camera.write(CameraRequest::FitAll);
         jobs.messages.push(message);
     }

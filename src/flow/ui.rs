@@ -13,17 +13,21 @@ use crate::ui::dock::{self, Dock};
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_egui::egui::{self, Color32, Pos2, Rect as ERect, Stroke, Vec2};
-use cadsim_core::workspace::Tool;
+use plantwright_core::workspace::Tool;
 
 use super::factory_ui::{FactoryUiState, factory_tab};
-use super::model::{ElementId, ElementKind, Failure, FlowModel, KindTag, Labor, sample_line};
-use super::palette::{busy_rgb, state_rgb};
 use super::plan_ui::{PlanUiState, plan_tab};
 use super::scenario_ui::{ScenarioUiState, scenario_tab};
-use super::sim::{Report, State, WorkerState};
 use super::staff_ui::{StaffUiState, staff_tab};
-use super::{ColorMode, FlowRes, FlowRun, rewind};
-use crate::model::{Model, Selection};
+use super::{ColorMode, FlowRes, FlowRun};
+use crate::model::Selection;
+use plantwright_core::flow::model::{
+    ElementId, ElementKind, Failure, FlowModel, KindTag, Labor, sample_line,
+};
+use plantwright_core::flow::palette::{busy_rgb, state_rgb};
+use plantwright_core::flow::rewind;
+use plantwright_core::flow::sim::{Report, State, WorkerState};
+use plantwright_core::model::Model;
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
 enum Tab {
@@ -455,7 +459,7 @@ fn element_row(
     flow: &FlowModel,
     run: &FlowRun,
     ui_state: &mut FlowUiState,
-    e: &super::model::Element,
+    e: &plantwright_core::flow::model::Element,
 ) {
     {
         let summary = match &e.kind {
@@ -740,7 +744,7 @@ fn element_editor(
 /// 品種ごとの設定: 生成の作る品種、工程の品種ごとの加工時間と段取り替え、受け取る品種
 fn product_editor(
     ui: &mut egui::Ui,
-    e: &mut super::model::Element,
+    e: &mut plantwright_core::flow::model::Element,
     tag: KindTag,
     products: &[(u32, String)],
     planned_source: bool,
@@ -783,10 +787,11 @@ fn product_editor(
                             .changed()
                         {
                             if own {
-                                e.product_times.push(super::model::ProductTime {
-                                    product: *id,
-                                    cycle_time: base,
-                                });
+                                e.product_times
+                                    .push(plantwright_core::flow::model::ProductTime {
+                                        product: *id,
+                                        cycle_time: base,
+                                    });
                             } else {
                                 e.product_times.retain(|t| t.product != *id);
                             }
@@ -910,7 +915,7 @@ fn seconds(ui: &mut egui::Ui, value: &mut f64) {
     ui.add(
         egui::DragValue::new(value)
             .speed(0.1)
-            .range(super::model::MIN_TIME..=1_000_000.0)
+            .range(plantwright_core::flow::model::MIN_TIME..=1_000_000.0)
             .max_decimals(2)
             .suffix(" 秒"),
     );
@@ -1182,7 +1187,9 @@ fn legend(ui: &mut egui::Ui) {
 }
 
 /// 状態を持つ要素 (生成と工程)
-fn charted(report: &Report) -> impl Iterator<Item = (usize, &super::sim::ElementStats)> {
+fn charted(
+    report: &Report,
+) -> impl Iterator<Item = (usize, &plantwright_core::flow::sim::ElementStats)> {
     report
         .elements
         .iter()

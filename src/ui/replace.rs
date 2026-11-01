@@ -3,7 +3,7 @@
 use bevy_egui::egui;
 
 use super::UiState;
-use crate::model::NodeId;
+use plantwright_core::model::NodeId;
 
 pub fn show(ctx: &egui::Context, state: &mut UiState) {
     let Some(summary) = &state.jobs.replace_summary else {

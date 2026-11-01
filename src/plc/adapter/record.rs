@@ -5,8 +5,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use cadsim_core::melsec::DeviceRef;
-use cadsim_io::slmp::{Encoding, FrameKind, Transport};
+use plantwright_core::plc::melsec::DeviceRef;
+use plantwright_core::plc::slmp::{Encoding, FrameKind, Transport};
 
 use super::Protocol;
 use super::modbus::ModbusSettings;
@@ -388,7 +388,7 @@ mod tests {
 
     #[test]
     fn round_trip_keeps_slmp_settings() {
-        use cadsim_core::melsec::Device;
+        use plantwright_core::plc::melsec::Device;
         let mut slmp = SlmpSettings {
             host: "192.168.0.39".into(),
             port: 5001,

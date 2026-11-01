@@ -20,8 +20,9 @@
 //!
 //! Bevy・egui・ファイル形式のライブラリに依存しない。
 
-use crate::motion::chart::INTERLOCK_TIMEOUT;
-use crate::motion::{ActuatorKind, TimingChart};
+use plantwright_core::motion::chart::ActuatorKind;
+use plantwright_core::motion::chart::INTERLOCK_TIMEOUT;
+use plantwright_core::motion::chart::TimingChart;
 
 /// I/O 表の向き
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -678,10 +679,10 @@ mod tests {
 
     #[test]
     fn many_steps_widen_device_blocks() {
-        let chart = TimingChart(cadsim_core::motion::TimingChart {
+        let chart = TimingChart {
             steps: vec![Default::default(); 150],
             ..Default::default()
-        });
+        };
         let ladder = generate(&chart);
         assert!(
             ladder

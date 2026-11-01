@@ -1,6 +1,6 @@
 //! 作業者と AGV の 3D モデルの表示
 //!
-//! 形と動きは `cadsim_core::floor::{figure, figure_motion}` が決める。ここでは
+//! 形と動きは `plantwright_core::floor::{figure, figure_motion}` が決める。ここでは
 //!
 //! - 形ごとにメッシュを 1回だけ作り、1体ぶんを「親 (位置・向き) + 形ごとの子」として並べる
 //! - 動きのクリップ (作業者は歩く・作業・待つ、AGV は車輪・荷) を Bevy の `AnimationClip` にし、
@@ -18,17 +18,17 @@ use bevy::curve::UnevenSampleAutoCurve;
 use bevy::math::DVec2;
 use bevy::prelude::*;
 
-use super::agv_sim::{AgvSim, Phase, Vehicle};
-use super::figure::{
+use super::{AGV_HEIGHT, FloorClock, FloorState, OperatorsRes, operator_position};
+use plantwright_core::floor::agv_sim::{AgvSim, Phase, Vehicle};
+use plantwright_core::floor::figure::{
     AgvPose, AgvStatus, FigurePart, Paint, PersonPose, Shape, agv_local_parts, heading_rotation,
     person_local_parts,
 };
-use super::figure_motion::{
+use plantwright_core::floor::figure_motion::{
     AgvDims, FigureClip, PERSON_ACTIVITIES, agv_cargo_amount, agv_cargo_clip, agv_roll_clip,
     agv_roll_time, person_clip, person_weights,
 };
-use super::operator_plan::Activity;
-use super::{AGV_HEIGHT, FloorClock, FloorState, OperatorsRes, operator_position};
+use plantwright_core::floor::operator_plan::Activity;
 
 /// 作業者と AGV の 3D モデルの部品 (ライブラリのドロップ先の判定などから外すための目印)
 #[derive(Component)]

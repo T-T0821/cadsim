@@ -6,7 +6,7 @@
 //! | `view.rs` | 3D のワーク (設備の上に積む・設備から設備へ渡る・AGV に積む) |
 //! | `panel.rs` | 「ライン連携」ウィンドウ (再生・つなぎ方・PLC の信号表) |
 //!
-//! 判断と計算は `cadsim_core::line` にある (工程・AGV・コンベアを少しずつ進めて出来事を受け渡すのは `stepper`)。このファイルは Bevy とのつなぎで、
+//! 判断と計算は `plantwright_core::line` にある (工程・AGV・コンベアを少しずつ進めて出来事を受け渡すのは `stepper`)。このファイルは Bevy とのつなぎで、
 //! 毎フレーム「止める条件を見る → 進める → 結果をタイミングチャートや表示に写す」だけをする。
 //! ライン連携で再生している間は、工程シミュレーションと作業者・AGV のそれぞれの再生ボタンは使わない
 //! (同じ時計で進めるため、それぞれの再生は止めておく)。
@@ -18,21 +18,22 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_egui::EguiPrimaryContextPass;
 
-use cadsim_core::flow::model::FlowModel;
-use cadsim_core::line::{
+use plantwright_core::flow::model::FlowModel;
+use plantwright_core::line::{
     ConveyorCounts, LineCoupler, LineInputs, LineParts, LineSnapshot, LineTimeline, Signal,
     SignalSources, line_signals, line_timeline, may_run, step,
 };
 
 use crate::conveyor::{ConveyorConfigRes, ConveyorSet, TimeMap, WorkState};
-use crate::model::Model;
+use plantwright_core::model::Model;
 
-use crate::floor::agv_sim::AgvSim;
 use crate::floor::{AgvLayoutRes, FloorClock, FloorState};
 use crate::flow::{FlowRes, FlowRun};
-use crate::motion::{ChartSchedule, MotionSet, Playback, TimingChart};
+use crate::motion::{ChartSchedule, MotionSet, Playback};
 use crate::plc::Plc;
 use crate::safety::{SafetySet, SafetyState};
+use plantwright_core::floor::agv_sim::AgvSim;
+use plantwright_core::motion::chart::TimingChart;
 
 pub struct LinePlugin;
 
@@ -215,7 +216,7 @@ impl LineState {
     }
 
     /// 詰まりを探す推移の記録 (いちばん先まで回したときの工程シミュレーション)
-    fn furthest_flow(&self) -> Option<&cadsim_core::flow::sim::Simulation> {
+    fn furthest_flow(&self) -> Option<&plantwright_core::flow::sim::Simulation> {
         self.timeline.last().and_then(|(_, s)| s.flow.as_ref())
     }
 }

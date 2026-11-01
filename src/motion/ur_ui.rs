@@ -1,16 +1,17 @@
 //! 実機の UR (Universal Robots) とつなぎ、受け取った関節角度でモデルのロボットを動かす画面
 //!
-//! 通信は `cadsim_io::rtde`、角度からモデルの関節の値への直し方は `live_joints` に置き、
+//! 通信は `plantwright_core::motion::rtde`、角度からモデルの関節の値への直し方は `live_joints` に置き、
 //! ここは「設定を集める → つなぐ → 受け取った値をジョグの値に写す」だけにする。
 
 use bevy::prelude::*;
 use bevy_egui::egui;
-use cadsim_io::rtde::{RtdeClient, RtdeSettings, RtdeStatus};
+use plantwright_core::motion::rtde::{RtdeClient, RtdeSettings, RtdeStatus};
 
 use super::JogPose;
-use super::chart::{Robot, TimingChart};
 use super::live_joints::{self, JOINT_COUNT, JointMap};
 use super::ui::{ERROR_COLOR, WARN_COLOR};
+use plantwright_core::motion::chart::Robot;
+use plantwright_core::motion::chart::TimingChart;
 
 /// 実機とのつながり (ロボットの画面の状態の一部)
 #[derive(Default)]
