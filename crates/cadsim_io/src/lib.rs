@@ -11,5 +11,6 @@ pub mod line_draft_json;
 pub mod modeled;
 pub mod preferences_file;
 pub mod rtde;
+pub mod slmp;
 pub mod step;
 pub mod ui_check;

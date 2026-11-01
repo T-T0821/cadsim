@@ -5,8 +5,14 @@
 
 use serde::{Deserialize, Serialize};
 
+use cadsim_core::melsec::DeviceRef;
+use cadsim_io::slmp::{Encoding, FrameKind, Transport};
+
+use super::Protocol;
 use super::modbus::ModbusSettings;
 use super::opcua::OpcUaSettings;
+use super::slmp::SlmpSettings;
+use crate::plc::domain::device_map::{DeviceArea, DeviceMap};
 use crate::plc::domain::io::{AddressPlan, Point, PointSettings};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -25,6 +31,11 @@ pub struct PlcRecord {
     pub use_opcua: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opcua: Option<OpcUaRecord>,
+    /// 外部 PLC と SLMP (三菱 PLC) でつなぐなら true。`use_opcua` より優先する。
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub use_slmp: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slmp: Option<SlmpRecord>,
 }
 
 fn is_false(v: &bool) -> bool {
@@ -37,13 +48,110 @@ pub struct OpcUaRecord {
     pub interval_ms: u64,
 }
 
+/// SLMP の接続先と、I/O 表の信号を置くデバイス (各領域の先頭を "M100" のような文字列で書く)
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct SlmpRecord {
+    pub host: String,
+    pub port: u16,
+    pub transport: TransportRecord,
+    pub frame: FrameRecord,
+    pub encoding: EncodingRecord,
+    pub poll_ms: u64,
+    pub output_bits: String,
+    pub output_words: String,
+    pub input_bits: String,
+    pub input_words: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum TransportRecord {
+    Tcp,
+    Udp,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FrameRecord {
+    #[serde(rename = "3E")]
+    E3,
+    #[serde(rename = "4E")]
+    E4,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum EncodingRecord {
+    Binary,
+    Ascii,
+}
+
 /// 保存する PLC 連携の設定一式
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct PlcSettings {
     pub plan: AddressPlan,
-    pub use_opcua: bool,
+    pub protocol: Protocol,
     pub modbus: ModbusSettings,
     pub opcua: OpcUaSettings,
+    pub slmp: SlmpSettings,
+}
+
+fn slmp_record(s: &SlmpSettings) -> SlmpRecord {
+    let area = |a: &DeviceArea| a.first().to_string();
+    SlmpRecord {
+        host: s.host.clone(),
+        port: s.port,
+        transport: match s.transport {
+            Transport::Tcp => TransportRecord::Tcp,
+            Transport::Udp => TransportRecord::Udp,
+        },
+        frame: match s.frame {
+            FrameKind::E3 => FrameRecord::E3,
+            FrameKind::E4 => FrameRecord::E4,
+        },
+        encoding: match s.encoding {
+            Encoding::Binary => EncodingRecord::Binary,
+            Encoding::Ascii => EncodingRecord::Ascii,
+        },
+        poll_ms: s.poll_ms,
+        output_bits: area(&s.devices.output_bits),
+        output_words: area(&s.devices.output_words),
+        input_bits: area(&s.devices.input_bits),
+        input_words: area(&s.devices.input_words),
+    }
+}
+
+fn slmp_settings(r: &SlmpRecord) -> SlmpSettings {
+    let defaults = DeviceMap::default();
+    // 読めない書き方なら、その領域は初期値にする
+    let area = |text: &str, default: DeviceArea| {
+        DeviceRef::parse(text).map_or(default, |d| DeviceArea {
+            device: d.device,
+            head: d.number,
+        })
+    };
+    SlmpSettings {
+        host: r.host.clone(),
+        port: r.port,
+        transport: match r.transport {
+            TransportRecord::Tcp => Transport::Tcp,
+            TransportRecord::Udp => Transport::Udp,
+        },
+        frame: match r.frame {
+            FrameRecord::E3 => FrameKind::E3,
+            FrameRecord::E4 => FrameKind::E4,
+        },
+        encoding: match r.encoding {
+            EncodingRecord::Binary => Encoding::Binary,
+            EncodingRecord::Ascii => Encoding::Ascii,
+        },
+        poll_ms: r.poll_ms,
+        devices: DeviceMap {
+            output_bits: area(&r.output_bits, defaults.output_bits),
+            output_words: area(&r.output_words, defaults.output_words),
+            input_bits: area(&r.input_bits, defaults.input_bits),
+            input_words: area(&r.input_words, defaults.input_words),
+        },
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -123,9 +231,10 @@ pub fn to_record(settings: &PlcSettings) -> Option<PlcRecord> {
     }
     let PlcSettings {
         plan,
-        use_opcua,
+        protocol,
         modbus,
         opcua,
+        slmp,
     } = settings;
     let modbus = (*modbus != ModbusSettings::default()).then(|| ModbusRecord {
         host: modbus.host.clone(),
@@ -137,6 +246,7 @@ pub fn to_record(settings: &PlcSettings) -> Option<PlcRecord> {
         endpoint: opcua.endpoint.clone(),
         interval_ms: opcua.interval_ms,
     });
+    let slmp = (*slmp != SlmpSettings::default()).then(|| slmp_record(slmp));
     let mut custom: Vec<PointRecord> = plan
         .custom
         .iter()
@@ -161,8 +271,10 @@ pub fn to_record(settings: &PlcSettings) -> Option<PlcRecord> {
         input_words: plan.input_words,
         custom,
         modbus,
-        use_opcua: *use_opcua,
+        use_opcua: *protocol == Protocol::OpcUa,
         opcua,
+        use_slmp: *protocol == Protocol::Slmp,
+        slmp,
     })
 }
 
@@ -208,11 +320,19 @@ pub fn from_record(record: Option<&PlcRecord>) -> PlcSettings {
         },
         None => OpcUaSettings::default(),
     };
+    let protocol = if r.use_slmp {
+        Protocol::Slmp
+    } else if r.use_opcua {
+        Protocol::OpcUa
+    } else {
+        Protocol::ModbusTcp
+    };
     PlcSettings {
         plan,
-        use_opcua: r.use_opcua,
+        protocol,
         modbus,
         opcua,
+        slmp: r.slmp.as_ref().map(slmp_settings).unwrap_or_default(),
     }
 }
 
@@ -254,9 +374,9 @@ mod tests {
         };
         let settings = PlcSettings {
             plan,
-            use_opcua: true,
+            protocol: Protocol::OpcUa,
             modbus,
-            opcua: OpcUaSettings::default(),
+            ..Default::default()
         };
         let record = to_record(&settings).unwrap();
         assert!(record.opcua.is_none());
@@ -264,5 +384,43 @@ mod tests {
         let json = serde_json::to_string(&record).unwrap();
         let parsed: PlcRecord = serde_json::from_str(&json).unwrap();
         assert_eq!(from_record(Some(&parsed)), settings);
+    }
+
+    #[test]
+    fn round_trip_keeps_slmp_settings() {
+        use cadsim_core::melsec::Device;
+        let mut slmp = SlmpSettings {
+            host: "192.168.0.39".into(),
+            port: 5001,
+            transport: Transport::Udp,
+            frame: FrameKind::E4,
+            encoding: Encoding::Ascii,
+            ..Default::default()
+        };
+        slmp.devices.output_bits = DeviceArea {
+            device: Device::Y,
+            head: 0x20,
+        };
+        let settings = PlcSettings {
+            protocol: Protocol::Slmp,
+            slmp,
+            ..Default::default()
+        };
+        let record = to_record(&settings).unwrap();
+        let json = serde_json::to_string(&record).unwrap();
+        assert!(json.contains(r#""output_bits":"Y20""#), "{json}");
+        assert!(json.contains(r#""frame":"4E""#), "{json}");
+        assert!(json.contains(r#""use_slmp":true"#), "{json}");
+        let parsed: PlcRecord = serde_json::from_str(&json).unwrap();
+        assert_eq!(from_record(Some(&parsed)), settings);
+    }
+
+    #[test]
+    fn old_files_without_slmp_still_open() {
+        let json = r#"{"output_bits":0,"output_words":0,"input_bits":100,"input_words":100,"use_opcua":true}"#;
+        let parsed: PlcRecord = serde_json::from_str(json).unwrap();
+        let settings = from_record(Some(&parsed));
+        assert_eq!(settings.protocol, Protocol::OpcUa);
+        assert_eq!(settings.slmp, SlmpSettings::default());
     }
 }

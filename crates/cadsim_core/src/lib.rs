@@ -17,6 +17,7 @@ pub mod library;
 pub mod line;
 pub mod line_draft;
 pub mod math;
+pub mod melsec;
 pub mod model;
 pub mod modeling;
 pub mod motion;

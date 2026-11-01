@@ -101,6 +101,39 @@ impl Default for AddressPlan {
     }
 }
 
+impl AddressPlan {
+    /// 各領域の先頭番号
+    pub fn starts(&self) -> AreaStarts {
+        AreaStarts {
+            output_bits: self.output_bits,
+            output_words: self.output_words,
+            input_bits: self.input_bits,
+            input_words: self.input_words,
+        }
+    }
+}
+
+/// 4つの領域の先頭番号 (I/O 表を作ったときの [`AddressPlan`] のもの)
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct AreaStarts {
+    pub output_bits: u16,
+    pub output_words: u16,
+    pub input_bits: u16,
+    pub input_words: u16,
+}
+
+impl AreaStarts {
+    /// 信号の向きと種類に合う領域の先頭番号
+    pub fn get(&self, output: bool, word: bool) -> u16 {
+        match (output, word) {
+            (true, false) => self.output_bits,
+            (true, true) => self.output_words,
+            (false, false) => self.input_bits,
+            (false, true) => self.input_words,
+        }
+    }
+}
+
 /// 1つの信号の個別設定。None / 空なら自動の値を使う。
 #[derive(Clone, PartialEq, Debug, Default)]
 pub struct PointSettings {
@@ -159,6 +192,8 @@ impl IoPoint {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct IoTable {
     pub points: Vec<IoPoint>,
+    /// 番号を振ったときの各領域の先頭番号
+    pub starts: AreaStarts,
 }
 
 impl IoTable {
@@ -204,7 +239,10 @@ impl IoTable {
                 });
             }
         }
-        Self { points }
+        Self {
+            points,
+            starts: plan.starts(),
+        }
     }
 
     /// ライン連携の信号を後ろに足す。番号は信号表の番号か、CSV で決めた個別の番号。

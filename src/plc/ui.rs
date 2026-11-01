@@ -1,12 +1,16 @@
-//! 「PLC 連携」ウィンドウ: モードの切り替え、模擬 PLC の運転、外部 PLC (Modbus TCP / OPC UA) の接続、I/O モニタ
+//! 「PLC 連携」ウィンドウ: モードの切り替え、模擬 PLC の運転、外部 PLC (Modbus TCP / OPC UA / 三菱 SLMP) の接続、I/O モニタ
 
 use crate::ui::dock::{self, Dock};
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
+use cadsim_core::melsec::Device;
 use cadsim_core::workspace::Tool;
+use cadsim_io::slmp::{Encoding, FrameKind, Transport};
 
 use super::adapter::modbus::{ModbusClient, ModbusSettings};
 use super::adapter::opcua::{OpcUaClient, OpcUaSettings};
+use super::adapter::slmp::{SlmpLink, SlmpSettings};
+use super::domain::device_map::{DeviceArea, DeviceMap};
 use super::domain::io::{AddressPlan, IoPoint};
 use super::domain::io_csv::CsvReport;
 use super::usecase::{LinkStatus, PlcLink, PlcMode, PlcSession};
@@ -57,6 +61,7 @@ pub fn plc_window(
             protocol,
             modbus,
             opcua,
+            slmp,
             notice,
         } = &mut *plc;
         match session.mode {
@@ -78,11 +83,13 @@ pub fn plc_window(
                     ui.add_enabled_ui(!session.is_connected(), |ui| {
                         ui.radio_value(protocol, Protocol::ModbusTcp, "Modbus TCP");
                         ui.radio_value(protocol, Protocol::OpcUa, "OPC UA");
+                        ui.radio_value(protocol, Protocol::Slmp, "三菱 (SLMP)");
                     });
                 });
                 match protocol {
                     Protocol::ModbusTcp => modbus_controls(ui, session, modbus),
                     Protocol::OpcUa => opcua_controls(ui, session, opcua),
+                    Protocol::Slmp => slmp_controls(ui, session, slmp),
                 }
             }
         }
@@ -90,7 +97,10 @@ pub fn plc_window(
             ui.separator();
             address_plan_editor(ui, &mut session.plan);
             io_csv_buttons(ui, &chart, session, notice);
-            io_monitor(ui, session);
+            // 三菱 PLC とつなぐときは、I/O モニタと一覧に信号を置いたデバイスも出す
+            let devices = (session.mode == PlcMode::External && *protocol == Protocol::Slmp)
+                .then_some(&slmp.devices);
+            io_monitor(ui, session, devices);
         }
     });
     if !open {
@@ -307,6 +317,100 @@ fn modbus_controls(ui: &mut egui::Ui, plc: &mut PlcSession, settings: &mut Modbu
     connect_row(ui, plc, || Box::new(ModbusClient::start(settings.clone())));
 }
 
+fn slmp_controls(ui: &mut egui::Ui, plc: &mut PlcSession, settings: &mut SlmpSettings) {
+    let connected = plc.is_connected();
+    ui.add_enabled_ui(!connected, |ui| {
+        egui::Grid::new("slmp_settings")
+            .num_columns(2)
+            .show(ui, |ui| {
+                ui.label("IPアドレス");
+                ui.text_edit_singleline(&mut settings.host);
+                ui.end_row();
+                ui.label("ポート");
+                ui.add(egui::DragValue::new(&mut settings.port));
+                ui.end_row();
+                ui.label("通信");
+                ui.horizontal(|ui| {
+                    ui.radio_value(&mut settings.transport, Transport::Tcp, "TCP");
+                    ui.radio_value(&mut settings.transport, Transport::Udp, "UDP");
+                });
+                ui.end_row();
+                ui.label("フレーム");
+                ui.horizontal(|ui| {
+                    ui.radio_value(&mut settings.frame, FrameKind::E3, "3E");
+                    ui.radio_value(&mut settings.frame, FrameKind::E4, "4E");
+                });
+                ui.end_row();
+                ui.label("コード");
+                ui.horizontal(|ui| {
+                    ui.radio_value(&mut settings.encoding, Encoding::Binary, "バイナリ");
+                    ui.radio_value(&mut settings.encoding, Encoding::Ascii, "ASCII");
+                });
+                ui.end_row();
+                ui.label("通信周期");
+                ui.add(
+                    egui::DragValue::new(&mut settings.poll_ms)
+                        .range(5..=1000)
+                        .suffix(" ms"),
+                );
+                ui.end_row();
+            });
+        device_map_editor(ui, &mut settings.devices);
+    });
+    for problem in settings.devices.problems(&plc.table) {
+        ui.colored_label(WARN_COLOR, problem);
+    }
+    ui.weak("PLC 側は GX Works の「Ethernet 設定」で SLMP の交信用ポートを開き、通信方式・コードをここと合わせてください。");
+    connect_row(ui, plc, || Box::new(SlmpLink::start(settings.clone())));
+}
+
+/// 4つの領域を三菱 PLC のどのデバイスの何番から置くか
+fn device_map_editor(ui: &mut egui::Ui, devices: &mut DeviceMap) {
+    egui::CollapsingHeader::new("デバイスの割り当て")
+        .id_salt("slmp_devices")
+        .default_open(true)
+        .show(ui, |ui| {
+            egui::Grid::new("slmp_device_map")
+                .num_columns(2)
+                .show(ui, |ui| {
+                    for (label, output, word) in [
+                        ("出力ビット (PLC → 設備)", true, false),
+                        ("出力ワード (PLC → 設備)", true, true),
+                        ("入力ビット (設備 → PLC)", false, false),
+                        ("入力ワード (設備 → PLC)", false, true),
+                    ] {
+                        ui.label(label);
+                        let area = devices.area_mut(output, word);
+                        ui.horizontal(|ui| device_area_editor(ui, label, word, area));
+                        ui.end_row();
+                    }
+                });
+            ui.weak("各領域の先頭の信号をこのデバイスに置き、続く信号を順に並べます。X・Y・B・W の番号は 16 進数です。X・Y は入出力ユニットのない番号を使ってください (ふつうは M・D か B・W)。");
+        });
+}
+
+fn device_area_editor(ui: &mut egui::Ui, id: &str, word: bool, area: &mut DeviceArea) {
+    let choices: &[Device] = if word { &Device::WORDS } else { &Device::BITS };
+    egui::ComboBox::from_id_salt(("slmp_device", id))
+        .width(50.0)
+        .selected_text(area.device.name())
+        .show_ui(ui, |ui| {
+            for &d in choices {
+                ui.selectable_value(
+                    &mut area.device,
+                    d,
+                    format!("{}  {}", d.name(), d.description()),
+                );
+            }
+        });
+    let number = egui::DragValue::new(&mut area.head).range(0..=0xFF_FFFF);
+    if area.device.is_hex() {
+        ui.add(number.hexadecimal(1, false, true));
+    } else {
+        ui.add(number);
+    }
+}
+
 /// 接続 / 切断のボタンと通信の状態
 fn connect_row(ui: &mut egui::Ui, plc: &mut PlcSession, start: impl FnOnce() -> Box<dyn PlcLink>) {
     ui.horizontal(|ui| {
@@ -415,7 +519,8 @@ fn import_summary(report: &CsvReport) -> String {
     text
 }
 
-fn io_monitor(ui: &mut egui::Ui, plc: &mut PlcSession) {
+fn io_monitor(ui: &mut egui::Ui, plc: &mut PlcSession, devices: Option<&DeviceMap>) {
+    let located = devices.map(|d| d.locate_all(&plc.table));
     ui.horizontal(|ui| {
         ui.strong("I/O モニタ");
         if ui
@@ -423,7 +528,8 @@ fn io_monitor(ui: &mut egui::Ui, plc: &mut PlcSession) {
             .on_hover_text("信号名と番号をタブ区切りでコピーする (Excel や PLC のコメントに貼れる)")
             .clicked()
         {
-            ui.ctx().copy_text(io_list_text(&plc.table.points));
+            ui.ctx()
+                .copy_text(io_list_text(&plc.table.points, located.as_deref()));
         }
     });
     for (a, b) in plc.table.address_conflicts() {
@@ -449,7 +555,7 @@ fn io_monitor(ui: &mut egui::Ui, plc: &mut PlcSession) {
                     ui.strong("番号");
                     ui.strong("値");
                     ui.end_row();
-                    for p in &table.points {
+                    for (i, p) in table.points.iter().enumerate() {
                         let point = p.point;
                         ui.label(if point.is_output() {
                             "出力"
@@ -457,7 +563,10 @@ fn io_monitor(ui: &mut egui::Ui, plc: &mut PlcSession) {
                             "入力"
                         });
                         ui.label(&p.name);
-                        ui.label(p.address_label());
+                        match &located {
+                            Some(located) => ui.label(device_label(located[i])),
+                            None => ui.label(p.address_label()),
+                        };
                         let editable = manual && point.is_output();
                         if point.is_word() {
                             let mut value = io.word(point);
@@ -483,10 +592,21 @@ fn io_monitor(ui: &mut egui::Ui, plc: &mut PlcSession) {
         });
 }
 
-/// I/O 一覧をタブ区切りの文字列にする
-fn io_list_text(points: &[IoPoint]) -> String {
-    let mut text = String::from("向き\t信号\t種類\t番号\tModbus番地\n");
-    for p in points {
+fn device_label(device: Option<cadsim_core::melsec::DeviceRef>) -> String {
+    device.map_or_else(|| "(置けません)".to_string(), |d| d.to_string())
+}
+
+/// I/O 一覧をタブ区切りの文字列にする。`devices` があれば三菱 PLC のデバイスの列も付ける。
+fn io_list_text(
+    points: &[IoPoint],
+    devices: Option<&[Option<cadsim_core::melsec::DeviceRef>]>,
+) -> String {
+    let mut text = String::from("向き\t信号\t種類\t番号\tModbus番地");
+    if devices.is_some() {
+        text += "\tデバイス";
+    }
+    text += "\n";
+    for (i, p) in points.iter().enumerate() {
         let direction = if p.point.is_output() {
             "出力"
         } else {
@@ -498,9 +618,13 @@ fn io_list_text(points: &[IoPoint]) -> String {
             ("コイル", 1 + p.address as u32)
         };
         text += &format!(
-            "{direction}\t{}\t{kind}\t{}\t{modbus:05}\n",
+            "{direction}\t{}\t{kind}\t{}\t{modbus:05}",
             p.name, p.address
         );
+        if let Some(devices) = devices {
+            text += &format!("\t{}", device_label(devices[i]));
+        }
+        text += "\n";
     }
     text
 }
