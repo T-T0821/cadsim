@@ -13,7 +13,7 @@
 
 use std::collections::{BinaryHeap, HashMap, VecDeque};
 
-use crate::line::AgvEvent;
+use crate::line::CarrierEvent;
 use glam::DVec2;
 
 /// 経路の点
@@ -310,7 +310,7 @@ pub struct AgvSim {
     pub pending: VecDeque<Job>,
     pub stats: AgvStats,
     /// ライン連携で頼まれた搬送の出来事 ([`AgvSim::take_events`])
-    events: Vec<AgvEvent>,
+    events: Vec<CarrierEvent>,
     /// 交差点 → 予約している AGV
     reservations: HashMap<u32, usize>,
     next_spawn: Vec<f64>,
@@ -396,7 +396,7 @@ impl AgvSim {
     }
 
     /// ライン連携で頼まれた搬送の、前回からの出来事を取り出す
-    pub fn take_events(&mut self) -> Vec<AgvEvent> {
+    pub fn take_events(&mut self) -> Vec<CarrierEvent> {
         std::mem::take(&mut self.events)
     }
 
@@ -533,7 +533,7 @@ impl AgvSim {
                         v.route = path;
                         v.phase = Phase::ToDrop;
                         if let Some(tag) = job.tag {
-                            self.events.push(AgvEvent::PickedUp { tag });
+                            self.events.push(CarrierEvent::PickedUp { tag });
                         }
                     }
                     // 降ろし先に行けない要求は捨てる
@@ -541,7 +541,7 @@ impl AgvSim {
                         v.job = None;
                         v.phase = Phase::Idle;
                         if let Some(tag) = job.tag {
-                            self.events.push(AgvEvent::Abandoned { tag });
+                            self.events.push(CarrierEvent::Abandoned { tag });
                         }
                     }
                 }
@@ -550,7 +550,7 @@ impl AgvSim {
                 let v = &mut self.vehicles[index];
                 if let Some(job) = v.job.take() {
                     if let Some(tag) = job.tag {
-                        self.events.push(AgvEvent::Delivered { tag });
+                        self.events.push(CarrierEvent::Delivered { tag });
                     }
                     self.stats.delivered += 1;
                     self.stats.lead_time_sum += time - job.created;
@@ -800,8 +800,8 @@ mod tests {
         assert_eq!(
             events,
             vec![
-                AgvEvent::PickedUp { tag: 7 },
-                AgvEvent::Delivered { tag: 7 }
+                CarrierEvent::PickedUp { tag: 7 },
+                CarrierEvent::Delivered { tag: 7 }
             ]
         );
         assert_eq!(sim.stats.delivered, 1);

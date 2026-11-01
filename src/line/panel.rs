@@ -6,10 +6,10 @@ use bevy_egui::{EguiContexts, egui};
 use cadsim_core::workspace::Tool;
 
 use cadsim_core::flow::model::{AgvCall, ElementKind, KindTag, sample_line};
-use cadsim_core::line::{Direction, Value};
+use cadsim_core::line::{Direction, Value, conveyor_problems, link_problems};
 
 use super::LineState;
-use super::stepper::link_problems;
+use crate::conveyor::ConveyorConfigRes;
 use crate::floor::agv_sim::AgvSim;
 use crate::floor::{AgvLayoutRes, FloorClock, FloorState, OperatorsRes, sample};
 use crate::flow::{FlowRes, FlowRun};
@@ -31,6 +31,7 @@ pub fn line_window(
     mut operators: ResMut<OperatorsRes>,
     safety: Res<SafetyState>,
     mut dock: ResMut<Dock>,
+    conveyors: Res<ConveyorConfigRes>,
 ) -> Result {
     let Some(window) = dock::workspace_window(Tool::LineLink, &dock, [520.0, 480.0]) else {
         return Ok(());
@@ -52,7 +53,7 @@ pub fn line_window(
                 ui.separator();
                 egui::CollapsingHeader::new("つなぎ方")
                     .default_open(true)
-                    .show(ui, |ui| edits = links(ui, &flow, &layout, &floor));
+                    .show(ui, |ui| edits = links(ui, &flow, &layout, &floor, &conveyors));
                 egui::CollapsingHeader::new("PLC の信号")
                     .default_open(false)
                     .show(ui, |ui| signals(ui, line, &flow, &run, &floor, &safety));
@@ -87,10 +88,11 @@ pub fn line_window(
         }
         None => {}
     }
-    for (id, carrier, starts) in edits {
-        if let Some(e) = flow.get_mut(id) {
-            e.carrier = carrier;
-            e.starts_chart = starts;
+    for edit in edits {
+        if let Some(e) = flow.get_mut(edit.id) {
+            e.carrier = edit.carrier;
+            e.conveyor = edit.conveyor;
+            e.starts_chart = edit.starts_chart;
         }
     }
     if sample_clicked {
@@ -172,7 +174,7 @@ fn summary(ui: &mut egui::Ui, line: &LineState, run: &FlowRun, floor: &FloorStat
                 ui.end_row();
                 ui.label("ライン内のワーク");
                 ui.label(format!(
-                    "{} 個 (うち AGV で運搬中 {})",
+                    "{} 個 (うち AGV・コンベアで運搬中 {})",
                     sim.wip(),
                     sim.in_transit()
                 ));
@@ -184,6 +186,18 @@ fn summary(ui: &mut egui::Ui, line: &LineState, run: &FlowRun, floor: &FloorStat
             ui.label("AGV が運んだワーク");
             ui.label(format!("{} 個", line.coupler.carried()));
             ui.end_row();
+            let on_belt = line.coupler.on_conveyor();
+            let waiting = line.coupler.waiting_for_conveyor();
+            if line.coupler.conveyed() > 0 || on_belt > 0 || waiting > 0 {
+                ui.label("コンベアで運んだワーク");
+                ui.label(format!(
+                    "{} 個 (流れている {} / 投入口の空き待ち {})",
+                    line.coupler.conveyed(),
+                    on_belt,
+                    waiting
+                ));
+                ui.end_row();
+            }
             if let Some(c) = line.conveyor {
                 ui.label("コンベア");
                 ui.label(format!(
@@ -204,13 +218,30 @@ fn summary(ui: &mut egui::Ui, line: &LineState, run: &FlowRun, floor: &FloorStat
         });
 }
 
-/// 工程ごとの送り出し方 (すぐ下流へ / AGV) と、チャートの起動
+/// 要素のつなぎ方の変更 (呼び出し側で工程モデルに書く)
+struct LinkEdit {
+    id: u32,
+    carrier: Option<AgvCall>,
+    conveyor: Option<u32>,
+    starts_chart: bool,
+}
+
+/// 送り出し方の選択肢
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Send {
+    Next,
+    Agv,
+    Conveyor,
+}
+
+/// 工程ごとの送り出し方 (すぐ下流へ / AGV / コンベア) と、チャートの起動
 fn links(
     ui: &mut egui::Ui,
     flow: &FlowRes,
     layout: &AgvLayoutRes,
     floor: &FloorState,
-) -> Vec<(u32, Option<AgvCall>, bool)> {
+    conveyors: &ConveyorConfigRes,
+) -> Vec<LinkEdit> {
     if flow.is_empty() {
         ui.label("工程モデルがありません。ツールレールの「工程」(工程シミュレーション) で並べると、ここでつなげます。");
         return Vec::new();
@@ -229,8 +260,19 @@ fn links(
             .node(id)
             .map_or_else(|| format!("#{id}"), |n| n.name.clone())
     };
+    let sources: Vec<(u32, String)> = conveyors
+        .sources
+        .iter()
+        .map(|s| (s.id, s.name.clone()))
+        .collect();
+    let source_name = |id: u32| {
+        sources
+            .iter()
+            .find(|(s, _)| *s == id)
+            .map_or_else(|| format!("#{id} (ありません)"), |(_, n)| n.clone())
+    };
     // 書き換えるのは、本当に変わったときだけ (工程モデルの変更は結果を古くする)。呼び出し側で書く。
-    let mut edits: Vec<(u32, Option<AgvCall>, bool)> = Vec::new();
+    let mut edits = Vec::new();
     egui::Grid::new("line_links")
         .num_columns(3)
         .striped(true)
@@ -245,20 +287,50 @@ fn links(
                 }
                 ui.label(&e.name);
                 let mut carrier = e.carrier;
+                let mut conveyor = e.conveyor;
                 ui.horizontal(|ui| {
-                    let mut by_agv = carrier.is_some();
-                    let can = stations.len() >= 2 || by_agv;
-                    if ui
-                        .add_enabled(can, egui::Checkbox::new(&mut by_agv, "AGV"))
-                        .on_disabled_hover_text(
-                            "「作業者・AGV」パネルでステーションを 2つ以上置くと選べます",
-                        )
-                        .changed()
-                    {
-                        carrier = by_agv.then(|| AgvCall {
+                    let current = match (carrier, conveyor) {
+                        (Some(_), _) => Send::Agv,
+                        (None, Some(_)) => Send::Conveyor,
+                        (None, None) => Send::Next,
+                    };
+                    let label = |s: Send| match s {
+                        Send::Next => "すぐ下流へ",
+                        Send::Agv => "AGV",
+                        Send::Conveyor => "コンベア",
+                    };
+                    let mut chosen = current;
+                    egui::ComboBox::from_id_salt(("line_send", e.id))
+                        .width(90.0)
+                        .selected_text(label(current))
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut chosen, Send::Next, label(Send::Next));
+                            ui.add_enabled_ui(stations.len() >= 2, |ui| {
+                                ui.selectable_value(&mut chosen, Send::Agv, label(Send::Agv))
+                                    .on_disabled_hover_text(
+                                        "「作業者・AGV」パネルでステーションを 2つ以上置くと選べます",
+                                    );
+                            });
+                            ui.add_enabled_ui(!sources.is_empty(), |ui| {
+                                ui.selectable_value(
+                                    &mut chosen,
+                                    Send::Conveyor,
+                                    label(Send::Conveyor),
+                                )
+                                .on_hover_text(
+                                    "ワーク搬送の投入口から 3D のコンベアに流し、排出口か排出端から出たら下流へ入れる",
+                                )
+                                .on_disabled_hover_text(
+                                    "「ワーク搬送」ウィンドウで投入口を置くと選べます",
+                                );
+                            });
+                        });
+                    if chosen != current {
+                        carrier = (chosen == Send::Agv).then(|| AgvCall {
                             from: stations[0].0,
                             to: stations[1].0,
                         });
+                        conveyor = (chosen == Send::Conveyor).then(|| sources[0].0);
                     }
                     if let Some(call) = carrier.as_mut() {
                         for (salt, value) in [("from", &mut call.from), ("to", &mut call.to)] {
@@ -274,8 +346,16 @@ fn links(
                                 ui.label("→");
                             }
                         }
-                    } else {
-                        ui.label("すぐ下流へ");
+                    } else if let Some(source) = conveyor.as_mut() {
+                        ui.label("投入口");
+                        egui::ComboBox::from_id_salt(("line_source", e.id))
+                            .width(90.0)
+                            .selected_text(source_name(*source))
+                            .show_ui(ui, |ui| {
+                                for (id, name) in &sources {
+                                    ui.selectable_value(source, *id, name);
+                                }
+                            });
                     }
                 });
                 let mut starts = e.starts_chart;
@@ -287,13 +367,21 @@ fn links(
                     ui.label("");
                 }
                 ui.end_row();
-                if carrier != e.carrier || starts != e.starts_chart {
-                    edits.push((e.id, carrier, starts));
+                if carrier != e.carrier || conveyor != e.conveyor || starts != e.starts_chart {
+                    edits.push(LinkEdit {
+                        id: e.id,
+                        carrier,
+                        conveyor,
+                        starts_chart: starts,
+                    });
                 }
             }
         });
     let vehicles = floor.agv_sim().map_or(0, |a| a.vehicles.len());
-    for problem in link_problems(flow, &layout.graph, vehicles) {
+    for problem in link_problems(flow, &layout.graph, vehicles)
+        .into_iter()
+        .chain(conveyor_problems(flow, conveyors))
+    {
         ui.colored_label(RED, problem);
     }
     edits

@@ -3,6 +3,7 @@
 //! 計算は `cadsim_core::conveyor` にあり、ここは次だけを行う。
 //! - 入力を集める: 設定、投入口・排出口・ベルトにする部品の外接箱、タイミングチャートの再生位置
 //! - `ConveyorSim::seek` を呼ぶ (グリッパと動く台は [`ChartMotion`] がチャートから求める)
+//!   ライン連携で再生している間は、ラインの時計で前へだけ進める ([`WorkState::with_line`])
 //! - 結果のワークを 3D 表示に写す
 //!
 //! 繰り返し再生ではサイクルをまたいでもワークが残り、流れ続ける。シーク位置を戻すと 0 から計算し直す。
@@ -11,7 +12,7 @@
 //!
 //! 現在のワークは [`WorkState::works`]、投入数・排出数は [`WorkState::counts`] で取れる。
 //! 毎フレームの位置を使う処理は `.after(ConveyorSet::Works)` で登録する。時刻表を作りながら任意の時刻の
-//! ワークを知りたい場合は、`ConveyorSim` を [`ChartMotion`] (`repeat: false`) と一緒に作り、
+//! ワークを知りたい場合は、`ConveyorSim` を [`ChartMotion`] (`repeat: false`、`map: TimeMap::IDENTITY`) と一緒に作り、
 //! `advance_to` で時刻順に進める。
 
 mod ui;
@@ -24,6 +25,7 @@ use cadsim_core::conveyor::{
     Bounds, Carrier, ConveyorConfig, ConveyorInputs, ConveyorSim, Counts, CycleClock, Gripper,
     GripperState, MachineMotion, Place, Pose, Work,
 };
+use cadsim_core::line::ConveyorLink;
 use glam::DVec3;
 
 use crate::history::{TrackDocExt, TrackedDoc};
@@ -92,9 +94,74 @@ pub struct WorkState {
     /// 計算に使った外接箱。部品が編集されたら計算し直すために覚えておく。
     parts: HashMap<NodeId, Bounds>,
     carrier_parts: HashMap<u32, Vec<Bounds>>,
+    /// ライン連携が進めている (チャートの再生位置では計算し直さない)
+    linked: bool,
 }
 
 impl WorkState {
+    /// ライン連携で回し始める。ワークを空にして時刻 0 から、`driven` の投入口は工程から送り込む。
+    pub(crate) fn start_line(
+        &mut self,
+        config: &ConveyorConfig,
+        model: &Model,
+        chart: &TimingChart,
+        driven: impl IntoIterator<Item = u32>,
+    ) {
+        let mut sim = ConveyorSim::default();
+        sim.drive_sources(driven);
+        *self = WorkState {
+            sim,
+            parts: part_bounds(config, model),
+            carrier_parts: carrier_parts(chart, model),
+            linked: true,
+        };
+    }
+
+    /// ライン連携をやめる。次のフレームからチャートの再生位置で計算し直す。
+    pub(crate) fn stop_line(&mut self) {
+        *self = WorkState::default();
+    }
+
+    pub(crate) fn is_line_driven(&self) -> bool {
+        self.linked
+    }
+
+    /// ワーク搬送の経過時刻 (ライン連携中はラインの時刻と同じ)
+    pub(crate) fn line_time(&self) -> f64 {
+        self.sim.time
+    }
+
+    /// ライン連携で進めるための入力をそろえて `f` に渡す。連携していなければ None。
+    pub(crate) fn with_line<R>(
+        &mut self,
+        config: &ConveyorConfig,
+        chart: &TimingChart,
+        schedule: &Schedule,
+        map: TimeMap,
+        repeat: bool,
+        f: impl FnOnce(ConveyorLink) -> R,
+    ) -> Option<R> {
+        if !self.linked {
+            return None;
+        }
+        let motion = ChartMotion {
+            chart,
+            schedule,
+            carrier_parts: &self.carrier_parts,
+            repeat,
+            map,
+        };
+        let inputs = ConveyorInputs {
+            config,
+            parts: &self.parts,
+            motion: &motion,
+        };
+        Some(f(ConveyorLink {
+            sim: &mut self.sim,
+            inputs: &inputs,
+        }))
+    }
+
     pub fn works(&self) -> &[Work] {
         &self.sim.works
     }
@@ -124,10 +191,35 @@ pub struct ChartMotion<'a> {
     /// true ならサイクルの最後まで行ったらチャートの先頭に戻って繰り返す。
     /// false なら経過時刻 = チャート上の時刻 (作りかけの時刻表でも使える)。
     pub repeat: bool,
+    /// 経過時刻からチャート上の時刻への写し方 (繰り返しの前に当てる)
+    pub map: TimeMap,
+}
+
+/// 経過時刻 `t` → チャート上の時刻 `base + rate × (t − from)`。
+/// ライン連携では、ワーク搬送はラインの時刻で進み、チャートは途中で頭から再生し直されるので、
+/// そのフレームのチャートの再生位置に合わせる。
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TimeMap {
+    pub from: f64,
+    pub base: f64,
+    pub rate: f64,
+}
+
+impl TimeMap {
+    pub const IDENTITY: Self = Self {
+        from: 0.0,
+        base: 0.0,
+        rate: 1.0,
+    };
+
+    fn apply(&self, time: f64) -> f64 {
+        self.base + self.rate * (time - self.from)
+    }
 }
 
 impl ChartMotion<'_> {
     fn chart_time(&self, time: f64) -> f64 {
+        let time = self.map.apply(time);
         let cycle = self.schedule.cycle_time;
         if self.repeat && cycle > 0.0 {
             time % cycle
@@ -219,6 +311,10 @@ fn update_works(
     mut state: ResMut<WorkState>,
 ) {
     let target = clock.elapsed(playback.time, playback.playing, schedule.cycle_time);
+    // ライン連携が進めている間は触らない
+    if state.linked {
+        return;
+    }
     if config.is_empty() {
         if !state.sim.works.is_empty() {
             *state = WorkState::default();
@@ -246,6 +342,7 @@ fn update_works(
         schedule: &schedule,
         carrier_parts: &state.carrier_parts,
         repeat: true,
+        map: TimeMap::IDENTITY,
     };
     let inputs = ConveyorInputs {
         config: &config,
@@ -378,6 +475,7 @@ fn draw_conveyor_overlay(
         schedule: &schedule,
         carrier_parts: &state.carrier_parts,
         repeat: false,
+        map: TimeMap::IDENTITY,
     };
     for gripper in &config.grippers {
         let Some(gripper_state) = motion.gripper_state(gripper, playback.time) else {

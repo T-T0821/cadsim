@@ -70,6 +70,9 @@ pub struct ElementRecord {
     /// ライン連携: 送り出しを運ぶ AGV の積み込み・荷降ろしの点の id
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agv: Option<AgvCallRecord>,
+    /// ライン連携: 送り出しを流すワーク搬送の投入口の id
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conveyor: Option<u32>,
     /// ライン連携: 加工を始めるたびにタイミングチャートを頭から再生する
     #[serde(default, skip_serializing_if = "is_false")]
     pub starts_chart: bool,
@@ -359,6 +362,7 @@ fn model_record(model: &FlowModel, part_path: &dyn Fn(u32) -> Option<Vec<usize>>
                     from: c.from,
                     to: c.to,
                 }),
+                conveyor: e.conveyor,
                 starts_chart: e.starts_chart,
                 labor: e.labor.into(),
                 line: e.line,
@@ -474,6 +478,7 @@ fn model_from_record(
                 from: c.from,
                 to: c.to,
             }),
+            conveyor: r.conveyor,
             starts_chart: r.starts_chart,
             labor: r.labor.into(),
             line: r.line.filter(|l| record.lines.iter().any(|k| k.id == *l)),
@@ -510,6 +515,7 @@ mod tests {
         model.elements[1].part = Some(42);
         model.elements[1].carrier = Some(AgvCall { from: 3, to: 5 });
         model.elements[1].starts_chart = true;
+        model.elements[2].conveyor = Some(7);
         let record = to_record(&model, |id| (id == 42).then(|| vec![0, 3]));
         let json = serde_json::to_string(&record).unwrap();
         assert!(json.contains("\"type\":\"Process\""), "{json}");
