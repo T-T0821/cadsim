@@ -3,13 +3,16 @@
 //! | ファイル | 役割 |
 //! | --- | --- |
 //! | `cadsim_core::floor` | 床の上の長方形・距離 (geom)、作業者の時刻表 (operator_plan)、AGV の配車 (agv_sim) |
-//! | `view.rs` | 作業者・経路・AGV の 3D 表示と、床をクリックして点を置く操作 |
+//! | `cadsim_core::floor::figure` | 作業者と AGV の 3D の形・歩く動き・向き |
+//! | `figures.rs` | 作業者と AGV の 3D モデルの表示 (形の計算結果をメッシュに写す) |
+//! | `view.rs` | 歩行経路・AGV の通路の線と、床をクリックして点を置く操作 |
 //! | `panel.rs` | 「作業者・AGV」パネル |
 //!
 //! 作業者と AGV はタイミングチャートとは別の時計 ([`FloorClock`]) で動く。
 //! どちらも安全機器の検知の対象 (`SafetyIntruders`) に入り、AGV は安全停止中は止まる。
 
-pub use cadsim_core::floor::{agv_sim, geom, operator_plan};
+pub use cadsim_core::floor::{agv_sim, figure, geom, operator_plan};
+pub(crate) mod figures;
 mod panel;
 pub(crate) mod sample;
 mod view;
@@ -44,6 +47,7 @@ impl Plugin for FloorPlugin {
             .init_resource::<OperatorsRes>()
             .init_resource::<AgvLayoutRes>()
             .init_resource::<FloorState>()
+            .init_resource::<figures::FigureAssets>()
             .add_systems(
                 Update,
                 (
@@ -51,6 +55,7 @@ impl Plugin for FloorPlugin {
                     view::floor_click.run_if(pointer_in_3d_view),
                     add_intruders.in_set(SafetySet::Intruders),
                     view::draw.after(SafetySet::Detect),
+                    figures::sync_figures.after(SafetySet::Detect),
                 ),
             )
             .add_systems(EguiPrimaryContextPass, panel::floor_panel);

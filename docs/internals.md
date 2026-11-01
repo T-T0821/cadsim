@@ -55,7 +55,7 @@ crates/cadsim_core/   Bevy に依存しないドメイン (cargo test -p cadsim_
 ├── drawing.rs       2D 図面: 投影・かくれ線・シルエット・寸法・図枠 (docs/drawing.md)
 ├── site/            平面図の下敷きの配置と縮尺合わせ、点群の間引き・LOD・干渉 (docs/site.md)
 ├── motion/          タイミングチャートと時刻表 (chart)、加減速とカム (profile)、姿勢 (pose)、ロボットの運動学・経路・時間、経路の干渉、センサー
-├── floor/           床の上の長方形・距離 (geom)、作業者の時刻表 (operator_plan)、AGV の配車 (agv_sim)
+├── floor/           床の上の長方形・距離 (geom)、作業者の時刻表 (operator_plan)、AGV の配車 (agv_sim)、作業者と AGV の 3D の形 (figure)
 ├── safety/          安全機器のデータ・侵入の検知・停止のラッチ・安全距離 (device)、動作範囲と距離の確認 (check)
 ├── flow/            工程モデル (model)、離散事象シミュレーションと集計 (sim)、状態・稼働率の色 (palette)
 └── physics/         物理演算の設定・ケーブルの紐モデル・剛体の進め方 (settings / cable / world)
@@ -123,7 +123,7 @@ src/                  アプリ本体 (Bevy + egui)
 │   ├── mod.rs        プラグイン、早送りの再生、3D の色分け (FlowColors)
 │   └── ui.rs         工程シミュレーションのウィンドウ
 ├── safety/          安全機器の表示・パネル・動作範囲の確認 (計算は cadsim_core::safety。docs/safety-and-floor.md)
-├── floor/           作業者と AGV の表示・パネル (計算は cadsim_core::floor。docs/safety-and-floor.md)
+├── floor/           作業者と AGV の 3D モデル・経路の表示・パネル (計算は cadsim_core::floor。docs/safety-and-floor.md)
 ├── physics/         物理演算の配線・パネル・サンプルライン、Rapier のアダプター、保存形式 (詳しくは docs/physics.md)
 └── ui/
     ├── mod.rs        画面の割り付け (上 → 下 → 左 → 右 → 残りが 3D ビュー)
