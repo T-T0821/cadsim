@@ -22,7 +22,8 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BinaryHeap, VecDeque};
 
-use super::model::{ElementId, ElementKind, FlowModel, Labor, RunSettings};
+use super::model::{ElementId, ElementKind, FlowModel, Labor, ProductId, RunSettings};
+use super::plan::{OrderStats, OrderStatus};
 use crate::staffing::model::{AssignRule, WorkerId};
 
 /// 設備の状態
@@ -92,6 +93,9 @@ impl StateTimes {
 struct Work {
     /// 生成された時刻
     created: f64,
+    product: Option<ProductId>,
+    /// 生産計画の注文 (注文の並びの添字)
+    order: Option<usize>,
 }
 
 /// 実行中の要素1つ分
@@ -127,6 +131,18 @@ struct Runtime {
     operator: Option<usize>,
     /// 人が要る工程: 人が来たら始める加工時間 (秒、人の速さで割る前)
     pending: Option<f64>,
+    /// 人が要る工程: 人が来たら加工の前にする段取り替えの時間 (秒)
+    pending_setup: f64,
+    /// 工程: 最後に加工した品種 (まだ何も加工していなければ None)
+    last_product: Option<Option<ProductId>>,
+    /// 工程: 集計期間の段取り替えの回数と時間
+    setups: u32,
+    setup_seconds: f64,
+    /// 生成: 生産計画で投入する注文 (先頭から) と、先頭の注文の残り
+    plan: VecDeque<usize>,
+    plan_left: u32,
+    /// 生成: 注文を受け持つ (注文がなくなったら止まる)
+    planned: bool,
 }
 
 impl Runtime {
@@ -150,6 +166,13 @@ impl Runtime {
             lead_sum: 0.0,
             operator: None,
             pending: None,
+            pending_setup: 0.0,
+            last_product: None,
+            setups: 0,
+            setup_seconds: 0.0,
+            plan: VecDeque::new(),
+            plan_left: 0,
+            planned: false,
         }
     }
 
@@ -405,6 +428,12 @@ pub struct Simulation {
     link: Option<Link>,
     /// 出勤する作業者
     workers: Vec<WorkerRt>,
+    /// 注文ごとの投入数・排出数・排出し終えた時刻
+    order_released: Vec<u32>,
+    order_done: Vec<u32>,
+    order_finished: Vec<Option<f64>>,
+    /// 集計期間に排出した数 (品種ごと)
+    product_output: Vec<(Option<ProductId>, u32)>,
 }
 
 impl Simulation {
@@ -438,11 +467,25 @@ impl Simulation {
             next_sample: 0.0,
             link: None,
             workers: Vec::new(),
+            order_released: vec![0; model.orders.len()],
+            order_done: vec![0; model.orders.len()],
+            order_finished: model
+                .orders
+                .iter()
+                .map(|o| (o.quantity == 0).then_some(0.0))
+                .collect(),
+            product_output: Vec::new(),
         };
         sim.start_workers();
+        sim.start_plan();
         for i in 0..sim.runtime.len() {
             match sim.model.elements[i].kind {
-                ElementKind::Source { .. } => sim.schedule(0.0, i, EventKind::Arrival),
+                ElementKind::Source { .. } => {
+                    let rt = &sim.runtime[i];
+                    if !rt.planned || !rt.plan.is_empty() {
+                        sim.schedule(0.0, i, EventKind::Arrival);
+                    }
+                }
                 ElementKind::Process {
                     failure: Some(f), ..
                 } => sim.runtime[i].time_to_failure = sim.rng.exponential(f.mtbf),
@@ -645,11 +688,10 @@ impl Simulation {
     fn place_deliveries(&mut self) -> bool {
         let mut moved = false;
         let mut k = 0;
-        while let Some(&(from, _)) = self.link.as_ref().and_then(|l| l.deliveries.get(k)) {
-            let target = self.next[from]
-                .iter()
-                .copied()
-                .find(|&t| self.can_accept(t));
+        while let Some(&(from, work)) = self.link.as_ref().and_then(|l| l.deliveries.get(k)) {
+            let target = self.next[from].iter().copied().find(|&t| {
+                self.can_accept(t) && self.model.elements[t].accepts_product(work.product)
+            });
             let Some(target) = target else {
                 k += 1;
                 continue;
@@ -724,7 +766,19 @@ impl Simulation {
                     link.held_arrivals[i] = true;
                     return;
                 }
-                self.runtime[i].slot = Some(Work { created: self.now });
+                let (product, order) = if self.runtime[i].planned {
+                    let Some(k) = self.next_planned(i) else {
+                        return;
+                    };
+                    (Some(self.model.orders[k].product), Some(k))
+                } else {
+                    (self.model.elements[i].product, None)
+                };
+                self.runtime[i].slot = Some(Work {
+                    created: self.now,
+                    product,
+                    order,
+                });
                 self.runtime[i].created += 1;
                 // 下流に送れなければそのまま詰まり。送れたら settle で待ちに戻る。
                 self.set_state(i, State::Blocked);
@@ -794,8 +848,10 @@ impl Simulation {
                 if !self.has_outgoing(i) || self.is_external(i) {
                     continue;
                 }
-                let Some(target) = self.next[i].iter().copied().find(|&t| self.can_accept(t))
-                else {
+                let product = self.outgoing_product(i);
+                let Some(target) = self.next[i].iter().copied().find(|&t| {
+                    self.can_accept(t) && self.model.elements[t].accepts_product(product)
+                }) else {
                     continue;
                 };
                 let work = self.take(i);
@@ -815,6 +871,17 @@ impl Simulation {
             }
         }
         self.request_carriers();
+    }
+
+    /// 送り出すワークの品種
+    fn outgoing_product(&self, i: usize) -> Option<ProductId> {
+        let rt = &self.runtime[i];
+        let work = match self.model.elements[i].kind {
+            ElementKind::Source { .. } | ElementKind::Process { .. } => rt.slot,
+            ElementKind::Buffer { .. } | ElementKind::Transport { .. } => rt.queue.front().copied(),
+            ElementKind::Sink => None,
+        };
+        work.and_then(|w| w.product)
     }
 
     fn has_outgoing(&self, i: usize) -> bool {
@@ -867,7 +934,8 @@ impl Simulation {
                 limit,
             } => {
                 let work = rt.slot.take().expect("source holds a work");
-                let more = limit.is_none_or(|l| rt.created < l);
+                let more =
+                    limit.is_none_or(|l| rt.created < l) && (!rt.planned || !rt.plan.is_empty());
                 self.set_state(i, State::Waiting);
                 // ワークがラインに入った
                 self.change_wip(1);
@@ -907,14 +975,31 @@ impl Simulation {
             ElementKind::Process {
                 cycle_time, spread, ..
             } => {
-                self.runtime[i].slot = Some(work);
-                let duration = self.rng.around(cycle_time, spread);
+                let e = &self.model.elements[i];
+                let base = e.cycle_for(work.product, cycle_time);
+                let rt = &mut self.runtime[i];
+                // 品種が変わったら段取り替え (最初の1個はしない)
+                let setup = if e.setup_time > 0.0
+                    && rt.last_product.is_some_and(|last| last != work.product)
+                {
+                    e.setup_time
+                } else {
+                    0.0
+                };
+                rt.last_product = Some(work.product);
+                if setup > 0.0 && measuring {
+                    rt.setups += 1;
+                    rt.setup_seconds += setup;
+                }
+                rt.slot = Some(work);
+                let duration = self.rng.around(base, spread);
                 if self.model.elements[i].labor.needs_operator() {
                     self.runtime[i].pending = Some(duration);
+                    self.runtime[i].pending_setup = setup;
                     self.set_state(i, State::NoOperator);
                     self.call_operator(i);
                 } else {
-                    self.start_work(i, duration);
+                    self.start_work(i, setup + duration);
                 }
             }
             ElementKind::Buffer { .. } => {
@@ -931,7 +1016,21 @@ impl Simulation {
             ElementKind::Sink => {
                 self.output_total += 1;
                 self.change_wip(-1);
+                if let Some(k) = work.order {
+                    self.order_done[k] += 1;
+                    if self.order_done[k] == self.model.orders[k].quantity {
+                        self.order_finished[k] = Some(self.now);
+                    }
+                }
                 if measuring {
+                    match self
+                        .product_output
+                        .iter_mut()
+                        .find(|(p, _)| *p == work.product)
+                    {
+                        Some((_, n)) => *n += 1,
+                        None => self.product_output.push((work.product, 1)),
+                    }
                     let rt = &mut self.runtime[i];
                     rt.count += 1;
                     rt.lead_sum += self.now - work.created;
@@ -982,6 +1081,44 @@ impl Simulation {
         for w in 0..self.workers.len() {
             self.schedule_shift_change(w);
         }
+    }
+
+    /// 注文を投入する生成に割り振る (数量 0 の注文は投入しない)
+    fn start_plan(&mut self) {
+        for (k, order) in self.model.orders.iter().enumerate() {
+            let Some(i) = self
+                .model
+                .order_source(order)
+                .and_then(|id| self.model.index_of(id))
+            else {
+                continue;
+            };
+            let rt = &mut self.runtime[i];
+            rt.planned = true;
+            if order.quantity > 0 {
+                rt.plan.push_back(k);
+            }
+        }
+        for i in 0..self.runtime.len() {
+            self.runtime[i].plan_left = self.runtime[i]
+                .plan
+                .front()
+                .map_or(0, |&k| self.model.orders[k].quantity);
+        }
+    }
+
+    /// 生成が次に投入する注文。注文が残っていなければ None。
+    fn next_planned(&mut self, i: usize) -> Option<usize> {
+        let orders = &self.model.orders;
+        let rt = &mut self.runtime[i];
+        let k = *rt.plan.front()?;
+        rt.plan_left = rt.plan_left.saturating_sub(1);
+        if rt.plan_left == 0 {
+            rt.plan.pop_front();
+            rt.plan_left = rt.plan.front().map_or(0, |&n| orders[n].quantity);
+        }
+        self.order_released[k] += 1;
+        Some(k)
     }
 
     fn clock(&self) -> f64 {
@@ -1093,19 +1230,20 @@ impl Simulation {
         let Some(duration) = self.runtime[i].pending.take() else {
             return;
         };
+        let setup = std::mem::take(&mut self.runtime[i].pending_setup);
         let speed = self.workers[w].speed[i].unwrap_or(1.0);
         self.set_worker_state(w, WorkerState::Working);
         match self.model.elements[i].labor {
-            Labor::Full => self.start_work(i, duration / speed),
+            Labor::Full => self.start_work(i, (setup + duration) / speed),
             Labor::Load { seconds } => {
-                // 最初の `seconds` 秒が人の作業。人が速ければその分だけ短くなる。
+                // 段取り替えと最初の `seconds` 秒が人の作業。人が速ければその分だけ短くなる。
                 let hand = seconds.min(duration);
-                let manual = hand / speed;
+                let manual = (setup + hand) / speed;
                 self.schedule(self.now + manual, i, EventKind::OperatorRelease);
                 self.start_work(i, duration - hand + manual);
             }
             Labor::None => {
-                self.start_work(i, duration);
+                self.start_work(i, setup + duration);
                 self.release_operator(i);
             }
         }
@@ -1226,6 +1364,8 @@ impl Simulation {
                         .then(|| rt.lead_sum / rt.count as f64),
                     energy_kwh,
                     air_m3,
+                    setups: rt.setups,
+                    setup_seconds: rt.setup_seconds,
                 }
             })
             .collect();
@@ -1254,6 +1394,53 @@ impl Simulation {
                 }
             })
             .collect();
+        let orders = self
+            .model
+            .orders
+            .iter()
+            .enumerate()
+            .map(|(k, o)| {
+                let finished = self.order_finished[k];
+                let status = match finished {
+                    Some(t) if t <= o.due => OrderStatus::OnTime,
+                    Some(_) => OrderStatus::Late,
+                    None if self.now > o.due => OrderStatus::Late,
+                    None => OrderStatus::Open,
+                };
+                OrderStats {
+                    name: o.name.clone(),
+                    product: o.product,
+                    quantity: o.quantity,
+                    released: self.order_released[k],
+                    done: self.order_done[k],
+                    finished,
+                    due: o.due,
+                    status,
+                }
+            })
+            .collect();
+        // 品種の並び順、最後に品種なし
+        let mut product_output: Vec<(Option<ProductId>, u32)> = self
+            .model
+            .products
+            .iter()
+            .map(|p| Some(p.id))
+            .chain([None])
+            .filter_map(|p| {
+                let n = self
+                    .product_output
+                    .iter()
+                    .find(|(q, _)| *q == p)
+                    .map_or(0, |(_, n)| *n);
+                (n > 0).then_some((p, n))
+            })
+            .collect();
+        // 消した品種のワークが残っていた場合も数える
+        for &(p, n) in &self.product_output {
+            if !product_output.iter().any(|(q, _)| *q == p) {
+                product_output.push((p, n));
+            }
+        }
         let wip_area = self.wip_area + self.wip as f64 * self.measured_span(self.wip_since);
         let energy_kwh = elements.iter().map(|e| e.energy_kwh).sum();
         let air_m3 = elements.iter().map(|e| e.air_m3).sum();
@@ -1280,6 +1467,8 @@ impl Simulation {
             energy_per_work_kwh: (output > 0).then(|| energy_kwh / output as f64),
             elements,
             workers,
+            orders,
+            product_output,
             samples: self.samples.clone(),
         }
     }
@@ -1328,6 +1517,9 @@ pub struct ElementStats {
     pub lead_time: Option<f64>,
     pub energy_kwh: f64,
     pub air_m3: f64,
+    /// 工程: 段取り替えの回数と時間 (秒)
+    pub setups: u32,
+    pub setup_seconds: f64,
 }
 
 impl ElementStats {
@@ -1361,6 +1553,10 @@ pub struct Report {
     pub elements: Vec<ElementStats>,
     /// 出勤した作業者 (欠勤の人は入らない)
     pub workers: Vec<WorkerStats>,
+    /// 生産計画の注文ごとの結果 (計画の並び順)
+    pub orders: Vec<OrderStats>,
+    /// 集計期間の排出数 (品種ごと。品種の並び順で、最後に品種なし。0 の品種は入れない)
+    pub product_output: Vec<(Option<ProductId>, u32)>,
     pub samples: Vec<Sample>,
 }
 

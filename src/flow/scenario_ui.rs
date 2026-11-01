@@ -152,6 +152,7 @@ fn comparison_section(ui: &mut egui::Ui, flow: &FlowModel, st: &mut ScenarioUiSt
         }
     };
     let best = c.best();
+    let has_plan = c.rows.iter().any(|r| r.on_time.is_some());
     egui::Grid::new("flow_scenario_compare")
         .striped(true)
         .spacing([14.0, 4.0])
@@ -169,6 +170,9 @@ fn comparison_section(ui: &mut egui::Ui, flow: &FlowModel, st: &mut ScenarioUiSt
                 "ボトルネック",
             ] {
                 ui.strong(title);
+            }
+            if has_plan {
+                ui.strong("納期達成率");
             }
             ui.end_row();
             for (i, r) in c.rows.iter().enumerate() {
@@ -189,6 +193,9 @@ fn comparison_section(ui: &mut egui::Ui, flow: &FlowModel, st: &mut ScenarioUiSt
                 ui.label(text(opt(&r.lead_time, 0, 1.0, " 秒")));
                 ui.label(text(opt(&r.energy_per_work_kwh, 3, 1.0, " kWh")));
                 ui.label(text(r.bottleneck.clone().unwrap_or_else(|| "-".into())));
+                if has_plan {
+                    ui.label(text(opt(&r.on_time, 0, 100.0, "%")));
+                }
                 ui.end_row();
             }
         });

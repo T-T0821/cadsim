@@ -8,7 +8,10 @@
 
 use std::collections::HashMap;
 
-use super::model::{Element, ElementId, ElementKind, Energy, Failure, FlowModel, KindTag, Labor};
+use super::model::{
+    Element, ElementId, ElementKind, Energy, Failure, FlowModel, KindTag, Labor, ProductId,
+    ProductTime,
+};
 use super::sim::{Report, State};
 use crate::staffing::model::{AssignRule, Break, Shift, Skill, Staffing, Worker};
 
@@ -75,6 +78,7 @@ impl FlowModel {
     /// 別の工程モデルを、1本のラインとして末尾に取り込む。ID は振り直し、送り先もつなぎ直す。
     ///
     /// 3D の部品・AGV の搬送・タイミングチャートの対応は別のファイルのものなので外す。
+    /// 品種は名前で突き合わせ、ない品種は足す (注文は取り込まない)。
     /// `with_staff` なら名簿も取り込み (スキル・持ち場は新しい ID に直す)、
     /// 同じ中身のシフトは今あるものを使う。
     /// 今の工程にラインがまだなければ、先に今の要素を「ライン1」にまとめる。
@@ -83,6 +87,16 @@ impl FlowModel {
             self.group_unassigned("");
         }
         let line = self.add_line(name);
+        // 品種は名前で突き合わせ、なければ足す
+        let mut products = HashMap::new();
+        for p in &other.products {
+            let id = match self.products.iter().find(|q| q.name == p.name) {
+                Some(q) => q.id,
+                None => self.add_product(&p.name),
+            };
+            products.insert(p.id, id);
+        }
+        let product = |p: &ProductId| products.get(p).copied();
         let mut ids: HashMap<ElementId, ElementId> = HashMap::new();
         for e in &other.elements {
             let id = self.insert(Element {
@@ -91,6 +105,18 @@ impl FlowModel {
                 carrier: None,
                 starts_chart: false,
                 line: Some(line),
+                product: e.product.as_ref().and_then(product),
+                product_times: e
+                    .product_times
+                    .iter()
+                    .filter_map(|t| {
+                        Some(ProductTime {
+                            product: product(&t.product)?,
+                            cycle_time: t.cycle_time,
+                        })
+                    })
+                    .collect(),
+                accepts: e.accepts.iter().filter_map(product).collect(),
                 ..e.clone()
             });
             ids.insert(e.id, id);

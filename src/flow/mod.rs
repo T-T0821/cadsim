@@ -9,6 +9,7 @@
 //! - `ui`      「工程シミュレーション」ウィンドウ
 //! - `staff_ui` そのウィンドウの「人員」タブ (シフト・名簿・スキル表・人数の比較)
 //! - `factory_ui` 「工場」タブ (ラインの一覧・取り込み・ラインごとの結果)
+//! - `plan_ui` 「計画」タブ (品種・生産計画・納期の結果)
 //! - `scenario_ui` 「案の比較」タブ
 //!
 //! このファイルは Bevy とのつなぎ: 工程モデルを包む Resource、早送りの再生、
@@ -16,11 +17,12 @@
 
 pub use cadsim_io::flow::{record, xlsx};
 mod factory_ui;
+mod plan_ui;
 mod scenario_ui;
 mod staff_ui;
 mod ui;
 
-pub use cadsim_core::flow::{factory, model, palette, scenario, sim};
+pub use cadsim_core::flow::{factory, model, palette, plan, scenario, sim};
 
 use std::collections::HashMap;
 use std::path::PathBuf;

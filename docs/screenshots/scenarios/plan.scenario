@@ -1,0 +1,32 @@
+# 生産計画: サンプル工場に品種と注文を入れて回し、納期に間に合ったかを見る
+wait_loaded
+click "空のプロジェクトから"
+wait_loaded
+wait 30
+click "★ Lv."                  # ミッションカードを隠す
+click "ファイル"
+hover "サンプルを開く"
+click "工程シミュレーションのサンプル"
+wait 10
+click "計画"
+wait 10
+click "サンプル計画"
+wait 10
+click "工程"
+wait 10
+click "[工程] 切削"
+wait 10
+expect "品種ごとの加工時間"
+scroll 850 520 -8                # 設定欄を下へ送る
+wait 10
+wait 420                         # ミッション達成の表示が消えるのを待つ
+screenshot element
+click "⏩ 最後まで"
+wait_loaded
+wait 30
+click "計画"
+wait 10
+expect "納期達成率"
+scroll 700 520 -8                # 結果の表が見えるまで下へ送る
+wait 420
+screenshot result

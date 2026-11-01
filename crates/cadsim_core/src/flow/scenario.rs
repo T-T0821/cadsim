@@ -58,6 +58,8 @@ pub struct ScenarioRow {
     pub energy_per_work_kwh: Option<Summary>,
     /// いちばん多くの回でボトルネックになった工程の名前
     pub bottleneck: Option<String>,
+    /// 納期達成率 (0〜1)。生産計画がない・納期の来た注文がなければ None
+    pub on_time: Option<Summary>,
 }
 
 /// 比べた結果
@@ -117,6 +119,7 @@ fn run_case(name: &str, model: &FlowModel, replications: u32) -> Result<Scenario
     let mut wip = Vec::new();
     let mut lead = Vec::new();
     let mut energy = Vec::new();
+    let mut on_time = Vec::new();
     let mut bottlenecks: Vec<(String, u32)> = Vec::new();
     for k in 0..replications {
         m.settings.seed = seed.wrapping_add(u64::from(k));
@@ -132,6 +135,7 @@ fn run_case(name: &str, model: &FlowModel, replications: u32) -> Result<Scenario
         wip.push(r.wip_average);
         lead.extend(r.lead_time);
         energy.extend(r.energy_per_work_kwh);
+        on_time.extend(super::plan::on_time_ratio(&r.orders));
         if let Some(b) = r.bottleneck.and_then(|id| r.element(id)) {
             match bottlenecks.iter_mut().find(|(n, _)| *n == b.name) {
                 Some((_, count)) => *count += 1,
@@ -156,6 +160,7 @@ fn run_case(name: &str, model: &FlowModel, replications: u32) -> Result<Scenario
             .rev()
             .max_by_key(|(_, c)| *c)
             .map(|(n, _)| n.clone()),
+        on_time: Summary::of(&on_time),
     })
 }
 
