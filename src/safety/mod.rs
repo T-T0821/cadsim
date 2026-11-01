@@ -120,6 +120,11 @@ impl SafetyState {
         self.monitor.is_stopped()
     }
 
+    /// 非常停止を押しているか、検知する機器を手動で遮光している
+    pub fn manually_tripped(&self) -> bool {
+        !self.pressed.is_empty() || !self.blocked.is_empty()
+    }
+
     /// 停止させた機器 (リセットするまで残る)
     pub fn stop_devices(&self) -> impl Iterator<Item = u32> + '_ {
         self.monitor.causes.iter().map(|c| c.device)

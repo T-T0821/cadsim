@@ -54,6 +54,8 @@ pub struct ComposeUi {
     error: Option<String>,
     /// 置いたあとの知らせ
     message: Option<String>,
+    /// モデルとチャートに置いた回数 (チュートリアルの達成に使う)
+    placed: u32,
 }
 
 impl Default for ComposeUi {
@@ -64,11 +66,17 @@ impl Default for ComposeUi {
             result: None,
             error: None,
             message: None,
+            placed: 0,
         }
     }
 }
 
 impl ComposeUi {
+    /// モデルとチャートに置いた回数
+    pub fn placed_count(&self) -> u32 {
+        self.placed
+    }
+
     /// 別スレッドで下書きを作り始める。`use_ai` なら生成 AI に、そうでなければキーワードから。
     fn start(&mut self, assistant: &AiAssistant) {
         let text = self.text.clone();
@@ -200,6 +208,7 @@ fn compose_window(
         history.record_added(&model, applied.root, label);
         selection.select(applied.root);
         selection.reveal_in_tree = true;
+        state.placed += 1;
         state.message = Some(format!(
             "置きました: アクチュエータ {} 個、センサー {} 個、ステップ {} 個をチャートに足しました",
             applied.actuators, applied.sensors, applied.steps

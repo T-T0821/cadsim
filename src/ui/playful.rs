@@ -6,6 +6,7 @@
 use std::collections::VecDeque;
 use std::path::PathBuf;
 
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_egui::{
     EguiContexts,
@@ -19,18 +20,25 @@ use crate::annotation::Annotations;
 use crate::assistant::help::HelpChat;
 use crate::flow::FlowRun;
 use crate::history::History;
+use crate::line::LineState;
+use crate::line_compose::ComposeUi;
 use crate::model::NodeKind;
 use crate::model::{Model, Selection};
-use crate::motion::Playback;
+use crate::motion::{Playback, TimingChart};
+use crate::plc::Plc;
 use crate::preferences_file;
 use crate::project::ProjectState;
+use crate::safety::SafetyState;
+use crate::sequence_gen::SequenceGen;
 use crate::simulation::InterferenceCheck;
 use crate::simulation::interference::PairStatus;
 use crate::simulation::measure::MeasureTool;
 use crate::view::camera::{OrbitCamera, ViewportRect};
+use crate::view::recording::Recorder;
+use crate::view::walk::WalkMode;
 use cadsim_core::gamify::{
-    Achievement, Chapter, ConfettiPiece, MissionId, Observation, Preferences, confetti,
-    level_title, mission,
+    Achievement, ConfettiPiece, MissionId, Observation, Part, Preferences, confetti, level_title,
+    mission,
 };
 
 /// お祝いの表示時間 (秒)
@@ -101,6 +109,12 @@ impl PlayfulUi {
         self.dirty = true;
     }
 
+    /// 一覧でえらんだミッションに今すぐ挑戦する
+    pub fn focus_mission(&mut self, id: MissionId) {
+        self.prefs.progress.focus(id);
+        self.dirty = true;
+    }
+
     pub fn retry_mission(&mut self, id: MissionId) {
         self.prefs.progress.retry(id);
         self.dirty = true;
@@ -118,6 +132,7 @@ impl PlayfulUi {
         self.bursts += 1;
         let count = if achievement.level_up.is_some()
             || achievement.chapter_complete.is_some()
+            || achievement.part_complete.is_some()
             || achievement.all_complete
         {
             CONFETTI_PIECES * 2
@@ -140,6 +155,38 @@ impl Plugin for PlayfulPlugin {
     }
 }
 
+/// 道具を使うミッションの判定に使う状態 (工程・チャート・安全・PLC・ライン連携・AI・歩行・動画)
+#[derive(SystemParam)]
+struct ToolSignals<'w> {
+    flow: Res<'w, FlowRun>,
+    chart: Res<'w, TimingChart>,
+    safety: Option<Res<'w, SafetyState>>,
+    plc: Option<Res<'w, Plc>>,
+    line: Option<Res<'w, LineState>>,
+    compose: Option<Res<'w, ComposeUi>>,
+    sequence_gen: Option<Res<'w, SequenceGen>>,
+    walk: Option<Res<'w, WalkMode>>,
+    recorder: Option<Res<'w, Recorder>>,
+}
+
+impl ToolSignals<'_> {
+    /// `now` の道具の欄を埋める
+    fn fill(&self, now: &mut Observation) {
+        now.flow_has_result = self.flow.report.is_some();
+        let chart = &self.chart.0;
+        now.actuated_part_count = chart.actuators.iter().map(|a| a.parts.len()).sum();
+        now.step_count = chart.steps.len();
+        now.sensor_count = chart.sensors.len();
+        now.safety_tripped = self.safety.as_ref().is_some_and(|s| s.manually_tripped());
+        now.plc_running = self.plc.as_ref().is_some_and(|p| p.simulated_running());
+        now.line_running = self.line.as_ref().is_some_and(|l| l.is_running());
+        now.composed_count = self.compose.as_ref().map_or(0, |c| c.placed_count());
+        now.ladder_export_count = self.sequence_gen.as_ref().map_or(0, |g| g.export_count());
+        now.walking = self.walk.as_ref().is_some_and(|w| w.active());
+        now.video_export_count = self.recorder.as_ref().map_or(0, |r| r.finished_count());
+    }
+}
+
 /// 画面の状態を集めてミッションの達成を調べる
 #[allow(clippy::too_many_arguments)]
 fn track_missions(
@@ -155,8 +202,8 @@ fn track_missions(
     project: Res<ProjectState>,
     viewport: Res<ViewportRect>,
     mouse: Res<ButtonInput<MouseButton>>,
-    flow: Res<FlowRun>,
     tutorial: Res<TutorialUi>,
+    tools: ToolSignals,
     mut opened: Local<Option<u64>>,
 ) {
     if ui.prefs.progress.all_complete() {
@@ -175,7 +222,7 @@ fn track_missions(
         .filter(|pair| matches!(pair.status, PairStatus::Interfering { .. }))
         .count();
     let saved_to_file = project.has_file() && !project.unsaved();
-    let now = Observation {
+    let mut now = Observation {
         selected: selection.node.is_some_and(|id| model.get(id).is_some()),
         camera_angles: [orbit.yaw as f64, orbit.pitch as f64],
         dragging_view: !viewport.pointer_on_ui
@@ -197,8 +244,9 @@ fn track_missions(
                     .is_some_and(|n| matches!(n.kind, NodeKind::Standard(_)))
             })
             .count(),
-        flow_has_result: flow.report.is_some(),
+        ..Default::default()
     };
+    tools.fill(&mut now);
     let achievements = ui.prefs.progress.observe(&now);
     if !achievements.is_empty() {
         ui.dirty = true;
@@ -303,6 +351,10 @@ fn mission_card(
                         let arrow = if state.show_list { "▼" } else { "▶" };
                         if ui.small_button(format!("{arrow} 一覧")).clicked() {
                             state.show_list = !state.show_list;
+                            // 一覧を開いている間は手順をたたんで、一覧の場所を空ける
+                            if state.show_list {
+                                state.show_steps = false;
+                            }
                         }
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui
@@ -315,7 +367,7 @@ fn mission_card(
                         });
                     });
                     if state.show_list {
-                        mission_list(ui, state);
+                        mission_list(ui, state, card.tutorial);
                     }
                 });
         });
@@ -372,47 +424,105 @@ fn current_mission(ui: &mut egui::Ui, state: &mut PlayfulUi, card: &mut tutorial
     }
 }
 
-fn mission_list(ui: &mut egui::Ui, state: &mut PlayfulUi) {
+fn mission_list(ui: &mut egui::Ui, state: &mut PlayfulUi, tutorial: &mut TutorialUi) {
     let mut retry = None;
-    egui::Grid::new("mission_list")
-        .num_columns(3)
-        .spacing([6.0, 3.0])
+    let mut focus = None;
+    let current = state.prefs.progress.next().map(|m| m.id);
+    // 応用編まで並べると長いので、カードが画面からはみ出さないようにスクロールさせる
+    egui::ScrollArea::vertical()
+        .id_salt("mission_list_scroll")
+        .max_height(220.0)
         .show(ui, |ui| {
-            for chapter in Chapter::ALL {
-                ui.label(
-                    egui::RichText::new(format!("第{}章 {}", chapter.number(), chapter.title()))
-                        .small()
-                        .color(palette::TEAL),
-                );
-                ui.end_row();
-                for m in chapter.missions() {
-                    let progress = &state.prefs.progress;
-                    if progress.is_done(m.id) {
-                        ui.colored_label(palette::GREEN, "✔");
-                        ui.weak(m.title);
-                        ui.weak(format!("{} XP", m.xp));
-                    } else if progress.is_skipped(m.id) {
-                        ui.weak("↷");
-                        ui.weak(m.title).on_hover_text(m.hint);
-                        if ui
-                            .small_button("戻す")
-                            .on_hover_text("次のミッションの候補に戻す")
-                            .clicked()
-                        {
-                            retry = Some(m.id);
+            egui::Grid::new("mission_list")
+                .num_columns(3)
+                .spacing([6.0, 3.0])
+                .show(ui, |ui| {
+                    for part in Part::ALL {
+                        ui.label(
+                            egui::RichText::new(format!("■ {}", part.title()))
+                                .strong()
+                                .color(palette::YELLOW),
+                        );
+                        ui.end_row();
+                        for chapter in part.chapters() {
+                            let (done, total) = state.prefs.progress.chapter_progress(chapter);
+                            ui.label(
+                                egui::RichText::new(format!(
+                                    "第{}章 {}  {done}/{total}",
+                                    chapter.number(),
+                                    chapter.title()
+                                ))
+                                .small()
+                                .color(palette::TEAL),
+                            );
+                            ui.end_row();
+                            for m in chapter.missions() {
+                                mission_row(ui, state, m, current, &mut retry, &mut focus);
+                                ui.end_row();
+                            }
                         }
-                    } else {
-                        ui.weak("○");
-                        ui.label(m.title).on_hover_text(m.hint);
-                        ui.weak(format!("{} XP", m.xp));
                     }
-                    ui.end_row();
-                }
-            }
+                });
         });
     if let Some(id) = retry {
         state.retry_mission(id);
     }
+    if let Some(id) = focus {
+        state.focus_mission(id);
+        state.show_list = false;
+        state.show_steps = true;
+        tutorial.point();
+    }
+}
+
+/// 一覧の1行: 達成 ✔ / とばした ↷ / まだ ○ と、挑戦・戻すのボタン
+fn mission_row(
+    ui: &mut egui::Ui,
+    state: &PlayfulUi,
+    m: &'static cadsim_core::gamify::Mission,
+    current: Option<MissionId>,
+    retry: &mut Option<MissionId>,
+    focus: &mut Option<MissionId>,
+) {
+    let progress = &state.prefs.progress;
+    if progress.is_done(m.id) {
+        ui.colored_label(palette::GREEN, "✔");
+        ui.weak(m.title);
+        ui.weak(format!("{} XP", m.xp));
+        return;
+    }
+    if current == Some(m.id) {
+        ui.colored_label(palette::YELLOW, "◉");
+        ui.label(egui::RichText::new(m.title).strong())
+            .on_hover_text(m.hint);
+        ui.weak("挑戦中");
+        return;
+    }
+    let skipped = progress.is_skipped(m.id);
+    ui.weak(if skipped { "↷" } else { "○" });
+    let title = if skipped {
+        ui.weak(m.title)
+    } else {
+        ui.label(m.title)
+    };
+    title.on_hover_text(m.hint);
+    ui.horizontal(|ui| {
+        if ui
+            .small_button("挑戦")
+            .on_hover_text("順番をとばして、このミッションを今すぐカードに出す")
+            .clicked()
+        {
+            *focus = Some(m.id);
+        }
+        if skipped
+            && ui
+                .small_button("戻す")
+                .on_hover_text("次のミッションの候補に戻す")
+                .clicked()
+        {
+            *retry = Some(m.id);
+        }
+    });
 }
 
 /// 案内役のマスコット (立方体のキャラクター)。喜んでいるときは跳ねて目を細める。
@@ -533,6 +643,8 @@ fn draw_toast(ctx: &egui::Context, view: egui::Rect, now: f64, state: &mut Playf
                     let size = |base: f32| base * pop.max(0.2);
                     let headline = if achievement.all_complete {
                         "🏆 全ミッション制覇!".to_owned()
+                    } else if let Some(part) = achievement.part_complete {
+                        format!("🎓 {} クリア!", part.title())
                     } else if let Some(chapter) = achievement.chapter_complete {
                         format!("📘 第{}章 クリア!", chapter.number())
                     } else {
@@ -551,6 +663,13 @@ fn draw_toast(ctx: &egui::Context, view: egui::Rect, now: f64, state: &mut Playf
                         .strong()
                         .size(size(18.0));
                     ui.label(xp.color(palette::TEAL));
+                    if achievement.part_complete == Some(Part::Basic) && !achievement.all_complete {
+                        ui.label(
+                            egui::RichText::new("次は応用編! 設備に動きを付けてみよう")
+                                .size(size(15.0))
+                                .color(palette::TEXT_STRONG),
+                        );
+                    }
                     if let Some(level) = achievement.level_up {
                         let title = level_title(level);
                         let text =

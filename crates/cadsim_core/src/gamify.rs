@@ -5,22 +5,67 @@
 
 use crate::workspace::Tool;
 
-/// チュートリアルの章。ミッションを「見る → さわる → ラインを組む → 仕上げる」の順にまとめる。
+/// チュートリアルの章。基本編は「見る → さわる → ラインを組む → 仕上げる」、
+/// 応用編は「動きを付ける → ラインとして動かす → 使いこなす」の順にまとめる。
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Chapter {
     Look,
     Touch,
     BuildLine,
     Finish,
+    Motion,
+    RunLine,
+    Master,
+}
+
+/// 章のまとまり。基本編で主な操作をひと回りし、応用編で設備の動き・PLC・AI などを覚える。
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Part {
+    Basic,
+    Advanced,
+}
+
+impl Part {
+    pub const ALL: [Part; 2] = [Part::Basic, Part::Advanced];
+
+    pub fn title(self) -> &'static str {
+        match self {
+            Part::Basic => "基本編",
+            Part::Advanced => "応用編",
+        }
+    }
+
+    /// ようこそ画面に出す説明
+    pub fn summary(self) -> &'static str {
+        match self {
+            Part::Basic => "見る → さわる → ラインを組む → 保存する (5 分ほど)",
+            Part::Advanced => "動きを付ける → PLC・ライン連携で動かす → AI・一人称・動画",
+        }
+    }
+
+    /// このまとまりの章
+    pub fn chapters(self) -> impl Iterator<Item = Chapter> {
+        Chapter::ALL.into_iter().filter(move |c| c.part() == self)
+    }
 }
 
 impl Chapter {
-    pub const ALL: [Chapter; 4] = [
+    pub const ALL: [Chapter; 7] = [
         Chapter::Look,
         Chapter::Touch,
         Chapter::BuildLine,
         Chapter::Finish,
+        Chapter::Motion,
+        Chapter::RunLine,
+        Chapter::Master,
     ];
+
+    pub fn part(self) -> Part {
+        match self {
+            Chapter::Look | Chapter::Touch | Chapter::BuildLine | Chapter::Finish => Part::Basic,
+            Chapter::Motion | Chapter::RunLine | Chapter::Master => Part::Advanced,
+        }
+    }
 
     /// 1 始まりの章番号
     pub fn number(self) -> usize {
@@ -33,6 +78,9 @@ impl Chapter {
             Chapter::Touch => "部品にさわってみよう",
             Chapter::BuildLine => "ラインを組んでみよう",
             Chapter::Finish => "仕上げて残そう",
+            Chapter::Motion => "設備に動きを付けよう",
+            Chapter::RunLine => "ラインとして動かそう",
+            Chapter::Master => "もっと使いこなそう",
         }
     }
 
@@ -74,6 +122,16 @@ pub enum MissionId {
     RunFlow,
     Annotate,
     Save,
+    AddActuator,
+    AddStep,
+    AddSensor,
+    EmergencyStop,
+    RunPlc,
+    RunLineLink,
+    ComposeLine,
+    ExportLadder,
+    WalkAround,
+    ExportVideo,
 }
 
 pub struct Mission {
@@ -310,6 +368,186 @@ pub const MISSIONS: &[Mission] = &[
         tool: None,
         xp: 80,
     },
+    Mission {
+        id: MissionId::AddActuator,
+        key: "add_actuator",
+        chapter: Chapter::Motion,
+        title: "部品に動きを付けよう",
+        hint: "タイミングチャートの「+ アクチュエータ」で作り、選んだ部品を割り当てる",
+        steps: &[
+            "3D ビューかツリーで、動かしたい部品をクリックしてえらぶ",
+            "下のタイミングチャートの「+ アクチュエータ」→「シリンダ」を押す",
+            "右側の設定欄の「+ 選択中の「…」を追加」を押すと、その部品がシリンダの先で動くようになる",
+        ],
+        why: "部品にシリンダ・直動軸・回転テーブルの役を持たせると、チャートの手順どおりに動かせます",
+        place: Place::Chart,
+        needs_stopped_line: false,
+        keys: &[],
+        tool: None,
+        xp: 100,
+    },
+    Mission {
+        id: MissionId::AddStep,
+        key: "add_step",
+        chapter: Chapter::Motion,
+        title: "動きの順番を足そう",
+        hint: "タイミングチャートの「+ ステップ」を押し、セルをダブルクリック",
+        steps: &[
+            "タイミングチャートの「+ ステップ」を押すと、S1, S2, … の列が1つ増える",
+            "増えた列で、動かしたいアクチュエータの行のセルをダブルクリックする (シリンダは 出 → 戻 → なし)",
+            "▶ 再生で、足したステップの動きを確かめる。サイクルタイムは自動で計算される",
+        ],
+        why: "同じステップの動作は同時に始まり、終わると次のステップへ進みます。順番を並べるだけで装置の動きが組めます",
+        place: Place::Chart,
+        needs_stopped_line: false,
+        keys: &[],
+        tool: None,
+        xp: 100,
+    },
+    Mission {
+        id: MissionId::AddSensor,
+        key: "add_sensor",
+        chapter: Chapter::Motion,
+        title: "センサーで待たせよう",
+        hint: "タイミングチャートの「+ センサー」で光電センサーを置く",
+        steps: &[
+            "タイミングチャートの「+ センサー」→「光電センサー」を押す",
+            "右側の設定欄で、センサーの位置・向き・範囲を決める",
+            "センサーの行のセルをダブルクリックすると、そのステップが「ON待」になる (インターロック)",
+        ],
+        why: "ワークが来るまで次の動きを始めない、といった条件を付けて、実機と同じ待ち方を確かめられます",
+        place: Place::Chart,
+        needs_stopped_line: false,
+        keys: &[],
+        tool: None,
+        xp: 100,
+    },
+    Mission {
+        id: MissionId::EmergencyStop,
+        key: "emergency_stop",
+        chapter: Chapter::RunLine,
+        title: "非常停止を押してみよう",
+        hint: "左端の 🛡 安全 を開き、非常停止の「押す」かセンサーの「遮光」",
+        steps: &[
+            "画面左端のツールレールの 🛡 安全 を押す (カードの「開く」でもよい)",
+            "一覧に非常停止がなければ「追加:」の「非常停止」を押して置く",
+            "非常停止の「押す」(ライトカーテンなら「遮光」) で、設備が安全停止するのを見る。「戻す」→「リセット」で再開",
+        ],
+        why: "どの安全機器が、どの設備を止めるのかを、据え付ける前に確かめられます",
+        place: Place::Rail,
+        needs_stopped_line: false,
+        keys: &[],
+        tool: Some(Tool::Safety),
+        xp: 100,
+    },
+    Mission {
+        id: MissionId::RunPlc,
+        key: "run_plc",
+        chapter: Chapter::RunLine,
+        title: "PLC で動かそう",
+        hint: "左端の 🔌 PLC を開き、「内蔵の模擬PLC」で「▶ 運転」",
+        steps: &[
+            "画面左端のツールレールの 🔌 PLC を押す (カードの「開く」でもよい)",
+            "モードを「内蔵の模擬PLC」にする",
+            "「▶ 運転」を押すと、出端・戻端の信号を見ながらチャートのステップが順に進む。I/O モニタで信号の ON / OFF が見られる",
+        ],
+        why: "実機の据え付け前に、ラダーと同じ信号のやりとりで設備を動かして確かめられます (仮想立ち上げ)",
+        place: Place::Rail,
+        needs_stopped_line: false,
+        keys: &[],
+        tool: Some(Tool::Plc),
+        xp: 120,
+    },
+    Mission {
+        id: MissionId::RunLineLink,
+        key: "run_line_link",
+        chapter: Chapter::RunLine,
+        title: "ライン全体を同じ時計で動かそう",
+        hint: "左端の 🔗 連携 を開き、「サンプルのラインを置く」→「▶ 再生」",
+        steps: &[
+            "画面左端のツールレールの 🔗 連携 を押す (カードの「開く」でもよい)",
+            "工程がなければ「サンプルのラインを置く」を押す",
+            "「▶ 再生」で、工程・AGV・作業者・タイミングチャートがいっしょに動く。時間スライダーで巻き戻しもできる",
+        ],
+        why: "AGV の待ちや安全停止がスループットにどう効くかを、ライン全体で確かめられます",
+        place: Place::Rail,
+        needs_stopped_line: false,
+        keys: &[],
+        tool: Some(Tool::LineLink),
+        xp: 120,
+    },
+    Mission {
+        id: MissionId::ComposeLine,
+        key: "compose_line",
+        chapter: Chapter::Master,
+        title: "言葉でラインを組もう",
+        hint: "左端の 💬 言葉で を開き、文を書いて「下書きを作る」→「モデルとチャートに置く」",
+        steps: &[
+            "画面左端のツールレールの 💬 言葉で を押す (カードの「開く」でもよい)",
+            "「コンベア2本とロボット1台で箱詰め」のように作りたいラインを書いて「下書きを作る」",
+            "配置図とステップを確かめて「モデルとチャートに置く」。Ctrl+Z で戻せる",
+        ],
+        why: "ラインのたたき台を数秒で作れます。AI の設定がなくても、文のキーワードから組めます",
+        place: Place::Rail,
+        needs_stopped_line: false,
+        keys: &[],
+        tool: Some(Tool::Compose),
+        xp: 120,
+    },
+    Mission {
+        id: MissionId::ExportLadder,
+        key: "export_ladder",
+        chapter: Chapter::Master,
+        title: "ラダーを書き出そう",
+        hint: "左端の ✨ ラダー を開き、「ラダーを書き出す」タブで保存かコピー",
+        steps: &[
+            "画面左端のツールレールの ✨ ラダー を押す (カードの「開く」でもよい)",
+            "「ラダーを書き出す」タブを開く。今のチャートからステップラダーと I/O 表ができている",
+            "「I/O 表をコピー」か「命令リストを保存…」を押す",
+        ],
+        why: "チャートから三菱 PLC 向けのラダーと I/O 表を作れるので、PLC のプログラムの下書きに使えます",
+        place: Place::Rail,
+        needs_stopped_line: false,
+        keys: &[],
+        tool: Some(Tool::SequenceGen),
+        xp: 100,
+    },
+    Mission {
+        id: MissionId::WalkAround,
+        key: "walk_around",
+        chapter: Chapter::Master,
+        title: "工場の中を歩こう",
+        hint: "ツールバーの「🎥 ビュー」→「🚶 一人称で歩く」",
+        steps: &[
+            "3D ビューの上のツールバーの「🎥 ビュー」→「🚶 一人称で歩く」を押す (「表示」メニューからでもよい)",
+            "W A S D で歩き、マウスで向きを変える。左上に通路幅や手が届く部品が出る",
+            "Esc で歩くのをやめる",
+        ],
+        why: "作業者の目の高さで、通路の幅・手の届く範囲・見通しを確かめられます",
+        place: Place::Menu,
+        needs_stopped_line: false,
+        keys: &["W", "A", "S", "D"],
+        tool: None,
+        xp: 100,
+    },
+    Mission {
+        id: MissionId::ExportVideo,
+        key: "export_video",
+        chapter: Chapter::Master,
+        title: "動画にして見せよう",
+        hint: "「ファイル → 書き出し → シミュレーションを動画で書き出し…」",
+        steps: &[
+            "メニューの「ファイル → 書き出し → シミュレーションを動画で書き出し…」を開く",
+            "形式 (MP4・GIF) とサイクル数を選んで「書き出し開始…」を押し、保存先を決める",
+            "撮り終わるまで待つ (Esc で中止)。打ち合わせの資料にそのまま貼れる",
+        ],
+        why: "動きを見せると、図面だけより早く意図が伝わります",
+        place: Place::Menu,
+        needs_stopped_line: false,
+        keys: &[],
+        tool: None,
+        xp: 120,
+    },
 ];
 
 pub fn mission(id: MissionId) -> &'static Mission {
@@ -348,6 +586,26 @@ pub struct Observation {
     pub library_part_count: usize,
     /// 工程シミュレーションの結果が出ている
     pub flow_has_result: bool,
+    /// タイミングチャートのアクチュエータに割り当てた部品の数 (全アクチュエータの合計)
+    pub actuated_part_count: usize,
+    /// タイミングチャートのステップの数
+    pub step_count: usize,
+    /// タイミングチャートのセンサーの数
+    pub sensor_count: usize,
+    /// 安全パネルで非常停止を押しているか、センサーを遮光している
+    pub safety_tripped: bool,
+    /// 内蔵の模擬 PLC で運転している
+    pub plc_running: bool,
+    /// ライン連携でラインが動いている
+    pub line_running: bool,
+    /// 「言葉でラインを組む」でモデルに置いた回数
+    pub composed_count: u32,
+    /// ラダーか I/O 表を書き出した (コピーした) 回数
+    pub ladder_export_count: u32,
+    /// 一人称で歩いている
+    pub walking: bool,
+    /// 動画を書き出し終えた回数
+    pub video_export_count: u32,
 }
 
 /// ミッションを1つ達成したときの知らせ
@@ -359,6 +617,8 @@ pub struct Achievement {
     pub level_up: Option<u32>,
     /// これで章のミッションが全部終わったら、その章
     pub chapter_complete: Option<Chapter>,
+    /// これで基本編・応用編のミッションが全部終わったら、そのまとまり
+    pub part_complete: Option<Part>,
     /// これで全部のミッションが終わった
     pub all_complete: bool,
 }
@@ -416,6 +676,8 @@ pub struct Progress {
     orbit_travel: f64,
     /// 起動してから部品を編集したか (最初からある干渉を数えないため)
     edited: bool,
+    /// 一覧の「挑戦」でえらんだミッション。おすすめ順より先にこれを出す (保存しない)
+    focus: Option<MissionId>,
 }
 
 impl Progress {
@@ -477,9 +739,27 @@ impl Progress {
         self.completed.len() == MISSIONS.len()
     }
 
-    /// 次に挑戦するミッション (おすすめ順で最初の、達成もとばしもしていないもの)
+    /// 次に挑戦するミッション。一覧でえらんだものがあればそれ、
+    /// なければおすすめ順で最初の、達成もとばしもしていないもの
     pub fn next(&self) -> Option<&'static Mission> {
+        if let Some(id) = self.focus.filter(|&id| !self.is_done(id)) {
+            return Some(mission(id));
+        }
         MISSIONS.iter().find(|m| !self.is_settled(m.id))
+    }
+
+    /// 一覧でえらんだミッションに今すぐ挑戦する (とばしていたら候補に戻す)
+    pub fn focus(&mut self, id: MissionId) {
+        if self.is_done(id) {
+            return;
+        }
+        self.skipped.retain(|&s| s != id);
+        self.focus = Some(id);
+    }
+
+    /// 一覧でえらんで挑戦しているミッション
+    pub fn focused(&self) -> Option<MissionId> {
+        self.focus.filter(|&id| !self.is_done(id))
     }
 
     /// 章の (達成した数, ミッションの数)
@@ -491,6 +771,9 @@ impl Progress {
 
     /// 今のミッションをとばして次へ進む。経験値はもらえない。
     pub fn skip(&mut self, id: MissionId) {
+        if self.focus == Some(id) {
+            self.focus = None;
+        }
         if !self.is_settled(id) {
             self.skipped.push(id);
         }
@@ -558,6 +841,34 @@ impl Progress {
                 MissionId::RunFlow,
                 now.flow_has_result && !before.flow_has_result,
             ),
+            (
+                MissionId::AddActuator,
+                now.actuated_part_count > before.actuated_part_count,
+            ),
+            (MissionId::AddStep, now.step_count > before.step_count),
+            (MissionId::AddSensor, now.sensor_count > before.sensor_count),
+            (
+                MissionId::EmergencyStop,
+                now.safety_tripped && !before.safety_tripped,
+            ),
+            (MissionId::RunPlc, now.plc_running && !before.plc_running),
+            (
+                MissionId::RunLineLink,
+                now.line_running && !before.line_running,
+            ),
+            (
+                MissionId::ComposeLine,
+                now.composed_count > before.composed_count,
+            ),
+            (
+                MissionId::ExportLadder,
+                now.ladder_export_count > before.ladder_export_count,
+            ),
+            (MissionId::WalkAround, now.walking && !before.walking),
+            (
+                MissionId::ExportVideo,
+                now.video_export_count > before.video_export_count,
+            ),
         ];
 
         let mut achievements = Vec::new();
@@ -573,15 +884,24 @@ impl Progress {
         let before = self.level().level;
         let m = mission(id);
         self.skipped.retain(|&s| s != id);
+        if self.focus == Some(id) {
+            self.focus = None;
+        }
         self.completed.push(id);
         self.xp += m.xp;
         let after = self.level().level;
         let (done, total) = self.chapter_progress(m.chapter);
+        let part = m.chapter.part();
+        let part_done = MISSIONS
+            .iter()
+            .filter(|other| other.chapter.part() == part)
+            .all(|other| self.is_done(other.id));
         Achievement {
             mission: id,
             xp: m.xp,
             level_up: (after > before).then_some(after),
             chapter_complete: (done == total).then_some(m.chapter),
+            part_complete: part_done.then_some(part),
             all_complete: self.all_complete(),
         }
     }
@@ -910,6 +1230,99 @@ mod tests {
             observe(&mut progress, |o| o.flow_has_result = true),
             [MissionId::RunFlow]
         );
+    }
+
+    #[test]
+    fn advanced_missions_complete_on_change() {
+        let mut progress = Progress::default();
+        // 読み込んだ直後からある数や状態は数えない
+        observe(&mut progress, |o| {
+            o.actuated_part_count = 4;
+            o.step_count = 6;
+            o.sensor_count = 2;
+        });
+        type Edit = fn(&mut Observation);
+        let cases: [(MissionId, Edit); 10] = [
+            (MissionId::AddActuator, |o| o.actuated_part_count = 5),
+            (MissionId::AddStep, |o| o.step_count = 7),
+            (MissionId::AddSensor, |o| o.sensor_count = 3),
+            (MissionId::EmergencyStop, |o| o.safety_tripped = true),
+            (MissionId::RunPlc, |o| o.plc_running = true),
+            (MissionId::RunLineLink, |o| o.line_running = true),
+            (MissionId::ComposeLine, |o| o.composed_count = 1),
+            (MissionId::ExportLadder, |o| o.ladder_export_count = 1),
+            (MissionId::WalkAround, |o| o.walking = true),
+            (MissionId::ExportVideo, |o| o.video_export_count = 1),
+        ];
+        for (id, edit) in cases {
+            assert_eq!(observe(&mut progress, edit), [id]);
+        }
+        // 減っても、止めても達成にはならない
+        assert!(
+            observe(&mut progress, |o| {
+                o.step_count = 1;
+                o.walking = false;
+                o.plc_running = false;
+            })
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn missions_with_a_rail_place_have_a_tool() {
+        for m in MISSIONS {
+            if m.place == Place::Rail {
+                assert!(m.tool.is_some(), "{} の道具がない", m.key);
+            }
+        }
+    }
+
+    #[test]
+    fn parts_split_chapters_basic_first() {
+        let basic: Vec<Chapter> = Part::Basic.chapters().collect();
+        let advanced: Vec<Chapter> = Part::Advanced.chapters().collect();
+        assert_eq!(basic.len() + advanced.len(), Chapter::ALL.len());
+        // 基本編の章が先に並ぶ
+        let last_basic = basic.iter().map(|c| c.number()).max().unwrap();
+        let first_advanced = advanced.iter().map(|c| c.number()).min().unwrap();
+        assert!(last_basic < first_advanced);
+        // 基本編だけを終えると、最後の1つで基本編クリアになり、応用編の最初のミッションが次になる
+        let mut progress = Progress::default();
+        let mut last = None;
+        for m in MISSIONS.iter().filter(|m| m.chapter.part() == Part::Basic) {
+            let achievement = progress.complete(m.id);
+            if let Some(prev) = last.replace(achievement.part_complete) {
+                assert_eq!(prev, None);
+            }
+        }
+        assert_eq!(last, Some(Some(Part::Basic)));
+        assert_eq!(progress.next().unwrap().chapter, advanced[0]);
+        assert!(!progress.all_complete());
+    }
+
+    #[test]
+    fn focus_jumps_to_a_chosen_mission() {
+        let mut progress = Progress::default();
+        progress.focus(MissionId::RunPlc);
+        assert_eq!(progress.next().unwrap().id, MissionId::RunPlc);
+        assert_eq!(progress.focused(), Some(MissionId::RunPlc));
+        // 達成するとおすすめ順に戻る
+        let done = progress.complete(MissionId::RunPlc);
+        assert_eq!(done.mission, MissionId::RunPlc);
+        assert_eq!(progress.focused(), None);
+        assert_eq!(progress.next().unwrap().id, MissionId::SelectPart);
+
+        // とばしていたミッションもえらべる。えらんだものをとばすとおすすめ順に戻る
+        progress.skip(MissionId::Save);
+        progress.focus(MissionId::Save);
+        assert!(!progress.is_skipped(MissionId::Save));
+        assert_eq!(progress.next().unwrap().id, MissionId::Save);
+        progress.skip(MissionId::Save);
+        assert_eq!(progress.next().unwrap().id, MissionId::SelectPart);
+
+        // 達成済みのものはえらべない
+        progress.focus(MissionId::RunPlc);
+        assert_eq!(progress.focused(), None);
     }
 
     #[test]

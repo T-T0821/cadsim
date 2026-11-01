@@ -191,11 +191,15 @@ fn save_dialog(name: &str, ext: &str, label: &str) -> Option<std::path::PathBuf>
         .save_file()
 }
 
-fn write_result(path: &std::path::Path, bytes: &[u8]) -> String {
-    match std::fs::write(path, bytes) {
-        Ok(()) => format!("{} に書き出しました", path.display()),
+/// 書き出して、結果をお知らせに出す。書けたら書き出しの回数を増やす
+fn write_result(state: &mut SequenceGen, path: &std::path::Path, bytes: &[u8]) {
+    state.notice = Some(match std::fs::write(path, bytes) {
+        Ok(()) => {
+            state.exports += 1;
+            format!("{} に書き出しました", path.display())
+        }
         Err(e) => format!("書き出せませんでした: {e}"),
-    }
+    });
 }
 
 fn ladder_tab(ui: &mut egui::Ui, state: &mut SequenceGen, chart: &TimingChart) {
@@ -222,7 +226,7 @@ fn ladder_tab(ui: &mut egui::Ui, state: &mut SequenceGen, chart: &TimingChart) {
             .clicked()
             && let Some(path) = save_dialog("ladder.txt", "txt", "テキスト")
         {
-            state.notice = Some(write_result(&path, ladder::to_text(&program).as_bytes()));
+            write_result(state, &path, ladder::to_text(&program).as_bytes());
         }
         if ui
             .button("GX Works 用 CSV を保存…")
@@ -234,7 +238,7 @@ fn ladder_tab(ui: &mut egui::Ui, state: &mut SequenceGen, chart: &TimingChart) {
         {
             let csv = ladder::to_gx_csv(&program);
             let (bytes, _, _) = encoding_rs::SHIFT_JIS.encode(&csv);
-            state.notice = Some(write_result(&path, &bytes));
+            write_result(state, &path, &bytes);
         }
         if ui
             .button("I/O 表を保存…")
@@ -244,10 +248,11 @@ fn ladder_tab(ui: &mut egui::Ui, state: &mut SequenceGen, chart: &TimingChart) {
             .clicked()
             && let Some(path) = save_dialog("io_list.csv", "csv", "CSV")
         {
-            state.notice = Some(write_result(&path, ladder::io_csv(&program).as_bytes()));
+            write_result(state, &path, ladder::io_csv(&program).as_bytes());
         }
         if ui.button("I/O 表をコピー").clicked() {
             ui.ctx().copy_text(ladder::io_tsv(&program));
+            state.exports += 1;
             state.notice = Some("I/O 表をコピーしました (タブ区切り)".into());
         }
     });
