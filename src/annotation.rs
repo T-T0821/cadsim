@@ -37,7 +37,7 @@ use crate::simulation::measure::MeasureTool;
 use crate::ui::widgets::length;
 use crate::view::camera::{ViewportRect, alt_pressed, keyboard_free};
 use crate::view::gizmo::transform_gizmo_system;
-use crate::view::viewport::PartPicker;
+use crate::view::picking::PartUnderPointer;
 
 /// 吸着する距離 (画面上のピクセル)
 const SNAP_PX: f32 = 12.0;
@@ -910,7 +910,7 @@ fn annotate_input(
     viewport: Res<ViewportRect>,
     window: Single<&Window, With<PrimaryWindow>>,
     camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
-    picker: PartPicker,
+    under_pointer: PartUnderPointer,
     model: Res<Model>,
     cache: Res<GeometryCache>,
     mut tool: ResMut<AnnotateTool>,
@@ -932,11 +932,7 @@ fn annotate_input(
     let (camera, camera_transform) = *camera;
     let to_screen = |p: DVec3| camera.world_to_viewport(camera_transform, p.as_vec3()).ok();
 
-    let hit = camera
-        .viewport_to_world(camera_transform, cursor)
-        .ok()
-        .and_then(|ray| picker.cast(ray))
-        .map(|hit| (hit, hit.point));
+    let hit = under_pointer.hit().map(|hit| (hit, hit.point));
 
     // 吸着や辺の候補は、画面上でカーソルの近くにある部品だけから探す
     let near_cursor = |id: NodeId| {

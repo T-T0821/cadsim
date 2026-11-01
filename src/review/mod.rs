@@ -27,7 +27,7 @@ use cadsim_io::review::{LinkEvent, ReviewLink, local_addresses, parse_address};
 
 use crate::model::{Model, Selection};
 use crate::view::camera::{OrbitCamera, ViewportRect, alt_pressed};
-use crate::view::viewport::PartPicker;
+use crate::view::picking::PartUnderPointer;
 
 pub struct ReviewPlugin;
 
@@ -360,7 +360,7 @@ fn share_pointer(
     window: Single<&Window, With<PrimaryWindow>>,
     viewport: Res<ViewportRect>,
     camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
-    picker: PartPicker,
+    under_pointer: PartUnderPointer,
     keys: Res<ButtonInput<KeyCode>>,
     recorder: Res<crate::view::recording::Recorder>,
 ) {
@@ -377,7 +377,7 @@ fn share_pointer(
             camera.viewport_to_world(transform, cursor).ok()
         })
         .and_then(|ray| {
-            picker.cast(ray).map(|hit| hit.point).or_else(|| {
+            under_pointer.hit().map(|hit| hit.point).or_else(|| {
                 // 部品に当たらなければ床 (y = 0) を指す
                 let t = -ray.origin.y / ray.direction.y;
                 (ray.direction.y.abs() > 1e-6 && t > 0.0).then(|| ray.origin + *ray.direction * t)

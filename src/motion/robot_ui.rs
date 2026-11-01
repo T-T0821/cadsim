@@ -24,7 +24,7 @@ use super::ui::{ChartUiState, ERROR_COLOR, WARN_COLOR};
 use super::{ChartSchedule, JogPose, SimulationPose};
 use crate::model::Model;
 use crate::simulation::{InterferenceCheck, SimBody};
-use crate::view::viewport::PartPicker;
+use crate::view::picking::PartUnderPointer;
 
 /// 移動中の干渉を調べる時刻の間隔 (秒)
 const INTERFERENCE_INTERVAL: f64 = 0.05;
@@ -829,7 +829,7 @@ pub fn place_teach_point(
     keys: Res<ButtonInput<KeyCode>>,
     window: Single<&Window, With<bevy::window::PrimaryWindow>>,
     camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
-    picker: PartPicker,
+    under_pointer: PartUnderPointer,
     bodies: Query<&SimBody>,
     mut state: ResMut<RobotUiState>,
     mut chart: ResMut<TimingChart>,
@@ -847,7 +847,7 @@ pub fn place_teach_point(
     let standoff = state.standoff;
     state.hover = window.cursor_position().and_then(|cursor| {
         let ray = camera.viewport_to_world(camera_transform, cursor).ok()?;
-        let hit = picker.cast(ray)?;
+        let hit = under_pointer.hit()?;
         let body = bodies.get(hit.entity).ok()?;
         // 当たった点を f64 の形状に載せ直し、その三角形の法線を使う
         let local = body.pose.inverse().apply(hit.point.as_dvec3());

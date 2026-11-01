@@ -50,7 +50,7 @@ Cargo.toml                ワークスペース兼アプリ本体 (4. UI・フ�
 src/                      アプリ本体。assets/ の場所を変えないようにルートに置いたままにする
 ├── main.rs               プラグインを並べるだけ
 ├── resources.rs          ドメインの型を包む Resource
-├── view/                 viewport, camera, gizmo, 干渉の表示, 動画の撮影, walk (一人称で歩く)
+├── view/                 viewport, picking (Bevy の picking の backend), camera, gizmo, 干渉の表示, 動画の撮影, walk (一人称で歩く)
 ├── input/                shortcuts, ファイルダイアログ, ドラッグ&ドロップ
 └── ui/                   menu, tree, properties, status, 各パネル
 crates/

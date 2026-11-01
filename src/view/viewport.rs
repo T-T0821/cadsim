@@ -11,7 +11,8 @@
 //! - 画面の外の部品は Bevy の視錐台カリングで描かない。画面上で小さい部品は粗いメッシュに
 //!   差し替え (LOD)、さらに小さいものは描かない。
 //! - クリックでの選択は、部品の外接箱と部品内の三角形の2段の BVH で探す (`PartPicker`)。
-//!   計測や寸法のツールも同じものを使う。
+//!   これを Bevy の picking の backend にして (`view::picking`)、ホバーや押したイベントは Bevy に任せる。
+//!   計測や寸法のツールも同じホバーの結果を使う。
 //! - 部品には干渉チェック用の `SimBody` (f64 メッシュ + 姿勢) も付け、干渉中の部品は半透明にする。
 //! - 「小さな穴とフィレットを省略」をオンにすると、取り込んだ形状ごとに裏のスレッドで
 //!   簡略化した形 (`defeature.rs`) を作り、できたものから表示を差し替える。干渉チェックは元の形のまま。
@@ -25,14 +26,12 @@ use bevy::{
     mesh::PrimitiveTopology,
     prelude::*,
     tasks::{AsyncComputeTaskPool, Task, block_on, poll_once},
-    window::PrimaryWindow,
 };
 use cadsim_core::effects::EffectSettings;
 use truck_meshalgo::prelude::*;
 // truck の prelude にも Transform トレイトがあるため Bevy 側を明示する
 use bevy::prelude::Transform;
 
-use crate::annotation::annotate_tool_off;
 use crate::bvh::{Bounds, Bvh};
 use crate::defeature::{DefeatureOptions, DefeatureStats, defeature_shape};
 use crate::flow::FlowColors;
@@ -42,11 +41,9 @@ use crate::model::{Model, NodeId, NodeKind, Selection};
 use crate::motion::{MotionSet, SimulationPose};
 use crate::part_mesh::{PartMesh, shell_edges};
 use crate::physics::{PhysicsPose, PhysicsSet};
-use crate::simulation::{self, InterferenceCheck, Pose, SimBody, TriMesh, measure::not_measuring};
+use crate::simulation::{self, InterferenceCheck, Pose, SimBody, TriMesh};
 use crate::step_import::ImportedShape;
-use crate::view::camera::{ViewportRect, alt_pressed, pointer_in_3d_view};
 use crate::view::factory_hall;
-use crate::view::gizmo::gizmo_not_focused;
 use cadsim_core::factory_hall::HallSettings;
 
 /// 箱のテッセレーションの許容誤差 (モデル単位)
@@ -67,13 +64,6 @@ impl Plugin for ViewportPlugin {
             .add_systems(
                 Update,
                 (
-                    pick_part
-                        .run_if(pointer_in_3d_view)
-                        .run_if(gizmo_not_focused)
-                        .run_if(not_measuring)
-                        .run_if(annotate_tool_off)
-                        .run_if(crate::motion::teach_tool_off)
-                        .run_if(crate::site::plan_tool_off),
                     rebuild_dirty_parts,
                     defeature_shapes,
                     // 動作シミュレーションと物理演算の動きが決まってから配置を写す
@@ -958,46 +948,10 @@ fn draw_grid(gizmos: &mut Gizmos, scene_bounds: Option<Aabb>, skip_from: Option<
 }
 
 // ---------------------------------------------------------------------------
-// クリックで選択
+// クリックで選択 (Bevy の picking の backend から使う。`view::picking`)
 // ---------------------------------------------------------------------------
 
-/// クリックで部品と面を選ぶ
-#[allow(clippy::too_many_arguments)]
-fn pick_part(
-    buttons: Res<ButtonInput<MouseButton>>,
-    keys: Res<ButtonInput<KeyCode>>,
-    window: Single<&Window, With<PrimaryWindow>>,
-    viewport: Res<ViewportRect>,
-    camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
-    picker: PartPicker,
-    model: Res<Model>,
-    mut selection: ResMut<Selection>,
-) {
-    // Alt + 左ドラッグはオービットなので選択しない
-    if !buttons.just_pressed(MouseButton::Left) || alt_pressed(&keys) {
-        return;
-    }
-    // viewport_to_world はウィンドウ座標を受け取る (ビューの位置は Bevy が差し引く)
-    let Some(cursor) = window.cursor_position().filter(|&c| viewport.contains(c)) else {
-        return;
-    };
-    let (camera, camera_transform) = *camera;
-    let Ok(ray) = camera.viewport_to_world(camera_transform, cursor) else {
-        return;
-    };
-    match picker.cast(ray) {
-        Some(hit) => {
-            // 標準部品は本体ではなく部品全体を選ぶ (面の強調もしない)
-            let target = model.pick_target(hit.node);
-            selection.node = Some(target);
-            selection.face = (target == hit.node).then_some(hit.face);
-            selection.reveal_in_tree = true;
-        }
-        None => selection.clear(),
-    }
-}
-
-/// レイが最初に当たった部品の面
+/// レイが最初に当たった部品の面。picking の `HitData` の `extra` にも載せる
 #[derive(Clone, Copy, Debug)]
 pub struct PartHit {
     /// 部品のエンティティ (`SimBody` を持つ)
@@ -1012,32 +966,61 @@ pub struct PartHit {
 /// 表示中の部品にレイを当てる。部品の外接箱の BVH → 部品内の三角形の BVH の順に調べるので、
 /// 数千部品でも速い。画面上で小さくて粗く描いている部品も詳細な形状で当たりを調べる
 /// (穴とフィレットを省略しているときは、省略した形で調べる)。
+///
+/// 部品の外接箱の BVH は、部品の配置・表示・形が変わったフレームだけ作り直す
+/// (picking の backend が毎フレーム呼ぶため)。
 #[derive(SystemParam)]
 pub struct PartPicker<'w, 's> {
     views: Query<'w, 's, (Entity, &'static PartView, &'static GlobalTransform)>,
+    changed: Query<'w, 's, (), PartMoved>,
+    removed: RemovedComponents<'w, 's, PartView>,
+    scene: Local<'s, PickScene>,
+}
+
+/// 配置・表示・形が変わった部品
+type PartMoved = (
+    With<PartView>,
+    Or<(Changed<PartView>, Changed<GlobalTransform>)>,
+);
+
+/// 表示中の部品の外接箱 (ワールド座標) の BVH
+#[derive(Default)]
+pub struct PickScene {
+    parts: Vec<Entity>,
+    bvh: Option<Bvh>,
 }
 
 impl PartPicker<'_, '_> {
-    pub fn cast(&self, ray: Ray3d) -> Option<PartHit> {
-        let parts: Vec<_> = self
+    /// 部品が変わっていれば外接箱の BVH を作り直す
+    fn refresh(&mut self) {
+        let removed = self.removed.read().count() > 0;
+        if self.scene.bvh.is_some() && !removed && self.changed.is_empty() {
+            return;
+        }
+        let (parts, world_bounds): (Vec<Entity>, Vec<Bounds>) = self
             .views
             .iter()
             .filter(|(_, view, _)| view.shown)
-            .collect();
-        let origin = ray.origin;
-        let dir = *ray.direction;
-        let world_bounds: Vec<Bounds> = parts
-            .iter()
-            .map(|(_, view, transform)| {
+            .map(|(entity, view, transform)| {
                 let b = view.display.mesh.bounds;
                 let corners = Aabb {
                     min: b.min.as_dvec3(),
                     max: b.max.as_dvec3(),
                 }
                 .corners();
-                Bounds::from_points(corners.map(|p| transform.transform_point(p.as_vec3())))
+                let bounds =
+                    Bounds::from_points(corners.map(|p| transform.transform_point(p.as_vec3())));
+                (entity, bounds)
             })
-            .collect();
+            .unzip();
+        self.scene.bvh = Some(Bvh::build(&world_bounds));
+        self.scene.parts = parts;
+    }
+
+    pub fn cast(&mut self, ray: Ray3d) -> Option<PartHit> {
+        self.refresh();
+        let origin = ray.origin;
+        let dir = *ray.direction;
         // 部品の座標系に移したレイ (向きは正規化しないので t は世界座標と同じ尺度のまま)
         let local_ray = |transform: &GlobalTransform| {
             let inverse = transform.affine().inverse();
@@ -1046,12 +1029,15 @@ impl PartPicker<'_, '_> {
                 inverse.transform_vector3(dir),
             )
         };
-        let (index, t) = Bvh::build(&world_bounds).cast(origin, dir, |i, _| {
-            let (_, view, transform) = parts[i as usize];
+        let views = &self.views;
+        let parts = &self.scene.parts;
+        let bvh = self.scene.bvh.as_ref()?;
+        let (index, t) = bvh.cast(origin, dir, |i, _| {
+            let (_, view, transform) = views.get(parts[i as usize]).ok()?;
             let (o, d) = local_ray(transform);
             view.display.mesh.ray_cast(o, d).map(|(_, t)| t)
         })?;
-        let (entity, view, transform) = parts[index as usize];
+        let (entity, view, transform) = views.get(parts[index as usize]).ok()?;
         let (o, d) = local_ray(transform);
         let (face, _) = view.display.mesh.ray_cast(o, d)?;
         Some(PartHit {

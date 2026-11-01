@@ -10,7 +10,7 @@ use bevy::{math::DVec3, prelude::*, window::PrimaryWindow};
 use bevy_egui::{EguiContexts, egui};
 
 use super::{SimBody, view::SimulationGizmos};
-use crate::view::viewport::PartPicker;
+use crate::view::picking::PartUnderPointer;
 
 /// 頂点に吸着する範囲 (画面上のピクセル)
 const SNAP_PIXELS: f32 = 12.0;
@@ -80,15 +80,14 @@ pub fn pick_point(
     keys: Res<ButtonInput<KeyCode>>,
     window: Single<&Window, With<PrimaryWindow>>,
     camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
-    picker: PartPicker,
+    under_pointer: PartUnderPointer,
     bodies: Query<&SimBody>,
     mut tool: ResMut<MeasureTool>,
 ) {
     let (camera, camera_transform) = *camera;
     tool.hover = window.cursor_position().and_then(|cursor| {
-        let ray = camera.viewport_to_world(camera_transform, cursor).ok()?;
         // 当たった部品のエンティティが SimBody を持っている
-        let hit = picker.cast(ray)?;
+        let hit = under_pointer.hit()?;
         let (body, point) = (bodies.get(hit.entity).ok()?, hit.point);
         Some(snap(body, point, cursor, camera, camera_transform))
     });

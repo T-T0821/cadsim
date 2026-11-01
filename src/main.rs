@@ -121,7 +121,7 @@ fn main() {
         .add_plugins((
             camera::CameraPlugin,
             animation::AnimationPlugin,
-            viewport::ViewportPlugin,
+            (viewport::ViewportPlugin, view::picking::PartPickingPlugin),
             file_io::FileIoPlugin,
             project::ProjectPlugin,
             input::InputPlugin,
