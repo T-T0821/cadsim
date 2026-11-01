@@ -10,7 +10,7 @@ plantwright 本体は MIT License と Apache License 2.0 のデュアルライ�
 
 ライセンスごとの件数 / Overview
 - MIT License: 737
-- Apache License 2.0: 48
+- Apache License 2.0: 49
 - ISC License: 26
 - Unicode License v3: 24
 - BSD 2-Clause "Simplified" License: 21
@@ -2843,6 +2843,7 @@ Apache License 2.0 (Apache-2.0)
 - ab_glyph 0.2.32 (https://github.com/alexheretic/ab-glyph)
 - ab_glyph_rasterizer 0.1.10 (https://github.com/alexheretic/ab-glyph)
 - accesskit_winit 0.33.2 (https://github.com/AccessKit/accesskit)
+- bevy_rapier3d 0.37.0 (https://github.com/dimforge/rapier)
 - blake3 1.8.7 (https://github.com/BLAKE3-team/BLAKE3)
 - gl_generator 0.14.0 (https://github.com/brendanzab/gl-rs/)
 - khronos_api 3.1.0 (https://github.com/brendanzab/gl-rs/)
