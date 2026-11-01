@@ -3,8 +3,16 @@
 //! クリックでの選択に使う。部品の数千個の外接箱 (上の階層) と、部品1つの数万個の三角形
 //! (下の階層) のどちらにも同じ木を使う。全件を順に調べる代わりに、レイが通らない枝を
 //! 丸ごと飛ばすので、部品や三角形が増えてもほぼ log(n) で済む。
+//!
+//! 木の構築と、近い枝から順に開くたどり方は parry の [`ParryBvh`] に任せる。
+//! 外から見える型 ([`Bounds`]・[`Bvh::cast`]) は f32 のまま。
+
+use std::cell::RefCell;
 
 use glam::Vec3;
+use parry3d_f64::bounding_volume::Aabb;
+use parry3d_f64::partitioning::{Bvh as ParryBvh, BvhBuildStrategy};
+use parry3d_f64::query::Ray;
 
 /// 軸に平行な箱 (f32)
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -38,6 +46,7 @@ impl Bounds {
     }
 
     /// レイ `origin + t * dir` が箱に入る t (0 以上 `max_t` 未満)。当たらなければ None。
+    #[cfg(test)]
     fn ray_entry(&self, origin: Vec3, inv_dir: Vec3, max_t: f32) -> Option<f32> {
         let t1 = (self.min - origin) * inv_dir;
         let t2 = (self.max - origin) * inv_dir;
@@ -48,80 +57,28 @@ impl Bounds {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-struct Node {
-    bounds: Bounds,
-    /// 葉なら `order` の先頭、枝なら左の子 (右の子はその次)
-    first: u32,
-    /// 葉に入っている数。0 なら枝。
-    count: u32,
+#[derive(Clone, Default)]
+pub struct Bvh {
+    /// 葉の番号は `build` に渡した要素の添字
+    tree: ParryBvh,
 }
 
-/// 葉に入れる最大の数
-const LEAF_SIZE: usize = 4;
-
-#[derive(Clone, Debug, Default)]
-pub struct Bvh {
-    nodes: Vec<Node>,
-    /// 葉の並び順に並べた要素の番号
-    order: Vec<u32>,
+impl std::fmt::Debug for Bvh {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Bvh").finish_non_exhaustive()
+    }
 }
 
 impl Bvh {
-    /// 要素の外接箱から木を作る。中心の並びの真ん中で、いちばん長い軸を半分に分けていく。
+    /// 要素の外接箱から木を作る
     pub fn build(items: &[Bounds]) -> Bvh {
-        let mut bvh = Bvh {
-            nodes: Vec::with_capacity(items.len().div_ceil(LEAF_SIZE) * 2),
-            order: (0..items.len() as u32).collect(),
-        };
-        if items.is_empty() {
-            return bvh;
+        let leaves: Vec<Aabb> = items
+            .iter()
+            .map(|b| Aabb::new(b.min.as_dvec3(), b.max.as_dvec3()))
+            .collect();
+        Bvh {
+            tree: ParryBvh::from_leaves(BvhBuildStrategy::Binned, &leaves),
         }
-        let centers: Vec<Vec3> = items.iter().map(Bounds::center).collect();
-        bvh.nodes.push(Node {
-            bounds: Bounds::EMPTY,
-            first: 0,
-            count: 0,
-        });
-        // (ノード, order の範囲) を積んで、再帰の代わりにループで分ける
-        let mut stack = vec![(0usize, 0usize, items.len())];
-        while let Some((node, start, end)) = stack.pop() {
-            let slice = &mut bvh.order[start..end];
-            let bounds = slice
-                .iter()
-                .fold(Bounds::EMPTY, |b, &i| b.union(items[i as usize]));
-            bvh.nodes[node].bounds = bounds;
-            if slice.len() <= LEAF_SIZE {
-                bvh.nodes[node].first = start as u32;
-                bvh.nodes[node].count = slice.len() as u32;
-                continue;
-            }
-            let spread = Bounds::from_points(slice.iter().map(|&i| centers[i as usize]));
-            let size = spread.max - spread.min;
-            let axis = if size.x >= size.y && size.x >= size.z {
-                0
-            } else if size.y >= size.z {
-                1
-            } else {
-                2
-            };
-            let mid = slice.len() / 2;
-            slice.select_nth_unstable_by(mid, |&a, &b| {
-                centers[a as usize][axis].total_cmp(&centers[b as usize][axis])
-            });
-            let left = bvh.nodes.len();
-            for _ in 0..2 {
-                bvh.nodes.push(Node {
-                    bounds: Bounds::EMPTY,
-                    first: 0,
-                    count: 0,
-                });
-            }
-            bvh.nodes[node].first = left as u32;
-            stack.push((left, start, start + mid));
-            stack.push((left + 1, start + mid, end));
-        }
-        bvh
     }
 
     /// レイにいちばん近く当たる要素とその t を探す。
@@ -133,48 +90,22 @@ impl Bvh {
         &self,
         origin: Vec3,
         dir: Vec3,
-        mut hit: impl FnMut(u32, f32) -> Option<f32>,
+        hit: impl FnMut(u32, f32) -> Option<f32>,
     ) -> Option<(u32, f32)> {
-        let root = self.nodes.first()?;
-        let inv_dir = dir.recip();
-        let mut best: Option<(u32, f32)> = None;
-        let mut best_t = f32::INFINITY;
-        let mut stack = Vec::with_capacity(64);
-        if let Some(t) = root.bounds.ray_entry(origin, inv_dir, best_t) {
-            stack.push((0usize, t));
-        }
-        while let Some((index, entry)) = stack.pop() {
-            if entry >= best_t {
-                continue;
-            }
-            let node = self.nodes[index];
-            if node.count > 0 {
-                let start = node.first as usize;
-                for &item in &self.order[start..start + node.count as usize] {
-                    if let Some(t) = hit(item, best_t).filter(|&t| t < best_t) {
-                        best_t = t;
-                        best = Some((item, t));
-                    }
-                }
-                continue;
-            }
-            let left = node.first as usize;
-            let entries = [left, left + 1]
-                .map(|c| (c, self.nodes[c].bounds.ray_entry(origin, inv_dir, best_t)));
-            // 遠い方を先に積み、近い方から開く
-            let [(a, ta), (b, tb)] = entries;
-            let (near, far) = if ta.unwrap_or(f32::INFINITY) <= tb.unwrap_or(f32::INFINITY) {
-                ((a, ta), (b, tb))
+        let ray = Ray::new(origin.as_dvec3(), dir.as_dvec3());
+        // parry は Fn を受け取るので、呼び出し側の FnMut は RefCell に入れて渡す
+        let hit = RefCell::new(hit);
+        let (item, t) = self.tree.cast_ray(&ray, f64::MAX, |item, best| {
+            let best = if best >= f64::from(f32::MAX) {
+                f32::INFINITY
             } else {
-                ((b, tb), (a, ta))
+                best as f32
             };
-            for (child, t) in [far, near] {
-                if let Some(t) = t {
-                    stack.push((child, t));
-                }
-            }
-        }
-        best
+            (hit.borrow_mut())(item, best)
+                .filter(|&t| t < best)
+                .map(f64::from)
+        })?;
+        Some((item, t as f32))
     }
 }
 

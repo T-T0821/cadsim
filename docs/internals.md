@@ -28,7 +28,7 @@
 | e57(E57 の点群の読み込み) | 0.11 |
 | las(LAS / LAZ の点群の読み込み。`laz` 機能) | 0.11 |
 | csv(CSV / TSV の読み書き) | 1 |
-| parry3d-f64(干渉チェックの検索木 `Bvh`) | 0.31 |
+| parry3d-f64(干渉チェックとクリック選択の検索木 `Bvh`) | 0.31 |
 | krilla(図面の PDF 書き出し) | 0.8 |
 | rust_xlsxwriter(部品表・工程シミュレーションの Excel 書き出し) | 0.102 |
 | rapier3d(物理演算。Bevy に依存しない) | 0.36 |
@@ -44,7 +44,7 @@
 crates/cadsim_core/   Bevy に依存しないドメイン (cargo test -p cadsim_core で単体テスト)
 ├── animation.rs     ノードの配置と、取り込んだアニメーションのキー (Animation / Track)
 ├── bom.rs           部品表: 同じ部品をまとめて数える、構成表
-├── bvh.rs           外接箱の木 (BVH) とレイの当たり判定
+├── bvh.rs           外接箱の木 (BVH。parry3d-f64 の Bvh) とレイの当たり判定
 ├── part_mesh.rs     部品1つ分の表示用メッシュ (面をまとめたもの・面番号の表・簡略形状)
 ├── shape.rs         取り込んだ形状 (B-rep・面メッシュ・計測値) とアセンブリの木 (ImportNode)
 ├── history.rs       元に戻す履歴の山 (UndoStack)・モデルの変更 (ModelChange)・ドラッグ中の編集のまとめ方
