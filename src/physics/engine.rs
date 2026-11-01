@@ -9,7 +9,7 @@
 
 use std::collections::HashMap;
 
-use bevy::ecs::schedule::ScheduleLabel;
+use bevy::ecs::schedule::{ScheduleLabel, SingleThreadedExecutor};
 use bevy::ecs::system::SystemParam;
 use bevy::math::{DVec3, Quat, Vec3};
 use bevy::prelude::*;
@@ -44,7 +44,11 @@ impl Plugin for RapierBackendPlugin {
             dt: STEP_DT as f32,
             substeps: 1,
         })
-        .init_resource::<Bodies>();
+        .init_resource::<Bodies>()
+        // 1フレームに何度も走らせるので、スレッドに分ける手間を省いて1本で順に走らせる
+        .edit_schedule(PhysicsStep, |schedule| {
+            schedule.set_executor(SingleThreadedExecutor::new());
+        });
     }
 }
 
@@ -195,7 +199,6 @@ impl PhysicsEngine for RapierEngine<'_> {
         };
         // 1フレームに何刻みも進めるので、刻みごとに変更の時刻を進める。進めないと、前の刻みで
         // プラグインのシステムが見た時刻と同じになり、変更が見落とされる。
-        self.world.increment_change_tick();
         let mut body = self.world.entity_mut(entity);
         // プラグインは、機構で動く剛体の Transform の変化を次の刻みの目標として渡す
         if body.get::<RigidBody>() == Some(&RigidBody::KinematicPositionBased)
@@ -496,5 +499,24 @@ mod tests {
         e.step(STEP_DT);
         assert!(e.dynamic_poses().is_empty());
         assert!(e.pose(BodyKey::Part(2)).is_none());
+    }
+
+    /// 機構で動く剛体は、刻みごとに与えた目標の姿勢へ毎回動く (原点からずれた箱でも)
+    #[test]
+    fn kinematic_targets_take_effect_every_step() {
+        let mut app = app();
+        let mut e = RapierEngine::new(app.world_mut());
+        let mut desc = cuboid(BodyKind::Kinematic, DVec3::ZERO, DVec3::ONE);
+        desc.shape = ShapeDesc::Cuboid {
+            half: DVec3::ONE,
+            offset: Iso::from_translation(DVec3::new(0.0, 5.0, 0.0)),
+        };
+        e.add_body(BodyKey::Part(1), &desc);
+        for y in [-10.0, -20.0, -30.0, -30.0, -40.0] {
+            let target = Iso::from_translation(DVec3::new(0.0, y, 0.0));
+            e.set_kinematic_target(BodyKey::Part(1), target);
+            e.step(STEP_DT);
+            assert_eq!(e.pose(BodyKey::Part(1)), Some(target));
+        }
     }
 }
