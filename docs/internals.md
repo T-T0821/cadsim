@@ -421,6 +421,17 @@ egui の標準フォントには日本語がないため、[Noto Sans JP](https:
 - `src/japanese_font.rs` … 起動直後に egui の予備フォントとして登録する。英数字は egui の標準フォント、日本語だけ Noto Sans JP で描かれます。
 - `tools/subset_jp_font.py` … 元フォントから絞り込み版を作り直すスクリプト(使い方はファイル先頭)。
 
+## ロゴとアイコン
+
+ロゴは頭文字の p をベルトコンベヤのループにし、上にワーク(黄色い箱)を載せた形です。色は画面の配色(`ui/theme.rs` の紫・ティール・黄・紺)に合わせています。
+
+- `assets/icon/plantwright-mark.svg` … 背景なしのマーク。元の絵はこれ。
+- `assets/icon/plantwright-icon.svg` … 紺の角丸にマークを載せたアプリのアイコン。README の先頭にも出している。
+- `assets/icon/plantwright-icon-256.png`、`plantwright-mark-128.png` … アプリに埋め込む PNG。`ui/logo.rs` がウィンドウのアイコン(Windows・Linux のタスクバーや Alt+Tab)と、ようこそ画面のロゴに使う。ウィンドウのアイコンは Bevy に設定がないため、`bevy::winit::WINIT_WINDOWS` から winit のウィンドウを取り出してメインスレッドで付けている。
+- `assets/icon/plantwright.ico` … Windows の .exe に埋め込むアイコン。`build.rs` が Windows 向けのビルドのときだけ `winresource` で埋め込む(MSVC は rc.exe、クロスビルドは mingw-w64 の windres を使う)。
+- `assets/icon/plantwright.icns` … Mac の .app のアイコン。リリースのワークフローが `Contents/Resources/` に置き、`packaging/macos/Info.plist` の `CFBundleIconFile` で指す。
+- `tools/icons/generate.sh` … SVG から PNG・.ico・.icns を作り直すスクリプト。形や色を変えたら実行してコミットする。
+
 ## 次に手を入れるところ
 
 - 面ごとの色(STEP で面に付いた色)の読み込み

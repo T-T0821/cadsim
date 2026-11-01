@@ -52,7 +52,7 @@ src/                      アプリ本体。assets/ の場所を変えないよ�
 ├── resources.rs          ドメインの型を包む Resource
 ├── view/                 viewport, picking (Bevy の picking の backend), camera, gizmo, 干渉の表示, 動画の撮影, walk (一人称で歩く)
 ├── input/                shortcuts, ファイルダイアログ, ドラッグ&ドロップ
-└── ui/                   menu, tree, properties, status, 各パネル
+└── ui/                   menu, tree, properties, status, 各パネル, logo (ウィンドウのアイコンとロゴの画像)
 crates/
 ├── cadsim_core/          1. ドメイン + 2. ユースケース (Bevy なし)
 │   └── src/

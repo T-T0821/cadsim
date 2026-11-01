@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- plantwright のマーク: 頭文字 p をベルトコンベヤのループにし、上にワーク (黄色い箱) を載せた形 -->
+  <rect x="28" y="4.5" width="12" height="11" rx="2.2" fill="#FFD64A"/>
+  <rect x="14" y="21" width="34" height="22" rx="11" fill="none" stroke="#8574FF" stroke-width="8"/>
+  <rect x="10" y="21" width="8" height="39" rx="4" fill="#8574FF"/>
+  <circle cx="25" cy="32" r="3.6" fill="#4AE0CB"/>
+  <circle cx="37" cy="32" r="3.6" fill="#4AE0CB"/>
+</svg>

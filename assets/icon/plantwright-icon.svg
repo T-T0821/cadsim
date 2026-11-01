@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- アプリのアイコン: 紺の角丸の上に plantwright のマーク (plantwright-mark.svg と同じ形) -->
+  <rect width="256" height="256" rx="58" fill="#191C2C"/>
+  <g transform="translate(36 34) scale(2.9)">
+    <rect x="28" y="4.5" width="12" height="11" rx="2.2" fill="#FFD64A"/>
+    <rect x="14" y="21" width="34" height="22" rx="11" fill="none" stroke="#8574FF" stroke-width="8"/>
+    <rect x="10" y="21" width="8" height="39" rx="4" fill="#8574FF"/>
+    <circle cx="25" cy="32" r="3.6" fill="#4AE0CB"/>
+    <circle cx="37" cy="32" r="3.6" fill="#4AE0CB"/>
+  </g>
+</svg>
