@@ -3,33 +3,34 @@
 //!
 //! | ファイル | 役割 |
 //! | --- | --- |
-//! | `stepper.rs` | 工程と AGV を少しずつ進めて出来事を受け渡す (Bevy 非依存) |
 //! | `view.rs` | 3D のワーク (設備の上に積む・設備から設備へ渡る・AGV に積む) |
 //! | `panel.rs` | 「ライン連携」ウィンドウ (再生・つなぎ方・PLC の信号表) |
 //!
-//! 判断と計算は `cadsim_core::line` にある。このファイルは Bevy とのつなぎで、
+//! 判断と計算は `cadsim_core::line` にある (工程・AGV・コンベアを少しずつ進めて出来事を受け渡すのは `stepper`)。このファイルは Bevy とのつなぎで、
 //! 毎フレーム「止める条件を見る → 進める → 結果をタイミングチャートや表示に写す」だけをする。
 //! ライン連携で再生している間は、工程シミュレーションと作業者・AGV のそれぞれの再生ボタンは使わない
 //! (同じ時計で進めるため、それぞれの再生は止めておく)。
 
 mod panel;
-mod stepper;
 mod view;
 
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy_egui::EguiPrimaryContextPass;
 
 use cadsim_core::flow::model::FlowModel;
 use cadsim_core::line::{
-    ConveyorCounts, LineCoupler, LineInputs, Signal, SignalSources, line_signals, may_run,
+    ConveyorCounts, LineCoupler, LineInputs, LineParts, Signal, SignalSources, line_signals,
+    may_run, step,
 };
 
-use crate::conveyor::{ConveyorConfigRes, ConveyorSet, WorkState};
+use crate::conveyor::{ConveyorConfigRes, ConveyorSet, TimeMap, WorkState};
+use crate::model::Model;
 
 use crate::floor::agv_sim::AgvSim;
 use crate::floor::{AgvLayoutRes, FloorClock, FloorState};
 use crate::flow::{FlowRes, FlowRun};
-use crate::motion::{MotionSet, Playback, TimingChart};
+use crate::motion::{ChartSchedule, MotionSet, Playback, TimingChart};
 use crate::plc::Plc;
 use crate::safety::{SafetySet, SafetyState};
 
@@ -74,6 +75,8 @@ pub struct LineState {
     plc_drives_inputs: bool,
     /// コンベアのワークの数 (ワーク搬送の投入口がなければ None)。信号表と集計に使う。
     conveyor: Option<ConveyorCounts>,
+    /// 回し始めたばかりで、ワーク搬送をラインの時計につなぐ前
+    conveyor_link_pending: bool,
     /// 止めた理由など
     message: Option<String>,
 }
@@ -92,6 +95,7 @@ impl Default for LineState {
             halted: false,
             plc_drives_inputs: false,
             conveyor: None,
+            conveyor_link_pending: false,
             message: None,
         }
     }
@@ -123,6 +127,7 @@ impl LineState {
         self.time = 0.0;
         self.started = true;
         self.playing = true;
+        self.conveyor_link_pending = true;
         self.message = None;
         Ok(())
     }
@@ -138,7 +143,39 @@ impl LineState {
     }
 }
 
-/// 毎フレーム: 止める条件を見て、工程・AGV・作業者・チャートを同じだけ進める
+/// ライン連携で一緒に進めるワーク搬送とその入力
+#[derive(SystemParam)]
+struct ConveyorParams<'w> {
+    config: Res<'w, ConveyorConfigRes>,
+    works: ResMut<'w, WorkState>,
+    model: Res<'w, Model>,
+    chart: Res<'w, TimingChart>,
+    schedule: Res<'w, ChartSchedule>,
+}
+
+impl ConveyorParams<'_> {
+    /// ワーク搬送を時刻 0 からラインの時計で進め始める。工程から送り込む投入口を決める。
+    fn start(&mut self, flow: &FlowModel) {
+        if self.config.is_empty() {
+            return;
+        }
+        let driven = flow
+            .elements
+            .iter()
+            .filter(|e| e.carrier.is_none())
+            .filter_map(|e| e.conveyor);
+        let (config, model, chart) = (&self.config.0, &*self.model, &*self.chart);
+        self.works.start_line(config, model, chart, driven);
+    }
+
+    fn stop(&mut self) {
+        if self.works.is_line_driven() {
+            self.works.stop_line();
+        }
+    }
+}
+
+/// 毎フレーム: 止める条件を見て、工程・AGV・作業者・コンベア・チャートを同じだけ進める
 #[allow(clippy::too_many_arguments)]
 fn advance_line(
     time: Res<Time>,
@@ -150,13 +187,26 @@ fn advance_line(
     layout: Res<AgvLayoutRes>,
     safety: Res<SafetyState>,
     mut playback: ResMut<Playback>,
+    mut conveyor: ConveyorParams,
 ) {
     if !line.started {
+        conveyor.stop();
+        return;
+    }
+    if line.conveyor_link_pending {
+        line.conveyor_link_pending = false;
+        conveyor.start(&flow);
+    } else if conveyor.config.is_changed() && conveyor.works.is_line_driven() {
+        line.stop(Some(
+            "ワーク搬送の設定が変わったので止めました。もう一度再生すると最初から回します".into(),
+        ));
+        conveyor.stop();
         return;
     }
     // 途中で設定が変わったら、その先は意味がないので止める
     if layout.is_changed() {
         line.stop(Some("AGV の経路・台数が変わったので止めました".into()));
+        conveyor.stop();
         return;
     }
     if line.with_flow {
@@ -206,23 +256,57 @@ fn advance_line(
             }
         }
     }
-    let result = stepper::step(
-        &flow,
-        run.sim.as_mut(),
-        floor.agv_sim_mut(),
-        &mut line.coupler,
-        dt,
-    );
+    // コンベアのグリッパ・台の動きは、このフレームのチャートの再生位置から同じ速さで進むとみなす
+    let map = TimeMap {
+        from: conveyor.works.line_time(),
+        base: playback.time,
+        rate: if playback.playing {
+            playback.speed / line.speed.max(1e-9)
+        } else {
+            0.0
+        },
+    };
+    let ConveyorParams {
+        config,
+        works,
+        chart,
+        schedule,
+        ..
+    } = &mut conveyor;
+    let looping = playback.looping;
+    let linked = works.with_line(config, chart, schedule, map, looping, |link| {
+        let parts = LineParts {
+            flow: run.sim.as_mut(),
+            agv: floor.agv_sim_mut(),
+            conveyor: Some(link),
+        };
+        step(&flow, parts, &mut line.coupler, dt)
+    });
+    let result = linked.unwrap_or_else(|| {
+        let parts = LineParts {
+            flow: run.sim.as_mut(),
+            agv: floor.agv_sim_mut(),
+            conveyor: None,
+        };
+        step(&flow, parts, &mut line.coupler, dt)
+    });
     if let Some(sim) = &run.sim {
         run.report = Some(sim.report());
     }
 
     // 工程の加工開始で頭から再生する設定があれば、それに任せる。なければラインと一緒に流す。
+    // 工程からコンベアへ送り込んでいるときは、グリッパがチャートで動かないとワークが進まず
+    // 加工も始まらないので、「チャート起動」があっても流し続ける (加工開始で頭に戻すのは同じ)。
     let triggered = flow.elements.iter().any(|e| e.starts_chart);
+    let feeds_conveyor = conveyor.works.is_line_driven()
+        && flow
+            .elements
+            .iter()
+            .any(|e| e.carrier.is_none() && e.conveyor.is_some());
     if result.restart_chart {
         playback.time = 0.0;
         playback.playing = true;
-    } else if line.chart_follows && !triggered && !playback.playing {
+    } else if line.chart_follows && (!triggered || feeds_conveyor) && !playback.playing {
         playback.playing = true;
     }
     if line.chart_follows && playback.speed != line.speed {

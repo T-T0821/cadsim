@@ -84,6 +84,10 @@ pub struct Element {
     /// ライン連携で、送り出しを AGV に運ばせる。None ならすぐ下流へ送る。
     /// 工程シミュレーションのウィンドウだけで回すときは使わない。
     pub carrier: Option<AgvCall>,
+    /// ライン連携で、送り出しをワーク搬送 (3D のコンベア) の投入口から流す。値は投入口の id。
+    /// 流したワークが排出口か排出端のコンベアから出ると、下流の要素に入る。
+    /// `carrier` (AGV) と両方あるときは AGV を使う。
+    pub conveyor: Option<u32>,
     /// ライン連携で、この工程が加工を始めるたびにタイミングチャートを頭から再生する
     pub starts_chart: bool,
     /// 工程に人が要るか (工程以外は使わない)
@@ -288,6 +292,7 @@ impl FlowModel {
             part: None,
             energy: Energy::default(),
             carrier: None,
+            conveyor: None,
             starts_chart: false,
             labor: Labor::None,
             line: None,

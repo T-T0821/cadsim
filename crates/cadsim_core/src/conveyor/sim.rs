@@ -10,8 +10,14 @@
 //!
 //! 計算は時刻 0 から一定刻みで進めるだけなので、同じ入力からは必ず同じ結果になる
 //! (シーク位置を戻したら、0 から計算し直せばよい)。
+//!
+//! ライン連携では、工程シミュレーションから送り出されたワークを投入口から流せる
+//! ([`ConveyorSim::drive_sources`] と [`ConveyorSim::feed_external`])。そのワークには荷札 (`tag`) が付き、
+//! 投入口から出たときと、排出されたときに [`ConveyorEvent`] を出す。外から入れるワークは
+//! 時刻 0 からの計算し直しでは再現できないので、そのときは [`ConveyorSim::seek`] を使わず、
+//! [`ConveyorSim::advance_to`] で前へだけ進める。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use glam::{DQuat, DVec3};
 
@@ -180,6 +186,17 @@ pub struct Work {
     /// ワーク中心のワールド座標での位置・姿勢
     pub pose: Pose,
     pub place: Place,
+    /// 工程シミュレーションから送り込んだワークの荷札。投入口が間隔で出したワークは None。
+    pub tag: Option<u64>,
+}
+
+/// 工程シミュレーションから送り込んだワークの出来事
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConveyorEvent {
+    /// 投入口から出た
+    Fed { tag: u64 },
+    /// 排出口か排出端のコンベアから出た (置き場があふれて消したときも、ワークを失わないようこれを出す)
+    Discharged { tag: u64 },
 }
 
 /// ワークがいまどこにあるか (何に「親付け」されているか)
@@ -281,6 +298,11 @@ pub struct ConveyorSim {
     next_feed: HashMap<u32, f64>,
     /// グリッパ id → 前の刻みでチャックが閉じていたか
     was_closed: HashMap<u32, bool>,
+    /// 間隔では出さず、[`ConveyorSim::feed_external`] で頼まれたときだけ出す投入口
+    driven: HashSet<u32>,
+    /// 頼まれて、まだ出していないワーク (投入口 id, 荷札)。頼まれた順に出す。
+    pending: VecDeque<(u32, u64)>,
+    events: Vec<ConveyorEvent>,
 }
 
 impl ConveyorSim {
@@ -303,6 +325,30 @@ impl ConveyorSim {
     /// 仕掛数 (投入されてまだ排出されていないワーク)
     pub fn in_process(&self) -> usize {
         self.works.len()
+    }
+
+    /// 工程から送り込む投入口を決める。これらは間隔ではワークを出さない。
+    pub fn drive_sources(&mut self, sources: impl IntoIterator<Item = u32>) {
+        self.driven = sources.into_iter().collect();
+    }
+
+    pub fn is_driven(&self, source: u32) -> bool {
+        self.driven.contains(&source)
+    }
+
+    /// 投入口 `source` から荷札 `tag` のワークを流すよう頼む。出す場所が空いた刻みで出る。
+    pub fn feed_external(&mut self, source: u32, tag: u64) {
+        self.pending.push_back((source, tag));
+    }
+
+    /// 頼まれてまだ出していないワークの数
+    pub fn pending_feeds(&self) -> usize {
+        self.pending.len()
+    }
+
+    /// たまった出来事を取り出す
+    pub fn take_events(&mut self) -> Vec<ConveyorEvent> {
+        std::mem::take(&mut self.events)
     }
 
     /// 1刻み進める
@@ -328,6 +374,10 @@ impl ConveyorSim {
     fn feed(&mut self, inputs: &ConveyorInputs) {
         let config = inputs.config;
         for source in &config.sources {
+            if self.driven.contains(&source.id) {
+                self.feed_requested(inputs, source);
+                continue;
+            }
             let fed = self.counts.fed.get(&source.id).copied().unwrap_or(0);
             if source.limit.is_some_and(|limit| fed >= limit) {
                 continue;
@@ -345,16 +395,46 @@ impl ConveyorSim {
             };
             self.next_feed
                 .insert(source.id, due + source.interval.max(TIME_STEP));
-            self.next_work_id += 1;
-            self.works.push(Work {
-                id: self.next_work_id,
-                kind: kind.id,
-                size: DVec3::from_array(kind.size),
-                pose,
-                place,
-            });
-            self.counts.count_fed(source.id, kind.id);
+            self.push_work(source.id, kind, pose, place, None);
         }
+    }
+
+    /// 工程から頼まれたワークを、頼まれた順に1つ出す (出す場所がふさがっていれば次の刻みに)
+    fn feed_requested(&mut self, inputs: &ConveyorInputs, source: &super::config::Source) {
+        let Some(i) = self.pending.iter().position(|(s, _)| *s == source.id) else {
+            return;
+        };
+        let fed = self.counts.fed.get(&source.id).copied().unwrap_or(0);
+        let Some(kind) = inputs.config.kind_for(source, fed) else {
+            return;
+        };
+        let Some((pose, place)) = self.feed_position(inputs, source.output, source.part, kind)
+        else {
+            return;
+        };
+        let (_, tag) = self.pending.remove(i).expect("位置は上で見つけた");
+        self.push_work(source.id, kind, pose, place, Some(tag));
+        self.events.push(ConveyorEvent::Fed { tag });
+    }
+
+    fn push_work(
+        &mut self,
+        source: u32,
+        kind: &WorkKind,
+        pose: Pose,
+        place: Place,
+        tag: Option<u64>,
+    ) {
+        self.next_work_id += 1;
+        self.works.push(Work {
+            id: self.next_work_id,
+            kind: kind.id,
+            size: DVec3::from_array(kind.size),
+            pose,
+            place,
+            tag,
+        });
+        self.counts.count_fed(source, kind.id);
     }
 
     /// 新しいワークを置く位置。ふさがっていれば None。
@@ -441,11 +521,12 @@ impl ConveyorSim {
                 front_rear = Some(moved);
             }
             // 排出端から完全に出たワークは消して数える
-            let counts = &mut self.counts;
+            let (counts, events) = (&mut self.counts, &mut self.events);
             self.works.retain(|w| {
                 let gone = on_conveyor(w, conveyor.id) && conveyor_s(w) >= belt_length;
                 if gone {
                     counts.count_discharged(Exit::Conveyor(conveyor.id), w.kind);
+                    discharged(events, w);
                 }
                 !gone
             });
@@ -526,7 +607,7 @@ impl ConveyorSim {
         if sinks.is_empty() {
             return;
         }
-        let counts = &mut self.counts;
+        let (counts, events) = (&mut self.counts, &mut self.events);
         self.works.retain(|w| {
             if w.is_held() {
                 return true;
@@ -536,6 +617,7 @@ impl ConveyorSim {
             match sinks.iter().find(|(_, s)| s.overlaps(&bounds, margin)) {
                 Some((id, _)) => {
                     counts.count_discharged(Exit::Sink(*id), w.kind);
+                    discharged(events, w);
                     false
                 }
                 None => true,
@@ -545,11 +627,19 @@ impl ConveyorSim {
 
     fn forget_old_works(&mut self) {
         while self.works.len() > MAX_WORKS {
-            match self.works.iter().position(|w| w.place == Place::Placed) {
+            let work = match self.works.iter().position(|w| w.place == Place::Placed) {
                 Some(i) => self.works.remove(i),
                 None => self.works.remove(0),
             };
+            discharged(&mut self.events, &work);
         }
+    }
+}
+
+/// 工程から送り込んだワークなら、出ていったことを知らせる
+fn discharged(events: &mut Vec<ConveyorEvent>, work: &Work) {
+    if let Some(tag) = work.tag {
+        events.push(ConveyorEvent::Discharged { tag });
     }
 }
 
@@ -938,5 +1028,43 @@ mod tests {
         assert_eq!(sim.works.len(), 1);
         assert_eq!(sim.counts.total_fed(), 1);
         assert!((conveyor_s(&sim.works[0]) - 0.25).abs() < 1e-9);
+    }
+
+    #[test]
+    fn driven_source_feeds_only_requested_works_and_reports_them() {
+        let config = line(ConveyorEnd::Discharge);
+        let parts = parts();
+        let inputs = ConveyorInputs {
+            config: &config,
+            parts: &parts,
+            motion: &NoMotion,
+        };
+        let mut sim = ConveyorSim::default();
+        sim.drive_sources([2]);
+        // 頼まれるまで、間隔 (0.5 秒) が来ても出さない
+        sim.advance_to(&inputs, 1.0);
+        assert!(sim.works.is_empty());
+        assert!(sim.take_events().is_empty());
+
+        // 2 個続けて頼むと、始端が空いた順に出る
+        sim.feed_external(2, 7);
+        sim.feed_external(2, 8);
+        sim.advance_to(&inputs, 1.1);
+        assert_eq!(sim.take_events(), vec![ConveyorEvent::Fed { tag: 7 }]);
+        assert_eq!(sim.pending_feeds(), 1);
+        assert_eq!(sim.works[0].tag, Some(7));
+        sim.advance_to(&inputs, 2.0);
+        assert_eq!(sim.take_events(), vec![ConveyorEvent::Fed { tag: 8 }]);
+
+        // 長さ 2.0 のベルトを速さ 1.0 で流れて排出端から出る
+        sim.advance_to(&inputs, 4.0);
+        assert_eq!(
+            sim.take_events(),
+            vec![
+                ConveyorEvent::Discharged { tag: 7 },
+                ConveyorEvent::Discharged { tag: 8 }
+            ]
+        );
+        assert_eq!(sim.counts.total_discharged(), 2);
     }
 }
