@@ -32,6 +32,7 @@ pub struct ImportedFile {
 }
 
 /// アセンブリの木の1ノード。子を持つならアセンブリ、shape を持つなら部品。
+#[derive(Clone)]
 pub struct ImportNode {
     /// インスタンス名 (例: "Bracket_L")
     pub name: String,

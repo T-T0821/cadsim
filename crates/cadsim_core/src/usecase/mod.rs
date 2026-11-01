@@ -2,5 +2,6 @@
 
 pub mod compose_line;
 pub mod edit_tracker;
+pub mod file_watch;
 pub mod help;
 pub mod llm;

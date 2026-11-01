@@ -276,6 +276,11 @@ pub struct Vehicle {
 }
 
 impl Vehicle {
+    /// 積み込み・荷降ろしの残り時間 (秒)。それ以外のときは意味を持たない
+    pub fn station_remaining(&self) -> f64 {
+        self.timer
+    }
+
     pub fn at_node(&self) -> u32 {
         self.route[0]
     }

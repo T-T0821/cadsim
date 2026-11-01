@@ -1,17 +1,31 @@
 //! 作業者と AGV の 3D モデルの表示
 //!
-//! 形と姿勢は `cadsim_core::floor::figure` が決める。ここでは形ごとにメッシュを 1回だけ作り、
-//! 毎フレーム、位置・向き・色・見える/見えないを写すだけにする。
-//! 作業者や AGV の数・形の数が変わったときだけ、その 1体ぶんを作り直す。
+//! 形と動きは `cadsim_core::floor::{figure, figure_motion}` が決める。ここでは
+//!
+//! - 形ごとにメッシュを 1回だけ作り、1体ぶんを「親 (位置・向き) + 形ごとの子」として並べる
+//! - 動きのクリップ (作業者は歩く・作業・待つ、AGV は車輪・荷) を Bevy の `AnimationClip` にし、
+//!   親に `AnimationPlayer` を付けて、子は `AnimationTargetId` で動かす
+//! - 毎フレーム、親の位置・向きと、クリップごとの時刻と重み (core が決める) を写す。
+//!   重みを Bevy の `AnimationGraph` が混ぜるので、歩きから作業へなめらかに移る
+//! - 色と見える/見えない (選択・ランプ・荷) は動きではないので、マテリアルと `Visibility` に写す
+//!
+//! クリップの時刻は再生に任せず、床の時計から毎フレーム決める (止める・巻き戻すと動きも止まる・戻る)。
 
 use std::collections::HashMap;
 
+use bevy::animation::{AnimatedBy, AnimationTargetId, animated_field};
+use bevy::curve::UnevenSampleAutoCurve;
 use bevy::math::DVec2;
 use bevy::prelude::*;
 
-use super::agv_sim::{AgvSim, Phase};
+use super::agv_sim::{AgvSim, Phase, Vehicle};
 use super::figure::{
-    AgvPose, AgvStatus, FigurePart, Paint, PersonPose, Shape, agv_parts, person_parts,
+    AgvPose, AgvStatus, FigurePart, Paint, PersonPose, Shape, agv_local_parts, heading_rotation,
+    person_local_parts,
+};
+use super::figure_motion::{
+    AgvDims, FigureClip, PERSON_ACTIVITIES, agv_cargo_amount, agv_cargo_clip, agv_roll_clip,
+    agv_roll_time, person_clip, person_weights,
 };
 use super::operator_plan::Activity;
 use super::{AGV_HEIGHT, FloorClock, FloorState, OperatorsRes, operator_position};
@@ -94,12 +108,93 @@ fn color_of(paint: Paint) -> (Color, f32) {
     }
 }
 
-/// メッシュとマテリアルの使い回し、作業者・AGV ごとの部品
+/// 形 `i` を動かすクリップの宛先 (同じ形の番号なら、どの作業者でも同じ ID。
+/// どの親のプレイヤーが動かすかは `AnimatedBy` で分ける)
+fn part_name(i: usize) -> Name {
+    Name::new(format!("形{i}"))
+}
+
+/// core のクリップを Bevy のクリップにする
+fn to_animation_clip(clip: &FigureClip) -> AnimationClip {
+    let mut out = AnimationClip::default();
+    let times: Vec<f32> = clip.times.iter().map(|&t| t as f32).collect();
+    for (i, keys) in clip.parts.iter().enumerate() {
+        let Some(keys) = keys else { continue };
+        let target = AnimationTargetId::from_name(&part_name(i));
+        fn zip<'a, T: 'a>(times: &'a [f32], values: Vec<T>) -> impl Iterator<Item = (f32, T)> + 'a {
+            times.iter().copied().zip(values)
+        }
+        if let Ok(curve) = UnevenSampleAutoCurve::new(zip(
+            &times,
+            keys.translations.iter().map(|v| v.as_vec3()).collect(),
+        )) {
+            out.add_curve_to_target(
+                target,
+                AnimatableCurve::new(animated_field!(Transform::translation), curve),
+            );
+        }
+        if let Ok(curve) = UnevenSampleAutoCurve::new(zip(
+            &times,
+            keys.rotations.iter().map(|q| q.as_quat()).collect(),
+        )) {
+            out.add_curve_to_target(
+                target,
+                AnimatableCurve::new(animated_field!(Transform::rotation), curve),
+            );
+        }
+        if let Ok(curve) = UnevenSampleAutoCurve::new(zip(
+            &times,
+            keys.scales.iter().map(|v| v.as_vec3()).collect(),
+        )) {
+            out.add_curve_to_target(
+                target,
+                AnimatableCurve::new(animated_field!(Transform::scale), curve),
+            );
+        }
+    }
+    out.set_duration(clip.duration as f32);
+    out
+}
+
+/// クリップを混ぜるグラフと、クリップごとの節
+struct FigureAnimations {
+    graph: Handle<AnimationGraph>,
+    nodes: Vec<AnimationNodeIndex>,
+}
+
+impl FigureAnimations {
+    fn new(
+        clips: &[FigureClip],
+        animation_clips: &mut Assets<AnimationClip>,
+        graphs: &mut Assets<AnimationGraph>,
+    ) -> Self {
+        let handles: Vec<Handle<AnimationClip>> = clips
+            .iter()
+            .map(|c| animation_clips.add(to_animation_clip(c)))
+            .collect();
+        let (graph, nodes) = AnimationGraph::from_clips(handles);
+        Self {
+            graph: graphs.add(graph),
+            nodes,
+        }
+    }
+}
+
+/// 1体ぶん: 親 (位置・向き・プレイヤー) と形ごとの子
+struct Spawned {
+    root: Entity,
+    parts: Vec<Entity>,
+}
+
+/// メッシュとマテリアルとクリップの使い回し、作業者・AGV ごとの部品
 #[derive(Resource, Default)]
 pub struct FigureAssets {
     meshes: HashMap<ShapeKey, Handle<Mesh>>,
     materials: HashMap<Paint, Handle<StandardMaterial>>,
-    spawned: HashMap<Owner, Vec<Entity>>,
+    spawned: HashMap<Owner, Spawned>,
+    person: Option<FigureAnimations>,
+    /// AGV のクリップは寸法で変わるので、作ったときの寸法と一緒に持つ
+    agv: Option<(AgvDims, FigureAnimations)>,
 }
 
 impl FigureAssets {
@@ -128,6 +223,12 @@ impl FigureAssets {
             })
             .clone()
     }
+
+    fn despawn(&mut self, owner: Owner, commands: &mut Commands) {
+        if let Some(old) = self.spawned.remove(&owner) {
+            commands.entity(old.root).despawn();
+        }
+    }
 }
 
 fn transform_of(part: &FigurePart) -> Transform {
@@ -146,7 +247,16 @@ fn visibility_of(part: &FigurePart) -> Visibility {
     }
 }
 
-fn agv_status(v: &super::agv_sim::Vehicle) -> AgvStatus {
+/// 床の位置と向きを親の置き方にする
+fn root_transform(position: DVec2, heading: DVec2) -> Transform {
+    Transform {
+        translation: Vec3::new(position.x as f32, 0.0, position.y as f32),
+        rotation: heading_rotation(heading).as_quat(),
+        scale: Vec3::ONE,
+    }
+}
+
+fn agv_status(v: &Vehicle) -> AgvStatus {
     if v.blocked {
         AgvStatus::Blocked
     } else {
@@ -158,18 +268,38 @@ fn agv_status(v: &super::agv_sim::Vehicle) -> AgvStatus {
     }
 }
 
-/// いまの作業者と AGV の形を並べる
+/// 1体ぶんの、いまの置き方と動き
+struct Figure {
+    owner: Owner,
+    root: Transform,
+    /// 色と見える/見えないを取る形 (置き方は使わない)
+    parts: Vec<FigurePart>,
+    /// クリップごとの (時刻, 重み)。並びは `FigureAnimations::nodes` と同じ
+    clips: Vec<(f64, f64)>,
+}
+
+fn agv_dims(sim: &AgvSim) -> AgvDims {
+    AgvDims {
+        length: sim.params().length,
+        width: sim.params().width,
+        height: AGV_HEIGHT,
+    }
+}
+
+/// いまの作業者と AGV を並べる
 fn current_figures(
     clock: &FloorClock,
     operators: &OperatorsRes,
     state: &FloorState,
-) -> Vec<(Owner, Vec<FigurePart>)> {
+) -> Vec<Figure> {
     let mut figures = Vec::new();
     for op in &operators.operators {
         let plan = state.plans.get(&op.id);
+        let position = operator_position(state, op, clock.time);
+        let heading = plan.map_or(DVec2::X, |p| p.heading_at(clock.time));
         let pose = PersonPose {
-            position: operator_position(state, op, clock.time),
-            heading: plan.map_or(DVec2::X, |p| p.heading_at(clock.time)),
+            position,
+            heading,
             activity: plan
                 .and_then(|p| p.segment_at(clock.time))
                 .map_or(Activity::Wait, |s| s.activity),
@@ -177,29 +307,51 @@ fn current_figures(
             time: clock.time,
             selected: state.selected_operator == Some(op.id),
         };
-        figures.push((Owner::Person(op.id), person_parts(&pose)));
+        figures.push(Figure {
+            owner: Owner::Person(op.id),
+            root: root_transform(position, heading),
+            parts: person_local_parts(&pose),
+            clips: person_weights(plan, clock.time)
+                .iter()
+                .map(|c| (c.time, c.weight))
+                .collect(),
+        });
     }
     if let Some(sim) = state.agv_sim() {
         for v in &sim.vehicles {
-            figures.push((Owner::Agv(v.id), agv_figure(sim, v, clock.time)));
+            figures.push(agv_figure(sim, v, clock.time));
         }
     }
     figures
 }
 
-fn agv_figure(sim: &AgvSim, v: &super::agv_sim::Vehicle, time: f64) -> Vec<FigurePart> {
+fn agv_figure(sim: &AgvSim, v: &Vehicle, time: f64) -> Figure {
     let (position, heading) = v.pose(sim.graph());
-    agv_parts(&AgvPose {
+    let total = match v.phase {
+        Phase::Loading => sim.params().load_time,
+        _ => sim.params().unload_time,
+    };
+    let cargo = agv_cargo_amount(v.phase, v.station_remaining(), total);
+    let dims = agv_dims(sim);
+    let parts = agv_local_parts(&AgvPose {
         position,
         heading,
-        length: sim.params().length,
-        width: sim.params().width,
-        height: AGV_HEIGHT,
+        length: dims.length,
+        width: dims.width,
+        height: dims.height,
         status: agv_status(v),
-        loaded: matches!(v.phase, Phase::ToDrop | Phase::Unloading),
+        loaded: cargo > 0.0,
+        cargo_lift: 0.0,
         distance: v.distance,
         time,
-    })
+    });
+    Figure {
+        owner: Owner::Agv(v.id),
+        root: root_transform(position, heading),
+        parts,
+        // 車輪と荷は別の形を動かすので、どちらも重み 1 で重ねる
+        clips: vec![(agv_roll_time(v.distance), 1.0), (cargo, 1.0)],
+    }
 }
 
 /// 作業者と AGV の 3D モデルを、いまの位置・姿勢に合わせる
@@ -212,40 +364,84 @@ pub fn sync_figures(
     mut assets: ResMut<FigureAssets>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    mut parts: Query<
-        (
-            &mut Transform,
-            &mut MeshMaterial3d<StandardMaterial>,
-            &mut Visibility,
-        ),
-        With<FloorFigure>,
-    >,
+    mut animation_clips: ResMut<Assets<AnimationClip>>,
+    mut graphs: ResMut<Assets<AnimationGraph>>,
+    mut roots: Query<(&mut Transform, &mut AnimationPlayer), Without<FloorFigure>>,
+    mut parts: Query<(&mut MeshMaterial3d<StandardMaterial>, &mut Visibility), With<FloorFigure>>,
 ) {
     let figures = current_figures(&clock, &operators, &state);
 
-    // いなくなった作業者・AGV を消す
-    let alive: Vec<Owner> = figures.iter().map(|(o, _)| *o).collect();
-    assets.spawned.retain(|owner, entities| {
-        let keep = alive.contains(owner);
-        if !keep {
-            for &e in entities.iter() {
-                commands.entity(e).despawn();
-            }
+    // クリップは最初に 1回だけ作る。AGV は寸法が変わったら作り直し、いまの AGV も並べ直す
+    if assets.person.is_none() {
+        let clips: Vec<FigureClip> = PERSON_ACTIVITIES.iter().map(|&a| person_clip(a)).collect();
+        assets.person = Some(FigureAnimations::new(
+            &clips,
+            &mut animation_clips,
+            &mut graphs,
+        ));
+    }
+    if let Some(dims) = state.agv_sim().map(agv_dims)
+        && assets.agv.as_ref().is_none_or(|(d, _)| *d != dims)
+    {
+        let clips = [agv_roll_clip(dims), agv_cargo_clip(dims)];
+        assets.agv = Some((
+            dims,
+            FigureAnimations::new(&clips, &mut animation_clips, &mut graphs),
+        ));
+        let agvs: Vec<Owner> = assets
+            .spawned
+            .keys()
+            .copied()
+            .filter(|o| matches!(o, Owner::Agv(_)))
+            .collect();
+        for owner in agvs {
+            assets.despawn(owner, &mut commands);
         }
-        keep
-    });
+    }
 
-    for (owner, figure) in figures {
-        // 形の数が同じなら姿勢と色だけ写す
-        if let Some(entities) = assets.spawned.get(&owner).cloned()
-            && entities.len() == figure.len()
+    // いなくなった作業者・AGV を消す
+    let alive: Vec<Owner> = figures.iter().map(|f| f.owner).collect();
+    let gone: Vec<Owner> = assets
+        .spawned
+        .keys()
+        .copied()
+        .filter(|o| !alive.contains(o))
+        .collect();
+    for owner in gone {
+        assets.despawn(owner, &mut commands);
+    }
+
+    for figure in figures {
+        let (graph, nodes) = {
+            let animations = match figure.owner {
+                Owner::Person(_) => assets.person.as_ref(),
+                Owner::Agv(_) => assets.agv.as_ref().map(|(_, a)| a),
+            };
+            let Some(animations) = animations else {
+                continue;
+            };
+            (animations.graph.clone(), animations.nodes.clone())
+        };
+        // 形の数が同じなら、置き方・動き・色だけ写す
+        if let Some(spawned) = assets.spawned.get(&figure.owner)
+            && spawned.parts.len() == figure.parts.len()
         {
-            for (e, part) in entities.iter().zip(&figure) {
+            let (root, entities) = (spawned.root, spawned.parts.clone());
+            if let Ok((mut transform, mut player)) = roots.get_mut(root) {
+                transform.set_if_neq(figure.root);
+                for (&node, &(time, weight)) in nodes.iter().zip(&figure.clips) {
+                    player
+                        .play(node)
+                        .pause()
+                        .set_seek_time(time as f32)
+                        .set_weight(weight as f32);
+                }
+            }
+            for (e, part) in entities.iter().zip(&figure.parts) {
                 let material = assets.material(part.paint, &mut materials);
-                let Ok((mut transform, mut mat, mut visibility)) = parts.get_mut(*e) else {
+                let Ok((mut mat, mut visibility)) = parts.get_mut(*e) else {
                     continue;
                 };
-                transform.set_if_neq(transform_of(part));
                 if mat.0 != material {
                     mat.0 = material;
                 }
@@ -253,27 +449,49 @@ pub fn sync_figures(
             }
             continue;
         }
-        if let Some(old) = assets.spawned.remove(&owner) {
-            for e in old {
-                commands.entity(e).despawn();
-            }
-        }
+        assets.despawn(figure.owner, &mut commands);
+        let root = commands
+            .spawn((
+                Name::new(match figure.owner {
+                    Owner::Person(id) => format!("作業者 {id}"),
+                    Owner::Agv(id) => format!("AGV {id}"),
+                }),
+                figure.root,
+                Visibility::default(),
+                AnimationPlayer::default(),
+                AnimationGraphHandle(graph),
+            ))
+            .id();
         let entities = figure
+            .parts
             .iter()
-            .map(|part| {
+            .enumerate()
+            .map(|(i, part)| {
                 let mesh = assets.mesh(part.shape, &mut meshes);
                 let material = assets.material(part.paint, &mut materials);
+                let name = part_name(i);
+                let target = AnimationTargetId::from_name(&name);
                 commands
                     .spawn((
                         FloorFigure,
+                        name,
                         Mesh3d(mesh),
                         MeshMaterial3d(material),
                         transform_of(part),
                         visibility_of(part),
+                        target,
+                        AnimatedBy(root),
+                        ChildOf(root),
                     ))
                     .id()
             })
             .collect();
-        assets.spawned.insert(owner, entities);
+        assets.spawned.insert(
+            figure.owner,
+            Spawned {
+                root,
+                parts: entities,
+            },
+        );
     }
 }

@@ -59,7 +59,7 @@ crates/
 │       ├── domain/       model, math, camera_path (紹介動画のカメラの通り道), melsec (三菱 PLC のデバイス), selection, remap (形状の差し替えの対応づけ), simulation (幾何・干渉・計測),
 │       │                 motion (チャート・姿勢・運動学・URDF の機種の関節への直し方), plc (シーケンス・I/O 表), flow, conveyor,
 │       │                 staffing (作業者の名簿・スキル・シフト・人数の比較),
-│       │                 safety (安全機器・検知・安全距離), floor (作業者・AGV・床の幾何・作業者と AGV の 3D の形・動線のヒートマップ),
+│       │                 safety (安全機器・検知・安全距離), floor (作業者・AGV・床の幾何・作業者と AGV の 3D の形と動きのクリップ・動線のヒートマップ),
 │       │                 line (工程と AGV・コンベアの受け渡しと時間の進め方・PLC の信号表・ワークの位置),
 │       │                 line_draft (言葉で組むラインの下書き・整え方・並べ方),
 │       │                 effects (状態のエフェクトのきっかけ・見た目・煙と火花の粒),
@@ -68,11 +68,11 @@ crates/
 │       │                 timeline (シミュレーションの巻き戻し: 状態の写しの記録と進め直し),
 │       │                 walk (一人称で歩く: 体の寸法・ぶつかり・通路幅と手の届く範囲),
 │       │                 review (複数人レビューのメッセージ・ホストの配り役・相手の様子・配置の変更の見つけ方)
-│       └── usecase/      document (開く・保存・取り込み・書き出し), edit, history, compose_line (言葉でラインを組む),
+│       └── usecase/      document (開く・保存・取り込み・書き出し), edit, history, compose_line (言葉でラインを組む), file_watch (取り込んだファイルの更新を見つける),
 │                         report (シミュレーション結果の CSV), llm (生成 AI のポート LlmClient), help (使い方を AI に聞く), script (部品スクリプトの実行と ScriptHost ポート),
 │                         ports (SceneReader / SceneWriter / ProjectStore などのトレイト)
 └── cadsim_io/            3. アダプター (Bevy なし)
-    └── src/              step, interchange (gltf / obj / stl / usd), project_file (JSON), formats (平面図・図面・帳票・動線のヒートマップの PNG など),
+    └── src/              step, interchange (gltf / obj / stl / usd), asset_key (取り込むファイルを Bevy のアセットの鍵にする), project_file (JSON), formats (平面図・図面・帳票・動線のヒートマップの PNG など),
                           modbus, slmp (三菱 PLC との SLMP 通信・テスト用の PLC), sound_settings (音の設定ファイル), rtde (UR の関節角度の受信), urdf (ロボット機種の URDF・COLLADA), video, xlsx (工程シミュレーションの結果), rhai (部品スクリプトのエンジン),
                           claude (生成 AI の Claude API), line_draft_json (生成 AI とやり取りするラインの下書きの JSON),
                           ui_check (画面の自動確認の PNG・結果の JSON・報告書の HTML),
@@ -137,6 +137,8 @@ crates/
 | 設備の音と警報 | `sound::{synth, settings, spatial, cues, alarm}` | `cadsim_io::sound_settings`(`sound.json`) | `sound/`(`mod.rs` が状態を集めて音を出し入れ、`source.rs` が波形を Bevy の音に、`panel.rs` が設定ウィンドウと警報の帯) |
 | 最初の5分 (ようこそ画面・章立てのチュートリアル) | `gamify`(章・ミッションの手順・使う道具 `workspace::Tool`・とばす・判定) | `cadsim_io::preferences_file`(とばしたミッション・ようこそ画面を閉じたか) | `ui/tutorial.rs`(ようこそ画面・カードの手順・矢印)、`ui/playful.rs`、起動時のデモラインは `project/mod.rs` の `ProjectAction::OpenDemoLine` |
 | ライセンス一覧 (ヘルプ → ライセンス) | — | — (一覧は `tools/licenses/generate.sh` が作る `assets/licenses/THIRD_PARTY_LICENSES.txt` を埋め込む) | `ui/licenses.rs`(ウィンドウ)、ヘルプメニュー (`ui/menu.rs`) |
+| 取り込むファイルを Bevy のアセットとして読み、更新で読み直す | `usecase::file_watch`(更新の見つけ方)、`Model::{file_sources, roots_from_file}`(見張るファイルと差し替える木) | `cadsim_io::asset_key`(絶対パスと単位 ⇔ アセットの鍵) | `scene_asset.rs`(アセットの読み元・読み込み・見張り)、モデルへの反映は `file_io.rs` の `receive_imports` |
+| 作業者と AGV の動き (Bevy のアニメーション) | `floor::figure_motion`(クリップのキー・切り替えで混ぜる重み・クリップの時刻) | — | `floor/figures.rs`(クリップを `AnimationClip` / `AnimationGraph` にし、毎フレーム時刻と重みを写す) |
 | 複数人でレビュー | `review::{Message, Hub, ReviewSession, SendThrottle, PlacementTracker}` | `cadsim_io::review`(1 行の JSON・TCP の待ち受けと接続のスレッド `ReviewLink`) | `review/`(送受信のシステム・アバターの表示・パネル)。docs/review.md |
 
 `drawing/collect.rs` と `motion::live_joints` は Bevy に依存しない書き方にしてあり、次の手順で core に移します。
