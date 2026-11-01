@@ -458,6 +458,7 @@ fn view_menu(ui: &mut egui::Ui, state: &mut UiState) {
         {
             state.playful.set_show_missions(show);
         }
+        crate::sound::show_menu_items(ui, &mut state.sound);
         if ui
             .button("開いている道具をすべて閉じる")
             .on_hover_text("3D ビューに浮かべたパネルとウィンドウを閉じる")

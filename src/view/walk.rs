@@ -105,6 +105,11 @@ impl WalkMode {
         body
     }
 
+    /// 1 m がモデルの何単位か
+    pub fn units_per_meter(&self) -> f64 {
+        1000.0 / self.unit_mm.max(1e-9)
+    }
+
     /// モデルの長さを m の文字にする
     fn meters(&self, length: f64) -> String {
         format!("{:.2} m", length * self.unit_mm / 1000.0)

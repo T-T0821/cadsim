@@ -27,6 +27,7 @@ pub fn icon(tool: Tool) -> &'static str {
         Tool::Interference => "💥",
         Tool::Annotation => "📐",
         Tool::Physics => "⚙",
+        Tool::Review => "👥",
         Tool::Conveyor => "🔁",
         Tool::Floor => "🚶",
         Tool::Safety => "🛡",

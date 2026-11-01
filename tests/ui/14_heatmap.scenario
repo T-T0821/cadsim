@@ -1,0 +1,32 @@
+# 人と AGV の動線のヒートマップ: デモラインで作業者・AGV を動かし、床に色を敷く
+wait_loaded
+click "自由にさわる"
+wait 30
+click "★ Lv."                  # ミッションカードを隠す
+click "作業者"
+wait 30
+click "動線ヒートマップ"
+wait 10
+click "床に色を表示"
+click "▶ 再生"
+wait 1200
+expect "混み合う場所"
+expect "動いた距離"
+click "⏸ 一時停止"
+wait 30
+screenshot 01_panel
+click "いた時間"
+wait 30
+screenshot 02_dwell
+click_at 1060 145              # ビューキューブの「上」で真上から見る
+wait 90
+scroll 740 380 3                # 少し寄る
+wait 60
+click "作業者・AGV"             # パネルをたたんで床を見せる
+wait 30
+screenshot 03_floor
+click "作業者・AGV"
+wait 30
+click "リセット"
+wait 30
+expect "まだ記録がありません"

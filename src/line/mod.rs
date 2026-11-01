@@ -140,6 +140,11 @@ impl LineState {
         Ok(())
     }
 
+    /// ラインが動いている (回し始めていて、一時停止・安全停止・運転 OFF で止まっていない)
+    pub fn is_running(&self) -> bool {
+        self.started && self.playing && !self.halted
+    }
+
     /// 止めて最初に戻す (結果は工程シミュレーションのウィンドウに残る)
     fn stop(&mut self, reason: Option<String>) {
         self.started = false;
