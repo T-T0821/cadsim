@@ -1,5 +1,7 @@
 # plantwright
 
+<img src="assets/icon/plantwright-icon.svg" alt="plantwright のロゴ" width="96">
+
 工場のライン設備を 3D で組み立てて、部品どうしがぶつからないかを確かめるためのツールです。
 STEP などの CAD データを読み込み、部品を動かしながら干渉や距離をその場で確認できます。
 
@@ -1010,7 +1012,7 @@ README の画面写真は `docs/screenshots/scenarios/` の手順書で撮って
 | [docs/architecture.md](docs/architecture.md) | コードのレイヤー分けと依存の向き |
 | [docs/dev-environment.md](docs/dev-environment.md) | 開発コンテナ(Dev Containers)と Makefile の目標、Windows 向けのクロスビルド |
 | [docs/urdf.md](docs/urdf.md) | URDF の読み込み、関節への直し方、同梱の UR5e と公開されている機種のライセンス |
-| [docs/internals.md](docs/internals.md) | 使っているライブラリ、各機能のしくみ、サンプルとフォントの作り方 |
+| [docs/internals.md](docs/internals.md) | 使っているライブラリ、各機能のしくみ、サンプルとフォントとアイコンの作り方 |
 | [docs/simulation.md](docs/simulation.md) | 干渉チェック・距離計測・結果の CSV 出力の設計 |
 | [docs/conveyor.md](docs/conveyor.md) | コンベアのワーク搬送とグリッパの把持・解放のしくみ |
 | [docs/flow.md](docs/flow.md) | 工程シミュレーション(離散事象シミュレーション・集計・案の比較・Excel 書き出し)の設計 |

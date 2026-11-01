@@ -9,6 +9,10 @@ members = ["crates/cadsim_core", "crates/cadsim_io"]
 # 引数なしの cargo test / clippy でワークスペースの全 crate を確かめる
 default-members = [".", "crates/cadsim_core", "crates/cadsim_io"]
 
+[build-dependencies]
+# Windows の .exe にアイコンを埋め込む (build.rs)
+winresource = "0.1"
+
 [dependencies]
 # 部品スクリプト (Rhai)。純 Rust
 rhai = "1.23"
@@ -16,6 +20,8 @@ cadsim_core = { path = "crates/cadsim_core" }
 cadsim_io = { path = "crates/cadsim_io" }
 bevy = "0.20"
 bevy_egui = "0.43"
+# ウィンドウのアイコンを付けるためだけに使う。Bevy が使っている winit と同じ版にする
+winit = { version = "0.30", default-features = false }
 # 動画の書き出し: GIF と PNG 連番は純 Rust、MP4 は同梱の OpenH264 (C++) をビルドして使う。ffmpeg は不要
 gif = "0.14"
 openh264 = "0.9"

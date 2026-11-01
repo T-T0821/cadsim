@@ -21,6 +21,8 @@ on:
       - ".cargo/**"
       - "Cargo.toml"
       - "Cargo.lock"
+      - "build.rs"
+      - "assets/icon/**"
 
 permissions:
   contents: write
@@ -135,6 +137,8 @@ jobs:
           # ライセンス文 (アプリの「ヘルプ → ライセンス」でも見られる)
           mkdir -p "$app/Contents/Resources"
           cp LICENSE-MIT LICENSE-APACHE assets/licenses/THIRD_PARTY_LICENSES.txt "$app/Contents/Resources/"
+          # Finder や Dock に出るアプリのアイコン (Info.plist の CFBundleIconFile)
+          cp assets/icon/plantwright.icns "$app/Contents/Resources/"
           # .app だけで動くことを確かめる: macOS 標準以外の dylib に依存していたら失敗させる
           otool -L "$app/Contents/MacOS/$APP_NAME"
           if otool -L "$app/Contents/MacOS/$APP_NAME" | tail -n +2 | grep -vE '^[[:space:]]+(/System/Library/|/usr/lib/)' | grep -v ':$'; then

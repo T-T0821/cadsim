@@ -10,6 +10,8 @@
     <string>io.github.t-t0821.plantwright</string>
     <key>CFBundleExecutable</key>
     <string>plantwright</string>
+    <key>CFBundleIconFile</key>
+    <string>plantwright</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleVersion</key>

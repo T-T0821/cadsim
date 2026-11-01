@@ -10,6 +10,7 @@ use bevy_egui::{
 };
 
 use super::dock::{self, Dock, RAIL_WIDTH};
+use super::logo;
 use super::playful::{PlayfulUi, mascot};
 use super::theme::palette;
 use crate::assistant::help::HelpChat;
@@ -34,6 +35,8 @@ pub struct TutorialUi {
     pointer: Option<(f64, &'static str)>,
     /// 「場所を教えて」が押された
     point_now: bool,
+    /// ようこそ画面に出すロゴ (初めて出すときに作る)
+    logo: Option<egui::TextureHandle>,
 }
 
 impl TutorialUi {
@@ -70,6 +73,23 @@ pub fn draw(
     Ok(())
 }
 
+/// 「plantwright」の文字。wright (つくる人) を紫にする
+fn wordmark(size: f32) -> egui::text::LayoutJob {
+    let mut job = egui::text::LayoutJob::default();
+    for (text, color) in [("plant", palette::TEXT_STRONG), ("wright", palette::PURPLE)] {
+        job.append(
+            text,
+            0.0,
+            egui::TextFormat {
+                font_id: egui::FontId::proportional(size),
+                color,
+                ..Default::default()
+            },
+        );
+    }
+    job
+}
+
 /// 初めて起動したときの案内。デモラインが後ろで動いている。
 fn welcome(
     ctx: &egui::Context,
@@ -93,6 +113,15 @@ fn welcome(
                 .inner_margin(egui::Margin::symmetric(24, 18))
                 .show(ui, |ui| {
                     ui.set_width(WELCOME_WIDTH);
+                    let logo = tutorial
+                        .logo
+                        .get_or_insert_with(|| logo::mark_texture(ctx))
+                        .id();
+                    ui.horizontal(|ui| {
+                        ui.add(egui::Image::new((logo, vec2(40.0, 40.0))));
+                        ui.label(wordmark(30.0));
+                    });
+                    ui.add_space(4.0);
                     ui.horizontal(|ui| {
                         mascot(ui, 64.0, now, true);
                         ui.vertical(|ui| {

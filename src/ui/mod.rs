@@ -25,6 +25,7 @@
 mod animation;
 pub mod dock;
 mod licenses;
+pub mod logo;
 mod menu;
 pub mod modeling;
 pub mod playful;
@@ -70,7 +71,7 @@ impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<modeling::ModelingUi>()
             .init_resource::<dock::Dock>()
-            .add_plugins(playful::PlayfulPlugin)
+            .add_plugins((playful::PlayfulPlugin, logo::LogoPlugin))
             .add_systems(Startup, spawn_ui_camera)
             .add_systems(
                 EguiPrimaryContextPass,
