@@ -6,6 +6,7 @@
 //! - 推移: 一定間隔の排出数の累計・仕掛数と、その折れ線グラフ
 //! - 作業者別 (作業者がいるときだけ): 作業・歩行・手待ちの割合と作業数、応援の作業数
 //! - ライン別 (ラインに分けているときだけ): ラインごとの出来高・ボトルネック・仕掛・人待ち
+//! - 生産計画 (注文があるときだけ): 注文ごとの投入・排出・完了時刻・遅れと、納期達成率
 
 use rust_xlsxwriter::{
     Chart, ChartFormat, ChartSolidFill, ChartType, Color, Format, FormatAlign, Workbook, Worksheet,
@@ -14,6 +15,7 @@ use rust_xlsxwriter::{
 
 use cadsim_core::flow::factory::line_summaries;
 use cadsim_core::flow::model::{ElementKind, FlowModel, KindTag};
+use cadsim_core::flow::plan::on_time_ratio;
 use cadsim_core::flow::sim::{Report, State, WorkerState};
 
 const SUMMARY: &str = "概要";
@@ -21,6 +23,7 @@ const ELEMENTS: &str = "設備別";
 const SERIES: &str = "推移";
 const WORKERS: &str = "作業者別";
 const LINES: &str = "ライン別";
+const PLAN: &str = "生産計画";
 
 /// 状態の色 (3D ビューの色分けと同じ)
 fn state_color(state: State) -> Color {
@@ -61,6 +64,17 @@ pub fn report_to_xlsx(model: &FlowModel, report: &Report) -> Result<Vec<u8>, Xls
             workbook.add_worksheet(),
             report,
             &header,
+            &percent,
+            &decimal,
+        )?;
+    }
+    if !report.orders.is_empty() {
+        plan_sheet(
+            workbook.add_worksheet(),
+            model,
+            report,
+            &header,
+            &bold,
             &percent,
             &decimal,
         )?;
@@ -331,6 +345,55 @@ fn workers_sheet(
     Ok(())
 }
 
+fn plan_sheet(
+    sheet: &mut Worksheet,
+    model: &FlowModel,
+    report: &Report,
+    header: &Format,
+    bold: &Format,
+    percent: &Format,
+    decimal: &Format,
+) -> Result<(), XlsxError> {
+    sheet.set_name(PLAN)?;
+    sheet.write_string_with_format(0, 0, "納期達成率", bold)?;
+    match on_time_ratio(&report.orders) {
+        Some(r) => sheet.write_number_with_format(0, 1, r, percent)?,
+        None => sheet.write_string(0, 1, "-")?,
+    };
+    let titles = [
+        "注文",
+        "品種",
+        "数量",
+        "投入",
+        "排出",
+        "納期 (時間)",
+        "完了 (時間)",
+        "遅れ (分)",
+        "結果",
+    ];
+    for (col, title) in titles.iter().enumerate() {
+        sheet.write_string_with_format(2, col as u16, *title, header)?;
+    }
+    sheet.set_column_range_width(0, 8, 13)?;
+    for (i, o) in report.orders.iter().enumerate() {
+        let row = i as u32 + 3;
+        sheet.write_string(row, 0, &o.name)?;
+        sheet.write_string(row, 1, model.product_name(Some(o.product)))?;
+        sheet.write_number(row, 2, o.quantity)?;
+        sheet.write_number(row, 3, o.released)?;
+        sheet.write_number(row, 4, o.done)?;
+        sheet.write_number_with_format(row, 5, o.due / 3600.0, decimal)?;
+        if let Some(t) = o.finished {
+            sheet.write_number_with_format(row, 6, t / 3600.0, decimal)?;
+        }
+        if let Some(late) = o.lateness(report.time) {
+            sheet.write_number_with_format(row, 7, late / 60.0, decimal)?;
+        }
+        sheet.write_string(row, 8, o.status.label())?;
+    }
+    Ok(())
+}
+
 fn lines_sheet(
     sheet: &mut Worksheet,
     model: &FlowModel,
@@ -440,5 +503,15 @@ mod tests {
         let text = String::from_utf8_lossy(&bytes);
         // 概要・設備別・推移・作業者別・ライン別
         assert!(text.contains("xl/worksheets/sheet5.xml"));
+    }
+
+    #[test]
+    fn a_plan_gets_its_own_sheet() {
+        let mut model = cadsim_core::flow::factory::sample_factory();
+        cadsim_core::flow::plan::apply_sample_plan(&mut model);
+        let report = Simulation::run(&model).unwrap();
+        let bytes = report_to_xlsx(&model, &report).unwrap();
+        let text = String::from_utf8_lossy(&bytes);
+        assert!(text.contains("xl/worksheets/sheet6.xml"));
     }
 }

@@ -8,7 +8,8 @@ use serde::{Deserialize, Serialize};
 use cadsim_core::staffing::model::{AssignRule, Break, Shift, Skill, Staffing, Worker};
 
 use cadsim_core::flow::model::{
-    AgvCall, Element, ElementKind, Energy, Failure, FlowModel, Labor, Line, RunSettings,
+    AgvCall, Element, ElementKind, Energy, Failure, FlowModel, Labor, Line, Order, Product,
+    ProductTime, RunSettings,
 };
 use cadsim_core::flow::scenario::Scenario;
 
@@ -28,6 +29,12 @@ pub struct FlowRecord {
     /// ラインのまとまり (なければ書かない)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub lines: Vec<LineRecord>,
+    /// 品種 (なければ書かない)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub products: Vec<ProductRecord>,
+    /// 生産計画の注文 (なければ書かない)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub orders: Vec<OrderRecord>,
     /// 比べるために取っておいた案 (なければ書かない)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub scenarios: Vec<ScenarioRecord>,
@@ -37,6 +44,29 @@ pub struct FlowRecord {
 pub struct LineRecord {
     pub id: u32,
     pub name: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct ProductRecord {
+    pub id: u32,
+    pub name: String,
+}
+
+/// 注文。`due` は開始からの秒、`source` は投入する生成の id (なければいちばん上の生成)
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct OrderRecord {
+    pub name: String,
+    pub product: u32,
+    pub quantity: u32,
+    pub due: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<u32>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
+pub struct ProductTimeRecord {
+    pub product: u32,
+    pub cycle_time: f64,
 }
 
 /// 名前つきの設定の写し。中身は工程モデルと同じ形 (案の中に案は持たない)
@@ -79,6 +109,18 @@ pub struct ElementRecord {
     /// 属するラインの id (なければ書かない)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub line: Option<u32>,
+    /// 生成: 注文がないときに作る品種の id
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub product: Option<u32>,
+    /// 工程: 品種ごとの加工時間 (秒)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub product_times: Vec<ProductTimeRecord>,
+    /// 工程: 品種が変わるときの段取り替えの時間 (秒)
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub setup_time: f64,
+    /// 受け取る品種の id (空なら何でも)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub accepts: Vec<u32>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
@@ -362,6 +404,36 @@ fn model_record(model: &FlowModel, part_path: &dyn Fn(u32) -> Option<Vec<usize>>
                 starts_chart: e.starts_chart,
                 labor: e.labor.into(),
                 line: e.line,
+                product: e.product,
+                product_times: e
+                    .product_times
+                    .iter()
+                    .map(|t| ProductTimeRecord {
+                        product: t.product,
+                        cycle_time: t.cycle_time,
+                    })
+                    .collect(),
+                setup_time: e.setup_time,
+                accepts: e.accepts.clone(),
+            })
+            .collect(),
+        products: model
+            .products
+            .iter()
+            .map(|p| ProductRecord {
+                id: p.id,
+                name: p.name.clone(),
+            })
+            .collect(),
+        orders: model
+            .orders
+            .iter()
+            .map(|o| OrderRecord {
+                name: o.name.clone(),
+                product: o.product,
+                quantity: o.quantity,
+                due: o.due,
+                source: o.source,
             })
             .collect(),
         staffing: staffing_record(&model.staffing),
@@ -410,6 +482,7 @@ fn model_from_record(
         seed: record.seed,
     };
     let mut warnings = Vec::new();
+    let known_product = |id: u32| record.products.iter().any(|p| p.id == id);
     for r in &record.elements {
         let part = r.part.as_ref().and_then(|path| {
             let found = find_part(path);
@@ -477,6 +550,23 @@ fn model_from_record(
             starts_chart: r.starts_chart,
             labor: r.labor.into(),
             line: r.line.filter(|l| record.lines.iter().any(|k| k.id == *l)),
+            product: r.product.filter(|p| known_product(*p)),
+            product_times: r
+                .product_times
+                .iter()
+                .filter(|t| known_product(t.product))
+                .map(|t| ProductTime {
+                    product: t.product,
+                    cycle_time: t.cycle_time,
+                })
+                .collect(),
+            setup_time: r.setup_time,
+            accepts: r
+                .accepts
+                .iter()
+                .copied()
+                .filter(|p| known_product(*p))
+                .collect(),
         });
         if !inserted {
             warnings.push(format!(
@@ -488,6 +578,26 @@ fn model_from_record(
     if let Some(staffing) = &record.staffing {
         model.staffing = staffing_from_record(staffing, &mut warnings);
     }
+    model.products = record
+        .products
+        .iter()
+        .map(|p| Product {
+            id: p.id,
+            name: p.name.clone(),
+        })
+        .collect();
+    model.orders = record
+        .orders
+        .iter()
+        .filter(|o| known_product(o.product))
+        .map(|o| Order {
+            name: o.name.clone(),
+            product: o.product,
+            quantity: o.quantity,
+            due: o.due,
+            source: o.source,
+        })
+        .collect();
     model.lines = record
         .lines
         .iter()
@@ -565,6 +675,23 @@ mod tests {
         let json = serde_json::to_string(&record).unwrap();
         assert!(json.contains("\"type\":\"Transport\""), "{json}");
         assert!(json.contains("\"lines\""), "{json}");
+        let parsed: FlowRecord = serde_json::from_str(&json).unwrap();
+        let (restored, warnings) = from_record(&parsed, |_| None);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(restored, model);
+    }
+
+    #[test]
+    fn round_trip_keeps_the_plan() {
+        let mut model = cadsim_core::flow::factory::sample_factory();
+        cadsim_core::flow::plan::apply_sample_plan(&mut model);
+        let accepts = model.products[0].id;
+        model.elements[2].accepts = vec![accepts];
+        model.elements[0].product = Some(accepts);
+        let record = to_record(&model, |_| None);
+        let json = serde_json::to_string(&record).unwrap();
+        assert!(json.contains("\"orders\""), "{json}");
+        assert!(json.contains("\"setup_time\":600"), "{json}");
         let parsed: FlowRecord = serde_json::from_str(&json).unwrap();
         let (restored, warnings) = from_record(&parsed, |_| None);
         assert!(warnings.is_empty(), "{warnings:?}");

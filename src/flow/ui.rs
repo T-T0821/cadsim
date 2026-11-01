@@ -4,6 +4,7 @@
 //! - 工程: 要素の一覧と、選んだ要素の設定。回す時間など
 //! - 人員: シフト・作業者の名簿とできる工程・人数の比較 (`staff_ui.rs`)
 //! - 工場: ラインの一覧・別ファイルのラインの取り込み・ラインごとの結果 (`factory_ui.rs`)
+//! - 計画: 品種と生産計画 (注文)、納期の結果 (`plan_ui.rs`)
 //! - 案の比較: 設定を案として取っておき、繰り返し回して並べる (`scenario_ui.rs`)
 //! - 結果: ラインの集計と設備ごとの表、作業者ごとの表
 //! - グラフ: 状態の割合の積み上げ横棒、排出数と仕掛数の推移、状態の時系列
@@ -17,6 +18,7 @@ use cadsim_core::workspace::Tool;
 use super::factory_ui::{FactoryUiState, factory_tab};
 use super::model::{ElementId, ElementKind, Failure, FlowModel, KindTag, Labor, sample_line};
 use super::palette::{busy_rgb, state_rgb};
+use super::plan_ui::{PlanUiState, plan_tab};
 use super::scenario_ui::{ScenarioUiState, scenario_tab};
 use super::sim::{Report, State, WorkerState};
 use super::staff_ui::{StaffUiState, staff_tab};
@@ -29,6 +31,7 @@ enum Tab {
     Line,
     Staff,
     Factory,
+    Plan,
     Scenarios,
     Results,
     Charts,
@@ -44,6 +47,7 @@ pub struct FlowUiState {
     staff: StaffUiState,
     scenarios: ScenarioUiState,
     factory: FactoryUiState,
+    plan: PlanUiState,
 }
 
 #[derive(SystemParam)]
@@ -92,6 +96,7 @@ pub fn show_window(
             ui.selectable_value(tab, Tab::Line, "工程");
             ui.selectable_value(tab, Tab::Staff, "人員");
             ui.selectable_value(tab, Tab::Factory, "工場");
+            ui.selectable_value(tab, Tab::Plan, "計画");
             ui.selectable_value(tab, Tab::Scenarios, "案の比較");
             ui.selectable_value(tab, Tab::Results, "結果");
             ui.selectable_value(tab, Tab::Charts, "グラフ");
@@ -107,6 +112,12 @@ pub fn show_window(
             }
             Tab::Factory => {
                 if factory_tab(ui, &mut state.flow, &state.run, &mut state.ui.factory) {
+                    state.run.stop();
+                    state.ui.selected = None;
+                }
+            }
+            Tab::Plan => {
+                if plan_tab(ui, &mut state.flow, &state.run, &mut state.ui.plan) {
                     state.run.stop();
                     state.ui.selected = None;
                 }
@@ -438,6 +449,12 @@ fn element_editor(
         .map(|e| (e.id, e.name.clone(), e.kind.tag()))
         .collect();
     let lines: Vec<(u32, String)> = flow.lines.iter().map(|l| (l.id, l.name.clone())).collect();
+    let products: Vec<(u32, String)> = flow
+        .products
+        .iter()
+        .map(|p| (p.id, p.name.clone()))
+        .collect();
+    let planned_source = flow.orders.iter().any(|o| flow.order_source(o) == Some(id));
     let e = flow.get_mut(id).unwrap();
     let tag = e.kind.tag();
     egui::Grid::new("flow_element")
@@ -549,6 +566,10 @@ fn element_editor(
                 ElementKind::Sink => {}
             }
 
+            if !products.is_empty() {
+                product_editor(ui, e, tag, &products, planned_source);
+            }
+
             if tag != KindTag::Sink {
                 ui.weak("送り先");
                 ui.vertical(|ui| {
@@ -638,6 +659,107 @@ fn element_editor(
             ui_state.selected = None;
         }
     });
+}
+
+/// 品種ごとの設定: 生成の作る品種、工程の品種ごとの加工時間と段取り替え、受け取る品種
+fn product_editor(
+    ui: &mut egui::Ui,
+    e: &mut super::model::Element,
+    tag: KindTag,
+    products: &[(u32, String)],
+    planned_source: bool,
+) {
+    let name_of = |id: Option<u32>| {
+        id.and_then(|id| products.iter().find(|(p, _)| *p == id))
+            .map_or("品種なし", |(_, n)| n.as_str())
+    };
+    match tag {
+        KindTag::Source => {
+            ui.weak("作る品種");
+            if planned_source {
+                ui.weak("「計画」タブの注文の順に投入します");
+            } else {
+                egui::ComboBox::from_id_salt("flow_source_product")
+                    .selected_text(name_of(e.product))
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut e.product, None, "品種なし");
+                        for (id, name) in products {
+                            ui.selectable_value(&mut e.product, Some(*id), name);
+                        }
+                    });
+            }
+            ui.end_row();
+        }
+        KindTag::Process => {
+            let base = match e.kind {
+                ElementKind::Process { cycle_time, .. } => cycle_time,
+                _ => 30.0,
+            };
+            ui.weak("品種ごとの加工時間");
+            ui.vertical(|ui| {
+                for (id, name) in products {
+                    ui.horizontal(|ui| {
+                        let k = e.product_times.iter().position(|t| t.product == *id);
+                        let mut own = k.is_some();
+                        if ui
+                            .checkbox(&mut own, name.as_str())
+                            .on_hover_text("チェックしない品種はサイクルタイムで加工する")
+                            .changed()
+                        {
+                            if own {
+                                e.product_times.push(super::model::ProductTime {
+                                    product: *id,
+                                    cycle_time: base,
+                                });
+                            } else {
+                                e.product_times.retain(|t| t.product != *id);
+                            }
+                        }
+                        if let Some(t) = e.product_times.iter_mut().find(|t| t.product == *id) {
+                            seconds(ui, &mut t.cycle_time);
+                        } else {
+                            ui.weak(format!("{base} 秒"));
+                        }
+                    });
+                }
+            });
+            ui.end_row();
+            ui.weak("段取り替え");
+            ui.add(
+                egui::DragValue::new(&mut e.setup_time)
+                    .speed(1.0)
+                    .range(0.0..=1_000_000.0)
+                    .max_decimals(1)
+                    .suffix(" 秒"),
+            )
+            .on_hover_text(
+                "前と違う品種が来たとき、加工の前にかかる時間。人が要る工程では人の作業になる",
+            );
+            ui.end_row();
+        }
+        _ => {}
+    }
+    if tag != KindTag::Source {
+        ui.weak("受け取る品種");
+        ui.vertical(|ui| {
+            for (id, name) in products {
+                let mut on = e.accepts.contains(id);
+                if ui.checkbox(&mut on, name.as_str()).changed() {
+                    if on {
+                        e.accepts.push(*id);
+                    } else {
+                        e.accepts.retain(|p| p != id);
+                    }
+                }
+            }
+            ui.weak(if e.accepts.is_empty() {
+                "どれもチェックしなければ、すべての品種を受け取ります"
+            } else {
+                "チェックした品種だけを受け取ります (品種ごとの通り道)"
+            });
+        });
+        ui.end_row();
+    }
 }
 
 /// 工程に人が要るか。「人員」タブの名簿のうち、この工程ができる人が来て作業する。

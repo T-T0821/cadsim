@@ -34,3 +34,7 @@ truck-stepio = "0.3"
 truck-topology = "0.6"
 # 生成 AI (Claude API) への HTTPS の問い合わせ。純 Rust (rustls)
 ureq = "3"
+# 生産計画の Excel (xlsx / xls / ods) の読み込み。純 Rust
+calamine = { version = "0.30", default-features = false }
+# 日本語の Excel が書く CSV (Shift_JIS) の読み込み
+encoding_rs = "0.8"

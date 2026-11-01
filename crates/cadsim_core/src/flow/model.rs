@@ -17,6 +17,7 @@
 //! 作業者のうち、その工程ができて手の空いている人が来るまで「人待ち」で止まる。
 
 pub use super::factory::{Line, LineId};
+pub use super::plan::{Order, Product, ProductId, ProductTime};
 pub use crate::staffing::model::{Labor, Staffing};
 
 /// 要素の ID。プロジェクト内で一意。
@@ -31,6 +32,10 @@ pub struct FlowModel {
     pub staffing: Staffing,
     /// ラインのまとまり。空なら工場全体が1本のライン
     pub lines: Vec<Line>,
+    /// 品種。空なら品種を分けない
+    pub products: Vec<Product>,
+    /// 生産計画 (注文の並び)。空なら生成は間隔どおりに出し続ける
+    pub orders: Vec<Order>,
     /// 名前を付けて取っておいた設定 (案)。比べるときに使う
     pub scenarios: Vec<super::scenario::Scenario>,
     next_id: ElementId,
@@ -43,6 +48,8 @@ impl Default for FlowModel {
             settings: RunSettings::default(),
             staffing: Staffing::default(),
             lines: Vec::new(),
+            products: Vec::new(),
+            orders: Vec::new(),
             scenarios: Vec::new(),
             next_id: 1,
         }
@@ -90,6 +97,14 @@ pub struct Element {
     pub labor: Labor,
     /// 属するライン。None ならどのラインにも入れていない
     pub line: Option<LineId>,
+    /// 生成: 注文がないときに作る品種
+    pub product: Option<ProductId>,
+    /// 工程: 品種ごとの加工時間 (ない品種はサイクルタイム)
+    pub product_times: Vec<ProductTime>,
+    /// 工程: 品種が変わるときの段取り替えの時間 (秒)
+    pub setup_time: f64,
+    /// 受け取る品種。空なら何でも受け取る (品種ごとの通り道に使う)
+    pub accepts: Vec<ProductId>,
 }
 
 /// 送り出したワークを運ぶ AGV の搬送: `from` のステーションで積み、`to` で降ろす。
@@ -224,6 +239,8 @@ impl FlowModel {
             && self.settings == other.settings
             && self.staffing == other.staffing
             && self.lines == other.lines
+            && self.products == other.products
+            && self.orders == other.orders
     }
 
     /// 案を除いた写し
@@ -233,6 +250,8 @@ impl FlowModel {
             settings: self.settings,
             staffing: self.staffing.clone(),
             lines: self.lines.clone(),
+            products: self.products.clone(),
+            orders: self.orders.clone(),
             scenarios: Vec::new(),
             next_id: self.next_id,
         }
@@ -291,6 +310,10 @@ impl FlowModel {
             starts_chart: false,
             labor: Labor::None,
             line: None,
+            product: None,
+            product_times: Vec::new(),
+            setup_time: 0.0,
+            accepts: Vec::new(),
         })
     }
 
@@ -469,6 +492,7 @@ impl FlowModel {
             out.push("立ち上がり時間は回す時間より短くしてください".into());
         }
         out.extend(self.staffing.problems());
+        out.extend(self.plan_problems());
         out
     }
 }
