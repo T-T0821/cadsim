@@ -15,7 +15,11 @@
 //! 他の機能とのつなぎ目は [`SimBody`] コンポーネントだけ。部品のルートエンティティに
 //! 付けておけば、このモジュールが勝手に拾って判定する。
 
-use std::{collections::HashMap, sync::Arc, time::Instant};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+    time::Instant,
+};
 
 use bevy::{
     prelude::*,
@@ -86,11 +90,14 @@ impl InterferenceCheck {
         self.requested = true;
     }
 
-    /// 部品が干渉に関わっているか (表示の色分けに使う)
-    pub fn is_interfering(&self, id: u32) -> bool {
-        self.report.pairs.iter().any(|pair| {
-            matches!(pair.status, PairStatus::Interfering { .. }) && (pair.a == id || pair.b == id)
-        })
+    /// 干渉に関わっている部品の id (表示の色分けに使う)
+    pub fn interfering_parts(&self) -> HashSet<u32> {
+        self.report
+            .pairs
+            .iter()
+            .filter(|pair| matches!(pair.status, PairStatus::Interfering { .. }))
+            .flat_map(|pair| [pair.a, pair.b])
+            .collect()
     }
 }
 
@@ -116,7 +123,7 @@ impl Plugin for SimulationPlugin {
                 run_interference_check,
                 receive_overlaps,
                 view::sync_overlap_meshes,
-                view::draw_results,
+                view::sync_result_lines,
                 measure::draw,
             )
                 .chain(),

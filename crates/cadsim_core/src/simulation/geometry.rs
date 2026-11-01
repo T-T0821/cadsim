@@ -6,7 +6,7 @@
 //!
 //! Bevy や truck には依存させず、単体テストできる純粋な関数だけを置く。
 
-use glam::{DMat4, DQuat, DVec3};
+use glam::{DMat3, DMat4, DQuat, DVec3};
 
 /// 3頂点の三角形。頂点の並びは反時計回りが表 (外向き法線) とする。
 pub type Triangle = [DVec3; 3];
@@ -140,16 +140,25 @@ impl Aabb {
     }
 
     /// 姿勢で動かした後の外接箱 (8隅を変換して囲み直すので少し大きめになる)。
+    ///
+    /// 8隅を1つずつ変換する代わりに、中心を動かし、半分の大きさに回転行列の絶対値を掛ける
+    /// (結果は同じで、計算は数分の1)。干渉チェックの木をたどるたびに呼ぶので軽くしておく。
     pub fn transformed(&self, pose: &Pose) -> Aabb {
-        let (lo, hi) = (self.min, self.max);
-        Aabb::from_points((0..8).map(|i| {
-            let pick = |bit: usize, a: f64, b: f64| if i & bit == 0 { a } else { b };
-            pose.apply(DVec3::new(
-                pick(1, lo.x, hi.x),
-                pick(2, lo.y, hi.y),
-                pick(4, lo.z, hi.z),
-            ))
-        }))
+        if self.min.x > self.max.x {
+            return *self; // 空の箱
+        }
+        let center = pose.apply((self.min + self.max) * 0.5);
+        let half = (self.max - self.min) * 0.5;
+        let m = DMat3::from_quat(pose.rotation);
+        let extent = DVec3::new(
+            m.row(0).abs().dot(half),
+            m.row(1).abs().dot(half),
+            m.row(2).abs().dot(half),
+        );
+        Aabb {
+            min: center - extent,
+            max: center + extent,
+        }
     }
 }
 
@@ -467,6 +476,30 @@ mod tests {
 
     fn tri(a: [f64; 3], b: [f64; 3], c: [f64; 3]) -> Triangle {
         [a.into(), b.into(), c.into()]
+    }
+
+    #[test]
+    fn transformed_box_matches_its_eight_corners() {
+        let aabb = Aabb {
+            min: DVec3::new(-1.0, 2.0, -3.0),
+            max: DVec3::new(4.0, 2.5, 1.0),
+        };
+        let pose = Pose {
+            rotation: DQuat::from_euler(glam::EulerRot::XYZ, 0.3, -1.1, 2.0),
+            translation: DVec3::new(10.0, -5.0, 2.0),
+        };
+        let corners = Aabb::from_points((0..8).map(|i| {
+            let pick = |bit: usize, a: f64, b: f64| if i & bit == 0 { a } else { b };
+            pose.apply(DVec3::new(
+                pick(1, aabb.min.x, aabb.max.x),
+                pick(2, aabb.min.y, aabb.max.y),
+                pick(4, aabb.min.z, aabb.max.z),
+            ))
+        }));
+        let fast = aabb.transformed(&pose);
+        assert!((fast.min - corners.min).abs().max_element() < 1e-9);
+        assert!((fast.max - corners.max).abs().max_element() < 1e-9);
+        assert_eq!(Aabb::EMPTY.transformed(&pose), Aabb::EMPTY);
     }
 
     #[test]
