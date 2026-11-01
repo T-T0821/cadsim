@@ -24,9 +24,9 @@
 
 | 層 | 場所 | 中身 |
 | --- | --- | --- |
-| ドメイン | `cadsim_core::effects` | きっかけ (`Cue`) と見た目 (`Look`・`Glow`)、設定 (`EffectSettings`)、出す場所 (`Emitter`) の決め方 (`flow_emitters`・`safety_beacon`・`collision_point`) |
-| ドメイン | `cadsim_core::effects::particles` | 煙と火花の粒 (`ParticleField`)。1 秒あたりの数だけ生み、重力・浮力・空気抵抗で動かし、寿命で消す |
-| UI | `src/effects/mod.rs` | 毎フレーム状態を集めて粒を進め、光と煙の球・火花と波紋の線に写す |
+| ドメイン | `plantwright_core::effects` | きっかけ (`Cue`) と見た目 (`Look`・`Glow`)、設定 (`EffectSettings`)、出す場所 (`Emitter`) の決め方 (`flow_emitters`・`safety_beacon`・`collision_point`) |
+| ドメイン | `plantwright_core::effects::particles` | 煙と火花の粒 (`ParticleField`)。1 秒あたりの数だけ生み、重力・浮力・空気抵抗で動かし、寿命で消す |
+| UI | `src/features/effects/mod.rs` | 毎フレーム状態を集めて粒を進め、光と煙の球・火花と波紋の線に写す |
 | UI | `src/ui/menu.rs` | 表示メニューの「状態のエフェクト」 |
 
 設定は `ViewSettings::effects` に持ちます (表示メニューのほかの切り替えと同じく、プロジェクトには保存しません)。

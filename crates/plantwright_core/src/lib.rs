@@ -36,6 +36,8 @@ pub mod render_quality;
 pub mod render_settings;
 pub mod review;
 pub mod safety;
+pub mod scripting;
+pub mod sequence_gen;
 pub mod shape;
 pub mod simulation;
 pub mod site;

@@ -5,7 +5,7 @@
 //! ホスト自身の画面も番号 0 の参加者として、チャンネル越しに同じ配り役とやり取りする。
 //! 参加する側は、接続・書き込みのスレッドと読み取りのスレッドを持つ。
 //!
-//! 画面 (UI 層) からは、ホストでも参加でも同じ `ReviewLink` の `send` と `poll` だけを使う。
+//! 画面 からは、ホストでも参加でも同じ `ReviewLink` の `send` と `poll` だけを使う。
 
 use std::collections::{HashMap, VecDeque};
 use std::io::{self, BufRead, BufReader, Read, Write};

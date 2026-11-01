@@ -1,7 +1,7 @@
 # 関節とロボット
 
 タイミングチャートのアクチュエータ (回転テーブル・直動軸) を関節として扱い、
-直列につないだものをロボットとして教示点へ動かすしくみです。計算は `crates/cadsim_core/src/motion/`、画面は `src/motion/` にあります。
+直列につないだものをロボットとして教示点へ動かすしくみです。計算は `crates/plantwright_core/src/motion/`、画面は `src/features/motion/` にあります。
 
 | ファイル | 層 | 内容 |
 | --- | --- | --- |
@@ -10,8 +10,7 @@
 | `kinematics.rs` | ドメイン | 関節の並び、TCP、ヤコビアン、逆運動学 |
 | `robot_ui.rs` | UI | ロボット画面 (ジョグ・教示点) と 3D ビューへの表示 |
 
-`chart.rs` / `pose.rs` / `kinematics.rs` は `crates/cadsim_core/src/motion/` にあり、Bevy に依存しません (ベクトルは glam)。
-[architecture.md](architecture.md) の移し方の 2 段目で `cadsim_core` の `domain::motion` に移します。
+`chart.rs` / `pose.rs` / `kinematics.rs` は `crates/plantwright_core/src/motion/` にあり、Bevy に依存しません (ベクトルは glam)。
 
 ## データ
 
@@ -107,7 +106,7 @@ MoveL は TCP の通り道の長さで決める。関節の移動量は `SolvedM
 
 ## 実機の UR の関節角度を受け取る (RTDE)
 
-通信は `cadsim_io::rtde`。コントローラのポート 30004 に TCP でつなぎ、プロトコルのバージョン 2 を要求 (`V`) →
+通信は `plantwright_core::motion::rtde`。コントローラのポート 30004 に TCP でつなぎ、プロトコルのバージョン 2 を要求 (`V`) →
 `actual_q` を指定した周期で登録 (`O`、返事のレシピ ID と型 `VECTOR6D` を確かめる) → 開始 (`S`) の順にやり取りし、
 あとは届くデータ (`U`) から 6 つの f64 (ラジアン、ビッグエンディアン) を取り出す。パケットは長さ (u16、ヘッダー込み) +
 種類 (u8) + 中身で、`PacketReader` が TCP の受信を区切りごとに切り出す。通信は別スレッドで、`RtdeClient` を捨てると

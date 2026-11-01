@@ -6,12 +6,12 @@
 
 | 層 | 場所 | 役割 |
 | --- | --- | --- |
-| ドメイン | `crates/cadsim_core/src/drawing.rs` | 投影・かくれ線・シルエット・寸法・尺度・図枠と表題欄。出来上がりは実寸の線と文字の集まり `Sheet` |
-| ユースケース | `src/drawing/collect.rs` | `Model` から図面の材料(部品の面の三角形と稜線、寸法を付けるまとまり)を集める |
-| ユースケース | `src/bom.rs` | `Model` から部品表 `Bom`(まとめた行と、構成の木)を作る |
+| ドメイン | `crates/plantwright_core/src/drawing/mod.rs` | 投影・かくれ線・シルエット・寸法・尺度・図枠と表題欄。出来上がりは実寸の線と文字の集まり `Sheet` |
+| ユースケース | `crates/plantwright_core/src/drawing/collect.rs` | `Model` から図面の材料(部品の面の三角形と稜線、寸法を付けるまとまり)を集める |
+| ユースケース | `crates/plantwright_core/src/bom/mod.rs` | `Model` から部品表 `Bom`(まとめた行と、構成の木)を作る |
 | アダプター | `src/formats/drawing_out.rs` | `Sheet` → PDF(krilla)/ DXF |
 | アダプター | `src/formats/bom_out.rs` | `Bom` → CSV / Excel(rust_xlsxwriter) |
-| UI | `src/documents.rs` | 設定のダイアログ、保存先の選択、書き出しの呼び出し |
+| UI | `src/features/drawing/mod.rs` | 設定のダイアログ、保存先の選択、書き出しの呼び出し |
 
 ## 図面
 

@@ -4,19 +4,19 @@
 
 ## 層の分け方
 
-[architecture.md](architecture.md) に合わせ、問い合わせ口をポートにして、Claude API の呼び出しはアダプターに置く。
+問い合わせ口はトレイト `LlmClient` にして、テストでは偽物を差す。Claude API の呼び出しは `plantwright_core::assistant::claude`。
 
 | 層 | 場所 | 内容 |
 | --- | --- | --- |
-| ユースケース (ポート) | `cadsim_core::usecase::llm` | `LlmClient` トレイト、問い合わせ (`LlmRequest`)・失敗 (`LlmError`) の型、返事から JSON を取り出す `extract_json`、テスト用の `ScriptedLlm` |
-| アダプター | `cadsim_io::claude` | `ClaudeClient`: Messages API への HTTPS の問い合わせ ([ureq](https://crates.io/crates/ureq) + rustls)。送る JSON の組み立て (`request_body`) と返事の読み取り (`parse_response`) は通信と切り離してテストする |
-| UI と設定 | `src/assistant/` | `settings_file.rs`(API キーとモデルの保存、Bevy なし)、`job.rs`(問い合わせを別スレッドで待つ `LlmJob`、Bevy なし)、`mod.rs`(`AiAssistant` リソース)、`ui.rs`(「AI の設定」ウィンドウ) |
+| ユースケース (ポート) | `plantwright_core::assistant::llm` | `LlmClient` トレイト、問い合わせ (`LlmRequest`)・失敗 (`LlmError`) の型、返事から JSON を取り出す `extract_json`、テスト用の `ScriptedLlm` |
+| アダプター | `plantwright_core::assistant::claude` | `ClaudeClient`: Messages API への HTTPS の問い合わせ ([ureq](https://crates.io/crates/ureq) + rustls)。送る JSON の組み立て (`request_body`) と返事の読み取り (`parse_response`) は通信と切り離してテストする |
+| UI と設定 | `src/features/assistant/` | `settings_file.rs`(API キーとモデルの保存、Bevy なし)、`job.rs`(問い合わせを別スレッドで待つ `LlmJob`、Bevy なし)、`mod.rs`(`AiAssistant` リソース)、`ui.rs`(「AI の設定」ウィンドウ) |
 
 新しく生成 AI を使う機能を足すときは、
 
 1. 問い合わせの組み立てと返事の読み取りを Bevy に依存しないユースケースの関数にし、`&dyn LlmClient` を受け取る。テストは `ScriptedLlm` で決まった返事を返して書く。
 2. 画面からは `AiAssistant::client()` で呼び出し口を受け取り、`LlmJob::start` で別スレッドに投げ、毎フレーム `poll` で結果を見る。
-3. 新しい道具なら `cadsim_core::workspace::Tool` に足す (ツールレールとメニューの「ツール」に並び、「AI に聞く」の説明にも入る)。
+3. 新しい道具なら `plantwright_core::workspace::Tool` に足す (ツールレールとメニューの「ツール」に並び、「AI に聞く」の説明にも入る)。
 
 ## Claude API への問い合わせ
 
@@ -35,7 +35,7 @@
 - 保存したキーがなければ環境変数 `ANTHROPIC_API_KEY` を使う。
 - 画面にはキーの末尾 4 文字だけを出す。
 
-## チャート・ラダーの自動生成 (`src/sequence_gen/`)
+## チャート・ラダーの自動生成 (`src/features/sequence_gen/`)
 
 | 層 | ファイル | 内容 |
 | --- | --- | --- |
@@ -46,7 +46,7 @@
 | アダプター | `json.rs` | 下書きと JSON の変換、生成 AI に渡す JSON Schema |
 | UI | `mod.rs`, `ui.rs` | `SequenceGen` リソースと「チャート・ラダーの自動生成」ウィンドウ |
 
-`TimingChart` がまだアプリ側にあるので、ここもアプリ側に置いている。チャートが `cadsim_core` に移ったら、Bevy に依存しない 4 つのファイルも移す。
+`TimingChart` がまだアプリ側にあるので、ここもアプリ側に置いている。チャートが `plantwright_core` に移ったら、Bevy に依存しない 4 つのファイルも移す。
 
 ### 説明文 → 下書き
 
@@ -95,4 +95,4 @@ GX Works 用 CSV は、命令リストの CSV の列 (ステップ番号・行�
 
 ## 言葉でラインを組む
 
-文から設備の配置とタイミングチャートの下書きを作る。しくみは [line-compose.md](line-compose.md)。生成 AI の口はポート `LineDraftAi` (`cadsim_core::usecase::compose_line`) で、`cadsim_io::line_draft_json::LlmLineDrafter` が `LlmClient` で実装する。API キーがない・失敗したときは文のキーワードから作る。
+文から設備の配置とタイミングチャートの下書きを作る。しくみは [line-compose.md](line-compose.md)。生成 AI の口はポート `LineDraftAi` (`plantwright_core::line_draft::compose`) で、`plantwright_core::line_draft::json::LlmLineDrafter` が `LlmClient` で実装する。API キーがない・失敗したときは文のキーワードから作る。

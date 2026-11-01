@@ -6,11 +6,11 @@
 
 | 層 | 場所 | 中身 |
 | --- | --- | --- |
-| ドメイン | `cadsim_core::sound` | 波形の合成 (`synth`)、音量 (`settings`)、聞こえ方 (`spatial`)、鳴らす音の決め方と動きの見張り (`cues`)、警報とブザー停止 (`alarm`) |
-| アダプター | `cadsim_io::sound_settings` | 設定ファイル `sound.json` の読み書き |
-| UI | `src/sound/` | `mod.rs` が毎フレーム状態を集めて `plan_sounds` を呼び、音を出し入れする。`source.rs` が波形を Bevy の音にする。`panel.rs` が設定ウィンドウと警報の帯 |
+| ドメイン | `plantwright_core::sound` | 波形の合成 (`synth`)、音量 (`settings`)、聞こえ方 (`spatial`)、鳴らす音の決め方と動きの見張り (`cues`)、警報とブザー停止 (`alarm`) |
+| アダプター | `plantwright_core::sound::settings_file` | 設定ファイル `sound.json` の読み書き |
+| UI | `src/features/sound/` | `mod.rs` が毎フレーム状態を集めて `plan_sounds` を呼び、音を出し入れする。`source.rs` が波形を Bevy の音にする。`panel.rs` が設定ウィンドウと警報の帯 |
 
-判断はすべて `cadsim_core::sound` にあり、Bevy なしで単体テストできます。
+判断はすべて `plantwright_core::sound` にあり、Bevy なしで単体テストできます。
 
 ## 音の波形
 

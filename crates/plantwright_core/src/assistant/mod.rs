@@ -2,4 +2,6 @@
 
 pub mod claude;
 pub mod help;
+pub mod job;
 pub mod llm;
+pub mod settings_file;

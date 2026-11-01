@@ -7,7 +7,7 @@
 //! 2. AI がない・失敗したときは、文のキーワードから作る ([`rules::draft_from_text`])。
 //! 3. どちらの下書きも [`check::normalize`] で整え、[`layout::layout`] で並べる。
 //!
-//! 下書きをモデルとタイミングチャートに置くのはアプリ側 (UI 層) の仕事。
+//! 下書きをモデルとタイミングチャートに置くのはアプリ側 の仕事。
 
 use crate::line_draft::layout::{Placed, layout};
 use crate::line_draft::{LineDraft, check, rules};

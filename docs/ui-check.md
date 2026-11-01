@@ -78,10 +78,10 @@ target/ui-check/<手順書>/log.txt              アプリのログ (落ちた�
 
 | 層 | 場所 | 中身 |
 | --- | --- | --- |
-| ドメイン | `cadsim_core::ui_check` | 手順書の読み取り (`scenario`)、1 フレームずつの進め方 (`runner`)、部品の探し方 (`widget`)、画像の比べ方 (`compare`)、判定 (`report`) |
-| アダプター | `cadsim_io::ui_check` | PNG の読み書き、結果の JSON、報告書の HTML |
-| UI | `src/ui_check/mod.rs` | Bevy のシステム。画面の様子を集めて runner に渡し、返ってきた入力を流して写真を撮る |
-| UI | `src/ui_check/suite.rs` | 手順書ごとにアプリを起動し直して流し、一覧を書く (Bevy なし) |
+| ドメイン | `plantwright_core::ui_check` | 手順書の読み取り (`scenario`)、1 フレームずつの進め方 (`runner`)、部品の探し方 (`widget`)、画像の比べ方 (`compare`)、判定 (`report`) |
+| アダプター | `plantwright_core::ui_check::files` | PNG の読み書き、結果の JSON、報告書の HTML |
+| UI | `src/features/ui_check/mod.rs` | Bevy のシステム。画面の様子を集めて runner に渡し、返ってきた入力を流して写真を撮る |
+| UI | `src/features/ui_check/suite.rs` | 手順書ごとにアプリを起動し直して流し、一覧を書く (Bevy なし) |
 
 ### 基準画像と環境
 

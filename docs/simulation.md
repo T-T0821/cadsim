@@ -1,6 +1,6 @@
 # シミュレーション機能の設計 (干渉チェック・距離計測)
 
-このドキュメントは干渉チェックと距離計測の設計をまとめたものです。計算部分は `crates/cadsim_core/src/simulation/`、Bevy での配線・表示・パネルは `src/simulation/` にあります。
+このドキュメントは干渉チェックと距離計測の設計をまとめたものです。計算部分は `crates/plantwright_core/src/simulation/`、Bevy での配線・表示・パネルは `src/features/simulation/` にあります。
 「何ができるか」→「どう動くか」→「どこを触ればよいか」の順に書いています。
 
 ## 1. できること
@@ -43,7 +43,7 @@ flowchart LR
         P[Model の箱・STEP 部品<br/>f64 の設計データ] -->|テッセレーション<br/>配置行列 → 姿勢| R[部品のエンティティ PartView]
     end
     R -->|SimBody を付ける| S
-    subgraph simulation [src/simulation]
+    subgraph simulation [src/features/simulation/]
         S[SimBody<br/>メッシュ + 姿勢] --> C[run_interference_check<br/>変更があったときだけ]
         C --> Rep[InterferenceCheck.report<br/>判定結果の一覧]
         Rep --> V[view.rs<br/>3D表示]
@@ -157,18 +157,18 @@ A∩B の表面は「A の表面のうち B の内側にある部分」と「B �
 
 | ファイル | 役割 | 層 |
 | --- | --- | --- |
-| `crates/cadsim_core/src/simulation/geometry.rs` | 姿勢・外接箱・三角形の交差と距離 (純粋な f64 計算) | ドメイン |
-| `crates/cadsim_core/src/simulation/mesh.rs` | `TriMesh` と BVH (`parry3d-f64` の `Bvh`)、内外判定、最近点 | ドメイン |
-| `crates/cadsim_core/src/simulation/interference.rs` | 組ごとの判定 (干渉 / 接触 / 近接) | ドメイン |
-| `crates/cadsim_core/src/simulation/overlap.rs` | 干渉部分の立体と体積 | ドメイン |
-| `src/simulation/mod.rs` | プラグイン、`SimBody`、判定の実行タイミング | UI (Bevy) |
-| `src/simulation/view.rs` | 判定結果の3D表示 | UI (Bevy) |
-| `src/simulation/measure.rs` | 距離計測ツール | UI (Bevy) |
-| `src/simulation/panel.rs` | 「干渉チェック・計測」パネル | UI (Bevy) |
+| `crates/plantwright_core/src/simulation/geometry.rs` | 姿勢・外接箱・三角形の交差と距離 (純粋な f64 計算) | ドメイン |
+| `crates/plantwright_core/src/simulation/mesh.rs` | `TriMesh` と BVH (`parry3d-f64` の `Bvh`)、内外判定、最近点 | ドメイン |
+| `crates/plantwright_core/src/simulation/interference.rs` | 組ごとの判定 (干渉 / 接触 / 近接) | ドメイン |
+| `crates/plantwright_core/src/simulation/overlap.rs` | 干渉部分の立体と体積 | ドメイン |
+| `src/features/simulation/mod.rs` | プラグイン、`SimBody`、判定の実行タイミング | UI (Bevy) |
+| `src/features/simulation/view.rs` | 判定結果の3D表示 | UI (Bevy) |
+| `src/features/simulation/measure.rs` | 距離計測ツール | UI (Bevy) |
+| `src/features/simulation/panel.rs` | 「干渉チェック・計測」パネル | UI (Bevy) |
 
-計算部分は Bevy に依存しない `cadsim_core` にあるので、`cargo test -p cadsim_core` で Bevy をビルドせずに単体テストできます。
+計算部分は Bevy に依存しない `plantwright_core` にあるので、`cargo test -p plantwright_core` で Bevy をビルドせずに単体テストできます。
 
-## 7. 結果の CSV 出力 (src/result_export/)
+## 7. 結果の CSV 出力 (src/features/result_export/)
 
 メニューの「ファイル → シミュレーション結果 (CSV)」から2種類を書き出します。どちらも Excel でそのまま開けるよう、BOM 付き UTF-8・改行 CRLF です。
 

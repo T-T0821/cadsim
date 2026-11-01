@@ -13,10 +13,10 @@ use super::dock::{self, Dock, RAIL_WIDTH};
 use super::logo;
 use super::playful::{PlayfulUi, mascot};
 use super::theme::palette;
-use crate::assistant::help::HelpChat;
-use crate::motion::Playback;
-use crate::project::{ProjectAction, ProjectState};
-use crate::view::camera::ViewportRect;
+use crate::document::project::{ProjectAction, ProjectState};
+use crate::features::assistant::help::HelpChat;
+use crate::features::motion::Playback;
+use crate::viewport::camera::ViewportRect;
 use plantwright_core::gamify::{Chapter, MISSIONS, Mission, Part, Place};
 
 /// 手順を出しているときのミッションカードの幅

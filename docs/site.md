@@ -1,18 +1,18 @@
 # 平面図の下敷きと点群のしくみ
 
-使い方は操作マニュアルの [平面図を床に敷く](src/floor-plan.md)・[点群を読み込む](src/point-cloud.md) を見てください。
+使い方は操作マニュアルの [平面図を床に敷く](src/features/floor/-plan.md)・[点群を読み込む](src/point-cloud.md) を見てください。
 
 ## 層の分け方
 
 | 層 | 場所 | 役割 |
 | --- | --- | --- |
-| ドメイン | `crates/cadsim_core/src/site/underlay.rs` | 下敷きの配置(縮尺・原点・回転・高さ)、図面座標 ⇔ ワールド座標、縮尺合わせの計算 |
-| ドメイン | `crates/cadsim_core/src/site/pointcloud.rs` | 点群の間引き・区画分け・LOD の段の選び方・部品との干渉と距離 |
-| ドメイン | `crates/cadsim_core/src/site/model.rs` | プロジェクトに属する現場データ `Site`(`Model::site` に入る) |
+| ドメイン | `crates/plantwright_core/src/site/underlay.rs` | 下敷きの配置(縮尺・原点・回転・高さ)、図面座標 ⇔ ワールド座標、縮尺合わせの計算 |
+| ドメイン | `crates/plantwright_core/src/site/pointcloud.rs` | 点群の間引き・区画分け・LOD の段の選び方・部品との干渉と距離 |
+| ドメイン | `crates/plantwright_core/src/site/model.rs` | プロジェクトに属する現場データ `Site`(`Model::site` に入る) |
 | アダプター | `src/formats/dxf.rs` / `pdf_plan.rs` / `mod.rs` | DXF・PDF・画像 → `PlanContent`(折れ線と画像) |
 | アダプター | `src/formats/pointcloud_read.rs` | PLY・LAS・E57 → 間引いた `PointCloud` |
 | アダプター | `src/formats/site_record.rs` | `.plantwright` に書く記録(パスと配置と読み込みの設定)と、開くときの読み直し |
-| UI | `src/site/` | 別スレッドの読み込み、3D 表示、縮尺合わせのクリック、「平面図・点群」パネル、干渉チェックの実行 |
+| UI | `src/features/site/` | 別スレッドの読み込み、3D 表示、縮尺合わせのクリック、「平面図・点群」パネル、干渉チェックの実行 |
 
 `Site` は `Model` のフィールドにしているので、元に戻す履歴の「プロジェクトをまるごと写す」操作や、未保存の判定がそのまま効きます。
 

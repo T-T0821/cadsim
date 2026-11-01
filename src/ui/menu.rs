@@ -5,13 +5,13 @@ use plantwright_core::factory_hall::HallSize;
 
 use super::UiState;
 use super::dock;
-use super::modeling::Tab;
 use super::theme::palette;
-use crate::file_io::ExportScope;
-use crate::project::ProjectAction;
-use crate::result_export::ResultKind;
-use crate::view::camera::{CameraRequest, StandardView};
-use crate::view::gizmo::Tool as Tool3d;
+use crate::document::import::ExportScope;
+use crate::document::project::ProjectAction;
+use crate::features::modeling::panel::Tab;
+use crate::features::result_export::ResultKind;
+use crate::viewport::camera::{CameraRequest, StandardView};
+use crate::viewport::gizmo::Tool as Tool3d;
 use plantwright_core::assistant::help::SHORTCUTS;
 use plantwright_core::formats::FORMATS;
 use plantwright_core::formats::LENGTH_UNITS;
@@ -450,7 +450,7 @@ fn view_menu(ui: &mut egui::Ui, state: &mut UiState) {
             lightweight_menu(ui, state)
         });
         ui.menu_button("状態のエフェクト", |ui| effects_menu(ui, state));
-        crate::view::render_quality::show_menu_items(ui, &mut state.render_quality);
+        crate::viewport::render_quality::show_menu_items(ui, &mut state.render_quality);
         ui.separator();
         let mut show = state.playful.prefs.show_missions;
         if ui
@@ -460,7 +460,7 @@ fn view_menu(ui: &mut egui::Ui, state: &mut UiState) {
         {
             state.playful.set_show_missions(show);
         }
-        crate::sound::show_menu_items(ui, &mut state.sound);
+        crate::features::sound::show_menu_items(ui, &mut state.sound);
         if ui
             .button("開いている道具をすべて閉じる")
             .on_hover_text("3D ビューに浮かべたパネルとウィンドウを閉じる")
@@ -574,7 +574,7 @@ fn create_menu(ui: &mut egui::Ui, state: &mut UiState) {
         }
         ui.separator();
         // 標準部品は「部品ライブラリ」パネルからビューへドラッグしても置ける
-        crate::library::add_menu(ui, state);
+        crate::features::library::add_menu(ui, state);
         if ui
             .button("部品ライブラリを開く")
             .on_hover_text("標準部品をビューへドラッグして置ける")

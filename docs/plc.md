@@ -2,25 +2,26 @@
 
 タイミングチャートの時刻表の代わりに、PLC の出力でアクチュエータを動かし、端のスイッチや現在位置を PLC の入力に返す。
 
-## 層の分け方
+## ファイルの分け方
 
-[architecture.md](architecture.md) に合わせ、`src/plc/` の中で層を分けている(ワークスペース化したら `cadsim_core::domain::plc` などへ移す)。
+Bevy を使わない中身は `crates/plantwright_core/src/plc/`、毎フレームの進め方と画面はアプリの `src/features/plc/` にある([architecture.md](architecture.md))。
 
-| 層 | ファイル | 内容 |
-| --- | --- | --- |
-| ドメイン | `domain/io.rs` | 信号 (`Point`)、割り付け表 (`IoTable`)、現在値 (`IoValues`)。ワードの符号付き 16 ビットへの変換 |
-| ドメイン | `domain/plant.rs` | 設備モデル。出力 → 指令値 → 一定速度で近づく → 端のスイッチ・現在位置 |
-| ドメイン | `domain/io_csv.rs` | I/O 対応表の CSV 書き出しと読み戻し(信号ごとの個別設定 `PointSettings`)|
-| ドメイン | `domain/log.rs` | PLC ログ (CSV) の読み込みと、時刻 t の出力の値 (`PlcLog`) |
-| ドメイン | `domain/sequencer.rs` | 内蔵の模擬 PLC。チャートのステップを I/O で実行 |
-| ユースケース | `usecase.rs` | `PlcSession`: 1スキャン分の処理、ログ再生の位置 (`LogPlayer`)。外部 PLC との通信はポート `PlcLink` で受け取る |
-| アダプター | `adapter/opcua.rs` | `PlcLink` の OPC UA クライアント実装([async-opcua](https://crates.io/crates/async-opcua)、MPL-2.0)|
-| アダプター | `adapter/modbus.rs` | `PlcLink` の Modbus TCP 実装([tokio-modbus](https://crates.io/crates/tokio-modbus))|
-| ドメイン | `domain/device_map.rs` | 信号を三菱 PLC のデバイス (M100、D0 など) に置く割り当て (`DeviceMap`) と、その問題の検出 |
-| ドメイン | `cadsim_core::melsec` | 三菱 PLC のデバイスの種類 (`Device`) と1点 (`DeviceRef`)。X・Y・B・W は 16 進数の番号 |
-| アダプター | `cadsim_io::slmp` | SLMP の電文 (`frame`)、TCP / UDP のクライアント (`client`)、テスト用の PLC (`mock`)。外部のライブラリは使わない |
-| アダプター | `adapter/slmp.rs` | `PlcLink` の SLMP 実装 (`SlmpLink`)。通信スレッドと、I/O 表 ↔ デバイスの読み書き |
-| UI | `mod.rs`, `ui.rs` | `Plc` リソース(`PlcSession` の包み型)、Bevy のシステム、「PLC連携」ウィンドウ |
+| ファイル | 内容 |
+| --- | --- |
+| `plc/io.rs` | 信号 (`Point`)、割り付け表 (`IoTable`)、現在値 (`IoValues`)。ワードの符号付き 16 ビットへの変換 |
+| `plc/plant.rs` | 設備モデル。出力 → 指令値 → 一定速度で近づく → 端のスイッチ・現在位置 |
+| `plc/io_csv.rs` | I/O 対応表の CSV 書き出しと読み戻し(信号ごとの個別設定 `PointSettings`)|
+| `plc/log.rs` | PLC ログ (CSV) の読み込みと、時刻 t の出力の値 (`PlcLog`) |
+| `plc/sequencer.rs` | 内蔵の模擬 PLC。チャートのステップを I/O で実行 |
+| `plc/session.rs` | `PlcSession`: 1スキャン分の処理、ログ再生の位置 (`LogPlayer`)。外部 PLC との通信はトレイト `PlcLink` で受け取る |
+| `plc/opcua.rs` | `PlcLink` の OPC UA クライアント実装([async-opcua](https://crates.io/crates/async-opcua)、MPL-2.0)|
+| `plc/modbus.rs` | `PlcLink` の Modbus TCP 実装([tokio-modbus](https://crates.io/crates/tokio-modbus))|
+| `plc/device_map.rs` | 信号を三菱 PLC のデバイス (M100、D0 など) に置く割り当て (`DeviceMap`) と、その問題の検出 |
+| `plc/melsec.rs` | 三菱 PLC のデバイスの種類 (`Device`) と1点 (`DeviceRef`)。X・Y・B・W は 16 進数の番号 |
+| `plc/slmp/` | SLMP の電文 (`frame`)、TCP / UDP のクライアント (`client`)、テスト用の PLC (`mock`)。外部のライブラリは使わない |
+| `plc/slmp_link.rs` | `PlcLink` の SLMP 実装 (`SlmpLink`)。通信スレッドと、I/O 表 ↔ デバイスの読み書き |
+| `plc/record.rs` | プロジェクトファイルに書く PLC の設定 (`PlcRecord`) |
+| アプリの `features/plc/mod.rs`, `panel.rs` | `Plc` リソース、Bevy のシステム、「PLC連携」ウィンドウ |
 
 ## 毎フレームの流れ
 
@@ -98,7 +99,7 @@ I/O 表の番号はコイル・保持レジスタの番号のまま。4つの領
 
 ### テスト
 
-`cadsim_io::slmp::mock::MockPlc` が、デバイスメモリを持つ SLMP サーバー (TCP / UDP、3E / 4E、バイナリ / ASCII) になる。
+`plantwright_core::plc::slmp::mock::MockPlc` が、デバイスメモリを持つ SLMP サーバー (TCP / UDP、3E / 4E、バイナリ / ASCII) になる。
 電文はマニュアルの例 (D100 から 3 ワード読むなど) とバイトごとに比べ、クライアントとアプリ側の `SlmpLink` は `MockPlc` 相手に全部の組み合わせで読み書きを確かめている。
 実機での確認はまだしていない。
 

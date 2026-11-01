@@ -6,10 +6,10 @@
 
 | 層 | 場所 | 内容 |
 | --- | --- | --- |
-| ドメイン | `crates/cadsim_core/src/conveyor/` | 設定 `ConveyorConfig`、計算 `ConveyorSim`、数 `Counts`、繰り返し再生をまたぐ時計 `CycleClock`、装置の動き(グリッパの開閉と、ワークを載せて動く部品)を受け取るトレイト `MachineMotion`。Bevy・egui・タイミングチャートに依存しない |
-| アプリ | `src/conveyor/mod.rs` | Bevy のプラグイン。`ChartMotion`(タイミングチャートから `MachineMotion` を実装)、入力を集めて `ConveyorSim::seek` を呼び、ワークを表示用エンティティに写す |
-| アプリ | `src/conveyor/ui.rs` | 「ワーク搬送」ウィンドウ |
-| アプリ | `src/motion/demo.rs` | サンプル装置(投入シュート → 供給コンベア → ガントリー → 排出コンベア → 排出箱。ワーク A / B を交互に投入) |
+| ドメイン | `crates/plantwright_core/src/conveyor/` | 設定 `ConveyorConfig`、計算 `ConveyorSim`、数 `Counts`、繰り返し再生をまたぐ時計 `CycleClock`、装置の動き(グリッパの開閉と、ワークを載せて動く部品)を受け取るトレイト `MachineMotion`。Bevy・egui・タイミングチャートに依存しない |
+| アプリ | `src/features/conveyor/mod.rs` | Bevy のプラグイン。`ChartMotion`(タイミングチャートから `MachineMotion` を実装)、入力を集めて `ConveyorSim::seek` を呼び、ワークを表示用エンティティに写す |
+| アプリ | `src/features/conveyor/panel.rs` | 「ワーク搬送」ウィンドウ |
+| アプリ | `crates/plantwright_core/src/motion/demo.rs` | サンプル装置(投入シュート → 供給コンベア → ガントリー → 排出コンベア → 排出箱。ワーク A / B を交互に投入) |
 
 ## 計算のしかた
 

@@ -1,28 +1,28 @@
 # 安全機器・作業者・AGV の設計
 
-このドキュメントは `src/safety/`・`src/floor/` と、計算を置いた `crates/cadsim_core/src/{safety,floor}/` のしくみをまとめたものです。使い方は README の「できること」を見てください。
+このドキュメントは `src/features/safety/`・`src/features/floor/` と、計算を置いた `crates/plantwright_core/src/{safety,floor}/` のしくみをまとめたものです。使い方は README の「できること」を見てください。
 
 ## 1. ファイルと層
 
 | ファイル | 層 | 役割 |
 | --- | --- | --- |
-| `cadsim_core/src/floor/geom.rs` | ドメイン | 床 (XZ 平面) の上の向き付き長方形 `Rect2`、長方形 + 高さの範囲 `Zone`、線分の距離 |
-| `cadsim_core/src/safety/device.rs` | ドメイン | 安全機器のデータ、侵入の検知 `detect`、停止信号のラッチ `SafetyMonitor`、ISO 13855 の安全距離 |
-| `cadsim_core/src/safety/check.rs` | ドメイン | 動作範囲 (危険源) の計算と、柵・ライトカーテンの距離の確認 |
-| `cadsim_core/src/floor/operator_plan.rs` | ドメイン | 作業者の手順 → 時刻表・作業時間の内訳・歩行距離・経路 |
-| `cadsim_core/src/floor/agv_sim.rs` | ドメイン | AGV の経路グラフ、配車、交差点の排他、車間、台数の比較 |
-| `cadsim_core/src/floor/heatmap.rs` | ドメイン | 人と AGV の動線のヒートマップ (マスごとの通った回数・いた時間、混み合う場所、動いた距離、色付けと書き出し用の画像) |
-| `cadsim_core/src/floor/figure.rs` | ドメイン | 作業者と AGV の 3D の形 (箱・球・円柱・カプセルの組み合わせ)、歩く・作業する動き、向き |
-| `cadsim_core/src/floor/figure_motion.rs` | ドメイン | 動きのクリップ (作業者の歩く・作業・待つ、AGV の車輪・荷) と、切り替えで混ぜる重み・クリップの時刻 |
+| `plantwright_core/src/floor/geom.rs` | ドメイン | 床 (XZ 平面) の上の向き付き長方形 `Rect2`、長方形 + 高さの範囲 `Zone`、線分の距離 |
+| `plantwright_core/src/safety/device.rs` | ドメイン | 安全機器のデータ、侵入の検知 `detect`、停止信号のラッチ `SafetyMonitor`、ISO 13855 の安全距離 |
+| `plantwright_core/src/safety/check.rs` | ドメイン | 動作範囲 (危険源) の計算と、柵・ライトカーテンの距離の確認 |
+| `plantwright_core/src/floor/operator_plan.rs` | ドメイン | 作業者の手順 → 時刻表・作業時間の内訳・歩行距離・経路 |
+| `plantwright_core/src/floor/agv_sim.rs` | ドメイン | AGV の経路グラフ、配車、交差点の排他、車間、台数の比較 |
+| `plantwright_core/src/floor/heatmap.rs` | ドメイン | 人と AGV の動線のヒートマップ (マスごとの通った回数・いた時間、混み合う場所、動いた距離、色付けと書き出し用の画像) |
+| `plantwright_core/src/floor/figure.rs` | ドメイン | 作業者と AGV の 3D の形 (箱・球・円柱・カプセルの組み合わせ)、歩く・作業する動き、向き |
+| `plantwright_core/src/floor/figure_motion.rs` | ドメイン | 動きのクリップ (作業者の歩く・作業・待つ、AGV の車輪・荷) と、切り替えで混ぜる重み・クリップの時刻 |
 | `safety/mod.rs`, `floor/mod.rs` | UI | Bevy のリソースとシステム。入力を集めてドメインの関数を呼ぶだけ |
 | `safety/view.rs`, `floor/view.rs` | UI | 3D 表示 (半透明のメッシュとギズモの線)、床のクリック |
 | `floor/heatmap_view.rs` | UI | 動線ヒートマップの記録 (毎フレーム位置を渡す)、床に敷く板のテクスチャ、PNG の書き出しのダイアログ |
-| `cadsim_io/src/formats/heatmap_png.rs` | アダプター | 動線ヒートマップの画像を PNG に書く |
+| `plantwright_core/src/floor/heatmap_png.rs` | アダプター | 動線ヒートマップの画像を PNG に書く |
 | `floor/figures.rs` | UI | 作業者と AGV の 3D モデル。`figure.rs` の形をメッシュに、`figure_motion.rs` のクリップを Bevy のアニメーションに写す |
 | `safety/panel.rs`, `floor/panel.rs` | UI | egui のパネル |
 | `floor_record.rs` | アダプター | .plantwright に書く形 (serde)。ドメインの型との写し替え |
 
-ドメインの型は Bevy の `Resource` を付けず、UI 層で包んでいます (`SafetyLayoutRes(SafetyLayout)` など)。
+`SafetyLayout` などの型は、アプリ側で Resource に包んでいます (`SafetyLayoutRes(SafetyLayout)` など)。
 長さは mm、時間は秒、上向きは +Y です。
 
 ## 2. 安全機器
@@ -71,7 +71,7 @@ T は秒で入れ、式の中では ms にしています。
 
 ### 見た目 (作業者と AGV の 3D モデル)
 
-- 外部のモデルファイルは使わず、`cadsim_core::floor::figure` で単純な形 (箱・球・円柱・カプセル) を組み合わせて作ります。ライセンスの心配がなく、寸法も AGV の性能の設定 (長さ・幅) に合わせて変わります。
+- 外部のモデルファイルは使わず、`plantwright_core::floor::figure` で単純な形 (箱・球・円柱・カプセル) を組み合わせて作ります。ライセンスの心配がなく、寸法も AGV の性能の設定 (長さ・幅) に合わせて変わります。
 - 作業者は頭・ヘルメット・目・首・胴 (オレンジの安全ベストと反射帯)・腰・腕・手・脚・靴でできています。前は +X で、体の向きは `OperatorPlan::heading_at` (歩いていれば進む向き、止まっていれば最後に歩いた向き。曲がるときは 0.35 秒かけて回る) で決めます。
 - 歩いている間は、歩いた距離 (`OperatorPlan::walked_at`) を 1300 mm で 1 周する位相にして、脚 (±25°、ひざの曲げ) と腕 (脚と逆) を振ります。低い方の足が床に着くよう体ごと下げるので、自然に上下します。作業中は腕を前に出して手元を小さく動かします。選んでいる作業者はベストが青になります。
 - AGV は車体・天板・黄色の帯・前後のバンパー・駆動輪 (走った距離に合わせてハブが回る)・四隅のキャスター・ヘッドライト・テールランプ・前のレーザーセンサー・後ろの状態ランプでできています。状態ランプは走行中が緑、積み降ろし中が橙の点滅、待ち (交差点や前の車) が赤、空車が消灯です。待っている間は帯も赤になります。荷を積んでいる間は天板に箱が乗り、積み込み・荷降ろしでは箱が上から降りる・上がる動きをします。
@@ -80,7 +80,7 @@ T は秒で入れ、式の中では ms にしています。
 ### 動き (Bevy のアニメーション)
 
 - 1 体は「親 (床の位置と向き) + 形ごとの子」です。子の姿勢は Bevy のアニメーション (`AnimationClip` / `AnimationGraph` / `AnimationPlayer`) が動かし、表示側は毎フレーム親の置き方と、クリップごとの時刻と重みだけを写します。
-- クリップは `cadsim_core::floor::figure_motion` が、形の計算 (`person_local_parts` / `agv_local_parts`) を等間隔に取ったキーとして作ります。作業者は **歩く** (歩幅の 1 周 = クリップの 0〜1、32 キー)・**作業** (手元の動き 1 回 = 0.625 秒、16 キー)・**待つ** の 3 本で、混ぜるのですべての形を持ちます。AGV は **車輪** (ハブ 1 回転、16 キー) と **荷** (天板の 260 mm 上から降りる) の 2 本で、動く形だけを持ちます。回転のキーは隣と同じ半球にそろえ、補間が遠回りしないようにしています。
+- クリップは `plantwright_core::floor::figure_motion` が、形の計算 (`person_local_parts` / `agv_local_parts`) を等間隔に取ったキーとして作ります。作業者は **歩く** (歩幅の 1 周 = クリップの 0〜1、32 キー)・**作業** (手元の動き 1 回 = 0.625 秒、16 キー)・**待つ** の 3 本で、混ぜるのですべての形を持ちます。AGV は **車輪** (ハブ 1 回転、16 キー) と **荷** (天板の 260 mm 上から降りる) の 2 本で、動く形だけを持ちます。回転のキーは隣と同じ半球にそろえ、補間が遠回りしないようにしています。
 - 重み (`person_weights`) は床の時計だけから決まります。区間の始まりから 0.35 秒は、前の区間の動きから今の動きへ smoothstep で重みを移すので、歩きから作業に移るときに腕がなめらかに前へ出ます。同じ動きが続く区間の境目では混ぜません。2 周目の先頭は前の周の最後の区間から混ぜます。
 - クリップの時刻も再生には任せず、歩くのは歩いた距離、作業は時刻、車輪は走った距離、荷は積み込み・荷降ろしの進み具合 (`agv_cargo_amount`。作業時間の後半で荷が降りる・上がる) で毎フレーム決めます。プレイヤーは一時停止のまま時刻を合わせるだけなので、床の時計を止めると動きも止まり、巻き戻すと同じ姿勢に戻ります。
 - 色 (選んだ作業者のベスト、ランプ、帯) と荷の見える/見えないは動きではないので、マテリアルと `Visibility` に写します。

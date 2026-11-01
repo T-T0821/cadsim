@@ -7,11 +7,11 @@
 
 | 層 | 場所 | 役割 |
 | --- | --- | --- |
-| ドメイン | `cadsim_core::timeline` | 時刻ごとの状態の写し `Timeline<S>`、決まった手順で進むシミュレーションのトレイト `Replay` |
-| ドメイン | `cadsim_core::flow::rewind` | 工程シミュレーション (`Simulation`) の `Replay` 実装、写しの間隔の決め方、詰まり始めの探し方 (`jam_marks` / `previous_jam` / `next_jam`) |
-| ドメイン | `cadsim_core::line::rewind` | ライン一式の写し `LineSnapshot` (受け渡しの状態・工程・AGV・コンベア・作業者の時計・チャートの再生位置) |
-| UI | `src/flow/mod.rs` (`FlowRun::{advance_to, seek}`)、`src/flow/ui.rs` (`time_slider`) | 工程シミュレーションのウィンドウのスライダーとボタン |
-| UI | `src/line/mod.rs` (`LineState::{record, restore}`)、`src/line/panel.rs` (`time_slider`) | ライン連携のウィンドウのスライダーとボタン |
+| ドメイン | `plantwright_core::timeline` | 時刻ごとの状態の写し `Timeline<S>`、決まった手順で進むシミュレーションのトレイト `Replay` |
+| ドメイン | `plantwright_core::flow::rewind` | 工程シミュレーション (`Simulation`) の `Replay` 実装、写しの間隔の決め方、詰まり始めの探し方 (`jam_marks` / `previous_jam` / `next_jam`) |
+| ドメイン | `plantwright_core::line::rewind` | ライン一式の写し `LineSnapshot` (受け渡しの状態・工程・AGV・コンベア・作業者の時計・チャートの再生位置) |
+| UI | `src/features/flow/mod.rs` (`FlowRun::{advance_to, seek}`)、`src/features/flow/panel/mod.rs` (`time_slider`) | 工程シミュレーションのウィンドウのスライダーとボタン |
+| UI | `src/features/line/mod.rs` (`LineState::{record, restore}`)、`src/features/line/panel.rs` (`time_slider`) | ライン連携のウィンドウのスライダーとボタン |
 
 ## 写しの取り方
 

@@ -27,7 +27,7 @@ Release は**人が手動で実行したときだけ**作られます。PR を m
 - ワークフローで依存ライブラリを確かめている。Windows は `dumpbin /dependents` で C ランタイムの DLL に依存していないこと、Mac は `otool -L` で `/System/Library/` と `/usr/lib/` 以外の dylib に依存していないことを見て、違えば失敗させる。
 - Mac は `.app` 1つにまとまっているので、どこに置いても動く。
 - 第三者ライセンスの一覧(`assets/licenses/THIRD_PARTY_LICENSES.txt`)も実行ファイルに埋め込み、ヘルプ → ライセンスで見せている。依存を変えたら作り直す([licenses.md](licenses.md))。
-- 見た目などの設定だけは OS の設定フォルダ(`src/preferences_file.rs`)に保存する。なくても標準の設定で起動する。
+- 見た目などの設定だけは OS の設定フォルダ(`crates/plantwright_core/src/preferences.rs`)に保存する。なくても標準の設定で起動する。
 
 Windows のリリースビルドでは、起動時に黒いコンソール窓を出さないようにしています(`src/main.rs` の `windows_subsystem`)。
 Mac の `.app` に入れる `Info.plist` のひな形は [`packaging/macos/Info.plist`](../packaging/macos/Info.plist) です。

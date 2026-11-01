@@ -4,19 +4,19 @@
 
 ## 層の分け方
 
-ドメインは `crates/cadsim_core/src/flow/`、保存形式・Excel・画面はアプリの `src/flow/` にあります。`record` と `xlsx` は Bevy に依存しないアダプターで、`cadsim_io` ができたらそちらに移します([architecture.md](architecture.md))。
+計算・保存形式・Excel は `crates/plantwright_core/src/flow/`、画面はアプリの `src/features/flow/` にあります([architecture.md](architecture.md))。
 
 | ファイル | 層 | 内容 |
 | --- | --- | --- |
-| `cadsim_core` の `flow/model.rs` | ドメイン | 工程モデル(`FlowModel` / `Element` / `ElementKind`)、追加・削除・並べ替え、回せない理由の検証、サンプルライン |
-| `cadsim_core` の `flow/sim.rs` | ドメイン | 離散事象シミュレーション(`Simulation`)と集計(`Report`) |
-| `cadsim_core` の `flow/palette.rs` | ドメイン | 状態・稼働率の色(3D ビュー・グラフ・Excel で共通) |
-| `cadsim_core` の `flow/factory.rs` | ドメイン | ラインのまとまり(`Line`)、別の工程モデルの取り込み(`import_line`)、ラインごとの集計(`line_summaries`)、サンプル工場 |
-| `cadsim_core` の `flow/plan.rs` | ドメイン | 品種(`Product`)・品種ごとの加工時間(`ProductTime`)・注文(`Order`)、注文ごとの結果(`OrderStats`)、表の行から計画を作る `plan_from_rows`、サンプル計画 |
-| `cadsim_core` の `flow/scenario.rs` | ドメイン | 案(名前つきの設定の写し)と、種を変えた繰り返し実行・集計(`compare_scenarios`) |
+| `plantwright_core` の `flow/model.rs` | ドメイン | 工程モデル(`FlowModel` / `Element` / `ElementKind`)、追加・削除・並べ替え、回せない理由の検証、サンプルライン |
+| `plantwright_core` の `flow/sim.rs` | ドメイン | 離散事象シミュレーション(`Simulation`)と集計(`Report`) |
+| `plantwright_core` の `flow/palette.rs` | ドメイン | 状態・稼働率の色(3D ビュー・グラフ・Excel で共通) |
+| `plantwright_core` の `flow/factory.rs` | ドメイン | ラインのまとまり(`Line`)、別の工程モデルの取り込み(`import_line`)、ラインごとの集計(`line_summaries`)、サンプル工場 |
+| `plantwright_core` の `flow/plan.rs` | ドメイン | 品種(`Product`)・品種ごとの加工時間(`ProductTime`)・注文(`Order`)、注文ごとの結果(`OrderStats`)、表の行から計画を作る `plan_from_rows`、サンプル計画 |
+| `plantwright_core` の `flow/scenario.rs` | ドメイン | 案(名前つきの設定の写し)と、種を変えた繰り返し実行・集計(`compare_scenarios`) |
 | `record.rs` | アダプター | `.plantwright` に書く形(serde)。部品は木の中の位置で指す |
 | `xlsx.rs` | アダプター | 結果の Excel 書き出し(`rust_xlsxwriter`) |
-| `cadsim_io` の `flow/plan_table.rs` | アダプター | 生産計画の表を読む(Excel・ODS は `calamine` で最初のシート、CSV / TSV は UTF-8 か Shift_JIS)。文字の表にするだけで、意味づけは `plan_from_rows` |
+| `plantwright_core` の `flow/plan_table.rs` | アダプター | 生産計画の表を読む(Excel・ODS は `calamine` で最初のシート、CSV / TSV は UTF-8 か Shift_JIS)。文字の表にするだけで、意味づけは `plan_from_rows` |
 | `mod.rs` | UI | `FlowRes`(モデルの包み)、`FlowRun`(実行中のシミュレーションと再生)、`FlowColors`(3D の部品に塗る色)、保存ダイアログ |
 | `ui.rs` | UI | ウィンドウ(工程・人員・工場・計画・案の比較・結果・グラフのタブ)。工程タブの品種の設定(`product_editor`)もここ |
 | `staff_ui.rs` | UI | 人員タブ([staffing.md](staffing.md)) |

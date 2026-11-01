@@ -50,3 +50,18 @@ calamine = { version = "0.30", default-features = false }
 encoding_rs = "0.8"
 # CSV / TSV の読み書き
 csv = "1"
+# 部品スクリプト (Rhai)。純 Rust
+rhai = "1.23"
+# 動画の書き出し: GIF と PNG 連番は純 Rust、MP4 は同梱の OpenH264 (C++) をビルドして使う。ffmpeg は不要
+gif = "0.14"
+openh264 = "0.9"
+# PLC との Modbus TCP 通信。純 Rust
+tokio-modbus = { version = "0.17", default-features = false, features = ["tcp-sync"] }
+# PLC との OPC UA 通信 (クライアントのみ)。純 Rust
+async-opcua = { version = "0.19", default-features = false, features = ["client"] }
+tokio = { version = "1", features = ["rt", "time"] }
+
+[dev-dependencies]
+# テストで Modbus TCP サーバー (PLC の代わり) を立てる
+tokio = { version = "1", features = ["rt-multi-thread", "net"] }
+tokio-modbus = { version = "0.17", default-features = false, features = ["tcp-sync", "tcp-server"] }

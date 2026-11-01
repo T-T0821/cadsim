@@ -7,8 +7,8 @@
 
 | 層 | 場所 | 中身 |
 | --- | --- | --- |
-| ドメイン | `cadsim_core::walk` | 体の寸法 (`WalkBody`)、位置と向き (`Walker`)、1 フレーム分の移動 (`step`)、立つ場所の探し方 (`place`)、測定 (`survey`) |
-| UI | `src/view/walk.rs` | キーとマウスを集めて `step` を呼び、カメラに写す。左上の表示 (egui) と床の線 (ギズモ) |
+| ドメイン | `plantwright_core::walk` | 体の寸法 (`WalkBody`)、位置と向き (`Walker`)、1 フレーム分の移動 (`step`)、立つ場所の探し方 (`place`)、測定 (`survey`) |
+| UI | `src/viewport/walk.rs` | キーとマウスを集めて `step` を呼び、カメラに写す。左上の表示 (egui) と床の線 (ギズモ) |
 
 歩いている間は `view/camera.rs` のオービット操作とカメラの更新、`input/shortcuts.rs` のショートカットを
 `not_walking` の実行条件で止めます。標準ビュー・全体表示・平行投影の依頼 (`CameraRequest`) が来たら、

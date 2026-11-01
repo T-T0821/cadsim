@@ -9,7 +9,7 @@ use bevy_egui::egui::{self, Align2, Color32, CornerRadius, Stroke, pos2, vec2};
 use super::theme::palette;
 use plantwright_core::workspace::{Tool, ToolGroup, Workspace};
 
-/// 開いている道具 (UI 層の包み)
+/// 開いている道具 (Resource の包み)
 #[derive(Resource, Default, Deref, DerefMut)]
 pub struct Dock(pub Workspace);
 

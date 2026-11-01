@@ -16,23 +16,23 @@ use bevy_egui::{
 use super::dock::Dock;
 use super::theme::{self, palette};
 use super::tutorial::{self, TutorialUi};
-use crate::annotation::Annotations;
-use crate::assistant::help::HelpChat;
-use crate::flow::FlowRun;
-use crate::history::History;
-use crate::line::LineState;
-use crate::line_compose::ComposeUi;
-use crate::model::Selection;
-use crate::motion::Playback;
-use crate::plc::Plc;
-use crate::project::ProjectState;
-use crate::safety::SafetyState;
-use crate::sequence_gen::SequenceGen;
-use crate::simulation::InterferenceCheck;
-use crate::simulation::measure::MeasureTool;
-use crate::view::camera::{OrbitCamera, ViewportRect};
-use crate::view::recording::Recorder;
-use crate::view::walk::WalkMode;
+use crate::document::history::History;
+use crate::document::project::ProjectState;
+use crate::document::selection::Selection;
+use crate::features::annotation::Annotations;
+use crate::features::assistant::help::HelpChat;
+use crate::features::flow::FlowRun;
+use crate::features::line::LineState;
+use crate::features::line_compose::ComposeUi;
+use crate::features::motion::Playback;
+use crate::features::plc::Plc;
+use crate::features::safety::SafetyState;
+use crate::features::sequence_gen::SequenceGen;
+use crate::features::simulation::InterferenceCheck;
+use crate::features::simulation::measure::MeasureTool;
+use crate::features::video::recording::Recorder;
+use crate::viewport::camera::{OrbitCamera, ViewportRect};
+use crate::viewport::walk::WalkMode;
 use plantwright_core::gamify::{
     Achievement, ConfettiPiece, MissionId, Observation, Part, Preferences, confetti, level_title,
     mission,
@@ -684,7 +684,7 @@ fn draw_toast(ctx: &egui::Context, view: egui::Rect, now: f64, state: &mut Playf
 
 fn draw_confetti(ctx: &egui::Context, view: egui::Rect, now: f64, state: &mut PlayfulUi) {
     // 画面の自動確認では描かない。続けて達成したときに降り始めが入れ替わり、写真が毎回ずれやすいため
-    if crate::ui_check::running() {
+    if crate::features::ui_check::running() {
         state.confetti.clear();
     }
     if state.confetti.is_empty() {

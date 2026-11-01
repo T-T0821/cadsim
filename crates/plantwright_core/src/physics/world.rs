@@ -102,7 +102,7 @@ pub struct BodyDesc {
     pub belt_velocity: Option<DVec3>,
 }
 
-/// 物理エンジンのポート。アダプター (`engine.rs`) が実装する。
+/// 物理エンジンのトレイト。アダプター (`engine.rs`) が実装する。
 pub trait PhysicsEngine {
     /// 剛体を足す。形が作れなかったら (頂点が足りないなど) false。同じ名前があれば置き換える。
     fn add_body(&mut self, key: BodyKey, desc: &BodyDesc) -> bool;

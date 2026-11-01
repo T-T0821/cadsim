@@ -41,108 +41,21 @@
 機能ごとのフォルダの分け方とファイル名の決まりは [architecture.md](architecture.md) を見てください。
 
 ```text
-crates/cadsim_core/   Bevy に依存しないドメイン (cargo test -p cadsim_core で単体テスト)
-├── animation.rs     ノードの配置と、取り込んだアニメーションのキー (Animation / Track)
-├── bom.rs           部品表: 同じ部品をまとめて数える、構成表
-├── bvh.rs           外接箱の木 (BVH。parry3d-f64 の Bvh) とレイの当たり判定
-├── part_mesh.rs     部品1つ分の表示用メッシュ (面をまとめたもの・面番号の表・簡略形状)
-├── shape.rs         取り込んだ形状 (B-rep・面メッシュ・計測値) とアセンブリの木 (ImportNode)
-├── history.rs       元に戻す履歴の山 (UndoStack)・モデルの変更 (ModelChange)・ドラッグ中の編集のまとめ方
-├── gamify.rs        ゲーム風 UI の中身: 章とミッション (手順・キー・操作する場所)・判定・とばす・経験値とレベル・紙吹雪 (docs/playful-ui.md)
-├── math.rs          回転・行列・外接箱の計算 (f64)
-├── modeling.rs      円柱・押し出し・穴あけ・ブーリアン (truck の B-rep。docs/modeling.md)
-├── model.rs         設計データ: アセンブリの木 (f64)。ノード・箱・取り込んだ部品・標準部品
-├── library/         標準部品の種類とパラメータ (catalog)、本体の形状 (geometry)
-├── remap.rs         形状の差し替え: 古い木と新しい木のノードの対応づけ
-├── simulation/      干渉チェックの幾何計算 (geometry / mesh / interference / overlap)
-├── drawing.rs       2D 図面: 投影・かくれ線・シルエット・寸法・図枠 (docs/drawing.md)
-├── site/            平面図の下敷きの配置と縮尺合わせ、点群の間引き・LOD・干渉 (docs/site.md)
-├── motion/          タイミングチャートと時刻表 (chart)、加減速とカム (profile)、姿勢 (pose)、ロボットの運動学・経路・時間、経路の干渉、センサー
-├── floor/           床の上の長方形・距離 (geom)、作業者の時刻表 (operator_plan)、AGV の配車 (agv_sim)、作業者と AGV の 3D の形 (figure)
-├── safety/          安全機器のデータ・侵入の検知・停止のラッチ・安全距離 (device)、動作範囲と距離の確認 (check)
-├── flow/            工程モデル (model)、離散事象シミュレーションと集計 (sim)、状態・稼働率の色 (palette)
-└── physics/         物理演算の設定・ケーブルの紐モデル・剛体の進め方 (settings / cable / world)
-crates/cadsim_io/     Bevy に依存しないアダプター (cargo test -p cadsim_io で単体テスト)
-├── step.rs          STEP → アセンブリの木と B-rep (形状の型は cadsim_core::shape)
-├── formats/         平面図 (DXF / PDF)・点群 (E57 など)・2D 図面と部品表の書き出し・.plantwright の現場とコンベヤの形
-├── flow/            工程シミュレーションの .plantwright の形 (record) と Excel 書き出し (xlsx)
-├── preferences_file.rs 見た目とミッションの設定 (preferences.json) の読み書き。旧名の設定フォルダ (cadsim) からの引き継ぎも
-├── modeled.rs       モデリングで作った B-rep ⇔ JSON (.plantwright に埋め込む)
-└── interchange/     glTF / OBJ / STL などの読み書き (形式に依存しない中間表現 Scene を経由)
-    ├── mod.rs        Scene・Format・対応形式の一覧 FORMATS
-    ├── gltf.rs / obj.rs / stl.rs
-    ├── usd.rs        OpenUSD (.usda / .usdc / .usdz)
-    ├── web_viewer.rs Web ビューア (.html、GLB を埋め込んだ1ファイル。docs/web-viewer.md)
-    └── samples.rs    動作確認用のサンプルシーン (ロボット)
-src/                  アプリ本体 (Bevy + egui)
-├── main.rs          アプリの組み立て (プラグインを並べるだけ)
-├── model.rs         設計データ (cadsim_core::model) を Bevy の Resource で包む型と、選択状態
-├── step_import.rs   cadsim_io::step を再公開する
-├── file_io.rs       別スレッドでの読み込み・モデルへの追加・形状の差し替え・書き出し
-├── interchange/     cadsim_io::interchange を再公開する
-│   └── samples.rs    サンプルファイルを作るテスト (手で実行)
-├── animation.rs     取り込んだアニメーションの再生
-├── project/         プロジェクトファイル (.plantwright) の保存と読み込み
-│   ├── file.rs       .plantwright の JSON の形 (Bevy に依存しない)
-│   ├── document.rs   開く・保存の手順: STEP の読み直し、文書の作り直し (Bevy に依存しない)
-│   └── mod.rs        新規・開く・保存の操作、未保存の確認、ウィンドウのタイトル
-├── preferences_file.rs 設定ファイルの読み書き (cadsim_io::preferences_file の再公開)
-├── part_mesh.rs / bvh.rs  cadsim_core の同名モジュールを再公開する
-├── defeature.rs     小さな穴とフィレットを消した表示用メッシュを作る (Bevy に依存しない)
-├── stress.rs        負荷テスト用の数千部品のシーン
-├── bench.rs         `--bench` で FPS を測って終了する
-├── motion/          タイミングチャートと動作シミュレーション
-│   ├── mod.rs        プラグイン、再生状態、SimulationPose (干渉チェックとのつなぎ口)
-│   ├── chart.rs      TimingChart を Bevy の Resource で包む型 (データと計算は cadsim_core::motion)
-│   ├── ui.rs         タイミングチャートのパネル
-│   ├── export.rs     1サイクルの動きを書き出し用のアニメーションにする
-│   └── demo.rs       サンプル装置 (ピック & プレース)
-├── view/            3D 表示 (UI 層)
-│   ├── viewport.rs   メッシュ作成、選択の強調、簡略表示 (LOD)、グリッド、部品の当たり判定 (PartPicker)
-│   ├── picking.rs    PartPicker を Bevy の picking の backend にする。クリック選択、カーソルの下の部品
-│   ├── camera.rs     オービットカメラ、標準ビュー、全体表示、透視 / 平行投影
-│   ├── gizmo.rs      移動・回転・拡大縮小のギズモとスナップ
-│   ├── factory_hall.rs 背景の工場の建屋 (床・通路の線・壁・柱・高窓) とメートルのグリッド
-│   └── recording.rs  動画の書き出し: 画面のキャプチャと設定ウィンドウ
-├── input/           入力 (UI 層)
-│   ├── shortcuts.rs  キーボードショートカット
-│   ├── file_dialog.rs ファイルのダイアログ・ドラッグ&ドロップ・起動時に開くファイル
-│   └── command_line.rs コマンドライン引数
-├── history.rs       元に戻す・やり直しの Bevy 側 (履歴の山とモデルの変更は cadsim_core::history)
-├── math.rs          f64 の配置を Bevy の Transform にする (計算は cadsim_core::math)
-├── japanese_font.rs egui に日本語フォントを登録
-├── simulation/      干渉チェックの配線・表示・パネルと距離計測 (詳しくは docs/simulation.md)
-├── plc/             PLC 連携: domain / usecase / adapter (Modbus TCP) / UI (詳しくは docs/plc.md)
-├── scripting/       部品スクリプト (Rhai): 実行・I/O へのつなぎ・エディタ (詳しくは docs/scripting.md)
-├── custom_part/     自作部品ライブラリ: 保存・一覧・配置・公開パラメータ (詳しくは docs/custom-parts.md)
-├── assistant/       生成 AI (Claude) の設定と、問い合わせを別スレッドで待つ口 (詳しくは docs/ai.md)
-├── sequence_gen/    説明文からチャートの下書き、チャートからラダーと I/O 表、動作の説明 (詳しくは docs/ai.md)
-├── annotation.rs    3D 上の寸法と注記 (置く操作・描画・パネル・保存形式)
-├── modeling.rs      モデリングの履歴への積み方 (計算は cadsim_core::modeling。docs/modeling.md)
-├── drawing/         図面の材料をモデルから集める (計算は cadsim_core::drawing)
-├── bom.rs           部品表のテスト (計算は cadsim_core::bom)
-├── documents.rs     図面・部品表の書き出しダイアログと保存
-├── site/            平面図・点群の読み込みの配線、3D 表示、「平面図・点群」パネル
-├── formats/         cadsim_io::formats を再公開する
-├── flow/            工程シミュレーションの配線と画面 (計算は cadsim_core::flow。詳しくは docs/flow.md)
-│   ├── mod.rs        プラグイン、早送りの再生、3D の色分け (FlowColors)
-│   └── ui.rs         工程シミュレーションのウィンドウ
-├── safety/          安全機器の表示・パネル・動作範囲の確認 (計算は cadsim_core::safety。docs/safety-and-floor.md)
-├── floor/           作業者と AGV の 3D モデル・経路の表示・パネル (計算は cadsim_core::floor。docs/safety-and-floor.md)
-├── physics/         物理演算の配線・パネル・サンプルライン、bevy_rapier3d のアダプター、保存形式 (詳しくは docs/physics.md)
-└── ui/
-    ├── mod.rs        画面の割り付け (上 → 下 → 左 → 右 → 残りが 3D ビュー)
-    ├── menu.rs       メニューバーとツールバー
-    ├── tree.rs       アセンブリツリー
-    ├── properties.rs プロパティパネル
-    ├── status.rs     ステータスバーと読み込み中の表示
-    ├── animation.rs  アニメーションの再生パネル
-    ├── modeling.rs   「モデリング」ウィンドウ (円柱・押し出し・穴あけ・ブーリアン)
-    ├── theme.rs      見た目 (ゲーム風 / シンプル) の配色と角丸
-    ├── playful.rs    ミッションカード・マスコット・お祝いと紙吹雪
-    ├── tutorial.rs   ようこそ画面、カードの手順・キー・とばす、操作する場所を指す矢印
-    ├── view_cube.rs  ビューキューブと座標軸
-    └── widgets.rs    数値入力などの小さな部品
+crates/plantwright_core/src/   Bevy の描画・egui を使わないもの全部 (cargo test -p plantwright_core で単体テスト)
+├── model.rs / shape.rs / math.rs   設計データ (アセンブリの木, f64)・取り込んだ形状・回転と行列の計算
+├── bvh.rs / part_mesh.rs           外接箱の木 (parry3d-f64 の Bvh)・部品1つ分の表示用メッシュ
+├── history/                        元に戻す履歴の山・モデルの変更・文書の変更の見張り (edit_tracker)
+├── formats/                        機能をまたぐ 3D の形式: STEP・glTF・OBJ・STL・USD・Web ビューア・アセットの鍵・CSV の文字
+├── preferences.rs / render_settings.rs  設定ファイル (preferences.json / render.json) の読み書き
+└── motion/ plc/ flow/ conveyor/ line/ floor/ safety/ physics/ site/ drawing/ bom/ modeling/ ...
+                                    機能ごと。アプリの src/features/ と同じ名前
+src/                                アプリ (Bevy + egui)
+├── main.rs                         App を作り、プラグインを足すだけ
+├── document/                       設計データの Resource・選択・元に戻す・開く/保存 (project/)・取り込みと書き出し (import.rs)・ダイアログ
+├── viewport/                       3D 表示 (parts.rs: メッシュ・選択の強調・LOD)、クリック選択 (picking.rs)、カメラ、ギズモ、画質、工場の建屋、歩行、ショートカット
+├── ui/                             画面の枠: 割り付け (mod.rs)・メニュー・部品の木・プロパティ・状態表示・テーマ・ゲーム風 UI・チュートリアル・フォント
+├── features/<機能>/                 機能ごとのプラグイン (mod.rs)・毎フレームの処理・3D 表示 (view.rs)・画面 (panel.rs / panel/)
+└── dev/                            負荷テストのシーン (--stress)・FPS の計測 (--bench)・サンプルファイルの作り直し
 ```
 
 データは一方向に流れます: **UI・ギズモ・読み込み → `Model`(f64)→ `viewport` が Bevy のエンティティに写す**。
@@ -151,7 +64,7 @@ src/                  アプリ本体 (Bevy + egui)
 
 ## 各機能のしくみ
 
-### STEP の読み込み(`cadsim_io/src/step.rs`)
+### STEP の読み込み(`plantwright_core/src/formats/step.rs`)
 
 1. `ruststep` で STEP をパースし、`#id` からレコードを引ける表を作る。
 2. `PRODUCT_DEFINITION` を製品、`NEXT_ASSEMBLY_USAGE_OCCURRENCE` を親子関係として木を組む。配置は `CONTEXT_DEPENDENT_SHAPE_REPRESENTATION` → `ITEM_DEFINED_TRANSFORMATION` の2つの `AXIS2_PLACEMENT_3D` から「子 → 親」の行列を求める。
@@ -180,7 +93,7 @@ src/                  アプリ本体 (Bevy + egui)
 
 書き出した glb は Khronos の glTF Validator でエラー・警告なしを確認しています。
 
-**新しい形式の足し方**: `crates/cadsim_io/src/interchange/xxx.rs` に `import(&Path, &UnitOptions) -> Result<Scene, String>` と `export(&Scene, &Path, &UnitOptions) -> Result<(), String>` を書き、`interchange/mod.rs` の `FORMATS` に1行足します。開くダイアログ・ドラッグ&ドロップ・書き出しメニューに自動で出ます。
+**新しい形式の足し方**: `crates/plantwright_core/src/interchange/xxx.rs` に `import(&Path, &UnitOptions) -> Result<Scene, String>` と `export(&Scene, &Path, &UnitOptions) -> Result<(), String>` を書き、`interchange/mod.rs` の `FORMATS` に1行足します。開くダイアログ・ドラッグ&ドロップ・書き出しメニューに自動で出ます。
 
 | glTF のアニメーションを再生(干渉チェックも追従) | OBJ に書き出したサンプルを取り込み直したところ |
 | --- | --- |
@@ -196,15 +109,15 @@ src/                  アプリ本体 (Bevy + egui)
 
 取り込むファイルの読み込みは Bevy のアセットサーバーに任せます。モデルの形にする中身 (`file_io::load_source`) は Bevy に依存しないので、ここは「どのファイルを、いつ読むか」だけです。
 
-1. Bevy のアセットは決まったフォルダの中の相対パスでしか呼べないので、専用の読み元 `plantwright-file://` を `AssetPlugin` より前に登録し (`SceneSourcePlugin`)、ファイルの絶対パスと単位を `cadsim_io::asset_key` で相対パスの形 (`<単位>/<根>/<残りのパス>`) に詰めて呼ぶ。OBJ / STL は単位を鍵に入れるので、単位を変えて読むと別のアセットになる。`..` を含むなど鍵にできないパスは、これまでどおり別スレッドで読む。
+1. Bevy のアセットは決まったフォルダの中の相対パスでしか呼べないので、専用の読み元 `plantwright-file://` を `AssetPlugin` より前に登録し (`SceneSourcePlugin`)、ファイルの絶対パスと単位を `plantwright_core::formats::asset_key` で相対パスの形 (`<単位>/<根>/<残りのパス>`) に詰めて呼ぶ。OBJ / STL は単位を鍵に入れるので、単位を変えて読むと別のアセットになる。`..` を含むなど鍵にできないパスは、これまでどおり別スレッドで読む。
 2. 読み元はファイルがあるかだけを確かめ、読み込み (`SceneFileLoader`) が鍵からパスに戻して `load_source` を呼ぶ (glTF の .bin や OBJ の .mtl も一緒に読むため)。重い変換は `AsyncComputeTaskPool` で行う。読み込みは拡張子を名乗らず型で選ぶので、Bevy の glTF の読み込みとは取り合わない。
 3. 読み終わったアセット (`SceneFile`) から中身を 1 回だけ取り出し (形状は複製できない)、別スレッドの結果と同じ `ImportJobs` の受け口に渡す。モデルへの追加・形状の差し替え・メッセージは `file_io::receive_imports` がする。同じファイルをもう一度開くと、取り出し済みなので `AssetServer::reload` で読み直す。
-4. 0.7 秒ごとに、モデルの部品の読み込み元 (`Model::file_sources`) の更新時刻と大きさを調べる。判断は `cadsim_core::usecase::file_watch::FileWatch` で、印が変わったあと次に調べたときも同じ (書き込みが落ち着いた) なら読み直す。プロジェクトから開いたファイルも見張る。
+4. 0.7 秒ごとに、モデルの部品の読み込み元 (`Model::file_sources`) の更新時刻と大きさを調べる。判断は `plantwright_core::file_watch::FileWatch` で、印が変わったあと次に調べたときも同じ (書き込みが落ち着いた) なら読み直す。プロジェクトから開いたファイルも見張る。
 5. 読み直したら、そのファイルから取り込んだ木 (`Model::roots_from_file`: 中の部品がすべてそのファイルのもので、親がそうでないノード) を `Model::replace_geometry` で差し替える。「設計変更後の形状に差し替える」と同じ対応づけなので、動きの設定は残る。差し替えは 1 回の「元に戻す」で戻せる。取り込んだ木に別の部品を足したものは、木の一部だけを差し替えることになるので読み直さない。読めなかったら前の形状のまま、メッセージを出す。
 
 いまの制限: 見張るのは取り込んだファイルそのものだけで、glTF の .bin や OBJ の .mtl だけを書き換えても読み直さない。URDF は複数のファイルを読むので別スレッドのまま。
 
-### OpenUSD の読み書き(`cadsim_io/src/interchange/usd.rs`)
+### OpenUSD の読み書き(`plantwright_core/src/formats/usd.rs`)
 
 純 Rust の [`openusd`](https://crates.io/crates/openusd) crate を使い、C++ の USD ライブラリには依存しません。
 
@@ -238,14 +151,14 @@ src/                  アプリ本体 (Bevy + egui)
 
 1. 部品1つにつき Bevy のエンティティを2つだけ作る。面をすべてまとめた1つのメッシュ(`PartView`)と、子の稜線のメッシュ(`EdgeLines`)。どの三角形がどの面かは `PartMesh::triangle_face` が持つ。
 2. 配置・表示/非表示・色・強調は、`Model`・選択・表示設定・干渉の結果・動作シミュレーションのどれかが変わったフレームだけ、木を1回たどって(`Model::visit_parts`)写す。形状が変わったとき(`dirty`)だけメッシュを作り直す。
-3. カーソルの下の部品と面は `PartPicker` で求める。部品の外接箱の BVH → 部品内の三角形の BVH の順に調べる(`cadsim_core::bvh`)。外接箱の BVH は部品の配置・表示・形が変わったフレームだけ作り直す。これを Bevy の picking (`bevy_picking`) の backend にしていて(`view/picking.rs`)、当たった部品と面は `HitData` の `extra` に `PartHit` として載せる。ホバーと押したイベント、egui の画面の下では当たりを止めるのは Bevy と bevy_egui に任せる。クリック選択は `PointerPress` を、計測・寸法・教示点・レビューの指さしは `PartUnderPointer`(Bevy の `HoverMap`)を読む。Bevy 標準の `MeshPickingPlugin` は部品を1つずつ調べて数千部品では重く、簡略表示の粗いメッシュに当たるので使わない。
+3. カーソルの下の部品と面は `PartPicker` で求める。部品の外接箱の BVH → 部品内の三角形の BVH の順に調べる(`plantwright_core::bvh`)。外接箱の BVH は部品の配置・表示・形が変わったフレームだけ作り直す。これを Bevy の picking (`bevy_picking`) の backend にしていて(`view/picking.rs`)、当たった部品と面は `HitData` の `extra` に `PartHit` として載せる。ホバーと押したイベント、egui の画面の下では当たりを止めるのは Bevy と bevy_egui に任せる。クリック選択は `PointerPress` を、計測・寸法・教示点・レビューの指さしは `PartUnderPointer`(Bevy の `HoverMap`)を読む。Bevy 標準の `MeshPickingPlugin` は部品を1つずつ調べて数千部品では重く、簡略表示の粗いメッシュに当たるので使わない。
 4. マテリアルは「選択(アセンブリなら子孫すべて)→ 青」「ツリーでホバー → 水色」「それ以外 → 部品の色」で決める。クリックした面は、その面だけのメッシュを重ねてオレンジにする。
 5. 稜線は線のメッシュで GPU に描かせる。グリッドと選択の外接箱は Gizmos で描く。グリッドの間隔はモデルの大きさに合わせて 1, 10, 100… と変わる。
-6. 部品のエンティティには干渉チェック用の `SimBody`(部品座標の f64 三角形メッシュ + 姿勢 + モデル上で表示中か)も付ける。姿勢と表示/非表示は 2. と一緒に写し、`src/simulation/` がこれを拾って判定する。干渉中の部品は半透明の赤にする。
+6. 部品のエンティティには干渉チェック用の `SimBody`(部品座標の f64 三角形メッシュ + 姿勢 + モデル上で表示中か)も付ける。姿勢と表示/非表示は 2. と一緒に写し、`src/features/simulation/` がこれを拾って判定する。干渉中の部品は半透明の赤にする。
 7. 画面上で小さい部品は粗いメッシュに替え、ごく小さい部品は描かない(`update_level_of_detail`)。大規模アセンブリ向けの工夫は [performance.md](performance.md) にまとめている。
 8. 「小さな穴とフィレットを省略」がオンなら、取り込んだ形状ごとに裏のスレッドで簡略化した形を作り、できたものから表示を差し替える(`defeature_shapes`)。しくみは [defeature.md](defeature.md)。
 
-### 背景の工場の建屋(`cadsim_core::factory_hall`、`view/factory_hall.rs`)
+### 背景の工場の建屋(`plantwright_core::factory_hall`、`view/factory_hall.rs`)
 
 装置の配置をイメージしやすいよう、3D ビューの背景に工場の建屋を置く。設計データではないので `Model` には入れず、保存・干渉チェック・書き出しの対象にもならない。
 
@@ -269,7 +182,7 @@ egui のパネルを上・下・左・右の順に置き、残った領域を 3D
 3. 平行投影ではカメラの後ろ(注視点までの距離の 20 倍まで)も描く。ズームやフライ移動でカメラが物体を通り越しても物体が消えないようにするため。
 4. ギズモには、透視投影なら画角から、平行投影なら Bevy が計算した表示範囲から作った投影行列を渡す。
 
-### 描画の質(`cadsim_core::render_quality`、`view/render_quality.rs`)
+### 描画の質(`plantwright_core::render_quality`、`view/render_quality.rs`)
 
 1. 画質の段階(軽い・標準・きれい)ごとに使う Bevy の機能を `RenderQuality::profile` が決める。
 
@@ -285,12 +198,12 @@ egui のパネルを上・下・左・右の順に置き、残った領域を 3D
 5. モデルの単位は mm のことが多いので、Bevy の既定値(m 前提)のままでは影の範囲や SSAO の半径が合わない。`shadow_range` と `occlusion_scale` が、カメラの距離・シーンの外接箱・1 m あたりの単位数から影の段の境目、影のずらし(depth bias)、SSAO の半径を決める。10% を超えて変わったときだけ書き換える。
 6. Bevy の接地の影(`ContactShadows`)は、小さな部品に寄ったときに床の奥へ縞が出たので使っていない。接地感は SSAO となめらかな影が受け持つ。
 7. 画面に映る範囲だけで計算する反射(SSR)は deferred 描画が要り、MSAA や今のマテリアルの作りと合わないので使っていない。光沢のある面の映り込みは環境光が受け持つ。
-8. 選んだ段階は `cadsim_io::render_settings` が設定フォルダの `render.json` に保存する。
+8. 選んだ段階は `plantwright_core::render_settings` が設定フォルダの `render.json` に保存する。
 
 ### 箱とギズモ
 
 1. 箱(`BoxPart`)は寸法・位置・回転を f64 で持ち、編集されると truck で B-rep ソリッドを作り直す(`tsweep` を3回 → `rotated` → `translated`)。
-2. ギズモ(`src/view/gizmo.rs`)は transform-gizmo で計算し、egui の背景レイヤーに描く。箱ならパラメータに、取り込んだ部品やアセンブリなら親から見た配置(f64 の行列)に書き戻す。スナップは移動・回転を transform-gizmo の機能に任せ、拡大縮小の寸法だけ `snap_size` で丸める。
+2. ギズモ(`src/viewport/gizmo.rs`)は transform-gizmo で計算し、egui の背景レイヤーに描く。箱ならパラメータに、取り込んだ部品やアセンブリなら親から見た配置(f64 の行列)に書き戻す。スナップは移動・回転を transform-gizmo の機能に任せ、拡大縮小の寸法だけ `snap_size` で丸める。
 
 ### タイミングチャートと干渉チェックのつながり(`motion/`)
 
@@ -300,14 +213,14 @@ egui のパネルを上・下・左・右の順に置き、残った領域を 3D
 - `view/viewport.rs` の `sync_views` が `.after(MotionSet::Pose)` で動きを部品の配置に重ね、表示用の `Transform` と干渉チェック用の `SimBody.pose` の両方に写すので、再生・スクラブ中も各時刻の位置で干渉チェックが走る。設計データ(`Model`)は書き換えない。
 - 書き出し(`motion/export.rs`)では、1サイクルを 1/30 秒ごとに標本化し、親と違う動きをするノードだけに「親から見た配置」のキーを作る(`(動き × 設計のワールド配置)` を親の同じ時刻のワールド配置で割る)。アセンブリに割り当てた動きは、シーンの親子関係で子孫に伝わる。
 
-### 加減速と電子カム(`cadsim_core/src/motion/profile.rs`)
+### 加減速と電子カム(`plantwright_core/src/motion/profile.rs`)
 
 - 加減速は「時間の進み具合 x (0〜1) → 位置の進み具合 s (0〜1)」の関数(`Easing::apply_with`)。`Schedule::value_at` は動作ごとに、直前の値から目標値までをこの s で補間する。
 - 台形加減速は加速の割合 r で、速度 v = 1/(1-r) まで一定の加速度で加速し、同じ時間で減速する。サイクロイドは s = x - sin(2πx)/2π。
 - 電子カム表は (時間, 位置) の点に始点 (0, 0) と終点 (1, 1) を足し、PCHIP(Fritsch–Carlson の傾きで決める区分 3 次エルミート補間)でつなぐ。単調な区間は単調のままで、点の間で行き過ぎない。表は `TimingChart::cams` にあり、`Schedule` を作るときに写して値を読むのに使う。
 - 速度のグラフは `Schedule::velocity_at`(位置の中心差分)。シリンダは 0〜1 の値なのでストロークを掛けて表示する。
 
-### センサーとインターロック(`cadsim_core/src/motion/sensor.rs`, `motion/targets.rs`)
+### センサーとインターロック(`plantwright_core/src/motion/sensor.rs`, `motion/targets.rs`)
 
 - `sensor.rs` と `targets.rs` は Bevy に依存しない計算だけのモジュールで、単体テストを持つ。Bevy のシステム(`mod.rs`)と描画(`sensor_view.rs`)・パネル(`ui.rs`)はそれを呼ぶだけ。
 - 検知対象は向きつきの直方体(`TargetBox`)。`targets.rs` が部品を直方体にする(箱はそのまま、取り込んだ部品は部品座標系の外接箱)。アクチュエータに割り当てた部品(またはその祖先のアセンブリ)には、そのアクチュエータの動きを付ける。
@@ -330,7 +243,7 @@ egui のパネルを上・下・左・右の順に置き、残った領域を 3D
 - 追加・削除・すべて削除・注記の文字の編集は元に戻せる。部品を削除すると寸法は隠れ、部品の削除を元に戻すと寸法も戻る。
 - 距離計測(シミュレーション)と寸法の道具は、片方を始めるともう片方は止まる。
 
-### 形状の差し替え(`cadsim_core::remap`、`Model::replace_geometry`)
+### 形状の差し替え(`plantwright_core::remap`、`Model::replace_geometry`)
 
 設計変更後のファイルを読み、選んだノード以下の木と新しい木のノードを対応づけてから入れ替えます。
 対応づけ(`remap::plan_remap`)は Bevy にもファイル形式にも依存しない純粋な関数で、次の順に試します。
@@ -353,7 +266,7 @@ ID で部品を指している設定(アクチュエータなど)はそのまま
 
 ### 元に戻す・やり直し(`history.rs`)
 
-変更を済ませてから記録する方式です。モデルを書き換えたあと、その変更を戻すための `Command` を `History` に積みます。履歴の山 (`UndoStack`)・`ModelChange`・ドラッグ中の編集のまとめ方 (`ModelEdits`) は Bevy に依存しない `cadsim_core::history` にあり、アプリ側の `history.rs` は `World` を書き換える部分とシステムだけを持ちます。
+変更を済ませてから記録する方式です。モデルを書き換えたあと、その変更を戻すための `Command` を `History` に積みます。履歴の山 (`UndoStack`)・`ModelChange`・ドラッグ中の編集のまとめ方 (`ModelEdits`) は Bevy に依存しない `plantwright_core::history` にあり、アプリ側の `history.rs` は `World` を書き換える部分とシステムだけを持ちます。
 
 - モデルの変更は `ModelChange` で表します。中身は変更前と変更後のノードの写し(`Model::snapshot`、子孫ごと)です。取り込んだ形状は `Arc` で共有しているので、大きなアセンブリでも写すのは軽く済みます。
 - 履歴に載るもの: 箱の追加、円柱・押し出しの追加、穴あけ・ブーリアン、STEP の読み込み、タイミングチャートのサンプル装置の読み込み(`History::replace_all`)、削除(Delete キー・ツリー・プロパティ)、すべて閉じる、ギズモでの移動・回転・拡大縮小、プロパティでの寸法・位置・回転・名前・色・部品スクリプトの変更。
@@ -370,7 +283,7 @@ ID で部品を指している設定(アクチュエータなど)はそのまま
 新しい操作を履歴に載せるには次のようにします。
 
 - ノードを書き換えるなら、書き換える直前に `history.begin_edit(&model, id)` を呼ぶ。追加なら `record_added`、削除なら `history.remove(&mut model, id)` を使う。
-- 画面のあちこちで編集されるモデル以外のデータ(文書)は、`TrackedDoc` を実装してプラグインで `app.track_doc::<D>()` と登録する。編集する場所に手を入れなくても、マウスを離して入力欄からも抜けた時点で「前に確定した状態」と比べ、違えば1件の履歴(`D::LABEL`)にする。比べる・戻すための写し(`Value`)は毎フレーム作るので、大きな中身は `Arc` で共有する。元に戻した直後は戻した状態を確定し直すので、戻したこと自体は履歴に載らない。新規作成・開くでは `History::clear` が見張りもやり直す。比べて確定するところは `cadsim_core::usecase::edit_tracker` にある。
+- 画面のあちこちで編集されるモデル以外のデータ(文書)は、`TrackedDoc` を実装してプラグインで `app.track_doc::<D>()` と登録する。編集する場所に手を入れなくても、マウスを離して入力欄からも抜けた時点で「前に確定した状態」と比べ、違えば1件の履歴(`D::LABEL`)にする。比べる・戻すための写し(`Value`)は毎フレーム作るので、大きな中身は `Arc` で共有する。元に戻した直後は戻した状態を確定し直すので、戻したこと自体は履歴に載らない。新規作成・開くでは `History::clear` が見張りもやり直す。比べて確定するところは `plantwright_core::history::edit_tracker` にある。
 - 1回の操作をはっきり区切りたいときは、`Command` トレイトを実装した型を作り、変更を済ませたあとで `history.push(...)` に渡す。
 
 | 見張る文書 | 登録している場所 | 比べるもの |
@@ -436,7 +349,7 @@ egui の標準フォントには日本語がないため、[Noto Sans JP](https:
 
 - `assets/fonts/NotoSansJP-Subset.otf` … 英数字・記号・かな・JIS 第1/第2水準漢字だけに絞ったもの(約 2.1 MB)。`include_bytes!` で実行ファイルに入るので、配布時にフォントを別に置く必要はありません。
 - `assets/fonts/OFL.txt` … フォントのライセンス。配布物にも同梱してください。
-- `src/japanese_font.rs` … 起動直後に egui の予備フォントとして登録する。英数字は egui の標準フォント、日本語だけ Noto Sans JP で描かれます。
+- `src/ui/font.rs` … 起動直後に egui の予備フォントとして登録する。英数字は egui の標準フォント、日本語だけ Noto Sans JP で描かれます。
 - `tools/subset_jp_font.py` … 元フォントから絞り込み版を作り直すスクリプト(使い方はファイル先頭)。
 
 ## ロゴとアイコン

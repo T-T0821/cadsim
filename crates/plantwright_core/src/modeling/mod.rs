@@ -2,7 +2,7 @@
 //!
 //! 形状は truck の B-rep (`truck_modeling::Solid`, f64) で作る。ブーリアン (和・差・積) は
 //! `truck_shapeops` を使う。作った形状はモデルの「部品」として加え、出どころに B-rep を詰めておく
-//! ([`ModeledSource`])。詰め方 (プロジェクトファイルに埋め込む JSON) はアダプター層が
+//! ([`ModeledSource`])。詰め方 (プロジェクトファイルに埋め込む JSON) は `modeling::record` が
 //! [`SolidStore`] として渡す。開き直すとそこから形状を作り直すので、続けて穴をあけたり
 //! ブーリアンをかけたりできる。
 //!
@@ -28,7 +28,7 @@ use crate::shape::{ImportedShape, mesh_stats, next_shape_id};
 /// ブーリアンの許容誤差 (形状の大きさに対する割合)
 const BOOLEAN_TOL_RATIO: f64 = 2e-4;
 
-/// B-rep を [`ModeledSource`] に詰める・取り出す (ポート)。実装はアダプター層
+/// B-rep を [`ModeledSource`] に詰める・取り出す (トレイト)。実装は `modeling::record`
 /// (`crate::modeling::record` の JSON)
 pub trait SolidStore {
     fn save(&self, name: String, solid: &Solid) -> Result<ModeledSource, String>;

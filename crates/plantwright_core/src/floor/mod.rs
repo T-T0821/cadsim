@@ -16,3 +16,4 @@ pub mod geom;
 pub mod heatmap;
 pub mod heatmap_png;
 pub mod operator_plan;
+pub mod record;
