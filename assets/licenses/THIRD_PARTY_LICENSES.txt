@@ -12483,8 +12483,7 @@ SOFTWARE.
 MIT License (MIT)
 
 使っているクレート / Used by:
-- cadsim_core 0.1.0
-- cadsim_io 0.1.0
+- plantwright_core 0.1.0
 - accesskit 0.24.1 (https://github.com/AccessKit/accesskit)
 - accesskit_consumer 0.38.0 (https://github.com/AccessKit/accesskit)
 - accesskit_ios 0.1.2 (https://github.com/AccessKit/accesskit)
