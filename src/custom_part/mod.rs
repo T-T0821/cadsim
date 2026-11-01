@@ -80,7 +80,7 @@ impl Default for CustomLibrary {
     }
 }
 
-/// 設定ファイルと同じ場所の `parts` フォルダ (例: ~/.config/cadsim/parts)
+/// 設定ファイルと同じ場所の `parts` フォルダ (例: ~/.config/plantwright/parts)
 fn default_dir() -> Option<PathBuf> {
     let prefs = crate::preferences_file::default_path()?;
     Some(prefs.parent()?.join("parts"))

@@ -1,7 +1,7 @@
 # 本物の装置のサンプル(UR5e + Robotiq 2F-85)
 
 「ファイル → サンプルを開く → 本物の装置 (UR5e + Robotiq 2F-85)」で開くサンプルの中身と作り方です。
-メーカーが公開している本物の装置の形状を読み込み、cadsim の関節・ロボット・タイミングチャート・ワーク搬送の機能だけで動きを付けています。
+メーカーが公開している本物の装置の形状を読み込み、plantwright の関節・ロボット・タイミングチャート・ワーク搬送の機能だけで動きを付けています。
 
 ## 使っている CAD と再配布の条件
 
@@ -25,7 +25,7 @@ git clone https://github.com/UniversalRobots/Universal_Robots_ROS2_Description.g
 git clone https://github.com/PickNikRobotics/ros2_robotiq_gripper.git robotiq
 pip install trimesh pycollada
 python3 tools/real_robot/convert_meshes.py ur robotiq   # ur5e.glb と robotiq_2f85.glb
-python3 tools/real_robot/make_demo.py                   # ur5e_pick_place.cadsim
+python3 tools/real_robot/make_demo.py                   # ur5e_pick_place.plantwright
 ```
 
 | スクリプト | 内容 |
@@ -38,17 +38,17 @@ python3 tools/real_robot/make_demo.py                   # ur5e_pick_place.cadsim
 
 - 単位は m、Y が上(glTF の決まり)。ROS の座標(Z が上)からは (x, y, z) → (x, z, −y) で写す。
 - `ur5e.glb` は **ホーム姿勢**(関節角 [0, −90, 90, −90, −90, 0]°、腕を立てて工具を真下に向けた姿勢)に組んだ形。原点はベースの底面の中心。
-  全関節 0° の姿勢は腕が水平に伸びきった特異姿勢なので、設計位置(cadsim の関節の値が 0 の姿勢)には使わない。
+  全関節 0° の姿勢は腕が水平に伸びきった特異姿勢なので、設計位置(plantwright の関節の値が 0 の姿勢)には使わない。
 - `robotiq_2f85.glb` は全開の形。原点はアダプタの取り付け面(UR の `tool0`)で、指は +Y を向く。
-- ノードは「ファイル名のルート → リンク → 色ごとのメッシュ」。cadsim は glTF のノード名を製品名として使い、
+- ノードは「ファイル名のルート → リンク → 色ごとのメッシュ」。plantwright は glTF のノード名を製品名として使い、
   プロジェクトの `Imported` ノードは製品名で形状を引くので、ノード名はファイルの中で重ならないようにしている(`upper_arm_blue` など)。
 
 ### 関節の付け方
 
-cadsim の関節(回転テーブル)は「設計位置でのワールドの軸と回転中心」で決まり、親の関節の動きで運ばれる(指数積の形。[robot.md](robot.md))。
+plantwright の関節(回転テーブル)は「設計位置でのワールドの軸と回転中心」で決まり、親の関節の動きで運ばれる(指数積の形。[robot.md](robot.md))。
 URDF の関節は子リンクの座標の Z 軸まわりに回るので、ホーム姿勢での子リンクの座標の Z 軸を `axis`(X / Y / Z と `reversed`)に、原点を `pivot` にすれば、
-同じ関節角で URDF と同じ姿勢になる。ホーム姿勢ではどの関節の軸も座標軸に沿うので、cadsim の X / Y / Z だけで表せる。
-関節の値はホーム姿勢からの角度になる(UR のペンダントの角度 = ホームの角度 + cadsim の値)。
+同じ関節角で URDF と同じ姿勢になる。ホーム姿勢ではどの関節の軸も座標軸に沿うので、plantwright の X / Y / Z だけで表せる。
+関節の値はホーム姿勢からの角度になる(UR のペンダントの角度 = ホームの角度 + plantwright の値)。
 
 | アクチュエータ | 動かすノード | 載せ先 |
 | --- | --- | --- |
@@ -59,7 +59,7 @@ URDF の関節は子リンクの座標の Z 軸まわりに回るので、ホー
 | 把持 (ワークを掴む合図) | なし(シリンダ) | J6 |
 
 2F-85 の指は平行リンクで、ROS の記述では 1 つの角度に「外側・内側は同じ向き、指先は逆向き」の係数を掛けて動かしている(mimic)。
-cadsim では 6 つの回転テーブルに同じ目標角を置き、係数が負のものは `reversed` で逆に回す。指先は外側に載っているので、外側と逆に同じだけ回ると向きが保たれ、平行に閉じる。
+plantwright では 6 つの回転テーブルに同じ目標角を置き、係数が負のものは `reversed` で逆に回す。指先は外側に載っているので、外側と逆に同じだけ回ると向きが保たれ、平行に閉じる。
 ワークの幅 60 mm に 2 mm 食い込む角度(約 16°)は、指先の関節の位置から二分法で求める(`kinematics.gripper_angle_for`)。
 
 ワークを掴む・離すのはワーク搬送のグリッパの機能で、チャックにはシリンダが要るので、動かす部品のないシリンダ「把持」を指と同じステップで出し入れしている。

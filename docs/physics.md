@@ -12,7 +12,7 @@
 | `cable.rs`(core) | ドメイン | ケーブル・ホースの紐モデル `CableState` と判定 `CableReport` | `glam` |
 | `world.rs`(core) | ユースケース | 部品 → 剛体の変換 `part_body`、一定刻みの進行 `PhysicsRun`、エンジンのポート `PhysicsEngine` | `glam` |
 | `rapier.rs` | アダプター | `PhysicsEngine` の Rapier 実装 | `rapier3d` |
-| `records.rs` | アダプター | `.cadsim` に書く形(serde) | `serde` |
+| `records.rs` | アダプター | `.plantwright` に書く形(serde) | `serde` |
 | `mod.rs` / `panel.rs` / `sample.rs` | UI | Bevy のシステム、egui のパネル、サンプルライン | Bevy・egui |
 
 Bevy 用の物理プラグイン(avian3d / bevy_rapier)ではなく、Bevy に依存しない `rapier3d` を使っています。物理の世界を ECS の外に置けるので、ユースケースとアダプターを Bevy なしで単体テストでき、`cadsim_io` にもそのまま移せます。

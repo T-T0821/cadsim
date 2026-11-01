@@ -4,7 +4,7 @@
 //! ライン間は「搬送」(フォークリフト・手運び) やバッファ (倉庫・部品置き場) でつなぐ。
 //! 作業者の名簿は工場で1つなので、持ち場のラインの手が空いた人は別のラインを応援できる。
 //!
-//! 別の .cadsim の工程を、1本のラインとして取り込める ([`FlowModel::import_line`])。
+//! 別の .plantwright の工程を、1本のラインとして取り込める ([`FlowModel::import_line`])。
 
 use std::collections::HashMap;
 

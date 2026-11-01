@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>CAD Prototype</string>
+    <string>plantwright</string>
     <key>CFBundleDisplayName</key>
-    <string>CAD Prototype</string>
+    <string>plantwright</string>
     <key>CFBundleIdentifier</key>
-    <string>io.github.t-t0821.cadsim</string>
+    <string>io.github.t-t0821.plantwright</string>
     <key>CFBundleExecutable</key>
-    <string>cad_proto</string>
+    <string>plantwright</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleVersion</key>

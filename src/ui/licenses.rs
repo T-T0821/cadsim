@@ -35,8 +35,8 @@ pub fn show(ctx: &egui::Context) {
         .resizable(true)
         .show(ctx, |ui| {
             ui.label(
-                "cadsim は MIT License と Apache License 2.0 のデュアルライセンスです。\n\
-                 次は cadsim が使っている第三者のソフトウェア・フォント・サンプル形状のライセンスです。",
+                "plantwright は MIT License と Apache License 2.0 のデュアルライセンスです。\n\
+                 次は plantwright が使っている第三者のソフトウェア・フォント・サンプル形状のライセンスです。",
             );
             if ui
                 .button("📋 全文をコピー")

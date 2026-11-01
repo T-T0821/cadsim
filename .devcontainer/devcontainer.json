@@ -1,5 +1,5 @@
 {
-  "name": "cadsim",
+  "name": "plantwright",
   "build": {
     "dockerfile": "Dockerfile"
   },
@@ -9,8 +9,8 @@
   "updateRemoteUserUID": true,
   "mounts": [
     // 取ってきた依存クレートをコンテナを作り直しても使い回す (ホストの make docker-<目標> と共有)
-    "source=cadsim-cargo-registry,target=/usr/local/cargo/registry,type=volume",
-    "source=cadsim-cargo-git,target=/usr/local/cargo/git,type=volume"
+    "source=plantwright-cargo-registry,target=/usr/local/cargo/registry,type=volume",
+    "source=plantwright-cargo-git,target=/usr/local/cargo/git,type=volume"
   ],
   "containerEnv": {
     "CARGO_TARGET_DIR": "/workspace/target/container"

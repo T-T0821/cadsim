@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="generator" content="cadsim">
-<title>__CADSIM_TITLE__ - cadsim ビューア</title>
+<meta name="generator" content="plantwright">
+<title>__PLANTWRIGHT_TITLE__ - plantwright ビューア</title>
 <style>
   :root {
     --bg: #eef1f5;
@@ -46,7 +46,7 @@
 <body>
 <canvas id="view"></canvas>
 <header class="bar">
-  <h1 id="title">__CADSIM_TITLE__</h1>
+  <h1 id="title">__PLANTWRIGHT_TITLE__</h1>
   <button id="fit" title="全体が見えるようにする">全体表示</button>
   <button id="vr" class="primary" hidden title="VR ヘッドセットで実寸で見る">VR で見る</button>
   <button id="ar" hidden title="カメラ越しに実寸で床に置く">AR で置く</button>
@@ -64,12 +64,12 @@
   </select>
 </footer>
 <div id="error"></div>
-<script id="cadsim-model" type="application/octet-stream">
-__CADSIM_MODEL__
+<script id="plantwright-model" type="application/octet-stream">
+__PLANTWRIGHT_MODEL__
 </script>
 <script>
 "use strict";
-// cadsim の Web ビューア。埋め込んだ GLB を WebGL で表示し、アニメーションを再生する。
+// plantwright の Web ビューア。埋め込んだ GLB を WebGL で表示し、アニメーションを再生する。
 // WebXR に対応したブラウザ (VR ヘッドセット・スマホ) では実寸の VR / AR でも見られる。
 // 座標はメートル・Y 軸が上 (glTF と同じ)。
 
@@ -818,7 +818,7 @@ function start() {
   if (!gl) throw new Error("このブラウザは WebGL に対応していません");
   shaded = program(VS, FS);
   lines = program(LINE_VS, LINE_FS);
-  const text = document.getElementById("cadsim-model").textContent;
+  const text = document.getElementById("plantwright-model").textContent;
   scene = loadScene(parseGlb(base64ToBytes(text)));
   upload();
   setupPlayer();
@@ -827,7 +827,7 @@ function start() {
   grid = makeGrid();
   setupXR();
   requestAnimationFrame(frame);
-  window.cadsimViewer = { scene, state, camera, fitView };
+  window.plantwrightViewer = { scene, state, camera, fitView };
 }
 
 try { start(); }

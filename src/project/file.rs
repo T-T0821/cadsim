@@ -1,4 +1,4 @@
-//! プロジェクトファイル (.cadsim) の形 (アダプター層)
+//! プロジェクトファイル (.plantwright) の形 (アダプター層)
 //!
 //! ファイルの中身は人が読める JSON。アセンブリの木をそのまま入れ子で書く。
 //! 書くのは設計データ (名前・配置・表示/非表示・色・箱の寸法) と、取り込んだ STEP の場所だけ。
@@ -36,14 +36,16 @@ use cadsim_core::motion::TimingChart;
 
 /// ファイル形式のバージョン。古いファイルを開けなくなる変更をしたときだけ上げる。
 pub const FORMAT_VERSION: u32 = 1;
-/// プロジェクトファイルの拡張子
-pub const FILE_EXTENSION: &str = "cadsim";
+/// プロジェクトファイルの拡張子。保存はいつもこれで行う
+pub const FILE_EXTENSION: &str = "plantwright";
+/// 開けるプロジェクトファイルの拡張子。`cadsim` は旧名のころのファイルで、中身の形は同じ
+pub const OPEN_EXTENSIONS: &[&str] = &[FILE_EXTENSION, "cadsim"];
 pub fn is_project_file(path: &Path) -> bool {
     path.extension()
-        .is_some_and(|e| e.eq_ignore_ascii_case(FILE_EXTENSION))
+        .is_some_and(|e| OPEN_EXTENSIONS.iter().any(|x| e.eq_ignore_ascii_case(x)))
 }
 
-/// .cadsim ファイルの中身そのもの。
+/// .plantwright ファイルの中身そのもの。
 ///
 /// 項目を増やすとき (タイミングチャートなど) は `#[serde(default)]` を付けたフィールドとして足す。
 /// そうすれば項目のない古いファイルもそのまま開ける。

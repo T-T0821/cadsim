@@ -28,8 +28,8 @@ use crate::file_io::{ImportJobs, ImportTarget, Loaded, asset_loadable, load_sour
 use crate::interchange::UnitOptions;
 use crate::model::{Model, StepSource};
 
-/// 取り込むファイルのアセットの読み元の名前 (`cadsim-file://<鍵>`)
-pub const SOURCE: &str = "cadsim-file";
+/// 取り込むファイルのアセットの読み元の名前 (`plantwright-file://<鍵>`)
+pub const SOURCE: &str = "plantwright-file";
 
 /// ファイルの更新を調べる間隔 (秒)。落ち着くまで 1回待つので、保存してから 1〜2 秒で読み直す
 const POLL_INTERVAL: f32 = 0.7;

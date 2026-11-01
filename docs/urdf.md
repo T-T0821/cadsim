@@ -1,6 +1,6 @@
 # ロボット機種を URDF で読み込む
 
-ROS のロボットの記述ファイル **URDF**(`.urdf`)を読み込み、リンクの形状と関節・可動範囲から、cadsim のロボット(タイミングチャートの関節 + ロボット)を作る機能の中身です。
+ROS のロボットの記述ファイル **URDF**(`.urdf`)を読み込み、リンクの形状と関節・可動範囲から、plantwright のロボット(タイミングチャートの関節 + ロボット)を作る機能の中身です。
 使い方は README の「ロボット機種を URDF で読み込む」を見てください。
 
 ## 層の分け方
@@ -27,7 +27,7 @@ ROS のロボットの記述ファイル **URDF**(`.urdf`)を読み込み、リ�
 
 - `revolute` / `continuous` は回転テーブル、`prismatic` は直動軸。`fixed` でつながったリンクは根元側の関節の部品に足す。`floating` / `planar` は動かせないので固定にして注意を出す。`mimic` は独立した関節にして注意を出す。
 - 関節の位置と向きは、モデルに置いたリンクのノードのワールド行列から求める。URDF では子リンクの座標系が関節の座標系と同じなので、子リンクの原点が回転の中心(`pivot`)、子リンクの座標で書いた `axis` をワールドに回したものが軸になる。ユーザーがロボットを動かしてから関節を付けても合うように、モデルの行列を使う。
-- 軸が X / Y / Z(と逆向き)にそろえば `axis` と `reversed` に、斜めなら `Actuator::custom_axis` に入れる。`custom_axis` は `.cadsim` の `custom_axis` に保存し、`pose::direction` が優先して使う(順運動学・ヤコビアン・MELFA の書き出しが同じ軸で動く)。
+- 軸が X / Y / Z(と逆向き)にそろえば `axis` と `reversed` に、斜めなら `Actuator::custom_axis` に入れる。`custom_axis` は `.plantwright` の `custom_axis` に保存し、`pose::direction` が優先して使う(順運動学・ヤコビアン・MELFA の書き出しが同じ軸で動く)。
 - 可動範囲はラジアン → 度、直動は m → モデルの単位。`continuous` は範囲なし。
 - ロボットの先端: 根元から、動く関節のある枝が 1 本だけのあいだたどった最後の動く関節。2 本指のグリッパのような枝分かれの手前で止まるので、指は逆運動学に入らない(関節としては残り、ジョグやステップで動かせる)。
 - TCP: 先端の関節の子リンクから固定の関節だけでつながったリンクのうち、`tool0` → 名前に `tcp` → `tool` の順に探し、なければいちばん先のリンク。工具の向きはそのリンクの Z 軸(ROS-Industrial の決まり)。
@@ -42,7 +42,7 @@ ROS のロボットの記述ファイル **URDF**(`.urdf`)を読み込み、リ�
 
 - 出典は「本物の装置」のサンプル([real-robot.md](real-robot.md))と同じ [Universal_Robots_ROS2_Description](https://github.com/UniversalRobots/Universal_Robots_ROS2_Description)(BSD 3-Clause)。ライセンス文も同じ `samples/real_robot/LICENSE-UR5e.txt` を一緒に書き出す。
 - URDF は `urdf/ur_macro.xacro` を `ur_type:=ur5e` で展開したものと同じリンク・関節・寸法(`config/ur5e/*.yaml`)を写し、慣性・衝突・ros2_control を省いたもの。
-- 「本物の装置」の `ur5e.glb` はホーム姿勢に組んだ 1 ファイルで、リンクの座標系で置いたメッシュがないため、URDF 用には元の COLLADA をリンクごとに GLB にした。変換は cadsim の COLLADA の読み込みを使う `cargo run -p cadsim_io --example dae_to_glb -- base.dae base.glb ur5e_base`(形は変えない)。
+- 「本物の装置」の `ur5e.glb` はホーム姿勢に組んだ 1 ファイルで、リンクの座標系で置いたメッシュがないため、URDF 用には元の COLLADA をリンクごとに GLB にした。変換は plantwright の COLLADA の読み込みを使う `cargo run -p cadsim_io --example dae_to_glb -- base.dae base.glb ur5e_base`(形は変えない)。
 
 テスト: `src/motion/urdf_robot.rs` で、同梱の URDF が注意なしで 6 軸のロボットになること、全関節 0 の TCP が UR の寸法どおりの位置に来ること、逆運動学で教示点に届き、届かない点は届かないと分かることを確かめる。
 

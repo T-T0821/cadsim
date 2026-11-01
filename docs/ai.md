@@ -30,8 +30,8 @@
 
 ## API キーの保存
 
-- 置き場所は見た目の設定と同じフォルダの `ai.json`(Windows: `%APPDATA%\cadsim\ai.json`、macOS: `~/Library/Application Support/cadsim/ai.json`、その他: `~/.config/cadsim/ai.json`)。Unix では自分だけが読める権限 (600) にする。
-- プロジェクトファイル (.cadsim) には書かない。
+- 置き場所は見た目の設定と同じフォルダの `ai.json`(Windows: `%APPDATA%\plantwright\ai.json`、macOS: `~/Library/Application Support/plantwright/ai.json`、その他: `~/.config/plantwright/ai.json`)。Unix では自分だけが読める権限 (600) にする。
+- プロジェクトファイル (.plantwright) には書かない。
 - 保存したキーがなければ環境変数 `ANTHROPIC_API_KEY` を使う。
 - 画面にはキーの末尾 4 文字だけを出す。
 

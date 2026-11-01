@@ -55,7 +55,7 @@ fn file_menu(ui: &mut egui::Ui, state: &mut UiState) {
         if ui
             .add(egui::Button::new("開く…").shortcut_text("Ctrl+O"))
             .on_hover_text(format!(
-                "プロジェクト (.cadsim) を開くか、ファイルを今のプロジェクトに取り込む。\n\
+                "プロジェクト (.plantwright) を開くか、ファイルを今のプロジェクトに取り込む。\n\
                  ウィンドウへのドラッグ&ドロップでも開けます。\n\n\
                  取り込める形式: STEP, {}\n\
                  平面図として床に敷く形式: DXF, PDF, PNG, JPG\n\
@@ -666,7 +666,7 @@ fn help_menu(ui: &mut egui::Ui, state: &mut UiState) {
         ui.separator();
         if ui
             .button("ライセンス")
-            .on_hover_text("cadsim と、使っている第三者のソフトウェアのライセンスを見る")
+            .on_hover_text("plantwright と、使っている第三者のソフトウェアのライセンスを見る")
             .clicked()
         {
             super::licenses::open(ui.ctx());

@@ -498,7 +498,7 @@ fn step_title(i: u32, comment: &str) -> String {
 /// 人が読む命令リスト (デバイスのコメント付き)
 pub fn to_text(ladder: &Ladder) -> String {
     let mut text = String::from(
-        "; cadsim がタイミングチャートから作ったラダー (三菱 MELSEC Q / iQ-R 向けの命令リスト)\n\
+        "; plantwright がタイミングチャートから作ったラダー (三菱 MELSEC Q / iQ-R 向けの命令リスト)\n\
          ; デバイスの割り付けは I/O 表を見てください。実機に入れる前に必ず内容を確認してください。\n",
     );
     for rung in &ladder.rungs {

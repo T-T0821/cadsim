@@ -1,13 +1,13 @@
 # デモライン
 
-`samples/demo_line.cadsim` は、ほとんどの機能を一度に見せるためのサンプルプロジェクトです。デモ動画の撮影や、起動直後のサンプルとして使います。
+`samples/demo_line.plantwright` は、ほとんどの機能を一度に見せるためのサンプルプロジェクトです。デモ動画の撮影や、起動直後のサンプルとして使います。
 
 ## 作り方
 
 手で編集せず、`tools/make_demo_line.py` で生成します。寸法や教示点を変えたいときはスクリプトを直して作り直してください。
 
 ```sh
-python3 tools/make_demo_line.py   # samples/demo_line.cadsim を書き出す
+python3 tools/make_demo_line.py   # samples/demo_line.plantwright を書き出す
 ```
 
 Python 3 の標準ライブラリだけで動きます。

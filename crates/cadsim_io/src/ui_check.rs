@@ -316,7 +316,7 @@ mod tests {
 
     #[test]
     fn png_を往復できる() {
-        let dir = std::env::temp_dir().join(format!("cadsim_ui_check_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("plantwright_ui_check_{}", std::process::id()));
         let path = dir.join("x.png");
         let img = Image::new(2, 1, vec![1, 2, 3, 255, 4, 5, 6, 255]);
         write_png(&path, &img).unwrap();

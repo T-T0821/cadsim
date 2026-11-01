@@ -79,7 +79,7 @@ pub fn export(scene: &Scene, path: &Path, units: &UnitOptions) -> ExchangeResult
     // 色ごとにマテリアルを1つ作る
     let mut material_of: HashMap<[u32; 3], usize> = HashMap::new();
     let mut mtl = String::new();
-    let mut obj = format!("# cadsim から書き出し\nmtllib {mtl_name}\n");
+    let mut obj = format!("# plantwright から書き出し\nmtllib {mtl_name}\n");
     let mut vertex_base = 1; // OBJ の頂点番号は 1 始まりでファイル全体の通し番号
     for (node, world) in scene.nodes.iter().zip(scene.world_transforms()) {
         let Some(mesh) = node.mesh.as_ref().filter(|m| !m.is_empty()) else {
@@ -124,7 +124,7 @@ mod tests {
 
     #[test]
     fn round_trip_keeps_parts_and_colors() {
-        let dir = std::env::temp_dir().join("cadsim_obj_test");
+        let dir = std::env::temp_dir().join("plantwright_obj_test");
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("line.obj");
         let units = UnitOptions::default();

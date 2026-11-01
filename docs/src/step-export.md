@@ -1,6 +1,6 @@
 # 各 CAD から STEP を書き出す
 
-cadsim は SOLIDWORKS や CATIA などの CAD 独自のファイル(.sldprt / .sldasm / .ipt / .iam / .CATPart / .prt など)を直接は読めません。
+plantwright は SOLIDWORKS や CATIA などの CAD 独自のファイル(.sldprt / .sldasm / .ipt / .iam / .CATPart / .prt など)を直接は読めません。
 設計した CAD で **STEP(.step / .stp)** に書き出してから開いてください。STEP は国際規格(ISO 10303)の形式で、ほとんどの CAD が書き出せます。
 
 ## 書き出すときのおすすめ設定
@@ -9,7 +9,7 @@ cadsim は SOLIDWORKS や CATIA などの CAD 独自のファイル(.sldprt / .s
 | --- | --- | --- |
 | 規格(AP) | **AP242**、なければ **AP214** | 色とアセンブリの構成が入ります。AP203 は色が入らないことがあります |
 | アセンブリ | 1つのファイルにまとめる | 部品ごとに別ファイルに分けると構成が読めません |
-| 単位 | mm | cadsim はファイルに書かれた単位で開きます(mm / cm / m / inch) |
+| 単位 | mm | plantwright はファイルに書かれた単位で開きます(mm / cm / m / inch) |
 | 出力するもの | ソリッドとサーフェス | ワイヤーフレームやスケッチは読み込みません |
 
 ## CAD ごとの書き出しかた

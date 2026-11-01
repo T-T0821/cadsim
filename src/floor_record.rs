@@ -1,4 +1,4 @@
-//! 安全機器・作業者・AGV をプロジェクトファイル (.cadsim) に書く形 (Bevy に依存しない)
+//! 安全機器・作業者・AGV をプロジェクトファイル (.plantwright) に書く形 (Bevy に依存しない)
 //!
 //! ドメインの型 (`SafetyLayout`・`Operator`・`AgvGraph` など) には serde を付けず、ここで写す。
 //! 長さは mm、時間は秒。

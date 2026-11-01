@@ -9,7 +9,7 @@
 | `cadsim_core` の `staffing/model.rs` | ドメイン | 名簿(`Staffing` / `Worker` / `Skill`)、シフトと休憩(`Shift` / `Break`)、工程に人が要るか(`Labor`)、検証、`with_headcount` |
 | `cadsim_core` の `staffing/compare.rs` | ドメイン | 人数を 1〜N 人に変えて回し、並べる(`compare_headcount`) |
 | `cadsim_core` の `flow/sim.rs` | ドメイン | 作業者の割り当て・歩行・シフトの切り替えと、作業者ごとの集計(`WorkerStats`) |
-| `src/flow/record.rs` | アダプター | `.cadsim` に書く形(`labor`、`staffing`) |
+| `src/flow/record.rs` | アダプター | `.plantwright` に書く形(`labor`、`staffing`) |
 | `src/flow/xlsx.rs` | アダプター | 「作業者別」シート |
 | `src/flow/staff_ui.rs` | UI | 人員タブ |
 

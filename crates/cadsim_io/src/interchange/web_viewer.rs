@@ -1,4 +1,4 @@
-//! Web ビューア (.html): cadsim が無い人がブラウザ・スマホ・VR ヘッドセットで見るための1ファイル
+//! Web ビューア (.html): plantwright が無い人がブラウザ・スマホ・VR ヘッドセットで見るための1ファイル
 //!
 //! シーンを GLB にして Base64 で HTML に埋め込み、WebGL のビューア
 //! (`assets/web_viewer/viewer.html`) と一緒に1つのファイルにする。
@@ -9,22 +9,22 @@ use std::path::Path;
 
 use super::{ExchangeResult, Scene, UnitOptions, gltf::to_glb_bytes, io_error};
 
-/// ビューアの HTML。`__CADSIM_TITLE__` と `__CADSIM_MODEL__` を差し替えて使う
+/// ビューアの HTML。`__PLANTWRIGHT_TITLE__` と `__PLANTWRIGHT_MODEL__` を差し替えて使う
 const TEMPLATE: &str = include_str!("../../../../assets/web_viewer/viewer.html");
 
 pub fn export(scene: &Scene, path: &Path, _units: &UnitOptions) -> ExchangeResult<()> {
     let title = path
         .file_stem()
         .map(|s| s.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "cadsim".to_owned());
+        .unwrap_or_else(|| "plantwright".to_owned());
     std::fs::write(path, to_html(scene, &title)).map_err(|e| io_error(path, e))
 }
 
 /// シーンを埋め込んだビューアの HTML
 pub fn to_html(scene: &Scene, title: &str) -> String {
     TEMPLATE
-        .replace("__CADSIM_TITLE__", &escape_html(title))
-        .replace("__CADSIM_MODEL__", &base64(&to_glb_bytes(scene)))
+        .replace("__PLANTWRIGHT_TITLE__", &escape_html(title))
+        .replace("__PLANTWRIGHT_MODEL__", &base64(&to_glb_bytes(scene)))
 }
 
 fn escape_html(text: &str) -> String {
@@ -109,17 +109,18 @@ mod tests {
         let scene = sample_scene();
         let html = to_html(&scene, "<ライン & 1>");
         assert!(html.contains("<title>&lt;ライン &amp; 1&gt;"));
-        assert!(!html.contains("__CADSIM_"));
+        assert!(!html.contains("__PLANTWRIGHT_"));
 
         // 埋め込んだ GLB を取り出して読み直すと、元のシーンに戻る
-        let start = html.find("id=\"cadsim-model\"").unwrap();
+        let start = html.find("id=\"plantwright-model\"").unwrap();
         let body = &html[start..];
         let body = &body[body.find('>').unwrap() + 1..];
         let encoded = body[..body.find('<').unwrap()].trim();
         let glb = decode_base64(encoded);
         assert_eq!(glb, to_glb_bytes(&scene));
 
-        let dir = std::env::temp_dir().join(format!("cadsim_web_viewer_{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("plantwright_web_viewer_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("line.glb");
         std::fs::write(&path, &glb).unwrap();
@@ -131,7 +132,8 @@ mod tests {
 
     #[test]
     fn export_writes_a_single_file() {
-        let dir = std::env::temp_dir().join(format!("cadsim_web_export_{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("plantwright_web_export_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("ライン1.html");
         export(&sample_scene(), &path, &UnitOptions::default()).unwrap();

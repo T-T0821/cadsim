@@ -16,7 +16,7 @@
 
 STEP は今のプロジェクトに **取り込まれ**(追加され)ます。入れ替えたいときは先に **ファイル → すべて閉じる** か **新規プロジェクト**(**Ctrl + N**)を選んでください。
 
-同じ方法で glTF / GLB・OBJ・STL・OpenUSD も取り込めます([glTF・OBJ・STL・USD の読み書き](interchange.md))。`.cadsim` を開くとプロジェクトそのものが開き直されます([プロジェクトの保存と読み込み](project.md))。
+同じ方法で glTF / GLB・OBJ・STL・OpenUSD も取り込めます([glTF・OBJ・STL・USD の読み書き](interchange.md))。`.plantwright` を開くとプロジェクトそのものが開き直されます([プロジェクトの保存と読み込み](project.md))。
 
 SOLIDWORKS や CATIA などのファイルは直接開けないので、CAD で STEP に書き出してください([各 CAD から STEP を書き出す](step-export.md))。
 

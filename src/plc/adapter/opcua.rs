@@ -176,12 +176,12 @@ type Connection = (Arc<Session>, tokio::task::JoinHandle<StatusCode>);
 
 async fn connect(settings: &OpcUaSettings) -> Result<Connection, String> {
     let mut client = ClientBuilder::new()
-        .application_name("cadsim")
-        .application_uri("urn:cadsim")
+        .application_name("plantwright")
+        .application_uri("urn:plantwright")
         .create_sample_keypair(false)
         .trust_server_certs(true)
         // 証明書の置き場所。暗号化なしでも作られるので、作業フォルダを汚さないよう一時フォルダにする
-        .pki_dir(std::env::temp_dir().join("cadsim-opcua-pki"))
+        .pki_dir(std::env::temp_dir().join("plantwright-opcua-pki"))
         .session_retry_limit(0)
         .client()
         .map_err(|e| e.join(", "))?;
@@ -476,14 +476,15 @@ mod tests {
 
     /// 本物の OPC UA サーバーとやりとりする (手で実行する)。
     /// サーバーに ns=2 の Cyl.Out (Boolean)、Cyl.Ext (Boolean)、Axis.Target (Int16 = 1250)、
-    /// Axis.Pos (Float) を用意し、`CADSIM_OPCUA_ENDPOINT=opc.tcp://… cargo test -- --ignored opcua` で動かす。
+    /// Axis.Pos (Float) を用意し、`PLANTWRIGHT_OPCUA_ENDPOINT=opc.tcp://… cargo test -- --ignored opcua` で動かす。
     #[test]
     #[ignore]
     fn exchanges_io_with_a_real_server() {
         use crate::motion::{ActuatorKind, TimingChart};
         use crate::plc::domain::io::{AddressPlan, Point, PointSettings};
 
-        let endpoint = std::env::var("CADSIM_OPCUA_ENDPOINT").expect("CADSIM_OPCUA_ENDPOINT");
+        let endpoint =
+            std::env::var("PLANTWRIGHT_OPCUA_ENDPOINT").expect("PLANTWRIGHT_OPCUA_ENDPOINT");
         let mut chart = TimingChart::default();
         let cyl = chart.add_actuator(ActuatorKind::Cylinder);
         let axis = chart.add_actuator(ActuatorKind::LinearAxis);

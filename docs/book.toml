@@ -1,6 +1,6 @@
 [book]
-title = "cadsim 操作マニュアル"
-authors = ["cadsim"]
+title = "plantwright 操作マニュアル"
+authors = ["plantwright"]
 language = "ja"
 src = "src"
 

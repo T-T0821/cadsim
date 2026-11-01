@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""デモ用のライン (samples/demo_line.cadsim) を作る。
+"""デモ用のライン (samples/demo_line.plantwright) を作る。
 
 供給コンベア → 4軸ロボットの移載 → 排出コンベア → AGV で検査場へ → 出荷、という小さな組立ラインです。
 標準部品・タイミングチャート (ロボットの教示点とセンサー)・ワーク搬送・安全機器・作業者・AGV・
 工程モデル (人員配置付き)・寸法と注記・ケーブルを1つのプロジェクトにまとめます。
 
-    python3 tools/make_demo_line.py            # samples/demo_line.cadsim に書く
-    python3 tools/make_demo_line.py out.cadsim
+    python3 tools/make_demo_line.py            # samples/demo_line.plantwright に書く
+    python3 tools/make_demo_line.py out.plantwright
 
 座標は mm、Y が上。床の上の (x, z) で配置を考えています。
 """
@@ -639,7 +639,7 @@ project = {
 
 def main():
     root = Path(__file__).resolve().parent.parent
-    out = Path(sys.argv[1]) if len(sys.argv) > 1 else root / "samples" / "demo_line.cadsim"
+    out = Path(sys.argv[1]) if len(sys.argv) > 1 else root / "samples" / "demo_line.plantwright"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(project, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"{out} に書きました")

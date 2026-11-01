@@ -1,7 +1,7 @@
 //! 「工程シミュレーション」ウィンドウの「工場」タブ
 //!
 //! - ラインの一覧 (足す・名前を変える・消す)、ラインに入れていない要素をまとめる
-//! - 別の .cadsim の工程を1本のラインとして取り込む (名簿も取り込むか選べる)
+//! - 別の .plantwright の工程を1本のラインとして取り込む (名簿も取り込むか選べる)
 //! - サンプル工場
 //! - 回した結果のラインごとの表
 //!
@@ -65,7 +65,7 @@ pub fn factory_tab(
                 ui.separator();
                 if ui
                     .button("別のファイルのラインを取り込む…")
-                    .on_hover_text("ほかの .cadsim の工程を、1 本のラインとしてこの工場に足す")
+                    .on_hover_text("ほかの .plantwright の工程を、1 本のラインとしてこの工場に足す")
                     .clicked()
                 {
                     st.message = pick_and_import(flow, st.with_staff);
@@ -88,7 +88,7 @@ pub fn factory_tab(
 fn pick_and_import(flow: &mut FlowModel, with_staff: bool) -> Option<(bool, String)> {
     let path = rfd::FileDialog::new()
         .set_title("取り込むラインのプロジェクト")
-        .add_filter("cadsim プロジェクト", &["cadsim"])
+        .add_filter("plantwright プロジェクト", crate::project::OPEN_EXTENSIONS)
         .pick_file()?;
     Some(match read_flow(&path) {
         Ok(other) if other.is_empty() => (false, "このファイルには工程がありません".into()),
@@ -111,7 +111,7 @@ fn pick_and_import(flow: &mut FlowModel, with_staff: bool) -> Option<(bool, Stri
     })
 }
 
-/// .cadsim から工程モデルだけを読む (3D の部品は取り込まないので対応付けは見ない)
+/// .plantwright から工程モデルだけを読む (3D の部品は取り込まないので対応付けは見ない)
 fn read_flow(path: &Path) -> Result<FlowModel, String> {
     let text = std::fs::read_to_string(path).map_err(|e| format!("読めません: {e}"))?;
     let file = crate::project::ProjectFile::from_json(&text).map_err(|e| e.to_string())?;

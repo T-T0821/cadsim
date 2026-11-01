@@ -15,9 +15,9 @@ Release は**人が手動で実行したときだけ**作られます。PR を m
 
 | OS | ファイル | 中身 |
 | --- | --- | --- |
-| Windows (x86_64) | `cadsim-v<版>-windows-x86_64.exe` | 単体の実行ファイル。これだけで起動する |
-| Windows (x86_64) | `cadsim-v<版>-windows-x86_64.zip` | 上と同じ exe(`cad_proto.exe`)、README、ライセンス文(`LICENSE-MIT`・`LICENSE-APACHE`・`THIRD_PARTY_LICENSES.txt`) |
-| macOS (Apple Silicon + Intel) | `cadsim-v<版>-macos-universal.zip` | `CAD Prototype.app`。arm64 と x86_64 を `lipo` で1つにまとめ、アドホック署名だけ付けている。ライセンス文は `Contents/Resources` に入れる |
+| Windows (x86_64) | `plantwright-v<版>-windows-x86_64.exe` | 単体の実行ファイル。これだけで起動する |
+| Windows (x86_64) | `plantwright-v<版>-windows-x86_64.zip` | 上と同じ exe(`plantwright.exe`)、README、ライセンス文(`LICENSE-MIT`・`LICENSE-APACHE`・`THIRD_PARTY_LICENSES.txt`) |
+| macOS (Apple Silicon + Intel) | `plantwright-v<版>-macos-universal.zip` | `plantwright.app`。arm64 と x86_64 を `lipo` で1つにまとめ、アドホック署名だけ付けている。ライセンス文は `Contents/Resources` に入れる |
 
 ## インストール不要にするための工夫
 

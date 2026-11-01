@@ -1,4 +1,4 @@
-//! cadsim のアダプター層
+//! plantwright のアダプター層
 //!
 //! ファイル形式など外部とのやり取りを、ドメインの型や形式に依存しない中間表現に変換する。
 //! Bevy・egui には依存しない (docs/architecture.md)。

@@ -1,4 +1,4 @@
-//! プロジェクトファイル (.cadsim) に書く現場データ (平面図の下敷きと点群)
+//! プロジェクトファイル (.plantwright) に書く現場データ (平面図の下敷きと点群)
 //!
 //! 図面や点の中身は書かず、ファイルの場所と配置・読み込みの設定だけを書く。
 //! 開くときに元のファイルから読み直す。
@@ -165,7 +165,7 @@ mod tests {
 
     #[test]
     fn records_round_trip_through_files() {
-        let dir = std::env::temp_dir().join(format!("cadsim_site_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("plantwright_site_{}", std::process::id()));
         std::fs::create_dir_all(dir.join("plans")).unwrap();
         let dxf =
             "0\nSECTION\n2\nENTITIES\n0\nLINE\n10\n0\n20\n0\n11\n1\n21\n1\n0\nENDSEC\n0\nEOF\n";

@@ -28,7 +28,7 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
-  APP_NAME: cad_proto
+  APP_NAME: plantwright
 
 jobs:
   # パッケージ名と Release のタグに使うバージョンを決める
@@ -60,7 +60,7 @@ jobs:
       # キャッシュは OS ごとに共有し、保存は main でのビルドのときだけ行う
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: cadsim
+          shared-key: plantwright
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Build
@@ -82,7 +82,7 @@ jobs:
         env:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
-          $name = "cadsim-v$env:VERSION-windows-x86_64"
+          $name = "plantwright-v$env:VERSION-windows-x86_64"
           # 単体の exe (ダウンロードしてそのままダブルクリックで起動)
           Copy-Item "target/release/$env:APP_NAME.exe" "$name.exe"
           # exe と README をまとめた zip
@@ -96,8 +96,8 @@ jobs:
         with:
           name: windows
           path: |
-            cadsim-v*-windows-x86_64.exe
-            cadsim-v*-windows-x86_64.zip
+            plantwright-v*-windows-x86_64.exe
+            plantwright-v*-windows-x86_64.zip
 
   macos:
     name: "macOS (Universal: Apple Silicon + Intel)"
@@ -111,7 +111,7 @@ jobs:
       # キャッシュは OS ごとに共有し、保存は main でのビルドのときだけ行う
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: cadsim
+          shared-key: plantwright
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Build (arm64 / x86_64)
@@ -125,7 +125,7 @@ jobs:
         env:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
-          app="CAD Prototype.app"
+          app="plantwright.app"
           mkdir -p "$app/Contents/MacOS"
           # 2つのアーキテクチャを1つのユニバーサルバイナリにまとめる
           lipo -create -output "$app/Contents/MacOS/$APP_NAME" \
@@ -142,7 +142,7 @@ jobs:
           fi
           # 署名なしだと Apple Silicon で起動できないため、アドホック署名だけ付ける
           codesign --force --deep --sign - "$app"
-          pkg="cadsim-v$VERSION-macos-universal.zip"
+          pkg="plantwright-v$VERSION-macos-universal.zip"
           ditto -c -k --keepParent "$app" "$pkg"
           echo "PKG=$pkg" >> "$GITHUB_ENV"
 

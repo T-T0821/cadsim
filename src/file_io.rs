@@ -8,7 +8,7 @@
 //! STL / USD) は Bevy のアセットとして読み (`scene_asset`。ファイルを直すと開いたまま読み直す)、
 //! それ以外 (URDF・サンプル・負荷テスト・作成メニューの形状) は別スレッドで読む。
 //! STEP 以外 (glTF / OBJ / STL など) は `interchange` の中間表現を経由する。
-//! プロジェクトファイル (.cadsim) が選ばれたときは project.rs に渡す。
+//! プロジェクトファイル (.plantwright) が選ばれたときは project.rs に渡す。
 
 use std::path::{Path, PathBuf};
 use std::sync::{
@@ -81,7 +81,7 @@ const URDF_SAMPLE: &str = "ur5e.urdf";
 fn urdf_sample_dir() -> PathBuf {
     crate::preferences_file::default_path()
         .and_then(|p| p.parent().map(|dir| dir.join("samples").join("ur5e_urdf")))
-        .unwrap_or_else(|| std::env::temp_dir().join("cadsim").join("ur5e_urdf"))
+        .unwrap_or_else(|| std::env::temp_dir().join("plantwright").join("ur5e_urdf"))
 }
 
 /// 同梱の URDF を `dir` に書き出し、URDF のパスを返す。中身が同じファイルは書き直さない

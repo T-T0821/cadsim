@@ -32,7 +32,7 @@
 - ヨーは前の視点から近い向きへ回るようにつなぐ (359° → 1° で一周しない)。「ぐるっと一周」は 90° ずつ視点を置くので一周できる。
 - 書き出すときは `FramePlan::extend_to` で通り道の終わりまでコマを足し、`n` 枚目は動画の `n ÷ fps` 秒目の視点にカメラを合わせてから撮る。チャートの時刻はいつもどおりサイクルでくり返す。カメラの視点も再生位置と同じく `CameraSystems` (カメラの反映) より前に決める。撮り終えたら元の視点に戻す。
 - プレビューは実時間で通り道をたどり、チャートの再生位置も書き出しの再生速度に合わせて動かす。
-- `.cadsim` には `camera_path` として、秒数・注視点・ヨー / ピッチ (度)・距離を書く (`cadsim_io::formats::camera_path_record`)。元に戻す履歴には `TrackedDoc` で載せる。
+- `.plantwright` には `camera_path` として、秒数・注視点・ヨー / ピッチ (度)・距離を書く (`cadsim_io::formats::camera_path_record`)。元に戻す履歴には `TrackedDoc` で載せる。
 
 ## コードの置き場所
 
@@ -42,7 +42,7 @@
 | `video::encode` | アダプター | `VideoSink` を実装する `EncoderThread`。別スレッドで MP4 / GIF / PNG に書く |
 | `video::mp4` | アダプター | H.264 を MP4 に入れる最小限のライター |
 | `cadsim_core::camera_path` | ドメイン | カメラの通り道 `CameraPath`(視点の足し方・並べ直し・補間・「ぐるっと一周」などの作り方) |
-| `cadsim_io::formats::camera_path_record` | アダプター | `.cadsim` に書くカメラワークの形 |
+| `cadsim_io::formats::camera_path_record` | アダプター | `.plantwright` に書くカメラワークの形 |
 | `recording` | UI | 設定ウィンドウ、保存ダイアログ、Bevy のスクリーンショット、Esc での中止、書き出し中のカメラの視点 |
 | `view::camera_path` | UI | カメラワークの欄、3D ビューの通り道の線、プレビュー、元に戻す履歴への登録 |
 

@@ -1,4 +1,4 @@
-# cadsim の開発用 Makefile
+# plantwright の開発用 Makefile
 #
 #   make build            開発ビルド             make test     テスト
 #   make run ARGS="..."   起動 (引数はアプリへ)  make check    PR を出す前の確認 (fmt・clippy・test)
@@ -11,7 +11,7 @@
 CARGO      ?= cargo
 # ビルド結果の置き場所。開発コンテナの中では target/container (ホストのビルド結果と混ぜない)
 TARGET_DIR := $(or $(CARGO_TARGET_DIR),target)
-APP        := cad_proto
+APP        := plantwright
 # 配布物の名前に使う版。既定は Cargo.toml の version (例: make package-windows VERSION=0.1.5)
 VERSION    ?= $(shell sed -n 's/^version *= *"\(.*\)"/\1/p' Cargo.toml | head -n1)
 DIST       := dist
@@ -34,7 +34,7 @@ build: ## 開発ビルド
 release: ## リリースビルド (最適化あり)
 	$(CARGO) build --release --locked
 
-run: ## 開発ビルドで起動 (例: make run ARGS="samples/demo_line.cadsim")
+run: ## 開発ビルドで起動 (例: make run ARGS="samples/demo_line.plantwright")
 	$(CARGO) run --locked -- $(ARGS)
 
 test: ## テストを流す
@@ -59,9 +59,9 @@ windows: ## Windows 向けの exe をクロスビルドする (Linux で。MinGW
 
 package: package-linux package-windows ## Linux と Windows の配布物を dist/ に作る
 
-package-linux: release ## Linux 向けの配布物 (dist/cadsim-v<版>-linux-<CPU>.tar.gz)
+package-linux: release ## Linux 向けの配布物 (dist/plantwright-v<版>-linux-<CPU>.tar.gz)
 	@set -e; \
-	name=cadsim-v$(VERSION)-linux-$$(uname -m); \
+	name=plantwright-v$(VERSION)-linux-$$(uname -m); \
 	rm -rf "$(DIST)/$$name"; mkdir -p "$(DIST)/$$name"; \
 	cp "$(TARGET_DIR)/release/$(APP)" README.md "$(DIST)/$$name/"; \
 	tar -C $(DIST) -czf "$(DIST)/$$name.tar.gz" "$$name"; \
@@ -70,7 +70,7 @@ package-linux: release ## Linux 向けの配布物 (dist/cadsim-v<版>-linux-<CP
 
 package-windows: windows ## Windows 向けの配布物 (Release と同じ形の .exe と .zip)
 	@set -e; \
-	name=cadsim-v$(VERSION)-windows-x86_64; \
+	name=plantwright-v$(VERSION)-windows-x86_64; \
 	exe="$(TARGET_DIR)/$(WIN_TARGET)/release/$(APP).exe"; \
 	rm -rf "$(DIST)/$$name" "$(DIST)/$$name.zip"; mkdir -p "$(DIST)/$$name"; \
 	cp "$$exe" "$(DIST)/$$name.exe"; \
@@ -86,7 +86,7 @@ clean: ## ビルド結果と dist/ を消す
 # ---- 開発コンテナ経由 ----------------------------------------------------------------
 
 DOCKER            ?= docker
-IMAGE             ?= cadsim-dev
+IMAGE             ?= plantwright-dev
 # docker build / docker run に足す引数 (例: DOCKER_BUILD_ARGS="--build-arg BASE_IMAGE=...")
 DOCKER_BUILD_ARGS ?=
 DOCKER_RUN_ARGS   ?=
@@ -94,8 +94,8 @@ DOCKER_RUN_ARGS   ?=
 DOCKER_TTY        := $(shell [ -t 0 ] && echo -it)
 DOCKER_RUN = $(DOCKER) run --rm $(DOCKER_TTY) \
 	-v "$(CURDIR)":/workspace -w /workspace \
-	-v cadsim-cargo-registry:/usr/local/cargo/registry \
-	-v cadsim-cargo-git:/usr/local/cargo/git \
+	-v plantwright-cargo-registry:/usr/local/cargo/registry \
+	-v plantwright-cargo-git:/usr/local/cargo/git \
 	--user "$$(id -u):$$(id -g)" -e HOME=/tmp \
 	$(DOCKER_RUN_ARGS) $(IMAGE)
 

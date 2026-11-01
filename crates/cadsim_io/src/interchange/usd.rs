@@ -119,7 +119,7 @@ pub fn to_usda(scene: &Scene) -> String {
     let mut out = String::new();
     out.push_str("#usda 1.0\n(\n");
     out.push_str("    defaultPrim = \"World\"\n");
-    out.push_str("    doc = \"cadsim から書き出し\"\n");
+    out.push_str("    doc = \"plantwright から書き出し\"\n");
     out.push_str("    metersPerUnit = 1\n");
     out.push_str("    upAxis = \"Y\"\n");
     if let Some(end) = end_time {
@@ -642,7 +642,7 @@ impl Importer {
         let children = prim.children().map_err(err)?;
 
         // Xform の下に変換も子もない形状が1つだけなら、その Xform のノードに形状を持たせる
-        // (cadsim が書き出す Xform + Mesh "Geom" の形もこれで1ノードに戻る)
+        // (plantwright が書き出す Xform + Mesh "Geom" の形もこれで1ノードに戻る)
         let index = self.scene.nodes.len();
         self.scene.nodes.push(SceneNode {
             name,
@@ -691,7 +691,7 @@ impl Importer {
     }
 
     /// 親の Xform に形状として取り込むプリムか。変換も子も持たない形状で、
-    /// cadsim が書き出した "Geom" か、兄弟 (マテリアルなどを除く) がいないもの
+    /// plantwright が書き出した "Geom" か、兄弟 (マテリアルなどを除く) がいないもの
     fn is_plain_shape(&self, prim: &usd::Prim, siblings: &[usd::Prim]) -> bool {
         let type_of = |p: &usd::Prim| {
             p.type_name()
@@ -1116,7 +1116,7 @@ mod tests {
         // テストは並列に走るので、呼ぶたびに別のファイルにする
         static COUNT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
         let n = COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!("cadsim_usd_test_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("plantwright_usd_test_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join(format!("scene_{n}.{ext}"));
         let units = UnitOptions::default();
@@ -1227,7 +1227,7 @@ def Xform "Root"
     }
 }
 "#;
-        let dir = std::env::temp_dir().join(format!("cadsim_usd_zup_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("plantwright_usd_zup_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("zup.usda");
         std::fs::write(&path, text).unwrap();
@@ -1259,7 +1259,7 @@ def Xform "Root"
 
     #[test]
     fn reads_references_instances_and_matrix_ops() {
-        let dir = std::env::temp_dir().join(format!("cadsim_usd_ref_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("plantwright_usd_ref_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(
             dir.join("bolt.usda"),

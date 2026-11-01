@@ -137,7 +137,10 @@ pub fn melfa_program(
         out.push_str(&text);
         out.push_str("\r\n");
     };
-    line(&mut out, format!("' {} (cadsim から書き出し)", robot.name));
+    line(
+        &mut out,
+        format!("' {} (plantwright から書き出し)", robot.name),
+    );
     line(
         &mut out,
         "' 位置: 根元の関節の回転中心が原点、根元の回転軸が +Z の mm。姿勢 A, B, C は度".into(),

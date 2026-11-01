@@ -54,7 +54,7 @@
 例:
 
 ```json
-{"t":"hello","version":1,"name":"佐藤","passphrase":"line1","project":"demo_line.cadsim"}
+{"t":"hello","version":1,"name":"佐藤","passphrase":"line1","project":"demo_line.plantwright"}
 {"t":"view","id":2,"pose":{"eye":[3.1,2.0,5.4],"focus":[0.0,0.5,0.0],"ortho":false}}
 ```
 
