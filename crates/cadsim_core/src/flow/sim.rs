@@ -1325,6 +1325,11 @@ impl Simulation {
         self.next_sample = time + self.sample_interval;
     }
 
+    /// 今の時刻までに記録した推移 (時刻の早い順)
+    pub fn samples(&self) -> &[Sample] {
+        &self.samples
+    }
+
     /// 今の時刻までの集計
     pub fn report(&self) -> Report {
         let settings = self.model.settings;

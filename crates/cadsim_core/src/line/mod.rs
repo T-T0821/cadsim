@@ -6,17 +6,20 @@
 //!   「工程が加工を始めたらタイミングチャートを頭から再生する」を受け持つ。
 //! - [`signals`] PLC とやりとりする信号の一覧 (設備の状態 → PLC、PLC → 運転・投入許可)。
 //! - [`workpieces`] 3D に描くワークの位置 (設備の上に積む・設備から設備へ渡す)。
+//! - [`rewind`] 巻き戻し (ライン一式の状態の写しを取っておき、前の時刻に戻す)。
 //! - [`stepper`] 工程シミュレーション・AGV・ワーク搬送 (3D のコンベア) を少しずつ進めて出来事を受け渡す。
 //!
 //! 時計は1つ: ラインの時刻を進めるときは、工程シミュレーション・AGV・作業者・
 //! タイミングチャートを同じだけ進める。安全停止中と、PLC の「運転」が OFF の間は全部止める。
 
 pub mod coupler;
+pub mod rewind;
 pub mod signals;
 pub mod stepper;
 pub mod workpieces;
 
 pub use coupler::{CarrierEvent, LineCommand, LineCoupler, Transit};
+pub use rewind::{LineSnapshot, LineTimeline, line_timeline};
 pub use signals::{
     ConveyorCounts, Direction, LineInputs, Signal, SignalSources, Value, line_signals,
 };

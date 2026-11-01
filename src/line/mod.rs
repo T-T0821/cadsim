@@ -20,8 +20,8 @@ use bevy_egui::EguiPrimaryContextPass;
 
 use cadsim_core::flow::model::FlowModel;
 use cadsim_core::line::{
-    ConveyorCounts, LineCoupler, LineInputs, LineParts, Signal, SignalSources, line_signals,
-    may_run, step,
+    ConveyorCounts, LineCoupler, LineInputs, LineParts, LineSnapshot, LineTimeline, Signal,
+    SignalSources, line_signals, line_timeline, may_run, step,
 };
 
 use crate::conveyor::{ConveyorConfigRes, ConveyorSet, TimeMap, WorkState};
@@ -79,6 +79,10 @@ pub struct LineState {
     conveyor_link_pending: bool,
     /// 止めた理由など
     message: Option<String>,
+    /// 途中の状態の写し (時間スライダーで戻すため)
+    timeline: LineTimeline,
+    /// 時間スライダーで戻してほしい時刻 (次のフレームで戻す)
+    seek_to: Option<f64>,
 }
 
 impl Default for LineState {
@@ -97,6 +101,8 @@ impl Default for LineState {
             conveyor: None,
             conveyor_link_pending: false,
             message: None,
+            timeline: line_timeline(),
+            seek_to: None,
         }
     }
 }
@@ -129,6 +135,8 @@ impl LineState {
         self.playing = true;
         self.conveyor_link_pending = true;
         self.message = None;
+        self.timeline = line_timeline();
+        self.seek_to = None;
         Ok(())
     }
 
@@ -140,6 +148,70 @@ impl LineState {
         self.time = 0.0;
         self.coupler = LineCoupler::new();
         self.message = reason;
+        self.timeline = line_timeline();
+        self.seek_to = None;
+    }
+
+    /// 今のライン一式の状態を、前の写しから間隔がたっていれば取っておく
+    fn record(
+        &mut self,
+        run: &FlowRun,
+        floor: &FloorState,
+        clock: &FloorClock,
+        works: &WorkState,
+        playback: &Playback,
+    ) {
+        if self.timeline.next_due().is_some_and(|due| self.time < due) {
+            return;
+        }
+        let snapshot = LineSnapshot {
+            coupler: self.coupler.clone(),
+            flow: run.sim.clone(),
+            agv: floor.agv_sim().cloned(),
+            conveyor: works.line_sim().cloned(),
+            floor_time: clock.time,
+            chart_time: playback.time,
+        };
+        self.timeline.record(self.time, &snapshot);
+    }
+
+    /// 時刻 `time` かそれより前の、いちばん近い写しに戻す
+    fn restore(
+        &mut self,
+        time: f64,
+        run: &mut FlowRun,
+        floor: &mut FloorState,
+        clock: &mut FloorClock,
+        works: &mut WorkState,
+        playback: &mut Playback,
+    ) {
+        let Some((at, snap)) = self.timeline.at_or_before(time) else {
+            return;
+        };
+        self.time = *at;
+        self.coupler = snap.coupler.clone();
+        if let Some(flow) = &snap.flow {
+            run.report = Some(flow.report());
+            run.sim = Some(flow.clone());
+        }
+        if let (Some(agv), Some(now)) = (&snap.agv, floor.agv_sim_mut()) {
+            *now = agv.clone();
+        }
+        if let Some(conveyor) = &snap.conveyor {
+            works.restore_line_sim(conveyor);
+        }
+        clock.time = snap.floor_time;
+        playback.time = snap.chart_time;
+    }
+
+    /// 記録してある時刻の範囲 (時間スライダーの幅)
+    fn recorded_span(&self) -> Option<(f64, f64)> {
+        self.timeline.span()
+    }
+
+    /// 詰まりを探す推移の記録 (いちばん先まで回したときの工程シミュレーション)
+    fn furthest_flow(&self) -> Option<&cadsim_core::flow::sim::Simulation> {
+        self.timeline.last().and_then(|(_, s)| s.flow.as_ref())
     }
 }
 
@@ -232,6 +304,23 @@ fn advance_line(
         clock.playing = false;
     }
 
+    if let Some(t) = line.seek_to.take() {
+        line.playing = false;
+        let line = &mut *line;
+        line.restore(
+            t,
+            &mut run,
+            &mut floor,
+            &mut clock,
+            &mut conveyor.works,
+            &mut playback,
+        );
+        if line.chart_follows {
+            playback.playing = false;
+        }
+        return;
+    }
+
     let halted = !may_run(safety.is_stopped(), &line.inputs);
     if line.halted != halted {
         line.halted = halted;
@@ -245,6 +334,9 @@ fn advance_line(
 
     let dt = time.delta_secs_f64() * line.speed;
     let line = &mut *line;
+    // 巻き戻した時点から進め直すと PLC の信号などで別の進み方になりうるので、先の記録は捨てる
+    line.timeline.truncate_after(line.time);
+    line.record(&run, &floor, &clock, &conveyor.works, &playback);
     line.time += dt;
     clock.time += dt;
     let run = &mut *run;
@@ -293,6 +385,7 @@ fn advance_line(
     if let Some(sim) = &run.sim {
         run.report = Some(sim.report());
     }
+    line.record(run, &floor, &clock, &conveyor.works, &playback);
 
     // 工程の加工開始で頭から再生する設定があれば、それに任せる。なければラインと一緒に流す。
     // 工程からコンベアへ送り込んでいるときは、グリッパがチャートで動かないとワークが進まず

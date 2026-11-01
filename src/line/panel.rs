@@ -5,7 +5,8 @@ use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 use cadsim_core::workspace::Tool;
 
-use cadsim_core::flow::model::{AgvCall, ElementKind, KindTag, sample_line};
+use cadsim_core::flow::model::{AgvCall, ElementKind, FlowModel, KindTag, sample_line};
+use cadsim_core::flow::rewind;
 use cadsim_core::line::{Direction, Value, conveyor_problems, link_problems};
 
 use super::LineState;
@@ -46,7 +47,7 @@ pub fn line_window(
     window
         .open(&mut open)
         .show(ctx, |ui| {
-            action = controls(ui, line, &run, &safety);
+            action = controls(ui, line, &flow, &run, &safety);
             ui.separator();
             egui::ScrollArea::vertical().show(ui, |ui| {
                 summary(ui, line, &run, &floor);
@@ -110,6 +111,7 @@ enum Action {
 fn controls(
     ui: &mut egui::Ui,
     line: &mut LineState,
+    flow: &FlowModel,
     run: &FlowRun,
     safety: &SafetyState,
 ) -> Option<Action> {
@@ -144,6 +146,7 @@ fn controls(
             );
     });
     ui.label(format!("経過 {}", format_time(line.time)));
+    time_slider(ui, line, flow, run);
     if safety.is_stopped() {
         ui.colored_label(
             RED,
@@ -162,6 +165,48 @@ fn controls(
         ui.colored_label(RED, message);
     }
     action
+}
+
+/// 時間スライダー: 回してきた途中のどの時刻にも戻せる。戻した時点から再生すると、その先を回し直す。
+fn time_slider(ui: &mut egui::Ui, line: &mut LineState, flow: &FlowModel, run: &FlowRun) {
+    let Some((start, end)) = line.recorded_span().filter(|_| line.started) else {
+        return;
+    };
+    let model = run.ran_with.as_ref().unwrap_or(flow);
+    let samples = line.furthest_flow().map_or(&[][..], |s| s.samples());
+    let now = line.time;
+    let previous = rewind::previous_jam(model, samples, now);
+    let next = rewind::next_jam(model, samples, now).filter(|m| m.before <= end);
+    ui.horizontal(|ui| {
+        if ui
+            .add_enabled(previous.is_some(), egui::Button::new("⏮ 詰まりの直前へ"))
+            .on_hover_text("今より前で、どこかの工程が詰まり始めた直前に戻す")
+            .clicked()
+        {
+            line.seek_to = previous.as_ref().map(|m| m.before);
+        }
+        let mut t = now.clamp(start, end);
+        ui.spacing_mut().slider_width = (ui.available_width() - 40.0).max(120.0);
+        let response = ui
+            .add(
+                egui::Slider::new(&mut t, start..=end)
+                    .show_value(false)
+                    .clamping(egui::SliderClamping::Always),
+            )
+            .on_hover_text(
+                "ドラッグすると、その時刻のラインの状態に巻き戻す。戻したところから ▶ で再生すると、その先を回し直す",
+            );
+        if response.changed() && (t - now).abs() > 1e-9 {
+            line.seek_to = Some(t);
+        }
+        if ui
+            .add_enabled(next.is_some(), egui::Button::new("⏭"))
+            .on_hover_text("今より後で、どこかの工程が詰まり始めた直前へ進める")
+            .clicked()
+        {
+            line.seek_to = next.as_ref().map(|m| m.before);
+        }
+    });
 }
 
 fn summary(ui: &mut egui::Ui, line: &LineState, run: &FlowRun, floor: &FloorState) {

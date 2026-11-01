@@ -64,6 +64,7 @@ crates/
 │       │                 line_draft (言葉で組むラインの下書き・整え方・並べ方),
 │       │                 effects (状態のエフェクトのきっかけ・見た目・煙と火花の粒),
 │       │                 ui_check (画面の自動確認の手順書・進め方・部品の探し方・画像の比べ方)
+│       │                 timeline (シミュレーションの巻き戻し: 状態の写しの記録と進め直し)
 │       └── usecase/      document (開く・保存・取り込み・書き出し), edit, history, compose_line (言葉でラインを組む),
 │                         report (シミュレーション結果の CSV), llm (生成 AI のポート LlmClient), help (使い方を AI に聞く), script (部品スクリプトの実行と ScriptHost ポート),
 │                         ports (SceneReader / SceneWriter / ProjectStore などのトレイト)
@@ -123,6 +124,7 @@ crates/
 | チャート・ラダーの自動生成 | —(`TimingChart` がアプリ側なので `sequence_gen/{spec, ladder, log_events, usecase}.rs` はアプリ側。Bevy 非依存で、チャートと一緒に手順 2 で core へ) | `sequence_gen/json.rs`(下書き ⇔ JSON) | `sequence_gen/{mod, ui}.rs` |
 | ライン連携 | `line::{coupler, signals, stepper, workpieces}`、`flow::sim` と `conveyor::sim` の連携の口 | — | `line/`(毎フレームの進め方・3D のワーク・ウィンドウ) |
 | 画面での動作確認の自動化 | `ui_check::{scenario, runner, widget, compare, report}` | `cadsim_io::ui_check`(PNG・JSON・HTML) | `ui_check/mod.rs`(入力を流して撮る Bevy のシステム)、`ui_check/suite.rs`(手順書ごとにアプリを起動し直す。Bevy なし) |
+| 巻き戻しと時間スライダー | `timeline`(写しの記録・間引き・進め直し)、`flow::rewind`(工程シミュレーションの戻し方・詰まり始めの探し方)、`line::rewind`(ライン一式の写し) | — | `flow/{mod, ui}.rs`、`line/{mod, panel}.rs` |
 | 言葉でラインを組む | `line_draft::{model, check, layout, rules}`(ドメイン)、`usecase::compose_line`(生成 AI のポート `LineDraftAi`) | `cadsim_io::line_draft_json`(AI への指示と返答の JSON) | `line_compose/`(`apply.rs` は Bevy 非依存。`TimingChart` が core に移ったら一緒に移す) |
 | 状態のエフェクト (詰まり・故障の光と煙、溶接と干渉の火花) | `effects`(きっかけと見た目・出す場所の決め方)、`effects::particles`(煙と火花の粒) | — | `effects/mod.rs`(状態を集めて光・煙・火花に写す)、表示メニュー (`ui/menu.rs`) |
 | 最初の5分 (ようこそ画面・章立てのチュートリアル) | `gamify`(章・ミッションの手順・使う道具 `workspace::Tool`・とばす・判定) | `cadsim_io::preferences_file`(とばしたミッション・ようこそ画面を閉じたか) | `ui/tutorial.rs`(ようこそ画面・カードの手順・矢印)、`ui/playful.rs`、起動時のデモラインは `project/mod.rs` の `ProjectAction::OpenDemoLine` |

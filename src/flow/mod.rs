@@ -22,7 +22,7 @@ mod scenario_ui;
 mod staff_ui;
 mod ui;
 
-pub use cadsim_core::flow::{factory, model, palette, plan, scenario, sim};
+pub use cadsim_core::flow::{factory, model, palette, plan, rewind, scenario, sim};
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -58,6 +58,7 @@ impl TrackedDoc for FlowDoc {
     }
 }
 use model::FlowModel;
+use rewind::FlowTimeline;
 use sim::{Report, Simulation};
 
 pub struct FlowPlugin;
@@ -101,13 +102,12 @@ impl ColorMode {
     }
 }
 
-/// 1回に処理する事象の上限。早送りでも画面が固まらないようにする。
-const EVENTS_PER_FRAME: usize = 200_000;
-
 /// 実行中・実行後のシミュレーションと、ウィンドウの表示状態
 #[derive(Resource)]
 pub struct FlowRun {
     pub sim: Option<Simulation>,
+    /// 途中の状態の写し (時間スライダーで戻すため)。`sim` と一緒に作り直す。
+    pub timeline: Option<FlowTimeline>,
     pub report: Option<Report>,
     /// 実行したときのモデル。今のモデルと違えば結果は古い。
     pub ran_with: Option<FlowModel>,
@@ -123,6 +123,7 @@ impl Default for FlowRun {
     fn default() -> Self {
         Self {
             sim: None,
+            timeline: None,
             report: None,
             ran_with: None,
             playing: false,
@@ -139,6 +140,7 @@ impl FlowRun {
         self.stop();
         let sim = Simulation::new(model)?;
         self.report = Some(sim.report());
+        self.timeline = Some(rewind::timeline_for(model.settings));
         self.sim = Some(sim);
         self.ran_with = Some(model.clone());
         Ok(())
@@ -147,9 +149,46 @@ impl FlowRun {
     /// 再生を止めて結果を消す
     pub fn stop(&mut self) {
         self.sim = None;
+        self.timeline = None;
         self.report = None;
         self.ran_with = None;
         self.playing = false;
+    }
+
+    /// 時刻 `until` まで進め、途中の状態を写しに取る
+    pub fn advance_to(&mut self, until: f64) {
+        let Some(sim) = self.sim.as_mut() else {
+            return;
+        };
+        match self.timeline.as_mut() {
+            Some(timeline) => timeline.advance_recording(sim, until),
+            None => {
+                sim.advance(until, usize::MAX);
+            }
+        }
+        self.report = Some(sim.report());
+    }
+
+    /// 時間スライダーで時刻 `time` の状態にする (一時停止する)
+    pub fn seek(&mut self, time: f64) {
+        self.playing = false;
+        let (Some(sim), Some(timeline)) = (self.sim.as_mut(), self.timeline.as_mut()) else {
+            return;
+        };
+        timeline.seek(sim, time);
+        self.report = Some(sim.report());
+    }
+
+    /// 詰まりを探す推移の記録 (いちばん先まで回した記録。巻き戻していても先の分が入っている)
+    pub fn furthest_samples(&self) -> &[sim::Sample] {
+        let sim = self.sim.as_ref();
+        let latest = self
+            .timeline
+            .as_ref()
+            .and_then(|t| t.last())
+            .map(|(_, s)| s)
+            .filter(|s| sim.is_none_or(|now| s.now() > now.now()));
+        latest.or(sim).map_or(&[], |s| s.samples())
     }
 
     /// 結果が今のモデルと合っていない
@@ -173,15 +212,13 @@ fn advance_run(time: Res<Time>, mut run: ResMut<FlowRun>) {
     if !run.playing {
         return;
     }
-    let run = &mut *run;
-    let Some(sim) = run.sim.as_mut() else {
+    let Some(sim) = run.sim.as_ref() else {
         run.playing = false;
         return;
     };
     let target = sim.now() + time.delta_secs_f64() * run.speed;
-    sim.advance(target, EVENTS_PER_FRAME);
-    run.report = Some(sim.report());
-    if sim.finished() {
+    run.advance_to(target);
+    if run.sim.as_ref().is_some_and(|s| s.finished()) {
         run.playing = false;
     }
 }
