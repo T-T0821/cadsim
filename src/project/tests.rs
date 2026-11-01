@@ -12,6 +12,7 @@ use crate::library::{self, PartKind};
 use crate::math::euler_deg_to_quat;
 use crate::model::{NodeKind, StepSource};
 use crate::step_import::import_step;
+use cadsim_core::camera_path::{CameraPath, CameraPose};
 
 /// 同梱のデモライン (tools/make_demo_line.py で生成) が今の形式で読めること
 #[test]
@@ -75,6 +76,7 @@ struct Docs {
     chart: TimingChart,
     animations: Animations,
     conveyors: ConveyorConfig,
+    camera_path: CameraPath,
 }
 
 impl Docs {
@@ -88,6 +90,7 @@ impl Docs {
             animations: &self.animations,
             plc: None,
             conveyors: &self.conveyors,
+            camera_path: &self.camera_path,
         }
     }
 }
@@ -491,4 +494,32 @@ fn real_robot_sample_opens_and_reaches_every_point() {
         "TCP {tcp} が教示点 {target} からずれている"
     );
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// カメラワークを保存して開き直すと、同じ通り道に戻る。変えると未保存の変更になる
+#[test]
+fn camera_path_round_trips_and_counts_as_a_change() {
+    let model = sample_model();
+    let mut docs = Docs::default();
+    let before = ProjectFile::capture(&docs.of(&model), None);
+    assert!(before.camera_path.is_none(), "通り道がなければ書かない");
+
+    docs.camera_path = CameraPath::turntable(
+        CameraPose {
+            focus: glam::Vec3::new(10.0, 0.0, 5.0),
+            yaw: 0.5,
+            pitch: 0.3,
+            distance: 900.0,
+        },
+        6.0,
+    );
+    let file = ProjectFile::capture(&docs.of(&model), None);
+    assert_ne!(file, before, "カメラワークの変更は未保存の変更になる");
+
+    let parsed = ProjectFile::from_json(&file.to_json()).unwrap();
+    let loaded = LoadedProject::fetch_shapes(parsed, Path::new("."));
+    let mut reopened = Model::default();
+    let opened = loaded.open(&mut reopened);
+    assert_eq!(opened.camera_path.len(), docs.camera_path.len());
+    assert_eq!(opened.camera_path.duration(), 6.0);
 }

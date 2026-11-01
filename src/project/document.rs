@@ -29,6 +29,7 @@ use crate::model::{BoxPart, Model, NodeId, NodeKind, StepSource};
 use crate::physics::PartPhysicsRecord;
 use crate::site::model::Site;
 use crate::step_import::{ImportNode, ImportedShape};
+use cadsim_core::camera_path::CameraPath;
 use cadsim_core::conveyor::ConveyorConfig;
 use cadsim_core::motion::TimingChart;
 
@@ -171,7 +172,10 @@ impl LoadedProject {
                 "部品が見つからない寸法・注記が {skipped} 件あったため読み飛ばしました"
             ));
         }
+        let camera_path =
+            crate::formats::camera_path_record::from_record(file.camera_path.as_ref());
         OpenedDocs {
+            camera_path,
             annotations,
             flow,
             chart,
@@ -354,6 +358,7 @@ pub struct OpenedDocs {
     pub chart: TimingChart,
     pub animations: Animations,
     pub conveyors: ConveyorConfig,
+    pub camera_path: CameraPath,
     pub floor: FloorLayout,
     /// 部品が見つからずに読み飛ばしたものなどの注意
     pub warnings: Vec<String>,

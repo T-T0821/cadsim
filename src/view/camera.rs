@@ -19,6 +19,7 @@ use crate::math::Aabb;
 use crate::model::{Model, Selection};
 use crate::view::gizmo::gizmo_not_focused;
 use crate::view::recording::Recorder;
+use cadsim_core::camera_path::CameraPose;
 
 /// 透視投影の縦の画角 (Bevy の既定値と同じ 45°)
 const FOV_Y: f32 = FRAC_PI_4;
@@ -46,10 +47,15 @@ impl Plugin for CameraPlugin {
                     animate_and_apply_camera,
                     fit_camera_viewport,
                 )
-                    .chain(),
+                    .chain()
+                    .in_set(CameraSystems),
             );
     }
 }
+
+/// カメラの入力と Transform への反映。動画の書き出しやプレビューはこれより前に視点を決める
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct CameraSystems;
 
 /// 6方向の標準ビューと等角ビュー
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -191,6 +197,38 @@ impl OrbitCamera {
     /// 手で操作したらアニメーションは止める
     fn cancel_animation(&mut self) {
         self.target = None;
+    }
+
+    /// 今の視点 (カメラワークの視点として覚える。アニメーション中なら行き先)
+    pub fn camera_pose(&self) -> CameraPose {
+        let p = self.pose();
+        CameraPose {
+            focus: p.focus,
+            yaw: p.yaw,
+            pitch: p.pitch,
+            distance: p.distance,
+        }
+    }
+
+    /// すぐにこの視点にする (動画の書き出しとプレビューで毎フレーム使う)
+    pub fn set_camera_pose(&mut self, pose: CameraPose) {
+        self.target = None;
+        self.focus = pose.focus;
+        self.yaw = pose.yaw;
+        self.pitch = pose.pitch;
+        self.distance = pose.distance;
+    }
+
+    /// 少しアニメーションしてこの視点に移る
+    pub fn fly_to(&mut self, pose: CameraPose) {
+        let turn = (pose.yaw - self.yaw + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU)
+            - std::f32::consts::PI;
+        self.target = Some(Pose {
+            focus: pose.focus,
+            yaw: self.yaw + turn,
+            pitch: pose.pitch,
+            distance: pose.distance,
+        });
     }
 }
 
