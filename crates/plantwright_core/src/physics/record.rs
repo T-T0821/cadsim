@@ -1,14 +1,12 @@
-//! 物理の設定のファイル上の形 (.plantwright の JSON)。アダプター層。
+//! 物理の設定のファイル上の形 (.plantwright の JSON)。
 //!
 //! 内部の型 (`settings.rs` / `cable.rs`) と分けておき、内部を変えてもファイルの互換を保つ。
 //! 部品は「最上位から順にたどる子の番号」(寸法・注記と同じ) で書く。
 
 use serde::{Deserialize, Serialize};
 
-use plantwright_core::physics::cable::{Cable, CableAnchor, CableKind};
-use plantwright_core::physics::settings::{
-    BeltDrive, BodyMode, ColliderShape, LocalAxis, PartPhysics,
-};
+use crate::physics::cable::{Cable, CableAnchor, CableKind};
+use crate::physics::settings::{BeltDrive, BodyMode, ColliderShape, LocalAxis, PartPhysics};
 
 /// 部品1つ分の物理の設定。既定値の項目は省く。
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]

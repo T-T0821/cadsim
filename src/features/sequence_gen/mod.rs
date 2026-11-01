@@ -4,16 +4,8 @@
 //! - タイミングチャートから、三菱 PLC 向けのステップラダー (命令リスト・GX Works 用 CSV) と I/O 表を作る (AI は使わない)
 //! - チャート・ラダー・PLC のログを生成 AI に読ませ、動作を文章で説明させる
 //!
-//! 層の分け方 (docs/architecture.md):
-//! - `spec`: 動作の下書きの型と、チャートとの変換 (ドメイン、Bevy なし)
-//! - `ladder`: チャート → ラダーと I/O 表 (ドメイン、Bevy なし)
-//! - `log_events`: PLC のログ → 信号の変化の一覧 (ドメイン、Bevy なし)
-//! - `usecase`: 生成 AI への問い合わせの組み立てと返事の読み取り (ユースケース、Bevy なし)
-//! - `json`: 下書きと JSON の変換 (アダプター)
-//! - このファイルと `ui`: Bevy のリソースと egui のウィンドウ
-//!
-//! チャートの型 (`TimingChart`) がまだアプリ側にあるので、ここもアプリ側に置いている。
-//! チャートが `plantwright_core` に移ったら、`spec`・`ladder`・`log_events`・`usecase` も一緒に移す。
+//! 下書きの型・ラダー・ログの読み取り・AI とのやり取りは `plantwright_core::sequence_gen`。
+//! ここは Bevy のリソースと、egui のウィンドウ (`panel`) だけ。
 
 mod panel;
 

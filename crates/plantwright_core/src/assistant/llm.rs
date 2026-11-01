@@ -1,7 +1,7 @@
 //! 生成 AI (大規模言語モデル) を呼ぶためのポート
 //!
 //! ユースケースは [`LlmClient`] トレイトだけを知っていて、Claude API などの具体的な呼び出し方は
-//! アダプター層 (`crate::assistant::claude`) が実装する。テストでは [`ScriptedLlm`] で決まった返事を返す。
+//! `crate::assistant::claude` が実装する。テストでは [`ScriptedLlm`] で決まった返事を返す。
 //!
 //! 返事を JSON で受け取りたいときは [`LlmRequest::json_schema`] に JSON Schema を入れる。
 //! アダプターが構造化出力に対応していれば形が保証され、対応していなくても
@@ -134,7 +134,7 @@ impl fmt::Display for LlmError {
 
 impl std::error::Error for LlmError {}
 
-/// 生成 AI への問い合わせ口 (ポート)。時間がかかるので、UI からは別スレッドで呼ぶ。
+/// 生成 AI への問い合わせ口 (トレイト)。時間がかかるので、UI からは別スレッドで呼ぶ。
 pub trait LlmClient: Send + Sync {
     /// 問い合わせて、返事の本文 (文章、または JSON の文字列) を返す
     fn complete(&self, request: &LlmRequest) -> Result<String, LlmError>;

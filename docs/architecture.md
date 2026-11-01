@@ -25,7 +25,8 @@ src/                       アプリ (Bevy・egui)。assets/ の場所を変え�
 crates/
 └── plantwright_core/      Bevy・egui を使わないもの全部
     └── src/
-        ├── document/      Model・Node・形状・BVH・表示用メッシュ・元に戻す履歴
+        ├── model.rs  shape.rs  math.rs  bvh.rs  part_mesh.rs   設計データ・形状・表示用メッシュ (機能をまたぐもの)
+        ├── history/       元に戻す履歴
         ├── formats/       機能をまたぐ 3D の形式 (STEP・glTF・OBJ・STL・USD・Web ビューア)
         └── motion/ plc/ flow/ conveyor/ line/ ...   アプリの features/ と同じ名前
 ```
@@ -57,12 +58,13 @@ crates/
 - `ui.rs`・`*_ui.rs`・`usecase.rs`・`domain/`・`adapter/` という名前は使わない。
 - 1ファイルはおよそ 800 行まで。超えたら画面の区切りや計算の段階で分ける。
 
-## 移行の状況
+## まだ決まりどおりでないところ
 
-前の構成 (Clean Architecture の4層、`cadsim_core` / `cadsim_io` の2つの crate) から、動作を変えずに次の順で移します。
+前の構成 (Clean Architecture の4層、`cadsim_core` / `cadsim_io` の2つの crate) からの移行で、次が残っています。手を入れるついでに直してください。
 
-1. ✅ この文書と CLAUDE.md を新しい決まりに書き換える。
-2. `cadsim_io` を `cadsim_core` に統合し、`plantwright_core` に改名する。ファイル形式は機能の隣に置く。
-3. アプリ側の再公開だけのモジュールと、`Model`・`TimingChart` の包み型をなくす。
-4. アプリ側を `document/`・`viewport/`・`ui/`・`features/`・`dev/` に移し、ファイル名をそろえる。
-5. 大きすぎるファイルを分け、この文書の地図を実際の形に合わせる。
+- **Bevy を使わないのにアプリ側にあるもの。** ほかのアプリ側の型を使っているため、そのままでは core に移せない。
+  - `src/document/project/{file, document}.rs` … プロジェクトファイルの形と開く・保存の手順。寸法 (`features::annotation`)・取り込んだアニメーション・標準部品の配置の型がアプリ側にある
+  - `src/features/result_export/report/` … 干渉チェックに渡す形 (`features::simulation` の `Pose`・`TriMesh`) を使う
+  - `src/viewport/defeature.rs` … 表示用メッシュの簡略化 (`bevy::math` を使っている)
+- **800 行を超えるファイル。** `plantwright_core` の `flow/sim.rs`・`formats/usd.rs`・`gamify.rs`・`model.rs`・`motion/chart.rs`・`conveyor/sim.rs`、アプリの `features/motion/panel/mod.rs`・`features/annotation/mod.rs`・`features/flow/panel/mod.rs`・`viewport/parts.rs` など。
+- **自分の Resource を `main.rs` で登録しているもの。** `Model`・`Selection`・`GizmoTool`。プラグインの順番に関わるので、動かすときは画面を確かめる。

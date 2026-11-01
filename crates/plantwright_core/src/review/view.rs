@@ -37,7 +37,7 @@ impl ViewPose {
     }
 }
 
-/// 注視点を回るカメラ (UI 層の `OrbitCamera`) の角度に直す。戻り値は (yaw, pitch, 距離)。
+/// 注視点を回るカメラ (アプリの `OrbitCamera`) の角度に直す。戻り値は (yaw, pitch, 距離)。
 ///
 /// カメラは `focus + Ry(yaw)·Rx(-pitch)·(0, 0, 距離)` にいる。
 pub fn orbit_angles(pose: &ViewPose) -> (f32, f32, f32) {

@@ -1,4 +1,4 @@
-//! コマンドライン引数 (UI 層の入力)
+//! コマンドライン引数 (入力)
 //!
 //! `cargo run -- 部品.step --stress 5000` のような引数を読む。何を開くかは input::file_dialog、
 //! ベンチマークは bench、物理演算のサンプルは physics、画面の自動確認は ui_check が使う。

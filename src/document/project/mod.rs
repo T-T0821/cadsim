@@ -14,7 +14,7 @@
 //! - Ctrl+N / Ctrl+O / Ctrl+S / Ctrl+Shift+S
 //! - `cargo run -- line.plantwright`、またはウィンドウへのドラッグ&ドロップでも開ける
 //!
-//! ここ (UI 層) は、頼まれた操作を受けて `document` の手順を呼び、結果を Resource と画面に写すだけにする。
+//! ここ は、頼まれた操作を受けて `document` の手順を呼び、結果を Resource と画面に写すだけにする。
 //! ファイルの形は `file`、開く・保存の手順は `document` にある。
 
 mod document;

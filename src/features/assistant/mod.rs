@@ -1,13 +1,11 @@
 //! 生成 AI (Claude) を使う機能の共通部分
 //!
-//! - `settings_file`: API キーとモデルの保存 (Bevy なし)
-//! - `job`: 問い合わせを別スレッドで走らせて結果を待つ (Bevy なし)
-//! - このファイルと `ui`: 設定を持つ Resource と「AI の設定」ウィンドウ
+//! - このファイルと `panel`: 設定を持つ Resource と「AI の設定」ウィンドウ
 //! - `help`: 「AI に聞く」ウィンドウ (使い方を会話で質問する。中身は `plantwright_core::assistant::help`)
 //!
-//! 問い合わせ口のポート (`LlmClient`) は `plantwright_core::assistant::llm`、
-//! Claude API での実装は `plantwright_core::assistant::claude`。各機能は [`AiAssistant::client`] で呼び出し口を受け取り、
-//! [`plantwright_core::assistant::job::LlmJob`] で別スレッドに投げる。
+//! 問い合わせ口のトレイト (`LlmClient`)・Claude API での実装・設定ファイル・別スレッドでの問い合わせ (`LlmJob`) は
+//! `plantwright_core::assistant`。各機能は [`AiAssistant::client`] で呼び出し口を受け取り、
+//! `plantwright_core::assistant::job::LlmJob` で別スレッドに投げる。
 
 pub mod help;
 mod panel;

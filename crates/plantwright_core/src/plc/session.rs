@@ -1,6 +1,6 @@
 //! PLC 連携のユースケース: 1スキャン分の「設備 → 入力 → PLC → 出力 → 設備を動かす」
 //!
-//! 実機との通信は [`PlcLink`] (ポート) として受け取り、具体的な方式 (Modbus TCP など) は知らない。
+//! 実機との通信は [`PlcLink`] (トレイト) として受け取り、具体的な方式 (Modbus TCP など) は知らない。
 
 use std::collections::HashMap;
 
@@ -29,7 +29,7 @@ pub enum PlcMode {
     Script,
 }
 
-/// 外部の PLC との通信方式 (ポート)。
+/// 外部の PLC との通信方式 (トレイト)。
 /// Modbus TCP のほか、OPC UA などを足すときもこれを実装すれば残りはそのまま使える。
 pub trait PlcLink: Send + Sync {
     /// 入力 (設備 → PLC) を渡し、届いている出力 (PLC → 設備) を `io` に書く。

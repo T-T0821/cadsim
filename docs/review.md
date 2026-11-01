@@ -25,9 +25,9 @@
 
 | 層 | 場所 | 中身 |
 | --- | --- | --- |
-| ドメイン | `cadsim_core::review` | メッセージの型 (`Message`)、配り役 (`Hub`)、自分の画面から見た相手の様子 (`ReviewSession`)、送る回数の抑え方 (`SendThrottle`)、配置の変更の見つけ方 (`PlacementTracker`)、視点と注視点カメラの角度の変換 (`orbit_angles`) |
-| アダプター | `cadsim_io::review` | 1 行の JSON への変換 (`wire`)、TCP の待ち受け・接続とスレッド (`net` の `ReviewLink`) |
-| UI | `src/review/` | `mod.rs` (入力を集めて送り、届いたものをカメラとモデルに写す Bevy のシステム)、`view.rs` (アバター・指さし・印・枠・名札)、`panel.rs` (パネル) |
+| ドメイン | `plantwright_core::review` | メッセージの型 (`Message`)、配り役 (`Hub`)、自分の画面から見た相手の様子 (`ReviewSession`)、送る回数の抑え方 (`SendThrottle`)、配置の変更の見つけ方 (`PlacementTracker`)、視点と注視点カメラの角度の変換 (`orbit_angles`) |
+| アダプター | `plantwright_core::review` | 1 行の JSON への変換 (`wire`)、TCP の待ち受け・接続とスレッド (`net` の `ReviewLink`) |
+| UI | `src/features/review/` | `mod.rs` (入力を集めて送り、届いたものをカメラとモデルに写す Bevy のシステム)、`view.rs` (アバター・指さし・印・枠・名札)、`panel.rs` (パネル) |
 
 `Hub` と `ReviewSession` は通信から切り離してあり、「誰から何が届いたか」を渡すと「誰に何を送るか」「画面で何をするか」を返すだけなので、Bevy もソケットもなしに単体テストできる。
 

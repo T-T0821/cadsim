@@ -1,21 +1,20 @@
 //! 物理演算: 重力・接触・摩擦でワークを動かす。ベルトコンベア、ケーブル・ホースの紐モデル。
 //!
-//! | ファイル | 層 | 役割 |
-//! | --- | --- | --- |
-//! | `plantwright_core::physics::settings` | ドメイン | 部品ごとの物理の設定 (動かない / 機構で動く / 物理で動く / 当たらない、当たり判定の形、ベルト) |
-//! | `plantwright_core::physics::cable` | ドメイン | ケーブル・ホースの紐モデルと、曲げ半径・長さ不足・接触の判定 |
-//! | `plantwright_core::physics::world` | ユースケース | 部品 → 剛体の変換、一定刻みでの進行、物理エンジンのポート `PhysicsEngine` |
-//! | `engine.rs` | アダプター | ポートの bevy_rapier3d (Bevy の物理プラグイン) 実装。剛体はエンティティ、ベルトは接触フック |
-//! | `records.rs` | アダプター | .plantwright に書く形。Bevy に依存しない |
-//! | `mod.rs` / `panel.rs` / `sample.rs` | UI | Bevy のシステム、「物理演算」パネル、サンプルライン |
+//! | ファイル | 役割 |
+//! | --- | --- |
+//! | `plantwright_core::physics::settings` | 部品ごとの物理の設定 (動かない / 機構で動く / 物理で動く / 当たらない、当たり判定の形、ベルト) |
+//! | `plantwright_core::physics::cable` | ケーブル・ホースの紐モデルと、曲げ半径・長さ不足・接触の判定 |
+//! | `plantwright_core::physics::world` | 部品 → 剛体の変換、一定刻みでの進行、物理エンジンのトレイト `PhysicsEngine` |
+//! | `plantwright_core::physics::record` | プロジェクトファイルに書く形 |
+//! | `engine.rs` | `PhysicsEngine` の bevy_rapier3d (Bevy の物理プラグイン) 実装。剛体はエンティティ、ベルトは接触フック |
+//! | `mod.rs` / `panel.rs` / `sample.rs` | Bevy のシステム、「物理演算」パネル、サンプルライン |
 //!
-//! このファイルのシステムは「部品と動きを集める → ユースケースを呼ぶ → 姿勢を [`PhysicsPose`] に写す」だけ。
+//! このファイルのシステムは「部品と動きを集める → core を呼ぶ → 姿勢を [`PhysicsPose`] に写す」だけ。
 //! 物理を進める [`step_physics`] は、プラグインのスケジュールを走らせるため `World` を丸ごと借りる。
-//! 3D 表示 (viewport.rs) は [`displayed_matrix`] で、物理で動いた部品をその位置に描く。
+//! 3D 表示 (`viewport::parts`) は [`displayed_matrix`] で、物理で動いた部品をその位置に描く。
 
 mod engine;
 mod panel;
-mod records;
 mod sample;
 
 use std::collections::HashMap;
@@ -28,8 +27,8 @@ use bevy::prelude::*;
 use bevy_egui::EguiPrimaryContextPass;
 
 use plantwright_core::physics::cable::{Cable, CableAnchor, CableKind, CableReport};
+use plantwright_core::physics::record::{CableRecord, PartPhysicsRecord};
 use plantwright_core::physics::settings::BodyMode;
-pub use records::{CableRecord, PartPhysicsRecord};
 
 use engine::{RapierBackendPlugin, RapierEngine};
 use plantwright_core::physics::cable::{CableState, Obstacle};

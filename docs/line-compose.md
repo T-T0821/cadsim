@@ -15,9 +15,9 @@
 
 | 層 | 場所 | 中身 |
 | --- | --- | --- |
-| ドメイン | `cadsim_core::line_draft::{model, check, layout, rules}` | 下書きの型、整え方、床への並べ方、キーワードからの下書き |
-| ユースケース | `cadsim_core::usecase::compose_line` | 生成 AI のポート `LineDraftAi` と、AI → キーワードの順で試す `compose_line` |
-| UI | `src/line_compose/` | ウィンドウ (`mod.rs`)、モデルとチャートへの反映 (`apply.rs`、Bevy 非依存)、AI の口の用意 (`ai.rs`) |
+| ドメイン | `plantwright_core::line_draft::{model, check, layout, rules}` | 下書きの型、整え方、床への並べ方、キーワードからの下書き |
+| ユースケース | `plantwright_core::line_draft::compose` | 生成 AI のポート `LineDraftAi` と、AI → キーワードの順で試す `compose_line` |
+| UI | `src/features/line_compose/` | ウィンドウ (`mod.rs`)、モデルとチャートへの反映 (`apply.rs`、Bevy 非依存)、AI の口の用意 (`ai.rs`) |
 
 ## 下書きの型
 
@@ -68,7 +68,7 @@
 
 ## 生成 AI
 
-- ポート `LineDraftAi` は、文から `LineDraft` を返すだけ。実装は `cadsim_io::line_draft_json::LlmLineDrafter` で、共通の `LlmClient` ([ai.md](ai.md)) に問い合わせる。
+- ポート `LineDraftAi` は、文から `LineDraft` を返すだけ。実装は `plantwright_core::line_draft::json::LlmLineDrafter` で、共通の `LlmClient` ([ai.md](ai.md)) に問い合わせる。
 - 指示は `SYSTEM_PROMPT`、返事の形は構造化出力の `SCHEMA` で決める。構造化出力ではすべての項目を必須にするので、「なし」は空文字 (target・wait_sensor) と 0 (length) で表し、`parse` で None に戻す。位置は AI に決めさせず `layout` で並べる。
 - 画面は「AI の設定」の API キーがあるときだけ AI を使う。問い合わせは `LlmJob` で別スレッドに投げる。AI が失敗したとき (キーの誤り・通信・返事の形) は、理由を警告に出してキーワードから作り直す。
 - テストは `ScriptedLlm` で決まった返事を返して書く (送った指示と Schema、返事の読み取り)。

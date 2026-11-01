@@ -7,14 +7,14 @@
 
 | 層 | 場所 | 中身 |
 | --- | --- | --- |
-| ドメイン | `cadsim_core::flow::sim` | ライン連携の口: `Simulation::link`・`take_events`・`pick_up`・`deliver`・`set_source_enabled` |
-| ドメイン | `cadsim_core::line::coupler` | 工程の出来事と AGV・コンベアの出来事の受け渡し (`LineCoupler`) |
-| ドメイン | `cadsim_core::line::stepper` | 工程・AGV・ワーク搬送を同じ時間だけ少しずつ進める (`step`)、つなぎ方の設定の確かめ (`link_problems`・`conveyor_problems`) |
-| ドメイン | `cadsim_core::conveyor::sim` | ライン連携の口: `ConveyorSim::drive_sources`・`feed_external`・`take_events` |
-| ドメイン | `cadsim_core::line::signals` | PLC とやりとりする信号表と、PLC → 設備の値 (`LineInputs`) |
-| ドメイン | `cadsim_core::line::workpieces` | 3D に描くワークの位置 (積む・渡る・置き場所の決め方) |
-| UI | `src/line/mod.rs`・`view.rs`・`panel.rs` | 毎フレームの進め方、3D のワーク、「ライン連携」ウィンドウ |
-| UI | `src/conveyor/mod.rs` | `WorkState::start_line`・`with_line` (ワーク搬送をラインの時計で進めるための入力をそろえる)、`TimeMap` |
+| ドメイン | `plantwright_core::flow::sim` | ライン連携の口: `Simulation::link`・`take_events`・`pick_up`・`deliver`・`set_source_enabled` |
+| ドメイン | `plantwright_core::line::coupler` | 工程の出来事と AGV・コンベアの出来事の受け渡し (`LineCoupler`) |
+| ドメイン | `plantwright_core::line::stepper` | 工程・AGV・ワーク搬送を同じ時間だけ少しずつ進める (`step`)、つなぎ方の設定の確かめ (`link_problems`・`conveyor_problems`) |
+| ドメイン | `plantwright_core::conveyor::sim` | ライン連携の口: `ConveyorSim::drive_sources`・`feed_external`・`take_events` |
+| ドメイン | `plantwright_core::line::signals` | PLC とやりとりする信号表と、PLC → 設備の値 (`LineInputs`) |
+| ドメイン | `plantwright_core::line::workpieces` | 3D に描くワークの位置 (積む・渡る・置き場所の決め方) |
+| UI | `src/features/line/mod.rs`・`view.rs`・`panel.rs` | 毎フレームの進め方、3D のワーク、「ライン連携」ウィンドウ |
+| UI | `src/features/conveyor/mod.rs` | `WorkState::start_line`・`with_line` (ワーク搬送をラインの時計で進めるための入力をそろえる)、`TimeMap` |
 
 ## 1つの時計
 
@@ -84,13 +84,13 @@
 | PLC → 設備のビット | 300 | `ライン.運転`、生成ごとの `投入許可` |
 
 コンベアの数 (`ConveyorCounts`) は、ワーク搬送 (docs/conveyor.md) の投入口があるときだけワードの最後に足します。
-ワーク搬送を使うかどうかで工程・AGV の信号の番号がずれないようにするためです。値は `src/line/mod.rs` の `read_conveyor` が
+ワーク搬送を使うかどうかで工程・AGV の信号の番号がずれないようにするためです。値は `src/features/line/mod.rs` の `read_conveyor` が
 `ConveyorSet::Works` の後に `WorkState` から読んで `LineState` に覚え、次のフレームの信号表で使います (1 フレーム遅れ)。
 コンベアのワークはタイミングチャートの再生に合わせて流れ、チャートはライン連携の時計に付いて進むので、ラインと同じ時間で数えられます。
 
 PLC → 設備の値は `LineInputs` に持ち、名前で書けます (`LineInputs::set`)。名前が表にない信号は ON とみなすので、PLC をつながなくてもラインは動きます。
 
-PLC 連携 (docs/plc.md) とは `src/line/mod.rs` の `exchange_plc` でつなぐ。毎フレーム信号表を PLC 連携の I/O に書き (`Plc::exchange_line`)、外部 PLC かログ再生が PLC → 設備の信号を書いているときは、その値を `LineInputs` に写す。そのあいだは画面での切り替えはできない。
+PLC 連携 (docs/plc.md) とは `src/features/line/mod.rs` の `exchange_plc` でつなぐ。毎フレーム信号表を PLC 連携の I/O に書き (`Plc::exchange_line`)、外部 PLC かログ再生が PLC → 設備の信号を書いているときは、その値を `LineInputs` に写す。そのあいだは画面での切り替えはできない。
 投入許可が OFF の間は、生成は次のワークを出しません。出す時刻を過ぎてから ON に戻ると、すぐに 1 個出します。
 
 ## 3D のワーク

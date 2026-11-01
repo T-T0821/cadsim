@@ -1,4 +1,4 @@
-//! 複数人で同じ工場をレビューする (UI 層)
+//! 複数人で同じ工場をレビューする
 //!
 //! 1人がホストになって待ち受け、ほかの人が参加する。互いの視点 (アバター)・マウスで指している点・
 //! 「ここを見て」の印・選んだ部品・チャットを見せ合う。配置の変更を共有することもできる。
@@ -73,7 +73,7 @@ impl Default for ReviewForm {
     }
 }
 
-/// 複数人レビューの状態 (UI 層の包み)
+/// 複数人レビューの状態 (Resource の包み)
 #[derive(Resource, Default)]
 pub struct Review {
     pub session: ReviewSession,

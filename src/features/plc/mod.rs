@@ -1,12 +1,10 @@
 //! PLC 連携 (仮想立ち上げ)
 //!
 //! タイミングチャートの時刻表の代わりに、PLC の出力でアクチュエータを動かし、
-//! 端のスイッチや現在位置を PLC の入力に返す。層の分け方は docs/architecture.md に合わせている。
+//! 端のスイッチや現在位置を PLC の入力に返す。
 //!
-//! - `domain`: I/O の割り付け表、設備モデル、内蔵の模擬 PLC (Bevy なし)
-//! - `usecase`: 1スキャン分の処理と、外部 PLC との通信のポート [`plantwright_core::plc::session::PlcLink`] (Bevy なし)
-//! - `adapter`: 通信方式の実装 (Modbus TCP、OPC UA、三菱 PLC の SLMP)
-//! - このファイルと `ui`: Bevy のシステムと egui の画面
+//! I/O の割り付け表・設備モデル・模擬 PLC・1スキャン分の処理・通信 (Modbus TCP、OPC UA、SLMP) は
+//! `plantwright_core::plc`。ここは Bevy のシステムと、egui の画面 (`panel`) だけ。
 //!
 //! 部品の位置はチャート再生と同じ `SimulationPose` に書くので、表示や干渉チェックはそのまま使える。
 

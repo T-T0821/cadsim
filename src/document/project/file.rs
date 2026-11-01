@@ -1,4 +1,4 @@
-//! プロジェクトファイル (.plantwright) の形 (アダプター層)
+//! プロジェクトファイル (.plantwright) の形
 //!
 //! ファイルの中身は人が読める JSON。アセンブリの木をそのまま入れ子で書く。
 //! 書くのは設計データ (名前・配置・表示/非表示・色・箱の寸法) と、取り込んだ STEP の場所だけ。
@@ -20,7 +20,6 @@ use crate::features::animation::Animations;
 use crate::features::annotation::{AnnotationRecord, Annotations, node_path, to_records};
 use crate::features::custom_part::CustomInstanceRecord;
 use crate::features::library::PartKind;
-use crate::features::physics::{CableRecord, PartPhysicsRecord};
 use plantwright_core::camera_path::CameraPath;
 use plantwright_core::camera_path::record::CameraPathRecord;
 use plantwright_core::conveyor::ConveyorConfig;
@@ -36,6 +35,7 @@ use plantwright_core::model::NodeKind;
 use plantwright_core::model::StepSource;
 use plantwright_core::motion::TimingChart;
 use plantwright_core::motion::record::{AnimationRecord, ChartRecord, chart_to_record};
+use plantwright_core::physics::record::{CableRecord, PartPhysicsRecord};
 use plantwright_core::plc::record::PlcRecord;
 use plantwright_core::site::record::{CloudRecord, UnderlayRecord};
 

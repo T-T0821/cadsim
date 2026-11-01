@@ -4,12 +4,10 @@
 //! PLC の代わりに設備を動かす。スクリプトは信号の読み書き、関節 (アクチュエータ) の移動、
 //! 待ちができる。
 //!
-//! - `runner`: 1つのスクリプトをシミュレーションの時刻に合わせて動かす (Bevy なし)
-//! - `rhai_engine`: スクリプトから呼べる関数の登録 (Rhai)
-//! - `controller`: スクリプトを PLC 連携の I/O・センサーにつなぐ (Bevy なし)
-//! - このファイルと `ui`: 実行状態の Resource と、プロパティ欄のエディタ・PLC 連携ウィンドウの操作
+//! 実行 (`runner`)・Rhai への関数の登録 (`rhai_engine`)・PLC 連携の I/O へのつなぎ (`controller`) は
+//! `plantwright_core::scripting`。ここは実行状態の Resource と、エディタ・操作の画面 (`panel`) だけ。
 //!
-//! スクリプトのソースは [`crate::document::selection::Node::script`] に持つので、保存・元に戻す・
+//! スクリプトのソースは `plantwright_core::model::Node::script` に持つので、保存・元に戻す・
 //! 形状の差し替えはノードの他の設定と同じように扱われる。
 
 mod panel;

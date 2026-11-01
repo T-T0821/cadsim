@@ -187,7 +187,7 @@ pub struct CropRect {
     pub height: u32,
 }
 
-/// 撮ったフレームの書き込み先 (ポート)。実装はアダプター層のエンコーダ
+/// 撮ったフレームの書き込み先 (トレイト)。実装は `modeling::record`のエンコーダ
 pub trait VideoSink {
     fn push(&mut self, frame: Frame) -> Result<(), String>;
 }

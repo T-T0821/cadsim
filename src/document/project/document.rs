@@ -1,4 +1,4 @@
-//! プロジェクトを開く・保存する手順 (ユースケース層)
+//! プロジェクトを開く・保存する手順
 //!
 //! 開くときは、ファイルを読んで参照している STEP の形状を読み直し ([`LoadedProject::load`])、
 //! モデルとほかの文書 (寸法・工程モデル・チャートなど) を作り直す ([`LoadedProject::open`])。
@@ -18,7 +18,6 @@ use crate::features::animation::Animations;
 use crate::features::annotation::{Annotations, node_at_path};
 use crate::features::custom_part::CustomInstanceRecord;
 use crate::features::library::{self, PartKind, Spec};
-use crate::features::physics::PartPhysicsRecord;
 use plantwright_core::camera_path::CameraPath;
 use plantwright_core::conveyor::ConveyorConfig;
 use plantwright_core::floor::record::{FloorLayout, FloorRecord};
@@ -34,6 +33,7 @@ use plantwright_core::model::NodeKind;
 use plantwright_core::model::StepSource;
 use plantwright_core::motion::TimingChart;
 use plantwright_core::motion::record::chart_from_record;
+use plantwright_core::physics::record::PartPhysicsRecord;
 use plantwright_core::site::model::Site;
 use plantwright_core::site::record::load_site;
 

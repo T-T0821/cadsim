@@ -87,11 +87,11 @@ UR5e とグリッパを「ロボット (UR5e + 2F-85)」のアセンブリにま
 
 ## アプリへの埋め込み
 
-`src/project/document.rs` の `REAL_ROBOT_FILES` に、プロジェクト・GLB 2 つ・README・ライセンス文を `include_bytes!` で埋め込んでいる(合わせて約 3 MB)。
+`src/document/project/document.rs` の `REAL_ROBOT_FILES` に、プロジェクト・GLB 2 つ・README・ライセンス文を `include_bytes!` で埋め込んでいる(合わせて約 3 MB)。
 メニューから開くと、設定ファイルと同じ場所の `samples/real_robot/`(なければ一時フォルダ)に書き出し、そこからプロジェクトとして読む。
 プロジェクトは GLB を相対パスで参照するので、同じフォルダに並べる必要があるため。中身が同じファイルは書き直さない。
 開いたプロジェクトはファイルに結びつけない(デモラインと同じく、保存すると名前を聞く)。
 
-テストは `src/project/tests.rs` の `real_robot_sample_opens_and_reaches_every_point`。
+テストは `src/document/project/tests.rs` の `real_robot_sample_opens_and_reaches_every_point`。
 注意なしで開けること、関節がどれも読み込んだリンクを動かすこと、4 つの教示点に届くこと、
 スクリプトの逆運動学で求めた関節角でアプリの TCP が教示点に来る(関節の位置と向きが合っている)ことを確かめる。

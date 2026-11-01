@@ -7,11 +7,11 @@ ROS のロボットの記述ファイル **URDF**(`.urdf`)を読み込み、リ�
 
 | 層 | 場所 | 内容 |
 | --- | --- | --- |
-| ドメイン | `cadsim_core::motion::robot_import` | 形式によらないロボットの機種 `RobotDescription`(リンクの名前と関節の木)と、それをチャートの関節とロボットにする `add_robot` |
-| アダプター | `cadsim_io::urdf`(`mod.rs`・`collada.rs`) | URDF の XML を `RobotDescription` と 3D の中間表現 `Scene` にする。見た目のメッシュ(COLLADA・STL・OBJ・glTF)と箱・円柱・球を読む |
-| UI | `src/file_io.rs`(読み込み)、`src/motion/urdf_robot.rs`(チャートへのつなぎ)、`src/ui/menu.rs`(ファイルメニューの入口) | 別スレッドで読み、形状をモデルに加えたあと、リンクの位置を集めて `add_robot` を呼ぶ |
+| ドメイン | `plantwright_core::motion::robot_import` | 形式によらないロボットの機種 `RobotDescription`(リンクの名前と関節の木)と、それをチャートの関節とロボットにする `add_robot` |
+| アダプター | `plantwright_core::motion::urdf`(`mod.rs`・`collada.rs`) | URDF の XML を `RobotDescription` と 3D の中間表現 `Scene` にする。見た目のメッシュ(COLLADA・STL・OBJ・glTF)と箱・円柱・球を読む |
+| UI | `src/document/import.rs`(読み込み)、`src/features/motion/urdf_robot.rs`(チャートへのつなぎ)、`src/ui/menu.rs`(ファイルメニューの入口) | 別スレッドで読み、形状をモデルに加えたあと、リンクの位置を集めて `add_robot` を呼ぶ |
 
-## 読み込み(`cadsim_io::urdf`)
+## 読み込み(`plantwright_core::motion::urdf`)
 
 - 読むもの: `<link>` の `<visual>`(`origin`・`geometry`・`material`)、`<joint>` の `type`・`origin`・`parent`・`child`・`axis`・`limit`(`lower` / `upper` / `velocity`)・`mimic`、`<robot>` 直下の名前付きの `<material>`。
 - 読まないもの: `<collision>`・`<inertial>`・`<transmission>`・`<gazebo>`・ros2_control。**xacro** も読まない(`${…}` や `<xacro:…>` が残っていたら、xacro で URDF に直すよう伝えるエラーにする)。
@@ -23,7 +23,7 @@ ROS のロボットの記述ファイル **URDF**(`.urdf`)を読み込み、リ�
 - COLLADA(`collada.rs`): `triangles` / `polylist` / `polygons`、ノードの `matrix` / `translate` / `rotate` / `scale`、`instance_node`、材質の拡散色、`<unit meter>` を読む。ROS の RViz と同じく `<up_axis>` は見ない。色ごとに 1 つのメッシュにまとめる。
 - STL・OBJ・glTF は 3D ファイルの読み込み(`interchange::import_file`)を「m・座標はそのまま」で呼び、ノードの配置を焼き込む。
 
-## 関節にする(`cadsim_core::motion::robot_import::add_robot`)
+## 関節にする(`plantwright_core::motion::robot_import::add_robot`)
 
 - `revolute` / `continuous` は回転テーブル、`prismatic` は直動軸。`fixed` でつながったリンクは根元側の関節の部品に足す。`floating` / `planar` は動かせないので固定にして注意を出す。`mimic` は独立した関節にして注意を出す。
 - 関節の位置と向きは、モデルに置いたリンクのノードのワールド行列から求める。URDF では子リンクの座標系が関節の座標系と同じなので、子リンクの原点が回転の中心(`pivot`)、子リンクの座標で書いた `axis` をワールドに回したものが軸になる。ユーザーがロボットを動かしてから関節を付けても合うように、モデルの行列を使う。
@@ -37,14 +37,14 @@ ROS のロボットの記述ファイル **URDF**(`.urdf`)を読み込み、リ�
 
 ## 同梱の UR5e
 
-`samples/real_robot/ur5e_urdf/` に、UR5e の URDF(`ur5e.urdf`)と見た目のメッシュ(リンクごとの GLB 7 つ、合わせて約 2.2 MB)を置き、アプリにも埋め込んでいる(`src/file_io.rs` の `URDF_SAMPLE_FILES`)。
+`samples/real_robot/ur5e_urdf/` に、UR5e の URDF(`ur5e.urdf`)と見た目のメッシュ(リンクごとの GLB 7 つ、合わせて約 2.2 MB)を置き、アプリにも埋め込んでいる(`src/document/import.rs` の `URDF_SAMPLE_FILES`)。
 「ファイル → サンプルを開く → ロボット機種 UR5e (URDF)」で、設定ファイルと同じ場所の `samples/ur5e_urdf/` に書き出して読み込む。
 
 - 出典は「本物の装置」のサンプル([real-robot.md](real-robot.md))と同じ [Universal_Robots_ROS2_Description](https://github.com/UniversalRobots/Universal_Robots_ROS2_Description)(BSD 3-Clause)。ライセンス文も同じ `samples/real_robot/LICENSE-UR5e.txt` を一緒に書き出す。
 - URDF は `urdf/ur_macro.xacro` を `ur_type:=ur5e` で展開したものと同じリンク・関節・寸法(`config/ur5e/*.yaml`)を写し、慣性・衝突・ros2_control を省いたもの。
-- 「本物の装置」の `ur5e.glb` はホーム姿勢に組んだ 1 ファイルで、リンクの座標系で置いたメッシュがないため、URDF 用には元の COLLADA をリンクごとに GLB にした。変換は plantwright の COLLADA の読み込みを使う `cargo run -p cadsim_io --example dae_to_glb -- base.dae base.glb ur5e_base`(形は変えない)。
+- 「本物の装置」の `ur5e.glb` はホーム姿勢に組んだ 1 ファイルで、リンクの座標系で置いたメッシュがないため、URDF 用には元の COLLADA をリンクごとに GLB にした。変換は plantwright の COLLADA の読み込みを使う `cargo run -p plantwright_core --example dae_to_glb -- base.dae base.glb ur5e_base`(形は変えない)。
 
-テスト: `src/motion/urdf_robot.rs` で、同梱の URDF が注意なしで 6 軸のロボットになること、全関節 0 の TCP が UR の寸法どおりの位置に来ること、逆運動学で教示点に届き、届かない点は届かないと分かることを確かめる。
+テスト: `src/features/motion/urdf_robot.rs` で、同梱の URDF が注意なしで 6 軸のロボットになること、全関節 0 の TCP が UR の寸法どおりの位置に来ること、逆運動学で教示点に届き、届かない点は届かないと分かることを確かめる。
 
 ## ほかの公開 URDF(同梱していない)
 

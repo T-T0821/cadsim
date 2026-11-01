@@ -2,14 +2,14 @@
 //!
 //! | ファイル | 役割 |
 //! | --- | --- |
-//! | `plantwright_core::site::underlay` | 下敷きの配置と縮尺合わせの計算 (ドメイン) |
-//! | `plantwright_core::site::pointcloud` | 点群の間引き・LOD・設備との干渉と距離 (ドメイン) |
-//! | `plantwright_core::site::model` | プロジェクトに属する現場データの入れ物 (ドメイン) |
+//! | `plantwright_core::site::underlay` | 下敷きの配置と縮尺合わせの計算 |
+//! | `plantwright_core::site::pointcloud` | 点群の間引き・LOD・設備との干渉と距離 |
+//! | `plantwright_core::site::model` | プロジェクトに属する現場データの入れ物 |
 //! | `cloud_view.rs` | 点群の 3D 表示 (LOD) と、干渉チェックの実行・表示 |
 //! | `view.rs` | 下敷きの 3D 表示 |
 //! | `panel.rs` | 「平面図」パネル |
 //!
-//! ファイルの読み込みは `formats` (アダプター層)、保存は project.rs が受け持つ。
+//! ファイルの読み込みは `formats`、保存は project.rs が受け持つ。
 //! ここは Bevy のシステムで「入力を集める → ドメインを呼ぶ → 表示に写す」だけをする。
 
 mod cloud_view;

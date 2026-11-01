@@ -1,6 +1,6 @@
 //! ゲーム風の UI の中身: チュートリアルの章とミッション、経験値とレベル、達成時の紙吹雪、ミッションの表示の設定
 //!
-//! Bevy・egui・ファイル形式に依存しない。UI 層は毎フレーム [`Observation`] を作って
+//! Bevy・egui・ファイル形式に依存しない。アプリ側は毎フレーム [`Observation`] を作って
 //! [`Progress::observe`] に渡し、返ってきた達成を画面に出すだけにする。
 
 use crate::workspace::Tool;
@@ -90,7 +90,7 @@ impl Chapter {
     }
 }
 
-/// 操作する場所。UI 層はここを光らせたり矢印で指したりする。
+/// 操作する場所。アプリ側はここを光らせたり矢印で指したりする。
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Place {
     /// 3D ビューの中
@@ -563,7 +563,7 @@ pub const XP_PER_LEVEL: u32 = 150;
 /// 見まわしたとみなすカメラの回転量 (ラジアン、ヨーとピッチの変化の合計)
 const ORBIT_THRESHOLD: f64 = 0.6;
 
-/// その時点の画面の状態。UI 層が毎フレーム集める。
+/// その時点の画面の状態。アプリ側が毎フレーム集める。
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Observation {
     pub selected: bool,

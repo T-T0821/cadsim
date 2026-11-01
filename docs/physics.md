@@ -4,7 +4,7 @@
 
 ## 層の分け方
 
-[architecture.md](architecture.md) の4層に合わせて分けています。ドメインとユースケースは `crates/cadsim_core/src/physics/`、残りはアプリ本体の `src/physics/` です。物理エンジンのアダプター `engine.rs` は Bevy の物理プラグインを使うのでアプリ側に残し、`records.rs` は Bevy に依存しないので `cadsim_io` に移せます。
+Bevy を使わない設定・ケーブル・剛体の進め方は `crates/plantwright_core/src/physics/`、残りはアプリの `src/features/physics/` です([architecture.md](architecture.md))。物理エンジンとのつなぎ `engine.rs` は Bevy の物理プラグインを使うのでアプリ側にあります。
 
 | ファイル | 層 | 内容 | 依存 |
 | --- | --- | --- | --- |

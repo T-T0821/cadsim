@@ -8,7 +8,7 @@
 
 - 3D ビューの上に浮かぶ道具のパネル(干渉チェック・寸法・安全・PLC 連携など)は、はじめはすべて閉じておき、左端の **ツールレール** とメニューの「ツール」から開け閉めする。
   以前は 10 枚近いパネルが四隅に固定で浮いていて、ビューを覆い・重なっていた。
-- 道具の一覧(名前・短い名前・説明・分類・並び順)と「どれを開いているか」は `cadsim_core::workspace` にある。
+- 道具の一覧(名前・短い名前・説明・分類・並び順)と「どれを開いているか」は `plantwright_core::workspace` にある。
   `Workspace` は開いた順を覚え、小さなパネルを最初に出す位置を開いた順に 28 px ずつ右下へずらす(6 枚で一周)。大きな作業用のウィンドウ(工程シミュレーションなど)はずらす数に入れない。
 - UI 層の `src/ui/dock.rs` はそれを `Dock` という Resource に包み、レールのボタンと、パネルの枠 (`dock::panel` / `dock::workspace_window`) を作る。各機能のパネルのシステムは `Dock` を見て、閉じていれば何も描かない。パネルの × で閉じたら `Dock` に書き戻す。
 - レールのボタンには印を付けられる(`Badge`)。干渉している組の数と、安全停止中の印を出して、パネルを閉じていても気づけるようにしている。
@@ -20,8 +20,8 @@
 
 | 層 | 場所 | 役目 |
 | --- | --- | --- |
-| ユースケース | `crates/cadsim_core/src/usecase/help.rs` | システムプロンプト(画面の配置、道具の一覧、キー操作 `SHORTCUTS`、いまの画面の様子 `HelpContext`)を組み立て、`LlmClient` に問い合わせる。返事の `[[open:道具の名前]]` を `parse_answer` で道具に変える。キーがないときの `suggest_tools`(質問の言葉と道具ごとの言葉を照らし合わせる) |
-| UI | `src/assistant/help.rs` | `HelpChat`(会話・入力欄・問い合わせ中のジョブ)と「AI に聞く」ウィンドウ。答えの道具は「○○ を開く」ボタンにして `Dock` を開く |
+| ユースケース | `crates/plantwright_core/src/assistant/help.rs` | システムプロンプト(画面の配置、道具の一覧、キー操作 `SHORTCUTS`、いまの画面の様子 `HelpContext`)を組み立て、`LlmClient` に問い合わせる。返事の `[[open:道具の名前]]` を `parse_answer` で道具に変える。キーがないときの `suggest_tools`(質問の言葉と道具ごとの言葉を照らし合わせる) |
+| UI | `src/features/assistant/help.rs` | `HelpChat`(会話・入力欄・問い合わせ中のジョブ)と「AI に聞く」ウィンドウ。答えの道具は「○○ を開く」ボタンにして `Dock` を開く |
 
 - 道具の一覧とキー操作の一覧はアプリのデータから作るので、道具を足せば AI への説明にも自動で入る。
 - 会話は `LlmMessage` の列として毎回送る(問い合わせは `Effort::Low`、返事は 2000 トークンまで)。
@@ -36,8 +36,8 @@
 
 | 層 | 場所 | 役目 |
 | --- | --- | --- |
-| ドメイン | `crates/cadsim_core/src/gamify.rs` | ミッションの一覧、達成の判定、経験値とレベル、紙吹雪の軌道。Bevy・egui なしで単体テスト |
-| アダプター | `src/preferences_file.rs` | 設定 (`Preferences`) と JSON の変換、OS ごとの設定フォルダへの読み書き |
+| ドメイン | `crates/plantwright_core/src/gamify.rs` | ミッションの一覧、達成の判定、経験値とレベル、紙吹雪の軌道。Bevy・egui なしで単体テスト |
+| アダプター | `crates/plantwright_core/src/preferences.rs` | 設定 (`Preferences`) と JSON の変換、OS ごとの設定フォルダへの読み書き |
 | UI | `src/ui/theme.rs` | egui の `Style` (配色・角丸・余白・文字の大きさ) と 3D ビューの背景色 |
 | UI | `src/ui/playful.rs` | 画面の状態を集めて `Progress::observe` に渡し、カード・マスコット・お祝い・紙吹雪を描く |
 | UI | `src/ui/tutorial.rs` | ようこそ画面、カードの中の手順・キー・「とばす」、操作する場所を指す矢印 |
@@ -52,7 +52,7 @@
 ## 章と手順
 
 ミッションは `Chapter` にまとめ、章は `Part` の基本編 (見る → さわる → ラインを組む → 仕上げる) と応用編 (動きを付ける → ラインとして動かす → 使いこなす) に分ける。`MISSIONS` の並び順がそのまま進む順になる (章が前に戻らないこと、基本編の章が先に並ぶことをテストで確かめている)。
-各 `Mission` は 1 行のヒント (`hint`) のほかに、チュートリアルの手順 (`steps`)、何の役に立つか (`why`)、使うキー (`keys`)、操作する場所 (`place`)、使う道具 (`tool`、`cadsim_core::workspace::Tool`)、設備が止まっている必要があるか (`needs_stopped_line`) を持つ。
+各 `Mission` は 1 行のヒント (`hint`) のほかに、チュートリアルの手順 (`steps`)、何の役に立つか (`why`)、使うキー (`keys`)、操作する場所 (`place`)、使う道具 (`tool`、`plantwright_core::workspace::Tool`)、設備が止まっている必要があるか (`needs_stopped_line`) を持つ。
 
 - カードは今のミッションの章名、章の中の進み具合 (● 達成 / ◉ 今 / ◌ とばした / ○ まだ)、手順、キーの形を出す。「▲ 手順をたたむ」で 1 行のヒントだけにできる。
 - `tool` があるミッションでは、その道具のパネルが閉じているときにカードへ「📦 部品ライブラリを開く」のようなボタンを出し、押すと `Dock::set_open` で開く。
