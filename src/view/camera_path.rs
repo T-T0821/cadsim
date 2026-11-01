@@ -95,6 +95,7 @@ struct Preview {
 }
 
 /// プレビュー中は通り道どおりにカメラを動かす。終わるか Esc で元の視点に戻す
+#[allow(clippy::too_many_arguments)]
 fn run_preview(
     time: Res<Time>,
     keys: Res<ButtonInput<KeyCode>>,
@@ -296,7 +297,7 @@ pub fn camera_path_ui(
                             }
                         });
                         if ui
-                            .small_button("✕")
+                            .small_button("削除")
                             .on_hover_text("この視点を消します")
                             .clicked()
                         {

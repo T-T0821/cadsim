@@ -523,19 +523,21 @@ fn settings_ui(
     ui.checkbox(&mut settings.clear_selection, "選択を解除してから撮る");
 
     let busy = !matches!(recorder.state, State::Idle);
-    ui.separator();
-    ui.strong("カメラワーク");
     let speed = settings.speed;
-    camera_path_ui(
-        ui,
-        &mut camera.path,
-        &mut camera.ui,
-        &mut camera.orbit,
-        &mut camera.playback,
-        &mut settings.use_camera_path,
-        speed,
-        busy,
-    );
+    egui::CollapsingHeader::new("カメラワーク")
+        .default_open(!camera.path.is_empty())
+        .show(ui, |ui| {
+            camera_path_ui(
+                ui,
+                &mut camera.path,
+                &mut camera.ui,
+                &mut camera.orbit,
+                &mut camera.playback,
+                &mut settings.use_camera_path,
+                speed,
+                busy,
+            );
+        });
 
     let cycle = schedule.cycle_time;
     let plan = settings.plan(cycle, &camera.path);
