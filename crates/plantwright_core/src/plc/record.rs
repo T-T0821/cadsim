@@ -5,15 +5,15 @@
 
 use serde::{Deserialize, Serialize};
 
-use plantwright_core::plc::melsec::DeviceRef;
-use plantwright_core::plc::slmp::{Encoding, FrameKind, Transport};
+use crate::plc::melsec::DeviceRef;
+use crate::plc::slmp::{Encoding, FrameKind, Transport};
 
 use super::Protocol;
 use super::modbus::ModbusSettings;
 use super::opcua::OpcUaSettings;
-use super::slmp::SlmpSettings;
-use crate::features::plc::domain::device_map::{DeviceArea, DeviceMap};
-use crate::features::plc::domain::io::{AddressPlan, Point, PointSettings};
+use super::slmp_link::SlmpSettings;
+use crate::plc::device_map::{DeviceArea, DeviceMap};
+use crate::plc::io::{AddressPlan, Point, PointSettings};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct PlcRecord {
@@ -388,7 +388,7 @@ mod tests {
 
     #[test]
     fn round_trip_keeps_slmp_settings() {
-        use plantwright_core::plc::melsec::Device;
+        use crate::plc::melsec::Device;
         let mut slmp = SlmpSettings {
             host: "192.168.0.39".into(),
             port: 5001,

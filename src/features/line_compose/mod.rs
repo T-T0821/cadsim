@@ -21,7 +21,7 @@ use plantwright_core::line_draft::compose::{ComposedLine, LineDraftAi, compose_l
 use plantwright_core::line_draft::json::LlmLineDrafter;
 
 use crate::features::assistant::AiAssistant;
-use crate::features::assistant::job::LlmJob;
+use plantwright_core::assistant::job::LlmJob;
 
 use crate::document::history::History;
 use crate::document::selection::Selection;

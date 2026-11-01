@@ -98,8 +98,8 @@ pub fn chart_animation(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::features::motion::demo::load_demo;
     use plantwright_core::formats::model_io::model_to_scene;
+    use plantwright_core::motion::demo::load_demo;
 
     #[test]
     fn demo_cycle_becomes_keyframes() {

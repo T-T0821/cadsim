@@ -4,7 +4,7 @@ use super::file::compact_number_arrays;
 use super::*;
 use crate::document::import::{read_step, source_name};
 use crate::features::annotation::node_at_path;
-use crate::features::floor::record::FloorRecord;
+use plantwright_core::floor::record::FloorRecord;
 
 use crate::features::library::{self, PartKind};
 use plantwright_core::camera_path::{CameraPath, CameraPose};

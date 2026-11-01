@@ -20,9 +20,9 @@
 //!
 //! Bevy・egui・ファイル形式のライブラリに依存しない。
 
-use plantwright_core::motion::chart::ActuatorKind;
-use plantwright_core::motion::chart::INTERLOCK_TIMEOUT;
-use plantwright_core::motion::chart::TimingChart;
+use crate::motion::chart::ActuatorKind;
+use crate::motion::chart::INTERLOCK_TIMEOUT;
+use crate::motion::chart::TimingChart;
 
 /// I/O 表の向き
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -615,7 +615,7 @@ pub fn io_tsv(ladder: &Ladder) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::features::sequence_gen::spec::{ApplyMode, apply, tests::sample_spec};
+    use crate::sequence_gen::spec::{ApplyMode, apply, tests::sample_spec};
 
     fn sample_chart() -> TimingChart {
         let mut chart = TimingChart::default();

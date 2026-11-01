@@ -7,7 +7,7 @@ use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use plantwright_core::assistant::llm::{LlmClient, LlmError};
+use crate::assistant::llm::{LlmClient, LlmError};
 
 /// 実行中の問い合わせ1つ。`T` は返事を読み取った結果。
 pub struct LlmJob<T> {
@@ -57,7 +57,7 @@ impl<T: Send + 'static> LlmJob<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use plantwright_core::assistant::llm::{LlmRequest, ScriptedLlm};
+    use crate::assistant::llm::{LlmRequest, ScriptedLlm};
     use std::time::Duration;
 
     #[test]

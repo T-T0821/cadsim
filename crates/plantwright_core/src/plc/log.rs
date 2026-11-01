@@ -240,9 +240,9 @@ fn parse_value(text: &str, is_word: bool) -> Option<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::features::plc::domain::io::{AddressPlan, PointSettings};
-    use plantwright_core::motion::chart::ActuatorKind;
-    use plantwright_core::motion::chart::TimingChart;
+    use crate::motion::chart::ActuatorKind;
+    use crate::motion::chart::TimingChart;
+    use crate::plc::io::{AddressPlan, PointSettings};
 
     fn table() -> (IoTable, u32, u32) {
         let mut chart = TimingChart::default();

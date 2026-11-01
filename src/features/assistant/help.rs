@@ -8,13 +8,13 @@ use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 
 use super::AiAssistant;
-use super::job::LlmJob;
 use crate::document::selection::Selection;
 use crate::ui::dock::{self, Dock};
 use crate::ui::playful::PlayfulUi;
 use crate::ui::theme::palette;
 use crate::viewport::camera::ViewportRect;
 use plantwright_core::assistant::help::{self, Answer, HelpContext};
+use plantwright_core::assistant::job::LlmJob;
 use plantwright_core::assistant::llm::LlmMessage;
 use plantwright_core::model::Model;
 use plantwright_core::motion::chart::TimingChart;

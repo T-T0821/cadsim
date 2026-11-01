@@ -4,16 +4,13 @@
 //! 端のスイッチや現在位置を PLC の入力に返す。層の分け方は docs/architecture.md に合わせている。
 //!
 //! - `domain`: I/O の割り付け表、設備モデル、内蔵の模擬 PLC (Bevy なし)
-//! - `usecase`: 1スキャン分の処理と、外部 PLC との通信のポート [`usecase::PlcLink`] (Bevy なし)
+//! - `usecase`: 1スキャン分の処理と、外部 PLC との通信のポート [`plantwright_core::plc::session::PlcLink`] (Bevy なし)
 //! - `adapter`: 通信方式の実装 (Modbus TCP、OPC UA、三菱 PLC の SLMP)
 //! - このファイルと `ui`: Bevy のシステムと egui の画面
 //!
 //! 部品の位置はチャート再生と同じ `SimulationPose` に書くので、表示や干渉チェックはそのまま使える。
 
-mod adapter;
-mod domain;
 mod panel;
-mod usecase;
 
 use bevy::prelude::*;
 use bevy_egui::EguiPrimaryContextPass;
@@ -21,16 +18,14 @@ use bevy_egui::EguiPrimaryContextPass;
 use crate::document::history::{TrackDocExt, TrackedDoc};
 use crate::features::motion::{MotionSet, SensorStates, SimulationPose};
 use crate::features::scripting::ScriptRun;
-use adapter::Protocol;
-pub use adapter::record::PlcRecord;
-use adapter::record::PlcSettings;
-pub use domain::io::{AddressPlan, IoTable, IoValues, Point};
-#[cfg(test)]
-pub use domain::plant::Plant;
 use plantwright_core::motion::chart::TimingChart;
 use plantwright_core::motion::pose::actuator_poses_for;
 use plantwright_core::motion::pose::part_poses_for;
-use usecase::{PlcMode, PlcSession};
+use plantwright_core::plc::Protocol;
+use plantwright_core::plc::io::AddressPlan;
+use plantwright_core::plc::record::PlcRecord;
+use plantwright_core::plc::record::PlcSettings;
+use plantwright_core::plc::session::{PlcMode, PlcSession};
 
 pub struct PlcPlugin;
 
@@ -53,9 +48,9 @@ impl Plugin for PlcPlugin {
 pub struct Plc {
     session: PlcSession,
     protocol: Protocol,
-    modbus: adapter::modbus::ModbusSettings,
-    opcua: adapter::opcua::OpcUaSettings,
-    slmp: adapter::slmp::SlmpSettings,
+    modbus: plantwright_core::plc::modbus::ModbusSettings,
+    opcua: plantwright_core::plc::opcua::OpcUaSettings,
+    slmp: plantwright_core::plc::slmp_link::SlmpSettings,
     /// 画面に出すお知らせ (CSV の読み込み結果など)
     notice: Option<String>,
 }
@@ -63,7 +58,7 @@ pub struct Plc {
 impl Plc {
     /// プロジェクトファイルに書く設定 (I/O の割り付けと外部 PLC の接続先)。初期値のままなら None
     pub fn record(&self) -> Option<PlcRecord> {
-        adapter::record::to_record(&PlcSettings {
+        plantwright_core::plc::record::to_record(&PlcSettings {
             plan: self.session.plan.clone(),
             protocol: self.protocol,
             modbus: self.modbus.clone(),
@@ -79,7 +74,7 @@ impl Plc {
 
     /// 開いた (または新規の) プロジェクトの設定に置き換える。PLC 連携は止める。
     pub fn restore(&mut self, record: Option<&PlcRecord>) {
-        let settings = adapter::record::from_record(record);
+        let settings = plantwright_core::plc::record::from_record(record);
         self.session.set_mode(PlcMode::Off);
         self.session.plan = settings.plan;
         self.protocol = settings.protocol;

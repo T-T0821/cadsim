@@ -59,7 +59,7 @@ impl AiSettings {
 
 /// 設定ファイルの場所。ホームフォルダが分からなければ None (保存しない)
 pub fn default_path() -> Option<PathBuf> {
-    plantwright_core::preferences::default_path().map(|p| p.with_file_name("ai.json"))
+    crate::preferences::default_path().map(|p| p.with_file_name("ai.json"))
 }
 
 /// 読めない・壊れているときは空の設定

@@ -12,7 +12,9 @@
 //! | `sensor.rs` | センサーの検知 |
 
 pub mod chart;
+pub mod demo;
 pub mod kinematics;
+pub mod live_joints;
 pub mod path_interference;
 pub mod pose;
 pub mod profile;

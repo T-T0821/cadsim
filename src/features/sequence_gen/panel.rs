@@ -5,14 +5,14 @@ use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 use plantwright_core::workspace::Tool;
 
-use super::ladder::{self, Direction};
-use super::log_events;
-use super::spec::{self, ApplyMode};
-use super::usecase::{self, ExplainSource};
 use super::{SequenceGen, SourceKind, Tab};
 use crate::features::assistant::AiAssistant;
-use crate::features::assistant::job::LlmJob;
+use plantwright_core::assistant::job::LlmJob;
 use plantwright_core::motion::chart::TimingChart;
+use plantwright_core::sequence_gen::generate::{self, ExplainSource};
+use plantwright_core::sequence_gen::ladder::{self, Direction};
+use plantwright_core::sequence_gen::log_events;
+use plantwright_core::sequence_gen::spec::{self, ApplyMode};
 
 /// ログから取り出す変化の上限
 const MAX_LOG_EVENTS: usize = 3000;
@@ -121,7 +121,7 @@ fn generate_tab(
         let current = spec::from_chart(chart.as_ref());
         state.notice = None;
         state.generating = Some(LlmJob::start(ai.client(), move |llm| {
-            usecase::generate(llm, &description, &current)
+            generate::generate(llm, &description, &current)
         }));
     }
 
@@ -383,7 +383,7 @@ fn explain_tab(
     {
         state.notice = None;
         state.explaining = Some(LlmJob::start(ai.client(), move |llm| {
-            usecase::explain(llm, &source)
+            generate::explain(llm, &source)
         }));
     }
 

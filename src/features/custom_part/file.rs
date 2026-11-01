@@ -11,9 +11,9 @@ use std::path::{Path, PathBuf};
 use bevy::math::DVec3;
 use serde::{Deserialize, Serialize};
 
-use super::param::TargetOnChart;
 use crate::document::project::{ProjectFile, StepFileRecord};
 use crate::features::annotation::node_path;
+use plantwright_core::custom_part::param::TargetOnChart;
 use plantwright_core::custom_part::{CustomInstance, ParamTarget, PartParam};
 use plantwright_core::model::Model;
 use plantwright_core::model::NodeId;

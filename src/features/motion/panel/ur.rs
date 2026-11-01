@@ -8,10 +8,10 @@ use bevy_egui::egui;
 use plantwright_core::motion::rtde::{RtdeClient, RtdeSettings, RtdeStatus};
 
 use super::super::JogPose;
-use super::super::live_joints::{self, JOINT_COUNT, JointMap};
 use super::{ERROR_COLOR, WARN_COLOR};
 use plantwright_core::motion::chart::Robot;
 use plantwright_core::motion::chart::TimingChart;
+use plantwright_core::motion::live_joints::{self, JOINT_COUNT, JointMap};
 
 /// 実機とのつながり (ロボットの画面の状態の一部)
 #[derive(Default)]

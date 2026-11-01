@@ -7,13 +7,6 @@ use plantwright_core::plc::melsec::Device;
 use plantwright_core::plc::slmp::{Encoding, FrameKind, Transport};
 use plantwright_core::workspace::Tool;
 
-use super::adapter::modbus::{ModbusClient, ModbusSettings};
-use super::adapter::opcua::{OpcUaClient, OpcUaSettings};
-use super::adapter::slmp::{SlmpLink, SlmpSettings};
-use super::domain::device_map::{DeviceArea, DeviceMap};
-use super::domain::io::{AddressPlan, IoPoint};
-use super::domain::io_csv::CsvReport;
-use super::usecase::{LinkStatus, PlcLink, PlcMode, PlcSession};
 use super::{Plc, Protocol};
 use crate::document::selection::Selection;
 use crate::features::motion::Playback;
@@ -21,6 +14,13 @@ use crate::features::scripting::{ScriptRun, script_controls};
 use crate::viewport::camera::ViewportRect;
 use plantwright_core::model::Model;
 use plantwright_core::motion::chart::TimingChart;
+use plantwright_core::plc::device_map::{DeviceArea, DeviceMap};
+use plantwright_core::plc::io::{AddressPlan, IoPoint};
+use plantwright_core::plc::io_csv::CsvReport;
+use plantwright_core::plc::modbus::{ModbusClient, ModbusSettings};
+use plantwright_core::plc::opcua::{OpcUaClient, OpcUaSettings};
+use plantwright_core::plc::session::{LinkStatus, PlcLink, PlcMode, PlcSession};
+use plantwright_core::plc::slmp_link::{SlmpLink, SlmpSettings};
 
 const OK_COLOR: egui::Color32 = egui::Color32::from_rgb(90, 200, 120);
 const WARN_COLOR: egui::Color32 = egui::Color32::from_rgb(240, 170, 60);

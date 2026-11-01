@@ -17,7 +17,6 @@ use plantwright_core::floor::{agv_sim, operator_plan};
 pub(crate) mod figures;
 mod heatmap_view;
 mod panel;
-pub mod record;
 pub(crate) mod sample;
 mod view;
 
@@ -29,11 +28,11 @@ use bevy::prelude::*;
 use bevy_egui::EguiPrimaryContextPass;
 
 use crate::document::history::{TrackDocExt, TrackedDoc};
-use crate::features::floor::record::{FloorLayout, FloorRecord};
 use crate::features::safety::{Intruder, SafetyIntruders, SafetyLayoutRes, SafetySet, SafetyState};
 use crate::viewport::camera::pointer_in_3d_view;
 use agv_sim::{AgvGraph, AgvParams, AgvSim, FleetResult, Flow};
 use operator_plan::{Operator, OperatorPlan};
+use plantwright_core::floor::record::{FloorLayout, FloorRecord};
 use plantwright_core::math::Aabb;
 
 /// 作業者の体の大きさ (mm)

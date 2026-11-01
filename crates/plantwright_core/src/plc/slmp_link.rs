@@ -4,7 +4,7 @@
 //! - PLC の出力 (I/O 表の出力の信号を割り当てたデバイス。初期値は M0〜・D0〜) を一括読出しで読む
 //! - 設備の状態 (入力の信号。初期値は M100〜・D100〜) を一括書込みで書く
 //!
-//! 電文と TCP / UDP の通信は `plantwright_core::plc::slmp`、信号とデバイスの対応は `domain::device_map` にある。
+//! 電文と TCP / UDP の通信は `crate::plc::slmp`、信号とデバイスの対応は `domain::device_map` にある。
 //! 通信は別スレッドで行い、画面の更新は止めない。切れたら1秒ごとにつなぎ直す。
 
 use std::collections::HashMap;
@@ -13,12 +13,12 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use plantwright_core::plc::melsec::{Device, DeviceRef};
-use plantwright_core::plc::slmp::{ConnectOptions, Encoding, FrameKind, SlmpClient, Transport};
+use crate::plc::melsec::{Device, DeviceRef};
+use crate::plc::slmp::{ConnectOptions, Encoding, FrameKind, SlmpClient, Transport};
 
-use crate::features::plc::domain::device_map::DeviceMap;
-use crate::features::plc::domain::io::{IoTable, IoValues};
-use crate::features::plc::usecase::{LinkStatus, PlcLink};
+use crate::plc::device_map::DeviceMap;
+use crate::plc::io::{IoTable, IoValues};
+use crate::plc::session::{LinkStatus, PlcLink};
 
 const TIMEOUT: Duration = Duration::from_secs(1);
 const RETRY_INTERVAL: Duration = Duration::from_secs(1);
@@ -209,7 +209,7 @@ fn communicate(settings: &SlmpSettings, shared: &Mutex<Shared>, stop: &AtomicBoo
 fn transfer(
     client: &mut SlmpClient,
     request: &Request,
-) -> Result<Readback, plantwright_core::plc::slmp::SlmpError> {
+) -> Result<Readback, crate::plc::slmp::SlmpError> {
     let mut readback = Readback::default();
     for (device, start, count) in runs(&request.read_bits) {
         let values = client.read_bits(device, start, count)?;
@@ -278,11 +278,11 @@ fn sleep_unless_stopped(duration: Duration, stop: &AtomicBool) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::features::plc::domain::device_map::DeviceArea;
-    use crate::features::plc::domain::io::{AddressPlan, Point};
-    use plantwright_core::motion::chart::ActuatorKind;
-    use plantwright_core::motion::chart::TimingChart;
-    use plantwright_core::plc::slmp::mock::MockPlc;
+    use crate::motion::chart::ActuatorKind;
+    use crate::motion::chart::TimingChart;
+    use crate::plc::device_map::DeviceArea;
+    use crate::plc::io::{AddressPlan, Point};
+    use crate::plc::slmp::mock::MockPlc;
 
     #[test]
     fn devices_are_grouped_into_runs() {

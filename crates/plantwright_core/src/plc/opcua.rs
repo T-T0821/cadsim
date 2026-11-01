@@ -23,8 +23,8 @@ use opcua::types::{
     WriteValue,
 };
 
-use crate::features::plc::domain::io::{IoTable, IoValues};
-use crate::features::plc::usecase::{LinkStatus, PlcLink};
+use crate::plc::io::{IoTable, IoValues};
+use crate::plc::session::{LinkStatus, PlcLink};
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const RETRY_INTERVAL: Duration = Duration::from_secs(1);
@@ -480,9 +480,9 @@ mod tests {
     #[test]
     #[ignore]
     fn exchanges_io_with_a_real_server() {
-        use crate::features::plc::domain::io::{AddressPlan, Point, PointSettings};
-        use plantwright_core::motion::chart::ActuatorKind;
-        use plantwright_core::motion::chart::TimingChart;
+        use crate::motion::chart::ActuatorKind;
+        use crate::motion::chart::TimingChart;
+        use crate::plc::io::{AddressPlan, Point, PointSettings};
 
         let endpoint =
             std::env::var("PLANTWRIGHT_OPCUA_ENDPOINT").expect("PLANTWRIGHT_OPCUA_ENDPOINT");

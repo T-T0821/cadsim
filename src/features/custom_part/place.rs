@@ -8,8 +8,8 @@ use std::collections::HashMap;
 use bevy::math::{DMat4, DVec3};
 
 use super::file::CustomPart;
-use super::param::TargetOnChart;
 use crate::document::project::LoadedProject;
+use plantwright_core::custom_part::param::TargetOnChart;
 use plantwright_core::custom_part::{CustomInstance, PartParam};
 use plantwright_core::model::Model;
 use plantwright_core::model::NodeId;
@@ -155,8 +155,8 @@ mod tests {
     use super::*;
     use crate::document::project::ProjectFile;
     use crate::features::custom_part::file::{SaveRequest, build};
-    use crate::features::custom_part::param::InstanceOnChart;
     use plantwright_core::custom_part::ParamTarget;
+    use plantwright_core::custom_part::param::InstanceOnChart;
     use plantwright_core::model::BoxPart;
     use plantwright_core::model::NodeKind;
     use plantwright_core::motion::chart::ActuatorKind;

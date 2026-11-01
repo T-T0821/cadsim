@@ -12,17 +12,12 @@
 //! スクリプトのソースは [`crate::document::selection::Node::script`] に持つので、保存・元に戻す・
 //! 形状の差し替えはノードの他の設定と同じように扱われる。
 
-mod controller;
 mod panel;
-mod rhai_engine;
-mod runner;
 
 use bevy::prelude::*;
 
-pub use controller::{ScriptController, ScriptSource};
 pub use panel::{script_controls, script_section};
-pub use rhai_engine::API_HELP;
-pub use runner::ScriptState;
+use plantwright_core::scripting::controller::{ScriptController, ScriptSource};
 
 use plantwright_core::model::Model;
 
@@ -88,5 +83,5 @@ impl Plugin for ScriptPlugin {
 
 /// 文法だけ確かめる (プロパティ欄で、書いている途中に誤りを出す)
 pub fn check(source: &str) -> Result<(), String> {
-    rhai_engine::check_syntax(source)
+    plantwright_core::scripting::rhai_engine::check_syntax(source)
 }

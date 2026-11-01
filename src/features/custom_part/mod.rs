@@ -13,7 +13,6 @@
 
 mod file;
 mod panel;
-mod param;
 mod place;
 
 use std::path::PathBuf;
@@ -31,7 +30,7 @@ use crate::document::import::ImportJobs;
 use crate::document::project::LoadedProject;
 use crate::document::selection::Selection;
 use file::CustomPart;
-use param::InstanceOnChart;
+use plantwright_core::custom_part::param::InstanceOnChart;
 use plantwright_core::library::catalog::units_per_mm;
 use plantwright_core::model::Model;
 use plantwright_core::model::NodeId;

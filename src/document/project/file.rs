@@ -19,14 +19,13 @@ use serde::{Deserialize, Serialize};
 use crate::features::animation::Animations;
 use crate::features::annotation::{AnnotationRecord, Annotations, node_path, to_records};
 use crate::features::custom_part::CustomInstanceRecord;
-use crate::features::floor::record::FloorRecord;
 use crate::features::library::PartKind;
 use crate::features::physics::{CableRecord, PartPhysicsRecord};
-use crate::features::plc::PlcRecord;
 use plantwright_core::camera_path::CameraPath;
 use plantwright_core::camera_path::record::CameraPathRecord;
 use plantwright_core::conveyor::ConveyorConfig;
 use plantwright_core::conveyor::record::ConveyorsRecord;
+use plantwright_core::floor::record::FloorRecord;
 use plantwright_core::flow::model::FlowModel;
 use plantwright_core::flow::record::FlowRecord;
 use plantwright_core::math::quat_to_euler_deg;
@@ -37,6 +36,7 @@ use plantwright_core::model::NodeKind;
 use plantwright_core::model::StepSource;
 use plantwright_core::motion::TimingChart;
 use plantwright_core::motion::record::{AnimationRecord, ChartRecord, chart_to_record};
+use plantwright_core::plc::record::PlcRecord;
 use plantwright_core::site::record::{CloudRecord, UnderlayRecord};
 
 /// ファイル形式のバージョン。古いファイルを開けなくなる変更をしたときだけ上げる。

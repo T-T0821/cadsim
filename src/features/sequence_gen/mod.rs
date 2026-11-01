@@ -15,19 +15,14 @@
 //! チャートの型 (`TimingChart`) がまだアプリ側にあるので、ここもアプリ側に置いている。
 //! チャートが `plantwright_core` に移ったら、`spec`・`ladder`・`log_events`・`usecase` も一緒に移す。
 
-mod json;
-pub mod ladder;
-mod log_events;
 mod panel;
-pub mod spec;
-mod usecase;
 
 use bevy::prelude::*;
 use bevy_egui::EguiPrimaryContextPass;
 
-use crate::features::assistant::job::LlmJob;
-use log_events::LogSummary;
-use spec::{ApplyMode, SequenceSpec};
+use plantwright_core::assistant::job::LlmJob;
+use plantwright_core::sequence_gen::log_events::LogSummary;
+use plantwright_core::sequence_gen::spec::{ApplyMode, SequenceSpec};
 
 pub struct SequenceGenPlugin;
 

@@ -18,7 +18,7 @@ use bevy::{ecs::system::SystemParam, prelude::*};
 use bevy_egui::egui;
 
 use super::sensor::SensorKind;
-use super::{ChartSchedule, JogPose, Playback, SensorStates, SensorTimeline, SimulationPose, demo};
+use super::{ChartSchedule, JogPose, Playback, SensorStates, SensorTimeline, SimulationPose};
 use crate::document::history::History;
 use crate::document::selection::Selection;
 use crate::features::conveyor::ConveyorConfigRes;
@@ -37,6 +37,7 @@ use plantwright_core::motion::chart::RobotMove;
 use plantwright_core::motion::chart::Schedule;
 use plantwright_core::motion::chart::Step;
 use plantwright_core::motion::chart::TimingChart;
+use plantwright_core::motion::demo;
 use robot::RobotUiState;
 
 const NAME_WIDTH: f32 = 150.0;

@@ -27,10 +27,8 @@
 //! `builder::transformed(&part.build_solid(), pose.to_truck_matrix())` で動いた後の
 //! B-rep を作って判定すればよい (動かない部品は `parts` に入っていない)。
 
-mod demo;
 mod export;
 use plantwright_core::motion::kinematics;
-mod live_joints;
 mod melfa;
 use plantwright_core::motion::path_interference;
 use plantwright_core::motion::pose;
@@ -48,8 +46,6 @@ use std::collections::HashMap;
 
 use bevy::prelude::*;
 
-#[cfg(test)]
-pub use demo::load_demo;
 pub use export::chart_animation;
 pub use panel::robot::{show_robot_section, teach_tool_off};
 pub use panel::{MotionUi, show_panel};
@@ -386,7 +382,7 @@ mod tests {
     fn demo() -> (Model, TimingChart) {
         let mut model = Model::default();
         let mut chart = TimingChart::default();
-        demo::load_demo(&mut model, &mut chart, &mut Default::default());
+        plantwright_core::motion::demo::load_demo(&mut model, &mut chart, &mut Default::default());
         (model, chart)
     }
 

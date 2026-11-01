@@ -22,17 +22,17 @@
 //! コンベア上の教示点から置き台の上の教示点へ、工具を下向きにしたまま運ぶ。
 
 use super::sensor::SensorKind;
-use plantwright_core::conveyor::{BeltAxis, ConveyorConfig, ConveyorEnd, SourceOutput};
-use plantwright_core::motion::chart::Action;
-use plantwright_core::motion::chart::ActuatorKind;
-use plantwright_core::motion::chart::Axis;
-use plantwright_core::motion::chart::Interlock;
-use plantwright_core::motion::chart::MoveKind;
-use plantwright_core::motion::chart::RobotMove;
-use plantwright_core::motion::chart::Step;
-use plantwright_core::motion::chart::TimingChart;
+use crate::conveyor::{BeltAxis, ConveyorConfig, ConveyorEnd, SourceOutput};
+use crate::motion::chart::Action;
+use crate::motion::chart::ActuatorKind;
+use crate::motion::chart::Axis;
+use crate::motion::chart::Interlock;
+use crate::motion::chart::MoveKind;
+use crate::motion::chart::RobotMove;
+use crate::motion::chart::Step;
+use crate::motion::chart::TimingChart;
 
-use plantwright_core::model::Model;
+use crate::model::Model;
 
 /// 寸法は mm。下の数値は 100 mm 単位で考えたものを `add` などで掛けている。
 const S: f64 = 100.0;

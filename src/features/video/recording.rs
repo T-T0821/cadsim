@@ -18,9 +18,9 @@ use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
 use crate::document::selection::Selection;
 use crate::features::motion::{ChartSchedule, MotionSet, Playback};
 use crate::features::video::camera_path::{CameraPathRes, CameraPathUi, camera_path_ui};
-use crate::features::video::encode::{EncodeSettings, EncoderThread};
 use crate::viewport::camera::{CameraSystems, OrbitCamera, ViewportRect};
 use plantwright_core::camera_path::{CameraPath, CameraPose};
+use plantwright_core::video::encode::{EncodeSettings, EncoderThread};
 use plantwright_core::video::{CropRect, Format, Frame, FramePlan, RecordingSession};
 
 pub struct RecordingPlugin;

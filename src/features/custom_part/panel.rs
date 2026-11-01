@@ -6,9 +6,9 @@ use bevy_egui::{EguiContexts, egui};
 
 use super::CustomLibrary;
 use super::file::{self, LibraryEntry, SaveRequest};
-use super::param::{TargetOnChart, candidates};
 use crate::document::import::ImportJobs;
 use plantwright_core::custom_part::ParamTarget;
+use plantwright_core::custom_part::param::{TargetOnChart, candidates};
 use plantwright_core::model::Model;
 use plantwright_core::model::NodeId;
 use plantwright_core::motion::chart::TimingChart;

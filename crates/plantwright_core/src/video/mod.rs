@@ -6,6 +6,9 @@
 //! 画面のキャプチャ (Bevy) とファイルへのエンコード (アダプター) は外側の層が受け持つ。
 //! シミュレーション時刻はフレーム番号だけから決まるので、描画の速さに関係なく毎回同じ動画になる。
 
+pub mod encode;
+mod mp4;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Format {
     /// H.264 の MP4。PowerPoint や Teams でそのまま再生できる

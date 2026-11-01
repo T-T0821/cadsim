@@ -7,12 +7,10 @@
 //!
 //! 問い合わせ口のポート (`LlmClient`) は `plantwright_core::assistant::llm`、
 //! Claude API での実装は `plantwright_core::assistant::claude`。各機能は [`AiAssistant::client`] で呼び出し口を受け取り、
-//! [`job::LlmJob`] で別スレッドに投げる。
+//! [`plantwright_core::assistant::job::LlmJob`] で別スレッドに投げる。
 
 pub mod help;
-pub mod job;
 mod panel;
-pub mod settings_file;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -22,7 +20,7 @@ use bevy_egui::EguiPrimaryContextPass;
 
 use plantwright_core::assistant::claude::ClaudeClient;
 use plantwright_core::assistant::llm::LlmClient;
-pub use settings_file::AiSettings;
+use plantwright_core::assistant::settings_file::AiSettings;
 
 pub struct AssistantPlugin;
 
@@ -51,8 +49,11 @@ pub struct AiAssistant {
 
 impl AiAssistant {
     fn load() -> Self {
-        let path = settings_file::default_path();
-        let settings = path.as_deref().map(settings_file::load).unwrap_or_default();
+        let path = plantwright_core::assistant::settings_file::default_path();
+        let settings = path
+            .as_deref()
+            .map(plantwright_core::assistant::settings_file::load)
+            .unwrap_or_default();
         Self {
             settings,
             path,
@@ -79,10 +80,12 @@ impl AiAssistant {
 
     fn save(&mut self) {
         self.notice = Some(match &self.path {
-            Some(path) => match settings_file::save(path, &self.settings) {
-                Ok(()) => "保存しました".into(),
-                Err(e) => format!("保存できませんでした: {e}"),
-            },
+            Some(path) => {
+                match plantwright_core::assistant::settings_file::save(path, &self.settings) {
+                    Ok(()) => "保存しました".into(),
+                    Err(e) => format!("保存できませんでした: {e}"),
+                }
+            }
             None => "設定フォルダが見つからないため、この起動中だけ使います".into(),
         });
     }

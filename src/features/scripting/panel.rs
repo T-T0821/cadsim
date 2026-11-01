@@ -2,11 +2,13 @@
 
 use bevy_egui::egui;
 
-use super::{API_HELP, ScriptRun, ScriptState, check, scripts_of};
+use super::{ScriptRun, check, scripts_of};
 use crate::document::history::History;
 use crate::document::selection::Selection;
 use plantwright_core::model::Model;
 use plantwright_core::model::NodeId;
+use plantwright_core::scripting::rhai_engine::API_HELP;
+use plantwright_core::scripting::runner::ScriptState;
 
 const OK_COLOR: egui::Color32 = egui::Color32::from_rgb(90, 200, 120);
 const ERROR_COLOR: egui::Color32 = egui::Color32::from_rgb(235, 100, 90);

@@ -44,7 +44,7 @@ use crate::features::conveyor::ConveyorConfigRes;
 use crate::features::floor::{FloorDoc, FloorView};
 use crate::features::flow::{FlowRes, FlowRun};
 use crate::features::motion::Playback;
-use crate::features::plc::{Plc, PlcRecord};
+use crate::features::plc::Plc;
 use crate::features::video::camera_path::CameraPathRes;
 use crate::features::video::recording::is_recording;
 use crate::viewport::camera::CameraRequest;
@@ -52,6 +52,7 @@ use plantwright_core::conveyor::ConveyorConfig;
 use plantwright_core::model::Model;
 use plantwright_core::model::file_name;
 use plantwright_core::motion::chart::TimingChart;
+use plantwright_core::plc::record::PlcRecord;
 use plantwright_core::site::model::Site;
 
 /// ウィンドウタイトルの先頭 (後ろにファイル名を付ける)

@@ -348,8 +348,8 @@ pub fn unit_to_mm(unit: &str) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::features::motion::demo;
     use plantwright_core::model::Model;
+    use plantwright_core::motion::demo;
 
     #[test]
     fn downward_tool_is_180_0_0() {

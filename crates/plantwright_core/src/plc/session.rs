@@ -4,14 +4,14 @@
 
 use std::collections::HashMap;
 
-use plantwright_core::line::{Direction, Signal, Value};
+use crate::line::{Direction, Signal, Value};
 
-use super::domain::io::{AddressPlan, IoTable, IoValues, LineSignal, Point, line_points};
-use super::domain::io_csv::{self, CsvReport};
-use super::domain::log::PlcLog;
-use super::domain::plant::Plant;
-use super::domain::sequencer::StepSequencer;
-use plantwright_core::motion::chart::TimingChart;
+use super::io::{AddressPlan, IoTable, IoValues, LineSignal, Point, line_points};
+use super::io_csv::{self, CsvReport};
+use super::log::PlcLog;
+use super::plant::Plant;
+use super::sequencer::StepSequencer;
+use crate::motion::chart::TimingChart;
 
 /// 何がアクチュエータを動かすか
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -310,12 +310,12 @@ impl LogPlayer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::features::plc::domain::io::Point;
-    use plantwright_core::flow::model::sample_line;
-    use plantwright_core::line::{LineInputs, SignalSources, line_signals};
-    use plantwright_core::motion::chart::Action;
-    use plantwright_core::motion::chart::ActuatorKind;
-    use plantwright_core::motion::chart::Step;
+    use crate::flow::model::sample_line;
+    use crate::line::{LineInputs, SignalSources, line_signals};
+    use crate::motion::chart::Action;
+    use crate::motion::chart::ActuatorKind;
+    use crate::motion::chart::Step;
+    use crate::plc::io::Point;
 
     /// 外部 PLC のふり: ライン連携の「運転」を OFF にし、届いた「排出数」を覚える
     struct LinePlc {

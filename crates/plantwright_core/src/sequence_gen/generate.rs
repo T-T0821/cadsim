@@ -2,7 +2,7 @@
 //!
 //! 生成 AI はポート [`LlmClient`] で受け取る。Bevy・egui に依存しない。
 
-use plantwright_core::assistant::llm::{Effort, LlmClient, LlmError, LlmRequest};
+use crate::assistant::llm::{Effort, LlmClient, LlmError, LlmRequest};
 
 use super::json;
 use super::log_events::LogSummary;
@@ -137,8 +137,8 @@ fn check_size(text: &str) -> Result<(), LlmError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::features::sequence_gen::spec::tests::sample_spec;
-    use plantwright_core::assistant::llm::ScriptedLlm;
+    use crate::assistant::llm::ScriptedLlm;
+    use crate::sequence_gen::spec::tests::sample_spec;
 
     #[test]
     fn generate_sends_current_chart_and_schema_and_parses_reply() {

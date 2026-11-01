@@ -16,8 +16,8 @@ use std::time::{Duration, Instant};
 use tokio_modbus::Slave;
 use tokio_modbus::client::sync::{self, Reader, Writer};
 
-use crate::features::plc::domain::io::{IoTable, IoValues};
-use crate::features::plc::usecase::{LinkStatus, PlcLink};
+use crate::plc::io::{IoTable, IoValues};
+use crate::plc::session::{LinkStatus, PlcLink};
 
 /// 1回の要求で読み書きする最大の点数 (Modbus の上限 123〜2000 点より控えめにする)
 const MAX_PER_REQUEST: usize = 120;
@@ -293,9 +293,9 @@ mod server_tests {
     use tokio_modbus::{ExceptionCode, Request, Response};
 
     use super::*;
-    use crate::features::plc::domain::io::{AddressPlan, Point};
-    use plantwright_core::motion::chart::ActuatorKind;
-    use plantwright_core::motion::chart::TimingChart;
+    use crate::motion::chart::ActuatorKind;
+    use crate::motion::chart::TimingChart;
+    use crate::plc::io::{AddressPlan, Point};
 
     /// コイルと保持レジスタを 200 点ずつ持つだけの PLC
     #[derive(Clone, Default)]
