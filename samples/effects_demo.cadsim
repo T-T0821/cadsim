@@ -1,0 +1,335 @@
+{
+ "format_version": 1,
+ "unit": "mm",
+ "step_files": [],
+ "nodes": [
+  {
+   "name": "エフェクトのサンプルライン",
+   "position": [
+    0,
+    0,
+    0
+   ],
+   "rotation_deg": [
+    0,
+    0,
+    0
+   ],
+   "visible": true,
+   "kind": {
+    "type": "Assembly"
+   },
+   "children": [
+    {
+     "name": "部品投入",
+     "position": [
+      0,
+      0,
+      0
+     ],
+     "rotation_deg": [
+      0,
+      0,
+      0
+     ],
+     "visible": true,
+     "kind": {
+      "type": "Box",
+      "size": [
+       700,
+       900,
+       700
+      ],
+      "position": [
+       -5000,
+       450.0,
+       0
+      ],
+      "rotation_deg": [
+       0,
+       0,
+       0
+      ]
+     },
+     "color": [
+      0.55,
+      0.6,
+      0.65
+     ]
+    },
+    {
+     "name": "スポット溶接",
+     "position": [
+      0,
+      0,
+      0
+     ],
+     "rotation_deg": [
+      0,
+      0,
+      0
+     ],
+     "visible": true,
+     "kind": {
+      "type": "Box",
+      "size": [
+       1400,
+       1600,
+       1200
+      ],
+      "position": [
+       -3000,
+       800.0,
+       0
+      ],
+      "rotation_deg": [
+       0,
+       0,
+       0
+      ]
+     },
+     "color": [
+      0.45,
+      0.5,
+      0.6
+     ]
+    },
+    {
+     "name": "塗装ブース",
+     "position": [
+      0,
+      0,
+      0
+     ],
+     "rotation_deg": [
+      0,
+      0,
+      0
+     ],
+     "visible": true,
+     "kind": {
+      "type": "Box",
+      "size": [
+       1600,
+       2000,
+       1400
+      ],
+      "position": [
+       -1000,
+       1000.0,
+       0
+      ],
+      "rotation_deg": [
+       0,
+       0,
+       0
+      ]
+     },
+     "color": [
+      0.7,
+      0.72,
+      0.75
+     ]
+    },
+    {
+     "name": "仮置き棚",
+     "position": [
+      0,
+      0,
+      0
+     ],
+     "rotation_deg": [
+      0,
+      0,
+      0
+     ],
+     "visible": true,
+     "kind": {
+      "type": "Box",
+      "size": [
+       900,
+       1200,
+       600
+      ],
+      "position": [
+       1000,
+       600.0,
+       0
+      ],
+      "rotation_deg": [
+       0,
+       0,
+       0
+      ]
+     },
+     "color": [
+      0.72,
+      0.56,
+      0.38
+     ]
+    },
+    {
+     "name": "最終検査",
+     "position": [
+      0,
+      0,
+      0
+     ],
+     "rotation_deg": [
+      0,
+      0,
+      0
+     ],
+     "visible": true,
+     "kind": {
+      "type": "Box",
+      "size": [
+       1200,
+       900,
+       800
+      ],
+      "position": [
+       3000,
+       450.0,
+       0
+      ],
+      "rotation_deg": [
+       0,
+       0,
+       0
+      ]
+     },
+     "color": [
+      0.5,
+      0.62,
+      0.5
+     ]
+    },
+    {
+     "name": "出荷",
+     "position": [
+      0,
+      0,
+      0
+     ],
+     "rotation_deg": [
+      0,
+      0,
+      0
+     ],
+     "visible": true,
+     "kind": {
+      "type": "Box",
+      "size": [
+       800,
+       500,
+       800
+      ],
+      "position": [
+       5000,
+       250.0,
+       0
+      ],
+      "rotation_deg": [
+       0,
+       0,
+       0
+      ]
+     },
+     "color": [
+      0.6,
+      0.6,
+      0.6
+     ]
+    }
+   ]
+  }
+ ],
+ "flow": {
+  "duration": 28800.0,
+  "warmup": 0.0,
+  "seed": 7,
+  "elements": [
+   {
+    "id": 1,
+    "name": "部品投入",
+    "type": "Source",
+    "interval": 6.0,
+    "spread": 0.1,
+    "next": [
+     2
+    ],
+    "part": [
+     0,
+     0
+    ]
+   },
+   {
+    "id": 2,
+    "name": "スポット溶接",
+    "type": "Process",
+    "cycle_time": 7.0,
+    "spread": 0.1,
+    "next": [
+     3
+    ],
+    "part": [
+     0,
+     1
+    ]
+   },
+   {
+    "id": 3,
+    "name": "塗装ブース",
+    "type": "Process",
+    "cycle_time": 8.0,
+    "spread": 0.1,
+    "mtbf": 1200.0,
+    "mttr": 600.0,
+    "next": [
+     4
+    ],
+    "part": [
+     0,
+     2
+    ]
+   },
+   {
+    "id": 4,
+    "name": "仮置き棚",
+    "type": "Buffer",
+    "capacity": 2,
+    "next": [
+     5
+    ],
+    "part": [
+     0,
+     3
+    ]
+   },
+   {
+    "id": 5,
+    "name": "最終検査",
+    "type": "Process",
+    "cycle_time": 9.5,
+    "spread": 0.2,
+    "next": [
+     6
+    ],
+    "part": [
+     0,
+     4
+    ]
+   },
+   {
+    "id": 6,
+    "name": "出荷",
+    "type": "Sink",
+    "part": [
+     0,
+     5
+    ]
+   }
+  ]
+ }
+}

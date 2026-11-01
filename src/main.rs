@@ -39,6 +39,7 @@
 //! - `preferences_file` 見た目とミッションの設定の読み書き (中身は `cadsim_core::gamify`)
 //! - `physics`     物理演算 (重力・接触・摩擦、ベルトコンベア、ケーブル・ホース)
 //! - `video`       動画のエンコード (MP4 / GIF / PNG。Bevy に依存しない)
+//! - `effects`     状態のエフェクト (詰まり・故障・安全停止の光と煙、溶接と干渉の火花。判断は `cadsim_core::effects`)
 //! - `ui_check`    画面での動作確認の自動化 (`--ui-check`。手順書どおりに操作して画面を撮り、基準画像と比べる)
 
 // Windows のリリースビルドでは、起動時に黒いコンソール窓を出さない
@@ -55,6 +56,7 @@ mod custom_part;
 mod defeature;
 mod documents;
 mod drawing;
+mod effects;
 mod file_io;
 mod floor;
 mod floor_record;
@@ -152,6 +154,7 @@ fn main() {
                 assistant::AssistantPlugin,
                 sequence_gen::SequenceGenPlugin,
                 ui_check::UiCheckPlugin,
+                effects::EffectsPlugin,
             ),
         ))
         .run();

@@ -444,6 +444,7 @@ fn view_menu(ui: &mut egui::Ui, state: &mut UiState) {
         ui.menu_button("大きなモデルを軽く表示", |ui| {
             lightweight_menu(ui, state)
         });
+        ui.menu_button("状態のエフェクト", |ui| effects_menu(ui, state));
         ui.separator();
         let mut show = state.playful.prefs.show_missions;
         if ui
@@ -460,6 +461,25 @@ fn view_menu(ui: &mut egui::Ui, state: &mut UiState) {
         {
             state.dock.close_all();
         }
+    });
+}
+
+/// 詰まり・故障の光と煙、溶接と干渉の火花のオン・オフ
+fn effects_menu(ui: &mut egui::Ui, state: &mut UiState) {
+    let effects = &mut state.settings.effects;
+    ui.checkbox(&mut effects.enabled, "エフェクトを表示")
+        .on_hover_text(
+            "工程シミュレーションやライン連携で、詰まった設備を赤く光らせ、故障した設備から煙を出す。\n\
+             名前に「溶接」を含む工程が加工している間は火花を散らす。\n\
+             安全機器が止めたら機器の上で赤い光が点滅し、チャートの再生中はぶつかっている所に火花が出る",
+        );
+    ui.add_enabled_ui(effects.enabled, |ui| {
+        ui.checkbox(
+            &mut effects.glow,
+            "光と波紋 (詰まり・故障・人待ち・安全停止)",
+        );
+        ui.checkbox(&mut effects.smoke, "煙 (故障)");
+        ui.checkbox(&mut effects.sparks, "火花 (溶接・干渉)");
     });
 }
 

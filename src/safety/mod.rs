@@ -120,6 +120,11 @@ impl SafetyState {
         self.monitor.is_stopped()
     }
 
+    /// 停止させた機器 (リセットするまで残る)
+    pub fn stop_devices(&self) -> impl Iterator<Item = u32> + '_ {
+        self.monitor.causes.iter().map(|c| c.device)
+    }
+
     /// 停止・遮光・非常停止・選択を最初の状態に戻す (プロジェクトを開き直したとき)
     pub fn clear_runtime(&mut self) {
         *self = Self {
