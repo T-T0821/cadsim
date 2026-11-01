@@ -5,12 +5,18 @@
 //!   加工中に故障 (MTBF / MTTR を平均とする指数分布の乱数) で止まることがある。
 //! - **バッファ** は容量まで先入れ先出しでワークをためる。
 //! - **排出** はワークを受け取って数える。
+//! - **搬送** はフォークリフト・手運びなどでライン間を運ぶ。受け取ってから搬送時間で
+//!   送り先へ届け、同時に運べる数 (台数 × 1 回に積む数) まで受け取れる。
+//!
+//! 要素はライン ([`Line`]) にまとめられる。ラインを並べて工場にし、ラインごとの結果を見る
+//! (`factory.rs`)。
 //!
 //! 各要素は送り先を複数持てる。送るときは並び順に見て、最初に受け取れる先へ送る。
 //!
 //! 工程には「人が要るか」([`Labor`]) を付けられる。人が要る工程は、名簿 ([`Staffing`]) の
 //! 作業者のうち、その工程ができて手の空いている人が来るまで「人待ち」で止まる。
 
+pub use super::factory::{Line, LineId};
 pub use crate::staffing::model::{Labor, Staffing};
 
 /// 要素の ID。プロジェクト内で一意。
@@ -21,8 +27,10 @@ pub type ElementId = u32;
 pub struct FlowModel {
     pub elements: Vec<Element>,
     pub settings: RunSettings,
-    /// 作業者の名簿とシフト
+    /// 作業者の名簿とシフト (工場のすべてのラインで共有)
     pub staffing: Staffing,
+    /// ラインのまとまり。空なら工場全体が1本のライン
+    pub lines: Vec<Line>,
     /// 名前を付けて取っておいた設定 (案)。比べるときに使う
     pub scenarios: Vec<super::scenario::Scenario>,
     next_id: ElementId,
@@ -34,6 +42,7 @@ impl Default for FlowModel {
             elements: Vec::new(),
             settings: RunSettings::default(),
             staffing: Staffing::default(),
+            lines: Vec::new(),
             scenarios: Vec::new(),
             next_id: 1,
         }
@@ -79,6 +88,8 @@ pub struct Element {
     pub starts_chart: bool,
     /// 工程に人が要るか (工程以外は使わない)
     pub labor: Labor,
+    /// 属するライン。None ならどのラインにも入れていない
+    pub line: Option<LineId>,
 }
 
 /// 送り出したワークを運ぶ AGV の搬送: `from` のステーションで積み、`to` で降ろす。
@@ -110,6 +121,12 @@ pub enum ElementKind {
         capacity: u32,
     },
     Sink,
+    Transport {
+        /// 受け取ってから届けるまでの時間 (秒)
+        travel_time: f64,
+        /// 同時に運べる数 (台数 × 1 回に積む数)
+        capacity: u32,
+    },
 }
 
 /// 故障の入れ方。加工している時間で数える。
@@ -139,14 +156,16 @@ pub enum KindTag {
     Process,
     Buffer,
     Sink,
+    Transport,
 }
 
 impl KindTag {
-    pub const ALL: [KindTag; 4] = [
+    pub const ALL: [KindTag; 5] = [
         KindTag::Source,
         KindTag::Process,
         KindTag::Buffer,
         KindTag::Sink,
+        KindTag::Transport,
     ];
 
     pub fn label(self) -> &'static str {
@@ -155,6 +174,7 @@ impl KindTag {
             KindTag::Process => "工程",
             KindTag::Buffer => "バッファ",
             KindTag::Sink => "排出",
+            KindTag::Transport => "搬送",
         }
     }
 
@@ -173,6 +193,10 @@ impl KindTag {
             },
             KindTag::Buffer => ElementKind::Buffer { capacity: 5 },
             KindTag::Sink => ElementKind::Sink,
+            KindTag::Transport => ElementKind::Transport {
+                travel_time: 60.0,
+                capacity: 1,
+            },
         }
     }
 }
@@ -184,6 +208,7 @@ impl ElementKind {
             ElementKind::Process { .. } => KindTag::Process,
             ElementKind::Buffer { .. } => KindTag::Buffer,
             ElementKind::Sink => KindTag::Sink,
+            ElementKind::Transport { .. } => KindTag::Transport,
         }
     }
 }
@@ -198,6 +223,7 @@ impl FlowModel {
         self.elements == other.elements
             && self.settings == other.settings
             && self.staffing == other.staffing
+            && self.lines == other.lines
     }
 
     /// 案を除いた写し
@@ -206,6 +232,7 @@ impl FlowModel {
             elements: self.elements.clone(),
             settings: self.settings,
             staffing: self.staffing.clone(),
+            lines: self.lines.clone(),
             scenarios: Vec::new(),
             next_id: self.next_id,
         }
@@ -263,6 +290,7 @@ impl FlowModel {
             carrier: None,
             starts_chart: false,
             labor: Labor::None,
+            line: None,
         })
     }
 
@@ -383,6 +411,19 @@ impl FlowModel {
                 ElementKind::Buffer { capacity } => {
                     if *capacity == 0 {
                         out.push(format!("{name}: 容量は 1 以上にしてください"));
+                    }
+                }
+                ElementKind::Transport {
+                    travel_time,
+                    capacity,
+                } => {
+                    if travel_time.is_nan() || *travel_time < MIN_TIME {
+                        out.push(format!(
+                            "{name}: 搬送時間は {MIN_TIME} 秒以上にしてください"
+                        ));
+                    }
+                    if *capacity == 0 {
+                        out.push(format!("{name}: 同時に運べる数は 1 以上にしてください"));
                     }
                 }
                 ElementKind::Sink => {

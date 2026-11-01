@@ -3,6 +3,7 @@
 //! 上に実行の操作 (▶ / ⏸ / ⏩ 最後まで / 速度 / 色分け / Excel)、その下にタブ:
 //! - 工程: 要素の一覧と、選んだ要素の設定。回す時間など
 //! - 人員: シフト・作業者の名簿とできる工程・人数の比較 (`staff_ui.rs`)
+//! - 工場: ラインの一覧・別ファイルのラインの取り込み・ラインごとの結果 (`factory_ui.rs`)
 //! - 案の比較: 設定を案として取っておき、繰り返し回して並べる (`scenario_ui.rs`)
 //! - 結果: ラインの集計と設備ごとの表、作業者ごとの表
 //! - グラフ: 状態の割合の積み上げ横棒、排出数と仕掛数の推移、状態の時系列
@@ -13,6 +14,7 @@ use bevy::prelude::*;
 use bevy_egui::egui::{self, Color32, Pos2, Rect as ERect, Stroke, Vec2};
 use cadsim_core::workspace::Tool;
 
+use super::factory_ui::{FactoryUiState, factory_tab};
 use super::model::{ElementId, ElementKind, Failure, FlowModel, KindTag, Labor, sample_line};
 use super::palette::{busy_rgb, state_rgb};
 use super::scenario_ui::{ScenarioUiState, scenario_tab};
@@ -26,6 +28,7 @@ enum Tab {
     #[default]
     Line,
     Staff,
+    Factory,
     Scenarios,
     Results,
     Charts,
@@ -40,6 +43,7 @@ pub struct FlowUiState {
     problems: Vec<String>,
     staff: StaffUiState,
     scenarios: ScenarioUiState,
+    factory: FactoryUiState,
 }
 
 #[derive(SystemParam)]
@@ -87,6 +91,7 @@ pub fn show_window(
             let tab = &mut state.ui.tab;
             ui.selectable_value(tab, Tab::Line, "工程");
             ui.selectable_value(tab, Tab::Staff, "人員");
+            ui.selectable_value(tab, Tab::Factory, "工場");
             ui.selectable_value(tab, Tab::Scenarios, "案の比較");
             ui.selectable_value(tab, Tab::Results, "結果");
             ui.selectable_value(tab, Tab::Charts, "グラフ");
@@ -96,6 +101,12 @@ pub fn show_window(
             Tab::Line => line_tab(ui, state, model, selection),
             Tab::Staff => {
                 if staff_tab(ui, &mut state.flow, &mut state.ui.staff) {
+                    state.run.stop();
+                    state.ui.selected = None;
+                }
+            }
+            Tab::Factory => {
+                if factory_tab(ui, &mut state.flow, &state.run, &mut state.ui.factory) {
                     state.run.stop();
                     state.ui.selected = None;
                 }
@@ -337,7 +348,29 @@ fn line_tab(ui: &mut egui::Ui, state: &mut FlowUi, model: &Model, selection: &Se
 }
 
 fn element_list(ui: &mut egui::Ui, flow: &FlowModel, run: &FlowRun, ui_state: &mut FlowUiState) {
-    for e in &flow.elements {
+    // ラインに分けていれば、並び順のまま、ラインが変わるところに見出しを付ける
+    let mut previous = None;
+    for (k, e) in flow.elements.iter().enumerate() {
+        if !flow.lines.is_empty() && (k == 0 || previous != Some(e.line)) {
+            ui.add_space(2.0);
+            ui.strong(
+                flow.line_name(e)
+                    .unwrap_or("ライン間 (どのラインにも入れていない)"),
+            );
+        }
+        previous = Some(e.line);
+        element_row(ui, flow, run, ui_state, e);
+    }
+}
+
+fn element_row(
+    ui: &mut egui::Ui,
+    flow: &FlowModel,
+    run: &FlowRun,
+    ui_state: &mut FlowUiState,
+    e: &super::model::Element,
+) {
+    {
         let summary = match &e.kind {
             ElementKind::Source { interval, .. } => format!("{interval} 秒ごと"),
             ElementKind::Process {
@@ -350,6 +383,10 @@ fn element_list(ui: &mut egui::Ui, flow: &FlowModel, run: &FlowRun, ui_state: &m
             ),
             ElementKind::Buffer { capacity } => format!("容量 {capacity}"),
             ElementKind::Sink => String::new(),
+            ElementKind::Transport {
+                travel_time,
+                capacity,
+            } => format!("{travel_time} 秒・{capacity} 個まで"),
         };
         let next: Vec<&str> = e
             .next
@@ -400,6 +437,7 @@ fn element_editor(
         .filter(|e| e.id != id)
         .map(|e| (e.id, e.name.clone(), e.kind.tag()))
         .collect();
+    let lines: Vec<(u32, String)> = flow.lines.iter().map(|l| (l.id, l.name.clone())).collect();
     let e = flow.get_mut(id).unwrap();
     let tag = e.kind.tag();
     egui::Grid::new("flow_element")
@@ -412,6 +450,22 @@ fn element_editor(
             ui.weak("名前");
             ui.text_edit_singleline(&mut e.name);
             ui.end_row();
+            if !lines.is_empty() {
+                ui.weak("ライン");
+                let current = e
+                    .line
+                    .and_then(|l| lines.iter().find(|(id, _)| *id == l))
+                    .map_or("なし (ライン間など)", |(_, name)| name.as_str());
+                egui::ComboBox::from_id_salt("flow_element_line")
+                    .selected_text(current)
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut e.line, None, "なし (ライン間など)");
+                        for (id, name) in &lines {
+                            ui.selectable_value(&mut e.line, Some(*id), name);
+                        }
+                    });
+                ui.end_row();
+            }
 
             match &mut e.kind {
                 ElementKind::Source {
@@ -478,6 +532,18 @@ fn element_editor(
                 ElementKind::Buffer { capacity } => {
                     ui.weak("容量");
                     ui.add(egui::DragValue::new(capacity).range(1..=100_000).suffix(" 個"));
+                    ui.end_row();
+                }
+                ElementKind::Transport {
+                    travel_time,
+                    capacity,
+                } => {
+                    ui.weak("搬送時間");
+                    seconds(ui, travel_time);
+                    ui.end_row();
+                    ui.weak("同時に運べる数");
+                    ui.add(egui::DragValue::new(capacity).range(1..=10_000).suffix(" 個"))
+                        .on_hover_text("フォークリフトの台数 × 1 回に積む数。これだけ運んでいる間は次を受け取らない");
                     ui.end_row();
                 }
                 ElementKind::Sink => {}
@@ -796,7 +862,10 @@ fn element_table(ui: &mut egui::Ui, r: &Report) {
                     ui.label(&e.name);
                 }
                 ui.weak(e.kind.label());
-                let shows_states = matches!(e.kind, KindTag::Source | KindTag::Process);
+                let shows_states = matches!(
+                    e.kind,
+                    KindTag::Source | KindTag::Process | KindTag::Transport
+                );
                 for state in State::ALL {
                     if shows_states {
                         ui.label(format!("{:.1}%", e.times.ratio(state) * 100.0));
@@ -811,11 +880,16 @@ fn element_table(ui: &mut egui::Ui, r: &Report) {
                     "-".into()
                 });
                 ui.label(e.average_cycle.map_or("-".into(), |c| format!("{c:.1} 秒")));
-                ui.label(if matches!(e.kind, KindTag::Process | KindTag::Buffer) {
-                    format!("{:.2} 個", e.content_average)
-                } else {
-                    "-".into()
-                });
+                ui.label(
+                    if matches!(
+                        e.kind,
+                        KindTag::Process | KindTag::Buffer | KindTag::Transport
+                    ) {
+                        format!("{:.2} 個", e.content_average)
+                    } else {
+                        "-".into()
+                    },
+                );
                 ui.label(format!("{:.2} kWh", e.energy_kwh));
                 ui.label(format!("{:.2} m³", e.air_m3));
                 ui.end_row();
@@ -838,6 +912,7 @@ fn worker_table(ui: &mut egui::Ui, r: &Report) {
                 "出勤時間",
                 "作業数",
                 "歩いた回数",
+                "応援",
             ] {
                 ui.strong(title);
             }
@@ -856,6 +931,8 @@ fn worker_table(ui: &mut egui::Ui, r: &Report) {
                 ui.label(hours(w.times.on_duty()));
                 ui.label(w.tasks.to_string());
                 ui.label(w.walks.to_string());
+                ui.label(w.support_tasks.to_string())
+                    .on_hover_text("持ち場のライン以外で作業した回数");
                 ui.end_row();
             }
         });

@@ -4,13 +4,15 @@
 //! - 概要: ラインの集計 (排出数・スループット・サイクルタイム・仕掛数・電力量など) と回した条件
 //! - 設備別: 要素ごとの稼働・待ち・詰まり・故障の割合、電力量・エア消費量と、割合の積み上げ横棒グラフ
 //! - 推移: 一定間隔の排出数の累計・仕掛数と、その折れ線グラフ
-//! - 作業者別 (作業者がいるときだけ): 作業・歩行・手待ちの割合と作業数
+//! - 作業者別 (作業者がいるときだけ): 作業・歩行・手待ちの割合と作業数、応援の作業数
+//! - ライン別 (ラインに分けているときだけ): ラインごとの出来高・ボトルネック・仕掛・人待ち
 
 use rust_xlsxwriter::{
     Chart, ChartFormat, ChartSolidFill, ChartType, Color, Format, FormatAlign, Workbook, Worksheet,
     XlsxError,
 };
 
+use cadsim_core::flow::factory::line_summaries;
 use cadsim_core::flow::model::{ElementKind, FlowModel, KindTag};
 use cadsim_core::flow::sim::{Report, State, WorkerState};
 
@@ -18,6 +20,7 @@ const SUMMARY: &str = "概要";
 const ELEMENTS: &str = "設備別";
 const SERIES: &str = "推移";
 const WORKERS: &str = "作業者別";
+const LINES: &str = "ライン別";
 
 /// 状態の色 (3D ビューの色分けと同じ)
 fn state_color(state: State) -> Color {
@@ -56,6 +59,16 @@ pub fn report_to_xlsx(model: &FlowModel, report: &Report) -> Result<Vec<u8>, Xls
     if !report.workers.is_empty() {
         workers_sheet(
             workbook.add_worksheet(),
+            report,
+            &header,
+            &percent,
+            &decimal,
+        )?;
+    }
+    if !model.lines.is_empty() {
+        lines_sheet(
+            workbook.add_worksheet(),
+            model,
             report,
             &header,
             &percent,
@@ -174,6 +187,13 @@ fn summary_sheet(
             ElementKind::Buffer { capacity } => {
                 sheet.write_number(row, 4, *capacity)?;
             }
+            ElementKind::Transport {
+                travel_time,
+                capacity,
+            } => {
+                sheet.write_number(row, 2, *travel_time)?;
+                sheet.write_number(row, 4, *capacity)?;
+            }
             ElementKind::Sink => {}
         }
         sheet.write_number(row, 7, e.energy.rated_kw)?;
@@ -282,12 +302,13 @@ fn workers_sheet(
         "出勤時間 (時間)",
         "作業数",
         "歩いた回数",
+        "応援の作業数",
     ];
     for (col, title) in titles.iter().enumerate() {
         sheet.write_string_with_format(0, col as u16, *title, header)?;
     }
     sheet.set_column_width(0, 16)?;
-    sheet.set_column_range_width(1, 7, 14)?;
+    sheet.set_column_range_width(1, 8, 14)?;
     for (i, w) in report.workers.iter().enumerate() {
         let row = i as u32 + 1;
         sheet.write_string(row, 0, &w.name)?;
@@ -305,6 +326,47 @@ fn workers_sheet(
         sheet.write_number_with_format(row, 5, w.times.on_duty() / 3600.0, decimal)?;
         sheet.write_number(row, 6, w.tasks)?;
         sheet.write_number(row, 7, w.walks)?;
+        sheet.write_number(row, 8, w.support_tasks)?;
+    }
+    Ok(())
+}
+
+fn lines_sheet(
+    sheet: &mut Worksheet,
+    model: &FlowModel,
+    report: &Report,
+    header: &Format,
+    percent: &Format,
+    decimal: &Format,
+) -> Result<(), XlsxError> {
+    sheet.set_name(LINES)?;
+    let titles = [
+        "ライン",
+        "出来高",
+        "スループット (個/時)",
+        "ボトルネック",
+        "ボトルネックの稼働率",
+        "仕掛数 (平均)",
+        "人待ち",
+    ];
+    for (col, title) in titles.iter().enumerate() {
+        sheet.write_string_with_format(0, col as u16, *title, header)?;
+    }
+    sheet.set_column_width(0, 22)?;
+    sheet.set_column_range_width(1, 6, 16)?;
+    for (i, l) in line_summaries(model, report).iter().enumerate() {
+        let row = i as u32 + 1;
+        sheet.write_string(row, 0, &l.name)?;
+        sheet.write_number(row, 1, l.output)?;
+        sheet.write_number_with_format(row, 2, l.throughput_per_hour, decimal)?;
+        if let Some(b) = l.bottleneck.and_then(|id| report.element(id)) {
+            sheet.write_string(row, 3, &b.name)?;
+            sheet.write_number_with_format(row, 4, l.bottleneck_busy, percent)?;
+        }
+        sheet.write_number_with_format(row, 5, l.wip_average, decimal)?;
+        if let Some(r) = l.no_operator_ratio {
+            sheet.write_number_with_format(row, 6, r, percent)?;
+        }
     }
     Ok(())
 }
@@ -368,5 +430,15 @@ mod tests {
         let text = String::from_utf8_lossy(&bytes);
         assert!(text.contains("xl/worksheets/sheet3.xml"));
         assert!(text.contains("xl/charts/chart1.xml"));
+    }
+
+    #[test]
+    fn a_factory_gets_a_sheet_per_line() {
+        let model = cadsim_core::flow::factory::sample_factory();
+        let report = Simulation::run(&model).unwrap();
+        let bytes = report_to_xlsx(&model, &report).unwrap();
+        let text = String::from_utf8_lossy(&bytes);
+        // 概要・設備別・推移・作業者別・ライン別
+        assert!(text.contains("xl/worksheets/sheet5.xml"));
     }
 }
