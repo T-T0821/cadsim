@@ -21,6 +21,7 @@ use crate::annotation::{AnnotationRecord, Annotations, node_path, to_records};
 use crate::custom_part::CustomInstanceRecord;
 use crate::floor_record::FloorRecord;
 use crate::flow::{self, model::FlowModel, record::FlowRecord};
+use crate::formats::camera_path_record::{self, CameraPathRecord};
 use crate::formats::chart_record::{AnimationRecord, ChartRecord, chart_to_record};
 use crate::formats::conveyor_record::{self, ConveyorsRecord};
 use crate::formats::site_record::{CloudRecord, UnderlayRecord};
@@ -29,6 +30,7 @@ use crate::math::{quat_to_euler_deg, split_placement};
 use crate::model::{Model, NodeId, NodeKind, StepSource};
 use crate::physics::{CableRecord, PartPhysicsRecord};
 use crate::plc::PlcRecord;
+use cadsim_core::camera_path::CameraPath;
 use cadsim_core::conveyor::ConveyorConfig;
 use cadsim_core::motion::TimingChart;
 
@@ -87,6 +89,9 @@ pub struct ProjectFile {
     /// コンベアのワーク搬送とグリッパの設定
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub conveyors: Option<ConveyorsRecord>,
+    /// 紹介動画のカメラワーク (カメラの通り道)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub camera_path: Option<CameraPathRecord>,
 }
 
 /// プロジェクトに保存する設計データ一式 (モデル以外の文書も含む)
@@ -99,6 +104,7 @@ pub struct ProjectDocs<'a> {
     pub animations: &'a Animations,
     pub plc: Option<PlcRecord>,
     pub conveyors: &'a ConveyorConfig,
+    pub camera_path: &'a CameraPath,
 }
 
 fn default_unit() -> String {
@@ -218,6 +224,7 @@ impl ProjectFile {
             animations: Vec::new(),
             plc: None,
             conveyors: None,
+            camera_path: None,
         }
     }
 
@@ -260,6 +267,7 @@ impl ProjectFile {
             animations: docs.animations.to_records(path_of),
             plc: docs.plc.clone(),
             conveyors: conveyor_record::to_record(docs.conveyors, path_of),
+            camera_path: camera_path_record::to_record(docs.camera_path),
             ..Self::from_model(model, base_dir)
         }
     }

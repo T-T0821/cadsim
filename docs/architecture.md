@@ -56,7 +56,7 @@ src/                      アプリ本体。assets/ の場所を変えないよ�
 crates/
 ├── cadsim_core/          1. ドメイン + 2. ユースケース (Bevy なし)
 │   └── src/
-│       ├── domain/       model, math, melsec (三菱 PLC のデバイス), selection, remap (形状の差し替えの対応づけ), simulation (幾何・干渉・計測),
+│       ├── domain/       model, math, camera_path (紹介動画のカメラの通り道), melsec (三菱 PLC のデバイス), selection, remap (形状の差し替えの対応づけ), simulation (幾何・干渉・計測),
 │       │                 motion (チャート・姿勢・運動学・URDF の機種の関節への直し方), plc (シーケンス・I/O 表), flow, conveyor,
 │       │                 staffing (作業者の名簿・スキル・シフト・人数の比較),
 │       │                 safety (安全機器・検知・安全距離), floor (作業者・AGV・床の幾何・作業者と AGV の 3D の形),
@@ -116,6 +116,7 @@ crates/
 | モデリング | `modeling`(B-rep の詰め方のポート `SolidStore`) | `modeled`(B-rep ⇔ JSON) | `ui/modeling.rs` |
 | 物理演算 | `physics::{settings, cable}`(ドメイン)、`physics::world`(ユースケース。物理エンジンのポート `PhysicsEngine`) | `physics::{rapier, records}`(Rapier と .cadsim の形) | `physics/{mod, panel, sample}` |
 | 動画書き出し | `video`(撮る時刻・切り抜き・書き込み先のポート `VideoSink`) | `video::{encode, mp4}`(MP4 / GIF / PNG) | `view/recording.rs`(画面のキャプチャ・設定ウィンドウ) |
+| 紹介動画のカメラワーク | `camera_path`(視点の通り道と補間) | `cadsim_io::formats::camera_path_record`(.cadsim の形) | `view/camera_path.rs`(カメラワークの欄・通り道の線・プレビュー) |
 | タイミングチャート・アニメーションの保存 | `motion::chart` | `formats::chart_record` | `project/` |
 | 文書の変更を元に戻す履歴にまとめる | `usecase::edit_tracker`(前に確定した状態との比較) | — | `history.rs` の `TrackedDoc`(各プラグインで登録) |
 | ロボット機種 (URDF) の読み込み | `motion::robot_import`(機種の型 `RobotDescription` と、チャートの関節・ロボットへの直し方) | `cadsim_io::urdf`(URDF と COLLADA の XML) | `file_io.rs`(別スレッドでの読み込み)、`motion/urdf_robot.rs`(リンクの位置を集めて関節を付ける) |

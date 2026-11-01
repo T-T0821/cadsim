@@ -6,6 +6,7 @@
 pub mod animation;
 pub mod bom;
 pub mod bvh;
+pub mod camera_path;
 pub mod conveyor;
 pub mod custom_part;
 pub mod drawing;

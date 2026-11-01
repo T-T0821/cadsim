@@ -1,0 +1,24 @@
+# カメラワーク: サンプル装置のまわりを一周する紹介動画を GIF にする
+# 自動確認では保存ダイアログを出さず target/ui-check/14_camera_path/saved/ に書く
+wait_loaded
+click "空のプロジェクトから"        # ようこそ画面を閉じて空から始める
+wait_loaded
+wait 30
+click "サンプル装置"
+click "ファイル"
+hover "書き出し"
+click "シミュレーションを動画で書き出し…"
+click "カメラワーク"              # 欄を開く
+click "ぐるっと一周"              # 今の注視点のまわりを一周する通り道を作る
+wait 10
+expect "カメラの通り道に沿って撮る"
+expect "視点 5"
+screenshot 01_camera_path
+
+click "MP4 (H.264)"              # 形式の選択を開く
+click "GIF"
+click "1/2"
+click "● 書き出し開始…"
+wait_loaded
+expect "書き出しました:"
+screenshot 02_done

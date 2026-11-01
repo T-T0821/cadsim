@@ -5,6 +5,7 @@
 //! Bevy にも egui にも依存しない。
 
 pub mod bom_out;
+pub mod camera_path_record;
 pub mod chart_record;
 pub mod conveyor_record;
 pub mod drawing_out;
