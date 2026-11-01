@@ -278,7 +278,7 @@ fn collect_shapes(node: &ImportNode, out: &mut HashMap<String, Arc<ImportedShape
 }
 
 /// 起動時に動かして見せるデモライン (ロボットセル・コンベア・安全機器・AGV・工程モデル)
-const DEMO_LINE: &str = include_str!("../../samples/demo_line.cadsim");
+const DEMO_LINE: &str = include_str!("../../samples/demo_line.plantwright");
 /// 読み込み中・読み込み後の表示名
 pub const DEMO_LINE_NAME: &str = "デモライン";
 
@@ -294,7 +294,7 @@ pub fn load_demo_line() -> Result<LoadedProject, ProjectError> {
 const REAL_ROBOT_FILES: [(&str, &[u8]); 6] = [
     (
         REAL_ROBOT_PROJECT,
-        include_bytes!("../../samples/real_robot/ur5e_pick_place.cadsim"),
+        include_bytes!("../../samples/real_robot/ur5e_pick_place.plantwright"),
     ),
     (
         "ur5e.glb",
@@ -317,7 +317,7 @@ const REAL_ROBOT_FILES: [(&str, &[u8]); 6] = [
         include_bytes!("../../samples/real_robot/LICENSE-Robotiq-2F-85.txt"),
     ),
 ];
-const REAL_ROBOT_PROJECT: &str = "ur5e_pick_place.cadsim";
+const REAL_ROBOT_PROJECT: &str = "ur5e_pick_place.plantwright";
 /// 読み込み中・読み込み後の表示名
 pub const REAL_ROBOT_NAME: &str = "UR5e のピック & プレース";
 
@@ -337,10 +337,10 @@ pub fn load_real_robot_sample(dir: &Path) -> Result<LoadedProject, ProjectError>
 pub fn real_robot_sample_dir() -> PathBuf {
     crate::preferences_file::default_path()
         .and_then(|p| p.parent().map(|dir| dir.join("samples").join("real_robot")))
-        .unwrap_or_else(|| std::env::temp_dir().join("cadsim").join("real_robot"))
+        .unwrap_or_else(|| std::env::temp_dir().join("plantwright").join("real_robot"))
 }
 
-/// 拡張子なしで名前を付けられたら .cadsim を付ける
+/// 拡張子なしで名前を付けられたら .plantwright を付ける
 pub fn with_extension(path: PathBuf) -> PathBuf {
     if path.extension().is_some() {
         path

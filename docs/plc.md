@@ -109,7 +109,7 @@ I/O 表の番号はコイル・保持レジスタの番号のまま。4つの領
 - 購読するノードの集まりが変わったら、サブスクリプションを作り直す。
 - SecurityPolicy None・匿名ログインのみ。証明書の置き場所 (pki) は一時フォルダに作る。
 - 通信は別スレッドの tokio ランタイムで行う。切れたら 1 秒ごとにつなぎ直す。
-- 本物のサーバー相手のテストは `#[ignore]` にしてある(`CADSIM_OPCUA_ENDPOINT` を指定して `cargo test -- --ignored opcua`)。必要なノードはテストのコメントにある。
+- 本物のサーバー相手のテストは `#[ignore]` にしてある(`PLANTWRIGHT_OPCUA_ENDPOINT` を指定して `cargo test -- --ignored opcua`)。必要なノードはテストのコメントにある。
 
 ## ログ再生
 

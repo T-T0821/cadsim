@@ -223,7 +223,7 @@ mod tests {
 
     #[test]
     fn files_are_written() {
-        let dir = std::env::temp_dir().join(format!("cadsim_docs_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("plantwright_docs_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let mut model = Model::default();
         model.add_box([1000.0, 500.0, 600.0], [0.0, 250.0, 0.0]);

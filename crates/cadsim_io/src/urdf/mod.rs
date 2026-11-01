@@ -661,7 +661,7 @@ mod tests {
 
     #[test]
     fn package_paths_are_found_above_the_urdf() {
-        let dir = std::env::temp_dir().join(format!("cadsim-urdf-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("plantwright-urdf-{}", std::process::id()));
         let urdf_dir = dir.join("my_robot").join("urdf");
         let mesh_dir = dir.join("my_robot").join("meshes");
         std::fs::create_dir_all(&urdf_dir).unwrap();

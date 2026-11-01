@@ -301,7 +301,7 @@ pub const MISSIONS: &[Mission] = &[
         hint: "Ctrl+S でプロジェクトを保存",
         steps: &[
             "Ctrl+S を押す (「ファイル → 保存」でもよい)",
-            "保存する場所と名前を決める。部品・チャート・工程がまとめて .cadsim に入る",
+            "保存する場所と名前を決める。部品・チャート・工程がまとめて .plantwright に入る",
         ],
         why: "保存したファイルを開けば、いつでも続きから作業できます",
         place: Place::Keyboard,

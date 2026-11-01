@@ -1,4 +1,4 @@
-//! CAD プロトタイプ: STEP の取り込み・アセンブリツリー・箱の作成と編集
+//! plantwright: STEP の取り込み・アセンブリツリー・箱の作成と編集
 //!
 //! 形状の「正」は truck の B-rep (f64) が持ち、Bevy は表示用の f32 メッシュと操作だけを担う。
 //!
@@ -8,7 +8,7 @@
 //! - `interchange` glTF / OBJ / STL などの読み書き (形式に依存しない中間表現を経由)
 //! - `file_io`     読み込み・書き出し、形状の差し替え (URDF などは別スレッドで読む)
 //! - `scene_asset` STEP / glTF / OBJ / STL / USD を Bevy のアセットとして読み、ファイルの更新で読み直す
-//! - `project`     プロジェクトファイル (.cadsim) の保存と読み込み
+//! - `project`     プロジェクトファイル (.plantwright) の保存と読み込み
 //! - `animation`   ファイルから取り込んだアニメーションの再生
 //! - `view`        3D 表示: `viewport` (表示・選択の強調・クリック選択)、`camera`、`gizmo`、`recording` (動画書き出しの画面とキャプチャ)、`walk` (一人称で歩く)
 //! - `input`       入力: `shortcuts` (キー)、`file_dialog` (ダイアログ・ドラッグ&ドロップ)、`command_line` (起動時の引数)
@@ -35,7 +35,7 @@
 //! - `line`        ライン連携 (工程・AGV・作業者・チャート・安全停止を1つの時計で動かす、PLC の信号表)
 //! - `line_compose` 言葉でラインを組む (文から設備の配置とタイミングチャートの下書きを作る。中身は `cadsim_core::line_draft`)
 //! - `floor`       作業者と AGV (床の上を動くもの)、床の上の幾何計算
-//! - `floor_record` 安全機器・作業者・AGV の .cadsim での形
+//! - `floor_record` 安全機器・作業者・AGV の .plantwright での形
 //! - `safety`      安全機器 (ライトカーテン・エリアセンサ・安全柵・非常停止) と動作範囲
 //! - `preferences_file` 見た目とミッションの設定の読み書き (中身は `cadsim_core::gamify`)
 //! - `review`      複数人で同じ工場をレビューする (互いの視点・指さし・チャット。中身は `cadsim_core::review`)
@@ -111,7 +111,7 @@ fn main() {
         .add_plugins(scene_asset::SceneSourcePlugin)
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
-                title: "CADプロトタイプ".into(),
+                title: "plantwright".into(),
                 resolution: (1440, 900).into(),
                 ..default()
             }),

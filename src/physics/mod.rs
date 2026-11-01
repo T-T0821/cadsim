@@ -6,7 +6,7 @@
 //! | `cadsim_core::physics::cable` | ドメイン | ケーブル・ホースの紐モデルと、曲げ半径・長さ不足・接触の判定 |
 //! | `cadsim_core::physics::world` | ユースケース | 部品 → 剛体の変換、一定刻みでの進行、物理エンジンのポート `PhysicsEngine` |
 //! | `rapier.rs` | アダプター | ポートの Rapier 実装 (凸包・凸分解・メッシュの当たり判定、ベルトの接触フック)。Bevy に依存しない |
-//! | `records.rs` | アダプター | .cadsim に書く形。Bevy に依存しない |
+//! | `records.rs` | アダプター | .plantwright に書く形。Bevy に依存しない |
 //! | `mod.rs` / `panel.rs` / `sample.rs` | UI | Bevy のシステム、「物理演算」パネル、サンプルライン |
 //!
 //! このファイルのシステムは「部品と動きを集める → ユースケースを呼ぶ → 姿勢を [`PhysicsPose`] に写す」だけ。

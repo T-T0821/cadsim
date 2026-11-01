@@ -1,4 +1,4 @@
-# cadsim の開発コンテナ。VS Code の Dev Containers と、ホストからの `make docker-<目標>` の両方で使う。
+# plantwright の開発コンテナ。VS Code の Dev Containers と、ホストからの `make docker-<目標>` の両方で使う。
 # Rust のツールチェーン、Bevy が Linux で要るライブラリ、`cargo ui-check` 用の仮想画面 (Xvfb) と
 # ソフトウェア描画 (Mesa の lavapipe)、Windows 向けのクロスビルド (MinGW) を入れる。
 # 社内プロキシの証明書を入れた像などに差し替えるときは --build-arg BASE_IMAGE=... を渡す

@@ -12,14 +12,14 @@ use super::spec::{SequenceSpec, describe};
 pub const MAX_INPUT_CHARS: usize = 400_000;
 
 const GENERATE_SYSTEM: &str = "\
-あなたは工場の自動機 (FA) のシーケンス設計者です。ユーザーの動作の説明から、cadsim のタイミングチャートの下書きを JSON で作ります。
+あなたは工場の自動機 (FA) のシーケンス設計者です。ユーザーの動作の説明から、plantwright のタイミングチャートの下書きを JSON で作ります。
 
 決まり:
 - 装置の種類は cylinder (エアシリンダ。target は 1 = 出端、0 = 戻端)、linear_axis (直動軸。target は原点からの移動量で単位は mm)、rotary_table (回転テーブル。target は角度で単位は度) の3つです。ロボットは扱いません。
 - 今のチャートにある装置・センサーは、同じ名前のまま使ってください。新しく要る装置・センサーだけを足し、名前は日本語で短く (例: リフタ、クランプ、ワーク有無)。
 - ステップは上から順に実行されます。同じステップの動作は同時に始まり、すべて終わってから dwell 秒待って次のステップへ進みます。
 - interlocks はそのステップの開始条件です (on が true ならセンサーが ON、false なら OFF)。ワーク有無・安全扉・前の工程の完了など、説明に条件があれば必ずセンサーと条件にしてください。
-- duration は動作時間 (秒)、stroke はシリンダのストローク (mm)、default_duration は装置の標準の動作時間 (秒) です。説明から分からなければ 0 にします (cadsim の標準値が入ります)。
+- duration は動作時間 (秒)、stroke はシリンダのストローク (mm)、default_duration は装置の標準の動作時間 (秒) です。説明から分からなければ 0 にします (plantwright の標準値が入ります)。
 - 1サイクルの終わりには、装置を始めの位置に戻してください。
 - comment はステップの内容を日本語で短く (例: ワーク把持)。
 - 説明から決められなかったこと、置いた前提は notes に日本語で短く書いてください。";
@@ -78,7 +78,10 @@ pub enum ExplainSource {
 pub fn explain_request(source: &ExplainSource) -> LlmRequest {
     let user = match source {
         ExplainSource::Chart(spec) => {
-            format!("cadsim のタイミングチャートです。\n\n{}", describe(spec))
+            format!(
+                "plantwright のタイミングチャートです。\n\n{}",
+                describe(spec)
+            )
         }
         ExplainSource::Ladder(text) => format!(
             "PLC のラダー (命令リストなど) です。デバイスのコメントがあれば参考にしてください。\n```\n{}\n```",

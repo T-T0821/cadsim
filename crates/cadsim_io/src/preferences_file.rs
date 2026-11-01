@@ -1,13 +1,18 @@
 //! ミッションの設定 ([`Preferences`]) を JSON ファイルに読み書きする
 //!
 //! 置き場所は OS ごとの設定フォルダ:
-//! - Windows: `%APPDATA%\cadsim\preferences.json`
-//! - macOS: `~/Library/Application Support/cadsim/preferences.json`
-//! - その他: `$XDG_CONFIG_HOME/cadsim/preferences.json` (なければ `~/.config/cadsim/…`)
+//! - Windows: `%APPDATA%\plantwright\preferences.json`
+//! - macOS: `~/Library/Application Support/plantwright/preferences.json`
+//! - その他: `$XDG_CONFIG_HOME/plantwright/preferences.json` (なければ `~/.config/plantwright/…`)
+//!
+//! 旧名 (cadsim) のころの設定フォルダがあり、新しいフォルダがまだなければ、
+//! 初めて場所を求めたときに中身 (AI の設定・自作部品なども) を新しいフォルダへ写す。
+//! 旧フォルダは消さずに残す。
 //!
 //! Bevy・egui に依存しない。読めないときは標準の設定で始める。
 
 use std::path::{Path, PathBuf};
+use std::sync::Once;
 
 use serde::{Deserialize, Serialize};
 
@@ -71,7 +76,7 @@ pub fn from_json(json: &str) -> Preferences {
 
 /// 設定ファイルを置くフォルダを差し替える環境変数。画面の自動確認で、
 /// 使う人の設定 (見た目・ミッションの進み・自作部品・AI の設定) に左右されないようにする
-pub const CONFIG_DIR_ENV: &str = "CADSIM_CONFIG_DIR";
+pub const CONFIG_DIR_ENV: &str = "PLANTWRIGHT_CONFIG_DIR";
 
 /// 設定ファイルの場所。ホームフォルダが分からなければ None (保存しない)
 pub fn default_path() -> Option<PathBuf> {
@@ -90,7 +95,50 @@ pub fn default_path() -> Option<PathBuf> {
     } else {
         env("XDG_CONFIG_HOME").or_else(|| env("HOME").map(|home| home.join(".config")))
     }?;
-    Some(dir.join("cadsim").join("preferences.json"))
+    let new_dir = dir.join(APP_DIR);
+    static MIGRATE: Once = Once::new();
+    MIGRATE.call_once(|| {
+        // 写せなくても設定が標準に戻るだけなので、起動は止めない
+        let _ = migrate_legacy_dir(&dir.join(LEGACY_APP_DIR), &new_dir);
+    });
+    Some(new_dir.join("preferences.json"))
+}
+
+/// OS の設定フォルダの中の、このアプリのフォルダ名
+const APP_DIR: &str = "plantwright";
+/// 旧名のころのフォルダ名
+const LEGACY_APP_DIR: &str = "cadsim";
+
+/// 旧名のころの設定フォルダ `old` の中身を `new` へ写す。写したら true。
+/// `new` がすでにあるか `old` がなければ何もしない。
+/// 途中で失敗しても半端なフォルダを残さないよう、隣の一時フォルダに写してから名前を変える。
+pub fn migrate_legacy_dir(old: &Path, new: &Path) -> std::io::Result<bool> {
+    if new.exists() || !old.is_dir() {
+        return Ok(false);
+    }
+    let staging = new.with_extension("migrating");
+    if staging.exists() {
+        std::fs::remove_dir_all(&staging)?;
+    }
+    let copied = copy_dir(old, &staging).and_then(|()| std::fs::rename(&staging, new));
+    if copied.is_err() {
+        let _ = std::fs::remove_dir_all(&staging);
+    }
+    copied.map(|()| true)
+}
+
+fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(to)?;
+    for entry in std::fs::read_dir(from)? {
+        let entry = entry?;
+        let target = to.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir(&entry.path(), &target)?;
+        } else {
+            std::fs::copy(entry.path(), target)?;
+        }
+    }
+    Ok(())
 }
 
 pub fn load(path: &Path) -> Preferences {
@@ -150,7 +198,8 @@ mod tests {
 
     #[test]
     fn save_and_load_file() {
-        let dir = std::env::temp_dir().join(format!("cadsim-prefs-test-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("plantwright-prefs-test-{}", std::process::id()));
         let path = dir.join("nested").join("preferences.json");
         let prefs = Preferences {
             show_missions: false,
@@ -160,5 +209,37 @@ mod tests {
         assert!(!load(&path).show_missions);
         std::fs::remove_dir_all(&dir).unwrap();
         assert!(load(&path).show_missions);
+    }
+
+    #[test]
+    fn migrates_legacy_config_dir_once() {
+        let root =
+            std::env::temp_dir().join(format!("plantwright-migrate-test-{}", std::process::id()));
+        let old = root.join("cadsim");
+        let new = root.join("plantwright");
+        std::fs::create_dir_all(old.join("parts").join("clamp")).unwrap();
+        std::fs::write(old.join("ai.json"), "{}").unwrap();
+        std::fs::write(old.join("parts").join("clamp").join("part.json"), "x").unwrap();
+
+        assert!(migrate_legacy_dir(&old, &new).unwrap());
+        assert_eq!(std::fs::read_to_string(new.join("ai.json")).unwrap(), "{}");
+        assert!(new.join("parts").join("clamp").join("part.json").is_file());
+        // 旧フォルダは残し、一時フォルダは残さない
+        assert!(old.join("ai.json").is_file());
+        assert!(!root.join("plantwright.migrating").exists());
+
+        // 新しいフォルダがあれば上書きしない
+        std::fs::write(new.join("ai.json"), "new").unwrap();
+        assert!(!migrate_legacy_dir(&old, &new).unwrap());
+        assert_eq!(std::fs::read_to_string(new.join("ai.json")).unwrap(), "new");
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn no_legacy_dir_does_nothing() {
+        let root =
+            std::env::temp_dir().join(format!("plantwright-migrate-none-{}", std::process::id()));
+        assert!(!migrate_legacy_dir(&root.join("cadsim"), &root.join("plantwright")).unwrap());
+        assert!(!root.join("plantwright").exists());
     }
 }

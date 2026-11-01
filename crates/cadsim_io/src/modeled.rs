@@ -1,4 +1,4 @@
-//! モデリングで作った形状 (B-rep) を `.cadsim` に埋め込む JSON にする
+//! モデリングで作った形状 (B-rep) を `.plantwright` に埋め込む JSON にする
 //!
 //! `cadsim_core::modeling::SolidStore` の実装 ([`JsonSolids`]) と、
 //! `ModeledSource` から形状を作り直すための [`ModeledSourceExt`]。

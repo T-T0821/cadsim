@@ -71,7 +71,7 @@ mod tests {
 
     #[test]
     fn round_trip_merges_scene_into_one_mesh() {
-        let dir = std::env::temp_dir().join("cadsim_stl_test");
+        let dir = std::env::temp_dir().join("plantwright_stl_test");
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("line.stl");
         let units = UnitOptions {
@@ -93,7 +93,7 @@ mod tests {
 
     #[test]
     fn reads_ascii_stl() {
-        let dir = std::env::temp_dir().join("cadsim_stl_test");
+        let dir = std::env::temp_dir().join("plantwright_stl_test");
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("ascii.stl");
         std::fs::write(

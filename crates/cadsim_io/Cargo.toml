@@ -3,7 +3,7 @@ name = "cadsim_io"
 version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-description = "cadsim のアダプター層。STEP・3D ファイル・図面・帳票・設定ファイルの読み書き、UR RTDE の受信。Bevy・egui に依存しない"
+description = "plantwright のアダプター層。STEP・3D ファイル・図面・帳票・設定ファイルの読み書き、UR RTDE の受信。Bevy・egui に依存しない"
 
 [features]
 # アプリ側のテストからテスト用のシーン (interchange::test_util) を使う

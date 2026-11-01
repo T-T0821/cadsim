@@ -7,7 +7,7 @@
 - 2F-85: ros2_robotiq_gripper の robotiq_description/urdf/robotiq_2f_85_macro.urdf.xacro と
   ur_to_robotiq_adapter.urdf.xacro
 
-ROS の座標 (m、Z が上) で計算し、`ZUP_TO_YUP` で cadsim の座標 (Y が上) に写します。
+ROS の座標 (m、Z が上) で計算し、`ZUP_TO_YUP` で plantwright の座標 (Y が上) に写します。
 convert_meshes.py (メッシュの書き出し) と make_demo.py (プロジェクトの生成) の両方から使います。
 """
 
@@ -80,7 +80,7 @@ def translation(m):
     return [m[0][3], m[1][3], m[2][3]]
 
 
-# ROS (Z 上) → cadsim (Y 上)。(x, y, z) → (x, z, -y)
+# ROS (Z 上) → plantwright (Y 上)。(x, y, z) → (x, z, -y)
 ZUP_TO_YUP = [
     [1.0, 0.0, 0.0, 0.0],
     [0.0, 0.0, 1.0, 0.0],

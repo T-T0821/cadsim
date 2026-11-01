@@ -1,7 +1,7 @@
 //! 自作部品のファイル (`<ライブラリ>/<部品名>/part.cadpart`)
 //!
 //! 中身は JSON で、部品の名前・分類・公開パラメータと、部品の木だけを書いたプロジェクトファイル
-//! (`.cadsim` と同じ形) を持つ。取り込んだ STEP などは同じフォルダに写し、相対パスで指す。
+//! (`.plantwright` と同じ形) を持つ。取り込んだ STEP などは同じフォルダに写し、相対パスで指す。
 //! 部品のアクチュエータとセンサーはプロジェクトファイルのタイミングチャートに入れる
 //! (ステップは持たない)。位置は部品の一番上を原点にした座標で書く。
 
@@ -201,7 +201,7 @@ impl From<&TargetRecord> for ParamTarget {
     }
 }
 
-/// 置いた自作部品のしるし (`.cadsim` のノードに書く)
+/// 置いた自作部品のしるし (`.plantwright` のノードに書く)
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct CustomInstanceRecord {
     pub part: String,
@@ -263,7 +263,7 @@ impl CustomPart {
         let record: PartFileRecord = serde_json::from_str(json)
             .map_err(|e| format!("自作部品のファイルが読めません: {e}"))?;
         if record.format_version > FORMAT_VERSION {
-            return Err("新しい版の cadsim で作った自作部品です".into());
+            return Err("新しい版の plantwright で作った自作部品です".into());
         }
         let project = ProjectFile::from_json(&record.project.to_string())
             .map_err(|e| format!("自作部品の中身が正しくありません: {e}"))?;

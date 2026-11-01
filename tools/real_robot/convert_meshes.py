@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""メーカー公開の ROS 記述パッケージのメッシュ (COLLADA) を、cadsim で開ける glTF (GLB) にまとめる。
+"""メーカー公開の ROS 記述パッケージのメッシュ (COLLADA) を、plantwright で開ける glTF (GLB) にまとめる。
 
     git clone https://github.com/UniversalRobots/Universal_Robots_ROS2_Description.git ur
     git clone https://github.com/PickNikRobotics/ros2_robotiq_gripper.git robotiq
@@ -10,7 +10,7 @@
 - robotiq_2f85.glb: Robotiq 2F-85 と UR 用アダプタ。全開の形で、原点はアダプタの取り付け面 (UR の tool0)
 
 どちらも Y が上、単位は m (glTF の決まり)。リンクごとのノードの下に、色ごとのメッシュを子として置きます。
-cadsim の関節はリンクのノードを動かすので、ノード名 (= 製品名) はファイルの中で重ならないようにしています。
+plantwright の関節はリンクのノードを動かすので、ノード名 (= 製品名) はファイルの中で重ならないようにしています。
 """
 
 import json
@@ -68,7 +68,7 @@ class GlbWriter:
 
     def __init__(self):
         self.gltf = {
-            "asset": {"version": "2.0", "generator": "cadsim tools/real_robot/convert_meshes.py"},
+            "asset": {"version": "2.0", "generator": "plantwright tools/real_robot/convert_meshes.py"},
             "scene": 0,
             "scenes": [{"nodes": []}],
             "nodes": [],

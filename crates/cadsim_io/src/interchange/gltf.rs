@@ -418,7 +418,7 @@ impl Writer {
             .collect();
 
         let mut json = json!({
-            "asset": { "version": "2.0", "generator": "cadsim" },
+            "asset": { "version": "2.0", "generator": "plantwright" },
             "scene": 0,
             "scenes": [{ "nodes": roots }],
             "nodes": nodes,
@@ -580,7 +580,7 @@ mod tests {
     use super::*;
 
     fn round_trip(file: &str) {
-        let dir = std::env::temp_dir().join("cadsim_gltf_test");
+        let dir = std::env::temp_dir().join("plantwright_gltf_test");
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join(file);
         let scene = sample_scene();
@@ -613,14 +613,14 @@ mod tests {
     #[test]
     fn round_trip_gltf_with_bin() {
         round_trip("line.gltf");
-        let dir = std::env::temp_dir().join("cadsim_gltf_test");
+        let dir = std::env::temp_dir().join("plantwright_gltf_test");
         assert!(dir.join("line.bin").exists());
     }
 
     #[test]
     fn splits_primitives_and_merges_channels() {
         // 2つのプリミティブ (色違い) と、移動だけのチャンネルを持つ最小の glTF
-        let dir = std::env::temp_dir().join("cadsim_gltf_test");
+        let dir = std::env::temp_dir().join("plantwright_gltf_test");
         std::fs::create_dir_all(&dir).unwrap();
         let mut w = Writer::default();
         let pos = w.float_accessor(

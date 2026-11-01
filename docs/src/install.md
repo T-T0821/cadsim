@@ -8,13 +8,13 @@
 
    | OS | ファイル | 起動のしかた |
    | --- | --- | --- |
-   | Windows 10 / 11 (64bit) | `cadsim-<版>-windows-x86_64.exe` | ダウンロードした exe をそのままダブルクリック。好きな場所に置いて使えます |
-   | 〃(zip 版) | `cadsim-<版>-windows-x86_64.zip` | 展開して `cad_proto.exe` をダブルクリック。中身は上の exe と README です |
-   | macOS 11 以降 (Apple Silicon / Intel) | `cadsim-<版>-macos-universal.zip` | ダブルクリックで展開して `CAD Prototype.app` を開く。「アプリケーション」に移すと、ほかのアプリと同じように使えます |
+   | Windows 10 / 11 (64bit) | `plantwright-<版>-windows-x86_64.exe` | ダウンロードした exe をそのままダブルクリック。好きな場所に置いて使えます |
+   | 〃(zip 版) | `plantwright-<版>-windows-x86_64.zip` | 展開して `plantwright.exe` をダブルクリック。中身は上の exe と README です |
+   | macOS 11 以降 (Apple Silicon / Intel) | `plantwright-<版>-macos-universal.zip` | ダブルクリックで展開して `plantwright.app` を開く。「アプリケーション」に移すと、ほかのアプリと同じように使えます |
 
 2. 初回は署名がないため警告が出ます。
    - **Windows**: 「Windows によって PC が保護されました」→「詳細情報」→「実行」。
-   - **Mac**: 「開発元を検証できない」「開けません」→ アプリを右クリック →「開く」→「開く」。macOS 15 以降でこの方法が出ないときは、一度開こうとしたあと「システム設定」→「プライバシーとセキュリティ」の下のほうにある「このまま開く」を押します。それでも開けないときは、ターミナルで `xattr -dr com.apple.quarantine "/Applications/CAD Prototype.app"`(置いた場所に合わせて変えてください)を実行してから開いてください。
+   - **Mac**: 「開発元を検証できない」「開けません」→ アプリを右クリック →「開く」→「開く」。macOS 15 以降でこの方法が出ないときは、一度開こうとしたあと「システム設定」→「プライバシーとセキュリティ」の下のほうにある「このまま開く」を押します。それでも開けないときは、ターミナルで `xattr -dr com.apple.quarantine "/Applications/plantwright.app"`(置いた場所に合わせて変えてください)を実行してから開いてください。
 
 やめるときは、ダウンロードしたファイル(Mac は `.app`)を削除するだけです。見た目などの設定は小さなファイルとして残ります。
 
@@ -27,7 +27,7 @@ git clone https://github.com/T-T0821/cadsim.git
 cd cadsim
 cargo run --release                      # サンプルのアセンブリを開いて起動
 cargo run --release -- path/to/part.step # 指定した STEP を開いて起動
-cargo run --release -- path/to/line.cadsim # 保存したプロジェクトを開いて起動
+cargo run --release -- path/to/line.plantwright # 保存したプロジェクトを開いて起動
 ```
 
 初回はビルドに数分かかります。Linux では先に `libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev` を入れてください。

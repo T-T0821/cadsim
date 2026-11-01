@@ -11,7 +11,7 @@
 | ドメイン | `crates/cadsim_core/src/site/model.rs` | プロジェクトに属する現場データ `Site`(`Model::site` に入る) |
 | アダプター | `src/formats/dxf.rs` / `pdf_plan.rs` / `mod.rs` | DXF・PDF・画像 → `PlanContent`(折れ線と画像) |
 | アダプター | `src/formats/pointcloud_read.rs` | PLY・LAS・E57 → 間引いた `PointCloud` |
-| アダプター | `src/formats/site_record.rs` | `.cadsim` に書く記録(パスと配置と読み込みの設定)と、開くときの読み直し |
+| アダプター | `src/formats/site_record.rs` | `.plantwright` に書く記録(パスと配置と読み込みの設定)と、開くときの読み直し |
 | UI | `src/site/` | 別スレッドの読み込み、3D 表示、縮尺合わせのクリック、「平面図・点群」パネル、干渉チェックの実行 |
 
 `Site` は `Model` のフィールドにしているので、元に戻す履歴の「プロジェクトをまるごと写す」操作や、未保存の判定がそのまま効きます。
@@ -20,7 +20,7 @@
 
 ### 座標
 
-図面の座標 (u, v) は「右が +u、上が +v」。cadsim は Y が上で、上面図は「右が +X、上が −Z」なので、
+図面の座標 (u, v) は「右が +u、上が +v」。plantwright は Y が上で、上面図は「右が +X、上が −Z」なので、
 図面の点はワールドの `(origin.x + u', elevation, origin.z − v')` に置きます(`u', v'` は縮尺をかけて回したもの。`Underlay::to_world`)。
 
 ### 読み込み

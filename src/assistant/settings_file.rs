@@ -1,7 +1,7 @@
 //! 生成 AI の設定 (API キーとモデル) を JSON ファイルに読み書きする
 //!
 //! 置き場所は見た目の設定 (`preferences.json`) と同じフォルダの `ai.json`。
-//! API キーはプロジェクトファイル (.cadsim) には書かないので、ファイルを人に渡しても漏れない。
+//! API キーはプロジェクトファイル (.plantwright) には書かないので、ファイルを人に渡しても漏れない。
 //! 設定がなければ環境変数 `ANTHROPIC_API_KEY` を使う。
 //!
 //! Bevy・egui に依存しない。
@@ -115,7 +115,7 @@ mod tests {
 
     #[test]
     fn save_and_load_round_trip() {
-        let dir = std::env::temp_dir().join(format!("cadsim-ai-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("plantwright-ai-test-{}", std::process::id()));
         let path = dir.join("ai.json");
         let s = AiSettings {
             api_key: "k".into(),

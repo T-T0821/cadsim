@@ -430,7 +430,7 @@ mod tests {
 
     #[test]
     fn files_are_decimated_into_model_units() {
-        let dir = std::env::temp_dir().join(format!("cadsim_pc_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("plantwright_pc_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         // LAS (m, Z 上): 1 m 上の点は mm のモデルで Y = 1000
         let path = dir.join("scan.las");

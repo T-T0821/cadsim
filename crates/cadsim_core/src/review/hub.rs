@@ -119,14 +119,14 @@ impl Hub {
             ..
         } = message
         else {
-            // 名乗る前に別のメッセージを送ってくる相手は cadsim ではない
+            // 名乗る前に別のメッセージを送ってくる相手は plantwright ではない
             self.pending.remove(&from);
             return vec![Outgoing::Disconnect(from)];
         };
         self.pending.remove(&from);
         let reason = if version != PROTOCOL_VERSION {
             Some(format!(
-                "cadsim の版が合いません (相手 {version}・ホスト {PROTOCOL_VERSION})。同じ版にそろえてください"
+                "plantwright の版が合いません (相手 {version}・ホスト {PROTOCOL_VERSION})。同じ版にそろえてください"
             ))
         } else if passphrase != self.passphrase {
             Some("合言葉が違います".to_string())

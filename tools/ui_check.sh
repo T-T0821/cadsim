@@ -9,10 +9,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 cargo build --locked
-app="${CARGO_TARGET_DIR:-target}/debug/cad_proto"
+app="${CARGO_TARGET_DIR:-target}/debug/plantwright"
 
 lvp=/usr/share/vulkan/icd.d/lvp_icd.json
-if [[ "$(uname)" == Linux && -f "$lvp" && -z "${CADSIM_UI_CHECK_GPU:-}" ]]; then
+if [[ "$(uname)" == Linux && -f "$lvp" && -z "${PLANTWRIGHT_UI_CHECK_GPU:-}" ]]; then
     export VK_ICD_FILENAMES="$lvp"
 fi
 

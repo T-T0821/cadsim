@@ -106,7 +106,8 @@ mod tests {
 
     #[test]
     fn save_and_load_file() {
-        let dir = std::env::temp_dir().join(format!("cadsim-sound-test-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("plantwright-sound-test-{}", std::process::id()));
         let path = dir.join("sound.json");
         let settings = SoundSettings {
             muted: true,

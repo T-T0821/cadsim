@@ -1,4 +1,4 @@
-//! プロジェクトファイル (.cadsim) の保存と読み込み
+//! プロジェクトファイル (.plantwright) の保存と読み込み
 //!
 //! ファイルの中身は人が読める JSON。アセンブリの木をそのまま入れ子で書く。
 //! 書くのは設計データ (名前・配置・表示/非表示・色・箱の寸法) と、取り込んだ STEP の場所だけ。
@@ -12,7 +12,7 @@
 //! 操作:
 //! - ファイルメニュー / ツールバー: 新規・開く・保存・名前を付けて保存
 //! - Ctrl+N / Ctrl+O / Ctrl+S / Ctrl+Shift+S
-//! - `cargo run -- line.cadsim`、またはウィンドウへのドラッグ&ドロップでも開ける
+//! - `cargo run -- line.plantwright`、またはウィンドウへのドラッグ&ドロップでも開ける
 //!
 //! ここ (UI 層) は、頼まれた操作を受けて `document` の手順を呼び、結果を Resource と画面に写すだけにする。
 //! ファイルの形は `file`、開く・保存の手順は `document` にある。
@@ -52,7 +52,7 @@ use crate::view::recording::is_recording;
 use cadsim_core::conveyor::ConveyorConfig;
 
 /// ウィンドウタイトルの先頭 (後ろにファイル名を付ける)
-const APP_TITLE: &str = "CADプロトタイプ";
+const APP_TITLE: &str = "plantwright";
 
 pub struct ProjectPlugin;
 

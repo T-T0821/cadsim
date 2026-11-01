@@ -315,7 +315,7 @@ mod tests {
 
     #[test]
     fn saved_parts_are_listed_by_category_and_name() {
-        let dir = std::env::temp_dir().join(format!("cadsim_parts_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("plantwright_parts_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let mut part = save_sample();
         crate::custom_part::file::save(&part, &dir).unwrap();

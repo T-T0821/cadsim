@@ -44,7 +44,7 @@
 
 ## 最初の5分 (起動時のデモラインとようこそ画面)
 
-- 引数なしで起動すると、`file_io::open_command_line_file` が `ProjectAction::OpenDemoLine { play: true }` を頼む。`project.rs` は埋め込みの `samples/demo_line.cadsim` (`include_str!`) を別スレッドで読み、ファイルに結びつけない無題のプロジェクトとして開いて、タイミングチャートを繰り返し再生にする。保存すると名前を聞かれる。
+- 引数なしで起動すると、`file_io::open_command_line_file` が `ProjectAction::OpenDemoLine { play: true }` を頼む。`project.rs` は埋め込みの `samples/demo_line.plantwright` (`include_str!`) を別スレッドで読み、ファイルに結びつけない無題のプロジェクトとして開いて、タイミングチャートを繰り返し再生にする。保存すると名前を聞かれる。
 - `--bench` だけは前と比べられるよう、これまでどおりサンプルの STEP (`assets/sample_assembly.step`) で測る。
 - 起動直後に読み込みが終わるまでは「保存済み」の状態に含めるので、デモラインを開いただけでは閉じるときに確認が出ない。
 - 設定の `welcomed` が false のあいだ (初回) は `tutorial::draw` がようこそ画面を出し、ミッションカードは隠す。「チュートリアルを始める」「自由にさわる」「空のプロジェクトから」のどれかで閉じる。「ヘルプ → ようこそ画面」で `TutorialUi::welcome_requested` を立てると開き直せる。
@@ -83,9 +83,9 @@ UI 層は毎フレーム `Observation`(選択の有無、カメラの角度、�
 
 | OS | 場所 |
 | --- | --- |
-| Windows | `%APPDATA%\cadsim\preferences.json` |
-| macOS | `~/Library/Application Support/cadsim/preferences.json` |
-| その他 | `$XDG_CONFIG_HOME/cadsim/preferences.json`(なければ `~/.config/cadsim/…`) |
+| Windows | `%APPDATA%\plantwright\preferences.json` |
+| macOS | `~/Library/Application Support/plantwright/preferences.json` |
+| その他 | `$XDG_CONFIG_HOME/plantwright/preferences.json`(なければ `~/.config/plantwright/…`) |
 
 ```json
 {

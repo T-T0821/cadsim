@@ -1,4 +1,4 @@
-# cadsim の内部のしくみ
+# plantwright の内部のしくみ
 
 開発者向けの資料です。使い方は [README](../README.md) を見てください。
 レイヤーの分け方は [architecture.md](architecture.md) にまとめています。
@@ -64,10 +64,10 @@ crates/cadsim_core/   Bevy に依存しないドメイン (cargo test -p cadsim_
 └── physics/         物理演算の設定・ケーブルの紐モデル・剛体の進め方 (settings / cable / world)
 crates/cadsim_io/     Bevy に依存しないアダプター (cargo test -p cadsim_io で単体テスト)
 ├── step.rs          STEP → アセンブリの木と B-rep (形状の型は cadsim_core::shape)
-├── formats/         平面図 (DXF / PDF)・点群 (E57 など)・2D 図面と部品表の書き出し・.cadsim の現場とコンベヤの形
-├── flow/            工程シミュレーションの .cadsim の形 (record) と Excel 書き出し (xlsx)
-├── preferences_file.rs 見た目とミッションの設定 (preferences.json) の読み書き
-├── modeled.rs       モデリングで作った B-rep ⇔ JSON (.cadsim に埋め込む)
+├── formats/         平面図 (DXF / PDF)・点群 (E57 など)・2D 図面と部品表の書き出し・.plantwright の現場とコンベヤの形
+├── flow/            工程シミュレーションの .plantwright の形 (record) と Excel 書き出し (xlsx)
+├── preferences_file.rs 見た目とミッションの設定 (preferences.json) の読み書き。旧名の設定フォルダ (cadsim) からの引き継ぎも
+├── modeled.rs       モデリングで作った B-rep ⇔ JSON (.plantwright に埋め込む)
 └── interchange/     glTF / OBJ / STL などの読み書き (形式に依存しない中間表現 Scene を経由)
     ├── mod.rs        Scene・Format・対応形式の一覧 FORMATS
     ├── gltf.rs / obj.rs / stl.rs
@@ -82,8 +82,8 @@ src/                  アプリ本体 (Bevy + egui)
 ├── interchange/     cadsim_io::interchange を再公開する
 │   └── samples.rs    サンプルファイルを作るテスト (手で実行)
 ├── animation.rs     取り込んだアニメーションの再生
-├── project/         プロジェクトファイル (.cadsim) の保存と読み込み
-│   ├── file.rs       .cadsim の JSON の形 (Bevy に依存しない)
+├── project/         プロジェクトファイル (.plantwright) の保存と読み込み
+│   ├── file.rs       .plantwright の JSON の形 (Bevy に依存しない)
 │   ├── document.rs   開く・保存の手順: STEP の読み直し、文書の作り直し (Bevy に依存しない)
 │   └── mod.rs        新規・開く・保存の操作、未保存の確認、ウィンドウのタイトル
 ├── preferences_file.rs 設定ファイルの読み書き (cadsim_io::preferences_file の再公開)
@@ -175,7 +175,7 @@ src/                  アプリ本体 (Bevy + egui)
 3. 取り込んだメッシュは STEP の部品と同じ `ImportedShape`(B-rep なし)になる。稜線は B-rep がないので、隣の面と 30° 以上折れている辺と穴の縁を描く。
 4. 書き出しでは、箱は truck でテッセレーションし、STEP の部品は表示用のメッシュをそのまま使う。glTF には形状ごとのメッシュ・色ごとのマテリアル・ノードの階層・アニメーション(線形補間の移動 / 回転 / 拡大)を書く。OBJ は部品ごとにワールド座標へ焼き込んだ `o`、STL は全体を1つの形状にまとめる。
 5. glTF のアニメーションは、移動・回転・拡大の別々のチャンネルをノードごとの姿勢のキーにまとめて取り込む(Step はそのまま、CubicSpline は値だけを使って線形で近似)。再生中は `animation.rs` が毎フレームそのノードの配置を書き換える。
-6. プロジェクト(`.cadsim`)には取り込んだファイルの場所を保存し、開くときにこの経路で読み直す。
+6. プロジェクト(`.plantwright`)には取り込んだファイルの場所を保存し、開くときにこの経路で読み直す。
 7. 「開く」やドラッグ&ドロップで取り込むファイルのうち、ファイル 1 つで読める形式 (STEP / glTF / OBJ / STL / USD) は Bevy のアセットとして読む (`scene_asset.rs`)。下の「アセットとして読む・更新で読み直す」を参照。
 
 書き出した glb は Khronos の glTF Validator でエラー・警告なしを確認しています。
@@ -196,7 +196,7 @@ src/                  アプリ本体 (Bevy + egui)
 
 取り込むファイルの読み込みは Bevy のアセットサーバーに任せます。モデルの形にする中身 (`file_io::load_source`) は Bevy に依存しないので、ここは「どのファイルを、いつ読むか」だけです。
 
-1. Bevy のアセットは決まったフォルダの中の相対パスでしか呼べないので、専用の読み元 `cadsim-file://` を `AssetPlugin` より前に登録し (`SceneSourcePlugin`)、ファイルの絶対パスと単位を `cadsim_io::asset_key` で相対パスの形 (`<単位>/<根>/<残りのパス>`) に詰めて呼ぶ。OBJ / STL は単位を鍵に入れるので、単位を変えて読むと別のアセットになる。`..` を含むなど鍵にできないパスは、これまでどおり別スレッドで読む。
+1. Bevy のアセットは決まったフォルダの中の相対パスでしか呼べないので、専用の読み元 `plantwright-file://` を `AssetPlugin` より前に登録し (`SceneSourcePlugin`)、ファイルの絶対パスと単位を `cadsim_io::asset_key` で相対パスの形 (`<単位>/<根>/<残りのパス>`) に詰めて呼ぶ。OBJ / STL は単位を鍵に入れるので、単位を変えて読むと別のアセットになる。`..` を含むなど鍵にできないパスは、これまでどおり別スレッドで読む。
 2. 読み元はファイルがあるかだけを確かめ、読み込み (`SceneFileLoader`) が鍵からパスに戻して `load_source` を呼ぶ (glTF の .bin や OBJ の .mtl も一緒に読むため)。重い変換は `AsyncComputeTaskPool` で行う。読み込みは拡張子を名乗らず型で選ぶので、Bevy の glTF の読み込みとは取り合わない。
 3. 読み終わったアセット (`SceneFile`) から中身を 1 回だけ取り出し (形状は複製できない)、別スレッドの結果と同じ `ImportJobs` の受け口に渡す。モデルへの追加・形状の差し替え・メッセージは `file_io::receive_imports` がする。同じファイルをもう一度開くと、取り出し済みなので `AssetServer::reload` で読み直す。
 4. 0.7 秒ごとに、モデルの部品の読み込み元 (`Model::file_sources`) の更新時刻と大きさを調べる。判断は `cadsim_core::usecase::file_watch::FileWatch` で、印が変わったあと次に調べたときも同じ (書き込みが落ち着いた) なら読み直す。プロジェクトから開いたファイルも見張る。
@@ -227,7 +227,7 @@ src/                  アプリ本体 (Bevy + egui)
 - `xformOpOrder` の translate / scale / orient / rotateX・Y・Z / rotateXYZ など6通り / transform(行列)/ `!invert!` を評価し、時刻サンプルのある時刻ごとの姿勢をアニメーションのキーにします(時刻は `startTimeCode` からの秒)。
 - 形状は Mesh(多角形は扇形に三角形分割、leftHanded は向きを反転)と Cube / Sphere / Cylinder / Cone / Capsule(テッセレーションして取り込み)。
 - 色はバインドされたマテリアルの `inputs:diffuseColor`(祖先へのバインドもたどる)、なければ `primvars:displayColor`。
-- 変換も子もない形状が Xform の唯一の中身なら(cadsim の `Geom` も)、その Xform の部品として1つにまとめます。形状のない枝(マテリアルの Scope など)は取り込みません。
+- 変換も子もない形状が Xform の唯一の中身なら(plantwright の `Geom` も)、その Xform の部品として1つにまとめます。形状のない枝(マテリアルの Scope など)は取り込みません。
 - 非アクティブなプリム、`purpose` が guide / proxy のもの、カメラ・ライト・マテリアルは読み飛ばします。
 
 確認: 書き出した .usda / .usdz を Pixar の USD(usd-core 26)で開き、全バリデーターでエラーがないこと、マテリアルのバインドと時刻ごとの姿勢が正しいことを確かめています。逆に Pixar の USD で作った .usdc(Z 上・mm・アニメーション・Cylinder・マテリアル付き)も読み込めることを確認しています。
@@ -408,7 +408,7 @@ SampleVise
 ## 本物の装置のサンプル
 
 `samples/real_robot/` の UR5e と Robotiq 2F-85 の GLB は、メーカーが ROS 向けに公開しているメッシュ(BSD 3-Clause)を `tools/real_robot/convert_meshes.py` で変換したもので、
-プロジェクト `ur5e_pick_place.cadsim` は `tools/real_robot/make_demo.py` で生成しています。どちらもアプリに埋め込んでいます。出典・関節の付け方・作り直し方は [real-robot.md](real-robot.md) を見てください。
+プロジェクト `ur5e_pick_place.plantwright` は `tools/real_robot/make_demo.py` で生成しています。どちらもアプリに埋め込んでいます。出典・関節の付け方・作り直し方は [real-robot.md](real-robot.md) を見てください。
 
 同じ UR5e を URDF で読み込むサンプル(`samples/real_robot/ur5e_urdf/`)と、URDF の読み込みの中身は [urdf.md](urdf.md) にあります。
 

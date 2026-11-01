@@ -19,7 +19,7 @@
 - 寸法パラメータは mm。モデルの単位 (`Model::unit`) が mm 以外なら `units_per_mm` で換算してから形状を作る。
 - ビューでクリックした本体は `Model::pick_target` で親の部品に置き換えて選ぶ。
 - 干渉チェックでは `SimBody::group` に親の部品の id を入れ、同じ部品の本体どうしは調べない(ロッドとチューブのように組み付いた状態で重なっているため)。
-- `.cadsim` には `{"type": "Standard", "part": "air_cylinder", "params": {"bore": 32.0, "stroke": 100.0}}` のように種類とパラメータだけを書き、本体は書かない(開くときに作り直す)。種類のキーは `PartKind::key`。
+- `.plantwright` には `{"type": "Standard", "part": "air_cylinder", "params": {"bore": 32.0, "stroke": 100.0}}` のように種類とパラメータだけを書き、本体は書かない(開くときに作り直す)。種類のキーは `PartKind::key`。
 
 ## ほかの機能からの使い方
 

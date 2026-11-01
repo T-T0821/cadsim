@@ -61,7 +61,7 @@
 
 ## 保存
 
-標準部品は、種類と寸法だけがプロジェクト(.cadsim)に保存され、開くときにその寸法から形を作り直します。
+標準部品は、種類と寸法だけがプロジェクト(.plantwright)に保存され、開くときにその寸法から形を作り直します。
 
 ## 自作部品を保存する
 
@@ -96,6 +96,6 @@
 
 | OS | 場所 |
 | --- | --- |
-| Windows | `%APPDATA%\cadsim\parts` |
-| Mac | `~/Library/Application Support/cadsim/parts` |
-| Linux | `~/.config/cadsim/parts` |
+| Windows | `%APPDATA%\plantwright\parts` |
+| Mac | `~/Library/Application Support/plantwright/parts` |
+| Linux | `~/.config/plantwright/parts` |

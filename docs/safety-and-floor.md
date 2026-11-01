@@ -20,7 +20,7 @@
 | `cadsim_io/src/formats/heatmap_png.rs` | アダプター | 動線ヒートマップの画像を PNG に書く |
 | `floor/figures.rs` | UI | 作業者と AGV の 3D モデル。`figure.rs` の形をメッシュに、`figure_motion.rs` のクリップを Bevy のアニメーションに写す |
 | `safety/panel.rs`, `floor/panel.rs` | UI | egui のパネル |
-| `floor_record.rs` | アダプター | .cadsim に書く形 (serde)。ドメインの型との写し替え |
+| `floor_record.rs` | アダプター | .plantwright に書く形 (serde)。ドメインの型との写し替え |
 
 ドメインの型は Bevy の `Resource` を付けず、UI 層で包んでいます (`SafetyLayoutRes(SafetyLayout)` など)。
 長さは mm、時間は秒、上向きは +Y です。

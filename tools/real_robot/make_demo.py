@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""本物の装置の CAD で組んだピック & プレースのセル (samples/real_robot/ur5e_pick_place.cadsim) を作る。
+"""本物の装置の CAD で組んだピック & プレースのセル (samples/real_robot/ur5e_pick_place.plantwright) を作る。
 
 UR5e (Universal Robots) に Robotiq 2F-85 グリッパを付け、供給コンベアのワークを排出コンベアへ移します。
 形状は同じフォルダの ur5e.glb / robotiq_2f85.glb を読み込み、このスクリプトは
@@ -10,8 +10,8 @@ UR5e (Universal Robots) に Robotiq 2F-85 グリッパを付け、供給コン�
 
 だけを書きます。関節の位置と向きは kinematics.py でメーカー公開の寸法から求めます。
 
-    python3 tools/real_robot/make_demo.py            # samples/real_robot/ur5e_pick_place.cadsim に書く
-    python3 tools/real_robot/make_demo.py out.cadsim
+    python3 tools/real_robot/make_demo.py            # samples/real_robot/ur5e_pick_place.plantwright に書く
+    python3 tools/real_robot/make_demo.py out.plantwright
 
 座標は mm、Y が上。ロボットは +X を向いて立ち、その前を 2 本のコンベアが +Z へ流れます。
 関節の値は「ホーム姿勢 (kinematics.UR5E_HOME) からの角度」です。
@@ -58,12 +58,12 @@ BLUE = [0.25, 0.50, 0.85]
 GREEN = [0.30, 0.70, 0.45]
 
 # ---------------------------------------------------------------------------
-# 座標の変換 (ROS の m・Z 上 → cadsim の mm・Y 上、ロボットの原点を BASE に)
+# 座標の変換 (ROS の m・Z 上 → plantwright の mm・Y 上、ロボットの原点を BASE に)
 # ---------------------------------------------------------------------------
 
 
 def to_world(m_ros):
-    """ROS の座標で書いた (ロボットの原点から見た) 座標系 → cadsim のワールドから見た座標系。
+    """ROS の座標で書いた (ロボットの原点から見た) 座標系 → plantwright のワールドから見た座標系。
     局所の座標は ROS のまま (m の代わりに mm) で、写した先がワールド (mm・Y 上)"""
     m = k.chain(k.ZUP_TO_YUP, m_ros)
     for i in range(3):
@@ -79,7 +79,7 @@ def axis_letter(v):
 
 
 def euler_deg(m):
-    """回転行列 → cadsim の rotation_deg (Rz · Ry · Rx の X, Y, Z)"""
+    """回転行列 → plantwright の rotation_deg (Rz · Ry · Rx の X, Y, Z)"""
     sy = -m[2][0]
     y = math.asin(max(-1.0, min(1.0, sy)))
     if abs(math.cos(y)) > 1e-9:
@@ -503,7 +503,7 @@ project = {
 
 def main():
     root = Path(__file__).resolve().parents[2]
-    out = Path(sys.argv[1]) if len(sys.argv) > 1 else root / "samples" / "real_robot" / "ur5e_pick_place.cadsim"
+    out = Path(sys.argv[1]) if len(sys.argv) > 1 else root / "samples" / "real_robot" / "ur5e_pick_place.plantwright"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(project, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"{out} に書きました")

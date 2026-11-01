@@ -17,7 +17,7 @@ use cadsim_core::camera_path::{CameraPath, CameraPose};
 /// 同梱のデモライン (tools/make_demo_line.py で生成) が今の形式で読めること
 #[test]
 fn demo_line_sample_parses() {
-    let text = include_str!("../../samples/demo_line.cadsim");
+    let text = include_str!("../../samples/demo_line.plantwright");
     let file = ProjectFile::from_json(text).expect("demo line should parse");
     assert!(!file.nodes.is_empty());
     assert!(file.chart.is_some());
@@ -40,9 +40,9 @@ fn opening_the_demo_line_restores_every_document() {
 fn save_project_writes_what_it_returns() {
     let model = sample_model();
     let docs = Docs::default();
-    let dir = std::env::temp_dir().join("cadsim_save_project_test");
+    let dir = std::env::temp_dir().join("plantwright_save_project_test");
     std::fs::create_dir_all(&dir).unwrap();
-    let path = dir.join("a.cadsim");
+    let path = dir.join("a.plantwright");
     let saved = save_project(&path, &docs.of(&model)).unwrap();
     let reread = ProjectFile::from_json(&std::fs::read_to_string(&path).unwrap()).unwrap();
     assert_eq!(saved, reread);
@@ -254,9 +254,9 @@ fn step_paths_are_relative_to_the_project() {
 
 #[test]
 fn save_and_open_through_a_file() {
-    let dir = std::env::temp_dir().join(format!("cadsim-test-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("plantwright-test-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
-    let path = dir.join("line.cadsim");
+    let path = dir.join("line.plantwright");
     let model = sample_model();
     let mut state = ProjectState::default();
     let none = Docs::default();
@@ -432,9 +432,11 @@ fn embedded_demo_line_opens_without_warnings() {
 fn save_as_adds_the_extension() {
     assert_eq!(
         with_extension(PathBuf::from("line1")),
-        PathBuf::from("line1.cadsim")
+        PathBuf::from("line1.plantwright")
     );
-    assert!(is_project_file(Path::new("a/LINE.CADSIM")));
+    assert!(is_project_file(Path::new("a/LINE.PLANTWRIGHT")));
+    // 旧名のころのファイルも開ける
+    assert!(is_project_file(Path::new("a/line.cadsim")));
     assert!(!is_project_file(Path::new("a/vise.step")));
 }
 
@@ -446,7 +448,7 @@ fn real_robot_sample_opens_and_reaches_every_point() {
     use std::collections::HashMap;
 
     // メニューから開くときと同じく、埋め込みのファイルをフォルダに書き出して読む
-    let dir = std::env::temp_dir().join(format!("cadsim-real-robot-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("plantwright-real-robot-{}", std::process::id()));
     let loaded = load_real_robot_sample(&dir).expect("サンプルが読める");
     assert!(
         dir.join("LICENSE-UR5e.txt").exists(),

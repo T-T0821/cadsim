@@ -36,18 +36,18 @@ make docker-shell             # コンテナの中のシェルに入る
 | --- | --- |
 | `make build` | 開発ビルド (`cargo build --locked`) |
 | `make release` | リリースビルド |
-| `make run ARGS="..."` | 開発ビルドで起動。`ARGS` はアプリへの引数 (例: `ARGS="samples/demo_line.cadsim"`) |
+| `make run ARGS="..."` | 開発ビルドで起動。`ARGS` はアプリへの引数 (例: `ARGS="samples/demo_line.plantwright"`) |
 | `make test` | テスト |
 | `make fmt` / `make fmt-check` | 書式を整える / 整っているかを確かめる |
 | `make clippy` | `cargo clippy --all-targets --locked -- -D warnings` |
 | `make check` | PR を出す前の確認 (`fmt-check`・`clippy`・`test`) |
 | `make ui-check ARGS="..."` | `tools/ui_check.sh` を流す。画面がなければ Xvfb の仮想画面で |
 | `make windows` | `x86_64-pc-windows-gnu` 向けにクロスビルド |
-| `make package-linux` | `dist/cadsim-v<版>-linux-<CPU>.tar.gz` (実行ファイルと README) |
-| `make package-windows` | `dist/cadsim-v<版>-windows-x86_64.exe` と `.zip` (Release と同じ名前と中身) |
+| `make package-linux` | `dist/plantwright-v<版>-linux-<CPU>.tar.gz` (実行ファイルと README) |
+| `make package-windows` | `dist/plantwright-v<版>-windows-x86_64.exe` と `.zip` (Release と同じ名前と中身) |
 | `make package` | 上の 2 つ |
 | `make clean` | `cargo clean` と `dist/` の削除 |
-| `make docker-image` | 開発コンテナの像 (`cadsim-dev`) を作る |
+| `make docker-image` | 開発コンテナの像 (`plantwright-dev`) を作る |
 | `make docker-shell` | コンテナの中でシェルを開く |
 | `make docker-<目標>` | 上の目標をコンテナの中で動かす |
 
@@ -74,9 +74,9 @@ x86_64 と aarch64 (Apple Silicon の Mac の Docker など) のどちらでも�
 
 ### 依存クレートのキャッシュ
 
-取ってきた依存クレートは Docker のボリューム `cadsim-cargo-registry` と `cadsim-cargo-git` に置き、
+取ってきた依存クレートは Docker のボリューム `plantwright-cargo-registry` と `plantwright-cargo-git` に置き、
 Dev Containers と `make docker-<目標>` で共有します。コンテナを作り直しても取り直しません。
-消したいときは `docker volume rm cadsim-cargo-registry cadsim-cargo-git` です。
+消したいときは `docker volume rm plantwright-cargo-registry plantwright-cargo-git` です。
 
 ### 利用者の uid
 
@@ -85,7 +85,7 @@ Dev Containers と `make docker-<目標>` で共有します。コンテナを�
 Dev Containers では `dev` ユーザーで動き、uid はホストに合わせて自動で付け替えられます。
 
 別の uid (たとえば root) で一度動かしたあとに `Permission denied` が出たら、キャッシュのボリュームを消して取り直してください
-(`docker volume rm cadsim-cargo-registry cadsim-cargo-git`)。`target/container/` の持ち主が違うときはそのフォルダも消します。
+(`docker volume rm plantwright-cargo-registry plantwright-cargo-git`)。`target/container/` の持ち主が違うときはそのフォルダも消します。
 
 ## Windows 向けのクロスビルドと GitHub の Release の違い
 

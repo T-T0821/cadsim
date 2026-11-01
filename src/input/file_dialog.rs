@@ -15,7 +15,7 @@ use crate::formats::pointcloud_read::CLOUD_EXTENSIONS;
 use crate::interchange::FORMATS;
 use crate::model::{Model, NodeId, Selection};
 use crate::motion::{ChartSchedule, TimingChart};
-use crate::project::{ProjectAction, ProjectState};
+use crate::project::{OPEN_EXTENSIONS, ProjectAction, ProjectState};
 
 pub struct FileDialogPlugin;
 
@@ -34,7 +34,7 @@ impl Plugin for FileDialogPlugin {
     }
 }
 
-/// `cargo run -- 部品.step` (または `line.cadsim`) のように渡されたファイルを開く。
+/// `cargo run -- 部品.step` (または `line.plantwright`) のように渡されたファイルを開く。
 /// 無ければデモラインを開いて動かす。`--stress 5000` なら負荷テスト用のシーンを開く
 /// (`--bench` は bench.rs、`--physics` は physics が読む)。
 fn open_command_line_file(mut jobs: ResMut<ImportJobs>, mut project: ResMut<ProjectState>) {
@@ -89,7 +89,8 @@ fn open_dialog_if_requested(
     if !jobs.take_dialog_request() {
         return;
     }
-    let mut all: Vec<&str> = vec!["cadsim", "step", "stp", "urdf"];
+    let mut all: Vec<&str> = OPEN_EXTENSIONS.to_vec();
+    all.extend(["step", "stp", "urdf"]);
     all.extend(
         FORMATS
             .iter()
@@ -103,7 +104,7 @@ fn open_dialog_if_requested(
         .add_filter("対応しているすべての形式", &with_upper_case(&all))
         .add_filter("STEP", &with_upper_case(&["step", "stp"]))
         .add_filter("ロボット機種 (URDF)", &with_upper_case(&["urdf"]))
-        .add_filter("プロジェクト", &["cadsim"]);
+        .add_filter("プロジェクト", OPEN_EXTENSIONS);
     for format in FORMATS.iter().filter(|f| f.import.is_some()) {
         dialog = dialog.add_filter(format.name, &with_upper_case(format.extensions));
     }
@@ -182,11 +183,11 @@ fn open_in_browser_if_requested(
     if !jobs.take_browser_request() {
         return;
     }
-    let dir = std::env::temp_dir().join("cadsim_viewer");
+    let dir = std::env::temp_dir().join("plantwright_viewer");
     let chart = Some((&*chart, &**schedule));
     let result = std::fs::create_dir_all(&dir)
         .map_err(|e| e.to_string())
-        .map(|()| dir.join("cadsim.html"))
+        .map(|()| dir.join("plantwright.html"))
         .and_then(|path| {
             export_model(&model, &[], &animations, chart, &path, &jobs.units)?;
             open_with_default_app(&path)?;

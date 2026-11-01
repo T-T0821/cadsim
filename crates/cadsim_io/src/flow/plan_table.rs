@@ -98,7 +98,7 @@ mod tests {
         sheet.write_string(1, 1, "標準品").unwrap();
         sheet.write_number(1, 2, 120).unwrap();
         sheet.write_number(1, 3, 4.5).unwrap();
-        let dir = std::env::temp_dir().join(format!("cadsim_plan_{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("plantwright_plan_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("plan.xlsx");
         book.save(&path).unwrap();

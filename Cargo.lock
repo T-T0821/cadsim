@@ -2467,40 +2467,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
 
 [[package]]
-name = "cad_proto"
-version = "0.1.0"
-dependencies = [
- "async-opcua",
- "bevy",
- "bevy_egui",
- "cadsim_core",
- "cadsim_io",
- "e57",
- "encoding_rs",
- "gif",
- "glam 0.33.12",
- "image",
- "krilla",
- "lopdf",
- "openh264",
- "rapier3d",
- "rfd",
- "rhai",
- "rust_xlsxwriter",
- "ruststep",
- "serde",
- "serde_json",
- "tokio",
- "tokio-modbus",
- "transform-gizmo",
- "truck-meshalgo",
- "truck-modeling",
- "truck-shapeops",
- "truck-stepio",
- "truck-topology",
-]
-
-[[package]]
 name = "cadsim_core"
 version = "0.1.0"
 dependencies = [
@@ -6277,6 +6243,40 @@ name = "plain"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4596b6d070b27117e987119b4dac604f3c58cfb0b191112e24771b2faeac1a6"
+
+[[package]]
+name = "plantwright"
+version = "0.1.0"
+dependencies = [
+ "async-opcua",
+ "bevy",
+ "bevy_egui",
+ "cadsim_core",
+ "cadsim_io",
+ "e57",
+ "encoding_rs",
+ "gif",
+ "glam 0.33.12",
+ "image",
+ "krilla",
+ "lopdf",
+ "openh264",
+ "rapier3d",
+ "rfd",
+ "rhai",
+ "rust_xlsxwriter",
+ "ruststep",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-modbus",
+ "transform-gizmo",
+ "truck-meshalgo",
+ "truck-modeling",
+ "truck-shapeops",
+ "truck-stepio",
+ "truck-topology",
+]
 
 [[package]]
 name = "png"

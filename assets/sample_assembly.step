@@ -1,7 +1,7 @@
 ISO-10303-21;
 HEADER;
-FILE_DESCRIPTION(('cad_proto sample assembly'),'2;1');
-FILE_NAME('sample_assembly.step','2026-10-30T00:00:00',(''),(''),'make_sample_step.py','cad_proto','');
+FILE_DESCRIPTION(('plantwright sample assembly'),'2;1');
+FILE_NAME('sample_assembly.step','2026-10-30T00:00:00',(''),(''),'make_sample_step.py','plantwright','');
 FILE_SCHEMA(('AUTOMOTIVE_DESIGN { 1 0 10303 214 1 1 1 1 }'));
 ENDSEC;
 DATA;

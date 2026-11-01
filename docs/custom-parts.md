@@ -19,7 +19,7 @@
 - アクチュエータ: 動かす部品 (`parts`) のどれかが `root` 以下にあるもの。`parts` と `mounted_on` は部品の中にあるものだけ残す
 - センサー: 集めたアクチュエータに載っているもの、またはどこにも載らず `root` の外接箱 (1% の余裕つき) の中にあるもの
 
-木は `ProjectFile::from_subtree` で `.cadsim` と同じ形にする。一番上の位置は原点にし、ワールドでの回転は残す。
+木は `ProjectFile::from_subtree` で `.plantwright` と同じ形にする。一番上の位置は原点にし、ワールドでの回転は残す。
 タイミングチャートの軸は X / Y / Z の固定なので、置くときは平行移動だけにする (回転させると軸が合わなくなるため)。
 ピボットとセンサーの位置は、一番上の原点から見た座標で書く。部品は「最上位から順にたどる子の番号」で書き、先頭は部品の一番上を表す 0。
 
@@ -27,7 +27,7 @@
 
 ## ファイル
 
-ライブラリは設定ファイルと同じ場所の `parts` フォルダ (Linux なら `~/.config/cadsim/parts`、Windows なら `%APPDATA%\cadsim\parts`、Mac なら `~/Library/Application Support/cadsim/parts`)。
+ライブラリは設定ファイルと同じ場所の `parts` フォルダ (Linux なら `~/.config/plantwright/parts`、Windows なら `%APPDATA%\plantwright\parts`、Mac なら `~/Library/Application Support/plantwright/parts`)。
 部品ごとに `<部品名>/part.cadpart` を作り、取り込んだ STEP などは同じフォルダに写して相対パスで指す (別のフォルダの同じ名前のファイルは頭に番号を付けて分ける)。
 部品名の `/ \ : * ? " < > |` はフォルダ名では `_` にする。同じ名前の部品は置き換える。
 
@@ -44,7 +44,7 @@
 }
 ```
 
-`project` は `.cadsim` と同じ形 (docs/project-file.md) で、読むときも `ProjectFile::from_json` で確かめる。ステップは持たない。
+`project` は `.plantwright` と同じ形 (docs/project-file.md) で、読むときも `ProjectFile::from_json` で確かめる。ステップは持たない。
 `params` の id は `project.chart` の中の id。アプリより新しい `format_version` は読まない。
 
 ## 置くとき

@@ -26,7 +26,7 @@
 
 ## 部品としての持ち方
 
-作った形は `NodeKind::Imported` の部品にし、`source` を `StepSource::Modeled(ModeledSource)` にします。`ModeledSource` は B-rep を JSON にした文字列を持ち、`.cadsim` の `step_files` に `Modeled { name, solid }` として埋め込みます(元のファイルがないため)。開くときは JSON から B-rep を戻してテッセレーションし直します。
+作った形は `NodeKind::Imported` の部品にし、`source` を `StepSource::Modeled(ModeledSource)` にします。`ModeledSource` は B-rep を JSON にした文字列を持ち、`.plantwright` の `step_files` に `Modeled { name, solid }` として埋め込みます(元のファイルがないため)。開くときは JSON から B-rep を戻してテッセレーションし直します。
 
 箱に穴をあける・演算するときは、箱を「原点を中心にした形 + 配置」に分けてから演算し、結果を `Modeled` の部品に置き換えます。配置はそのまま残るので、ギズモで動かした位置は変わりません。
 

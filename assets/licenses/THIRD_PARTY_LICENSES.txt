@@ -1,11 +1,11 @@
-cadsim が使っている第三者のソフトウェアのライセンス
-Third-party software licenses used by cadsim
+plantwright が使っている第三者のソフトウェアのライセンス
+Third-party software licenses used by plantwright
 ================================================================
 
 このファイルは tools/licenses/generate.sh で Cargo.lock から作っています。手で書き換えないでください。
 This file is generated from Cargo.lock by tools/licenses/generate.sh. Do not edit by hand.
 
-cadsim 本体は MIT License と Apache License 2.0 のデュアルライセンスです。
+plantwright 本体は MIT License と Apache License 2.0 のデュアルライセンスです。
 同梱のフォントとサンプルの形状のライセンスは、このファイルの最後にあります。
 
 ライセンスごとの件数 / Overview
@@ -12418,7 +12418,7 @@ SOFTWARE.
 MIT License (MIT)
 
 使っているクレート / Used by:
-- cad_proto 0.1.0
+- plantwright 0.1.0
 ----------------------------------------------------------------
 
 MIT License

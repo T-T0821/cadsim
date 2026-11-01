@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <!--
-  UR5e (Universal Robots) の URDF。cadsim の「ロボット機種 (URDF)」の同梱サンプル。
+  UR5e (Universal Robots) の URDF。plantwright の「ロボット機種 (URDF)」の同梱サンプル。
 
   Universal_Robots_ROS2_Description (https://github.com/UniversalRobots/Universal_Robots_ROS2_Description)
   の urdf/ur_macro.xacro を ur_type:=ur5e で展開したものと同じリンク・関節・寸法

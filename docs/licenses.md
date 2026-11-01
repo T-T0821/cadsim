@@ -5,7 +5,7 @@
 ここに書いているのは、配布するときに守ることと、気をつけておく点のメモです。法的な助言ではありません。
 有料で売る・企業に納める・ロゴや認証を名乗るといった段階に進むときは、弁理士や弁護士に確かめてください。
 
-## cadsim 自身
+## plantwright 自身
 
 - 本体と `crates/` 以下のクレートは MIT License と Apache License 2.0 のデュアルライセンス(`LICENSE-MIT` / `LICENSE-APACHE`)。新しいクレートを足すときも `Cargo.toml` に `license = "MIT OR Apache-2.0"` を書く。
 - 同梱フォント `assets/fonts/NotoSansJP-Subset.otf` は SIL Open Font License 1.1(`assets/fonts/OFL.txt`)。
@@ -57,7 +57,7 @@ MIT・Apache-2.0・BSD などは、配るときに著作権表示とライセン
 ### H.264(MP4 書き出し)
 
 - MP4 は `openh264` クレートが同梱の OpenH264 のソースをビルドして H.264 にしている([video-export.md](video-export.md))。OpenH264 のソースは BSD 2-Clause だが、**H.264 には特許があり、ソースのライセンスとは別の話になる**。
-- Cisco が特許料を負担するのは、Cisco が配っている OpenH264 のバイナリをダウンロードして使う場合だけ。ソースからビルドして同梱している cadsim はその対象に入らない。
+- Cisco が特許料を負担するのは、Cisco が配っている OpenH264 のバイナリをダウンロードして使う場合だけ。ソースからビルドして同梱している plantwright はその対象に入らない。
 - H.264 の特許プール(Via LA の AVC)には、少ない台数なら無料の枠がある。無料で少し配るぶんには現実的な問題になりにくいが、**有料で売る・大量に配る前には確認する**。
 - 避けたくなったときの手: (1) 実行時に Cisco のバイナリをダウンロードして使う、(2) OS のエンコーダ(Windows の Media Foundation、macOS の AVFoundation)を使う、(3) MP4 をやめて VP9 / AV1(WebM)にする。GIF と PNG 連番は問題ない。
 
@@ -77,8 +77,8 @@ MIT・Apache-2.0・BSD などは、配るときに著作権表示とライセン
 
 - 競合比較などで他社の製品名(Process Simulate、ROBOGUIDE、MELSOFT など)を事実として書くのはふつう問題ない。**ロゴは使わない**、提携や推奨と取られる書き方をしない、各社の登録商標であることを書き添えると丁寧。
 - MELSEC・MELFA・Universal Robots・Robotiq などの機器名も同じ。「○○ に対応」とは書いてよいが、メーカー公認と取られる書き方はしない。
-- アプリの名前(cadsim、CAD Prototype)は、公開・販売で名前を前に出す前に、J-PlatPat で同じ区分(ソフトウェアは第 9 類・第 42 類)に同じか似た登録がないか確かめる。
+- アプリの名前(plantwright、plantwright)は、公開・販売で名前を前に出す前に、J-PlatPat で同じ区分(ソフトウェアは第 9 類・第 42 類)に同じか似た登録がないか確かめる。
 
 ### 生成 AI
 
-- Claude API は使う人が自分のキーを入れて使う。API の利用規約は使う人と Anthropic の間の話で、cadsim はキーを預からない。
+- Claude API は使う人が自分のキーを入れて使う。API の利用規約は使う人と Anthropic の間の話で、plantwright はキーを預からない。

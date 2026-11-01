@@ -59,7 +59,7 @@ Bevy の空間音声 (距離の 2 乗で小さくなる) は CAD の縮尺に合
 
 ## 設定ファイル
 
-`preferences.json` と同じフォルダ (環境変数 `CADSIM_CONFIG_DIR` で差し替え可) の `sound.json` に、ミュートと 4 つの音量 (0〜1) を書きます。
+`preferences.json` と同じフォルダ (環境変数 `PLANTWRIGHT_CONFIG_DIR` で差し替え可) の `sound.json` に、ミュートと 4 つの音量 (0〜1) を書きます。
 
 ```json
 {

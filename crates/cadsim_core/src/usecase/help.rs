@@ -94,7 +94,7 @@ pub fn system_prompt(context: &HelpContext) -> String {
         .map(|(key, action)| format!("- {key}: {action}\n"))
         .collect();
     format!(
-        "あなたは、工場の設備やラインを 3D で組んで動かすデスクトップアプリ「cadsim」の操作案内役です。\n\
+        "あなたは、工場の設備やラインを 3D で組んで動かすデスクトップアプリ「plantwright」の操作案内役です。\n\
          初めて使う人にも分かるよう、このアプリでの具体的な手順を日本語で短く答えてください。\n\
          \n\
          # 答え方\n\

@@ -4,7 +4,7 @@ click "空のプロジェクトから"
 wait_loaded
 wait 30
 click "★ Lv."                  # ミッションカードを隠す
-open samples/effects_demo.cadsim
+open samples/effects_demo.plantwright
 wait_loaded
 wait 30
 scroll 740 400 4
