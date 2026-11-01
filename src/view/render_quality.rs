@@ -1,4 +1,4 @@
-//! 3D ビューの描画の質 (UI 層): 影・環境光・SSAO・接地の影・ブルーム・アンチエイリアス
+//! 3D ビューの描画の質 (UI 層): 影・環境光・SSAO・ブルーム・アンチエイリアス
 //!
 //! どの段階で何を使うか、影や陰影をどの範囲に落とすかは `cadsim_core::render_quality` が決め、
 //! ここではそれを 3D カメラと主光源のコンポーネントに写すだけにする。
@@ -13,9 +13,7 @@ use bevy::light::{
     CascadeShadowConfigBuilder, DirectionalLightShadowMap, EnvironmentMapLight, GlobalAmbientLight,
     ShadowFilteringMethod,
 };
-use bevy::pbr::{
-    ContactShadows, ScreenSpaceAmbientOcclusion, ScreenSpaceAmbientOcclusionQualityLevel,
-};
+use bevy::pbr::{ScreenSpaceAmbientOcclusion, ScreenSpaceAmbientOcclusionQualityLevel};
 use bevy::post_process::bloom::Bloom;
 use bevy::prelude::*;
 use bevy_egui::egui;
@@ -133,7 +131,6 @@ fn apply_quality(
     };
     for mut light in &mut key_lights {
         light.shadow_maps_enabled = profile.shadows.is_some();
-        light.contact_shadows_enabled = profile.contact_shadows;
     }
     // 影と陰影の範囲は、新しい段数などで作り直す
     *fitted = FittedRanges::default();
@@ -190,13 +187,8 @@ fn set_camera_features(
             camera.remove::<(ScreenSpaceAmbientOcclusion, NormalPrepass)>();
         }
     }
-    if profile.contact_shadows {
-        camera.insert(ContactShadows::default());
-    } else {
-        camera.remove::<ContactShadows>();
-    }
-    // SSAO と接地の影が要る深さの前描きは、どちらも使わないなら外して軽くする
-    if profile.ambient_occlusion.is_none() && !profile.contact_shadows {
+    // SSAO が要る深さの前描きは、使わないなら外して軽くする
+    if profile.ambient_occlusion.is_none() {
         camera.remove::<DepthPrepass>();
     }
 }
@@ -208,8 +200,8 @@ struct FittedRanges {
     occlusion: Option<OcclusionScale>,
 }
 
-/// カメラの距離とシーンの大きさに合わせて、影の範囲と SSAO・接地の影の長さを決める
-#[allow(clippy::type_complexity, clippy::too_many_arguments)]
+/// カメラの距離とシーンの大きさに合わせて、影の範囲と SSAO の半径を決める
+#[allow(clippy::too_many_arguments)]
 fn fit_ranges(
     mut commands: Commands,
     ui: Res<RenderQualityUi>,
@@ -218,13 +210,7 @@ fn fit_ranges(
     model: Res<Model>,
     mut fitted: ResMut<FittedRanges>,
     mut key_lights: Query<(Entity, &mut DirectionalLight), With<KeyLight>>,
-    mut camera: Single<
-        (
-            Option<&mut ScreenSpaceAmbientOcclusion>,
-            Option<&mut ContactShadows>,
-        ),
-        With<Camera3d>,
-    >,
+    mut ssao: Single<Option<&mut ScreenSpaceAmbientOcclusion>, With<Camera3d>>,
 ) {
     let profile = ui.quality.profile();
     let meter = units_per_meter(units_per_mm(&model.unit));
@@ -253,20 +239,14 @@ fn fit_ranges(
 
     let scale = occlusion_scale(orbit.distance, meter);
     if fitted.occlusion.is_none_or(|old| scale.differs_from(&old)) {
-        let (ssao, contact) = &mut *camera;
+        let ssao = &mut *ssao;
         // 付け外しの命令がまだ届いていなければ、次のフレームでやり直す
-        let expected = profile.ambient_occlusion.is_some() == ssao.is_some()
-            && profile.contact_shadows == contact.is_some();
-        if expected {
+        if profile.ambient_occlusion.is_some() == ssao.is_some() {
             fitted.occlusion = Some(scale);
         }
         if let Some(ssao) = ssao {
             ssao.radius = scale.ao_radius;
             ssao.constant_object_thickness = scale.ao_thickness;
-        }
-        if let Some(contact) = contact {
-            contact.length = scale.contact_length;
-            contact.thickness = scale.contact_thickness;
         }
     }
 }

@@ -13,7 +13,7 @@ pub enum RenderQuality {
     Low,
     /// 影と環境光を使う。内蔵 GPU のノート PC でも動く重さ
     Standard,
-    /// 影をなめらかにし、隅の陰影 (SSAO)・接地の影・光のにじみ (ブルーム) を足す
+    /// 影をなめらかにし、隅の陰影 (SSAO)・光のにじみ (ブルーム) を足す
     #[default]
     High,
 }
@@ -62,7 +62,6 @@ impl RenderQuality {
                 shadows: None,
                 environment_light: false,
                 ambient_occlusion: None,
-                contact_shadows: false,
                 bloom: false,
                 antialias: Antialias::Msaa4,
             },
@@ -74,7 +73,6 @@ impl RenderQuality {
                 }),
                 environment_light: true,
                 ambient_occlusion: None,
-                contact_shadows: false,
                 bloom: false,
                 antialias: Antialias::Msaa4,
             },
@@ -86,7 +84,6 @@ impl RenderQuality {
                 }),
                 environment_light: true,
                 ambient_occlusion: Some(AoLevel::Medium),
-                contact_shadows: true,
                 bloom: true,
                 // SSAO は MSAA と一緒に使えないので、後処理のアンチエイリアス (SMAA) にする
                 antialias: Antialias::Smaa,
@@ -104,8 +101,6 @@ pub struct RenderProfile {
     pub environment_light: bool,
     /// 部品の隅や重なりを暗くする陰影 (SSAO)
     pub ambient_occlusion: Option<AoLevel>,
-    /// 部品が床や台に接する所の細かい影 (画面の深さから求める)
-    pub contact_shadows: bool,
     /// 明るい所 (光るエフェクト・強い照り返し) の光のにじみ
     pub bloom: bool,
     pub antialias: Antialias,
@@ -199,32 +194,25 @@ pub fn shadow_range(camera_distance: f32, scene_radius: f32, units_per_meter: f3
     }
 }
 
-/// SSAO と接地の影の届く長さ (モデルの単位)
+/// SSAO の届く長さ (モデルの単位)
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct OcclusionScale {
     /// SSAO が周りを調べる半径
     pub ao_radius: f32,
     /// SSAO が見込む物の厚み
     pub ao_thickness: f32,
-    /// 接地の影の光線の長さ
-    pub contact_length: f32,
-    /// 接地の影が見込む物の厚み
-    pub contact_thickness: f32,
 }
 
-/// SSAO と接地の影の長さを、カメラの距離に合わせて決める。
+/// SSAO の半径を、カメラの距離に合わせて決める。
 ///
 /// 画面の中で同じくらいの太さの陰影になるよう距離に比例させ、
 /// 実寸で 1 cm〜50 cm の間に収める (小さな部品でも、工場全体でも不自然にならないように)
 pub fn occlusion_scale(camera_distance: f32, units_per_meter: f32) -> OcclusionScale {
     let meter = units_per_meter.max(f32::EPSILON);
     let ao_radius = (camera_distance * 0.03).clamp(0.01 * meter, 0.5 * meter);
-    let contact_length = (camera_distance * 0.02).clamp(0.005 * meter, 0.3 * meter);
     OcclusionScale {
         ao_radius,
         ao_thickness: ao_radius * 0.35,
-        contact_length,
-        contact_thickness: contact_length * 0.3,
     }
 }
 
@@ -232,7 +220,7 @@ impl OcclusionScale {
     /// 前の値から大きく変わったか (10% を超えたら)
     pub fn differs_from(&self, other: &OcclusionScale) -> bool {
         let rel = |a: f32, b: f32| (a - b).abs() > 0.1 * a.abs().max(b.abs()).max(f32::EPSILON);
-        rel(self.ao_radius, other.ao_radius) || rel(self.contact_length, other.contact_length)
+        rel(self.ao_radius, other.ao_radius)
     }
 }
 
@@ -255,7 +243,7 @@ mod tests {
         let p = RenderQuality::Low.profile();
         assert_eq!(p.shadows, None);
         assert_eq!(p.ambient_occlusion, None);
-        assert!(!p.bloom && !p.contact_shadows && !p.environment_light && !p.hdr());
+        assert!(!p.bloom && !p.environment_light && !p.hdr());
         assert_eq!(p.antialias, Antialias::Msaa4);
     }
 
@@ -347,7 +335,7 @@ mod tests {
         for d in [0.0, 1.0, 1e9] {
             let s = occlusion_scale(d, 1000.0);
             assert!((10.0..=500.0).contains(&s.ao_radius), "{s:?}");
-            assert!(s.ao_thickness > 0.0 && s.contact_length > 0.0 && s.contact_thickness > 0.0);
+            assert!(s.ao_thickness > 0.0);
         }
         assert!(!near.differs_from(&occlusion_scale(510.0, 1000.0)));
         assert!(near.differs_from(&far));
