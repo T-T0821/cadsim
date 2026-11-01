@@ -1,0 +1,21 @@
+# 画質: デモラインを「きれい」「標準」「軽い」で撮り比べる
+wait_loaded
+click "自由にさわる"
+wait 30
+click "★ Lv."                  # ミッションカードを隠す
+wait 420                         # ミッション達成の表示が消えるのを待つ
+screenshot 01_high
+click "表示"
+wait 10
+click "画質: きれい"
+wait 10
+click "標準"
+wait 60
+screenshot 02_standard
+click "表示"
+wait 10
+click "画質: 標準"
+wait 10
+click "軽い"
+wait 60
+screenshot 03_low

@@ -449,6 +449,7 @@ fn view_menu(ui: &mut egui::Ui, state: &mut UiState) {
             lightweight_menu(ui, state)
         });
         ui.menu_button("状態のエフェクト", |ui| effects_menu(ui, state));
+        crate::view::render_quality::show_menu_items(ui, &mut state.render_quality);
         ui.separator();
         let mut show = state.playful.prefs.show_missions;
         if ui

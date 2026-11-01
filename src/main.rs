@@ -99,7 +99,7 @@ mod view;
 
 use bevy::{diagnostic::FrameTimeDiagnosticsPlugin, prelude::*};
 use bevy_egui::EguiPlugin;
-use view::{camera, camera_path, gizmo, recording, viewport, walk};
+use view::{camera, camera_path, gizmo, recording, render_quality, viewport, walk};
 
 fn main() {
     // `--ui-check` なら手順書ごとにアプリを起動し直して流し、結果を返して終わる
@@ -140,6 +140,7 @@ fn main() {
                 recording::RecordingPlugin,
                 camera_path::CameraPathPlugin,
                 walk::WalkPlugin,
+                render_quality::RenderQualityPlugin,
             ),
             (
                 flow::FlowPlugin,
