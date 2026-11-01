@@ -37,6 +37,7 @@
 //! - `floor_record` 安全機器・作業者・AGV の .cadsim での形
 //! - `safety`      安全機器 (ライトカーテン・エリアセンサ・安全柵・非常停止) と動作範囲
 //! - `preferences_file` 見た目とミッションの設定の読み書き (中身は `cadsim_core::gamify`)
+//! - `review`      複数人で同じ工場をレビューする (互いの視点・指さし・チャット。中身は `cadsim_core::review`)
 //! - `physics`     物理演算 (重力・接触・摩擦、ベルトコンベア、ケーブル・ホース)
 //! - `video`       動画のエンコード (MP4 / GIF / PNG。Bevy に依存しない)
 //! - `effects`     状態のエフェクト (詰まり・故障・安全停止の光と煙、溶接と干渉の火花。判断は `cadsim_core::effects`)
@@ -80,6 +81,7 @@ mod plc;
 mod preferences_file;
 mod project;
 mod result_export;
+mod review;
 mod safety;
 mod scripting;
 mod sequence_gen;
@@ -160,6 +162,7 @@ fn main() {
                 sequence_gen::SequenceGenPlugin,
                 ui_check::UiCheckPlugin,
                 effects::EffectsPlugin,
+                review::ReviewPlugin,
             ),
         ))
         .run();

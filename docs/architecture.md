@@ -64,9 +64,10 @@ crates/
 │       │                 line_draft (言葉で組むラインの下書き・整え方・並べ方),
 │       │                 effects (状態のエフェクトのきっかけ・見た目・煙と火花の粒),
 │       │                 sound (設備の音の波形・鳴らす条件・聞こえ方・警報とブザー停止),
-│       │                 ui_check (画面の自動確認の手順書・進め方・部品の探し方・画像の比べ方)
-│       │                 timeline (シミュレーションの巻き戻し: 状態の写しの記録と進め直し)
-│       │                 walk (一人称で歩く: 体の寸法・ぶつかり・通路幅と手の届く範囲)
+│       │                 ui_check (画面の自動確認の手順書・進め方・部品の探し方・画像の比べ方),
+│       │                 timeline (シミュレーションの巻き戻し: 状態の写しの記録と進め直し),
+│       │                 walk (一人称で歩く: 体の寸法・ぶつかり・通路幅と手の届く範囲),
+│       │                 review (複数人レビューのメッセージ・ホストの配り役・相手の様子・配置の変更の見つけ方)
 │       └── usecase/      document (開く・保存・取り込み・書き出し), edit, history, compose_line (言葉でラインを組む),
 │                         report (シミュレーション結果の CSV), llm (生成 AI のポート LlmClient), help (使い方を AI に聞く), script (部品スクリプトの実行と ScriptHost ポート),
 │                         ports (SceneReader / SceneWriter / ProjectStore などのトレイト)
@@ -74,7 +75,8 @@ crates/
     └── src/              step, interchange (gltf / obj / stl / usd), project_file (JSON), formats (平面図・図面・帳票・動線のヒートマップの PNG など),
                           modbus, slmp (三菱 PLC との SLMP 通信・テスト用の PLC), sound_settings (音の設定ファイル), rtde (UR の関節角度の受信), urdf (ロボット機種の URDF・COLLADA), video, xlsx (工程シミュレーションの結果), rhai (部品スクリプトのエンジン),
                           claude (生成 AI の Claude API), line_draft_json (生成 AI とやり取りするラインの下書きの JSON),
-                          ui_check (画面の自動確認の PNG・結果の JSON・報告書の HTML)
+                          ui_check (画面の自動確認の PNG・結果の JSON・報告書の HTML),
+                          review (複数人レビューの JSON と TCP の送受信)
 ```
 
 ルートの `Cargo.toml` の `default-members` に全 crate を並べているので、引数なしの `cargo test` / `cargo clippy` でワークスペース全体を確かめられます。
@@ -133,5 +135,6 @@ crates/
 | 状態のエフェクト (詰まり・故障の光と煙、溶接と干渉の火花) | `effects`(きっかけと見た目・出す場所の決め方)、`effects::particles`(煙と火花の粒) | — | `effects/mod.rs`(状態を集めて光・煙・火花に写す)、表示メニュー (`ui/menu.rs`) |
 | 設備の音と警報 | `sound::{synth, settings, spatial, cues, alarm}` | `cadsim_io::sound_settings`(`sound.json`) | `sound/`(`mod.rs` が状態を集めて音を出し入れ、`source.rs` が波形を Bevy の音に、`panel.rs` が設定ウィンドウと警報の帯) |
 | 最初の5分 (ようこそ画面・章立てのチュートリアル) | `gamify`(章・ミッションの手順・使う道具 `workspace::Tool`・とばす・判定) | `cadsim_io::preferences_file`(とばしたミッション・ようこそ画面を閉じたか) | `ui/tutorial.rs`(ようこそ画面・カードの手順・矢印)、`ui/playful.rs`、起動時のデモラインは `project/mod.rs` の `ProjectAction::OpenDemoLine` |
+| 複数人でレビュー | `review::{Message, Hub, ReviewSession, SendThrottle, PlacementTracker}` | `cadsim_io::review`(1 行の JSON・TCP の待ち受けと接続のスレッド `ReviewLink`) | `review/`(送受信のシステム・アバターの表示・パネル)。docs/review.md |
 
 `drawing/collect.rs` と `motion::live_joints` は Bevy に依存しない書き方にしてあり、次の手順で core に移します。

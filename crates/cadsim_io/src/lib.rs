@@ -10,6 +10,7 @@ pub mod interchange;
 pub mod line_draft_json;
 pub mod modeled;
 pub mod preferences_file;
+pub mod review;
 pub mod rtde;
 pub mod slmp;
 pub mod sound_settings;
