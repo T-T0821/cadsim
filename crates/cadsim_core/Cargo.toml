@@ -7,6 +7,8 @@ description = "cadsim のドメインとユースケース。Bevy・egui・フ�
 [dependencies]
 # Bevy 0.20 (bevy_math) と同じ版にして、ベクトル・行列の型をそのまま受け渡せるようにする
 glam = "0.33"
+# 干渉チェックの検索木 (三角形の外接箱の BVH)。純 Rust
+parry3d-f64 = "0.31"
 # 形状カーネル (B-rep とテッセレーション)
 truck-meshalgo = "0.4"
 truck-modeling = "0.6"

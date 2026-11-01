@@ -13,6 +13,8 @@ test-util = []
 cadsim_core = { path = "../cadsim_core" }
 glam = { version = "0.33", features = ["serde"] }
 serde = { version = "1.0.229", features = ["derive"] }
+# 点群の LAS / LAZ (圧縮した LAS) の読み込み。純 Rust
+las = { version = "0.11", features = ["laz"] }
 # 画像 (PNG / JPEG) の読み書き
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 # PDF の読み書き、Excel の書き出し、点群 (E57)
@@ -40,3 +42,5 @@ ureq = "3"
 calamine = { version = "0.30", default-features = false }
 # 日本語の Excel が書く CSV (Shift_JIS) の読み込み
 encoding_rs = "0.8"
+# CSV / TSV の読み書き
+csv = "1"

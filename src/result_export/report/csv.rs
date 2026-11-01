@@ -1,44 +1,28 @@
-//! 小さな CSV 書き出し (RFC 4180 形式)
+//! 結果の CSV を 1 行ずつ積む入れ物
 //!
-//! Excel (日本語版) でそのまま開けるよう、先頭に BOM を付けた UTF-8 で、改行は CRLF にする。
+//! 文字への変換 (BOM 付き UTF-8・CRLF・必要な欄だけ引用符) は [`cadsim_io::csv_text::write`] がする。
 
 /// 1行ずつ積んで、最後に文字列にする CSV
 #[derive(Default)]
 pub struct Csv {
-    text: String,
+    rows: Vec<Vec<String>>,
 }
 
 impl Csv {
     /// 見出し行を付けて作る
     pub fn with_header(header: &[&str]) -> Self {
-        let mut csv = Csv {
-            text: String::from('\u{feff}'),
-        };
+        let mut csv = Csv::default();
         csv.row(header.iter().map(|s| s.to_string()));
         csv
     }
 
-    /// 1行足す。カンマ・ダブルクォート・改行を含む値はクォートで囲む。
+    /// 1行足す
     pub fn row(&mut self, fields: impl IntoIterator<Item = String>) {
-        for (i, field) in fields.into_iter().enumerate() {
-            if i > 0 {
-                self.text.push(',');
-            }
-            self.text.push_str(&escape(&field));
-        }
-        self.text.push_str("\r\n");
+        self.rows.push(fields.into_iter().collect());
     }
 
     pub fn into_string(self) -> String {
-        self.text
-    }
-}
-
-fn escape(field: &str) -> String {
-    if field.contains([',', '"', '\r', '\n']) {
-        format!("\"{}\"", field.replace('"', "\"\""))
-    } else {
-        field.to_string()
+        cadsim_io::csv_text::write(self.rows)
     }
 }
 

@@ -56,37 +56,10 @@ fn decode(bytes: &[u8]) -> String {
     }
 }
 
-/// CSV / TSV の文字を表にする。区切りは 1 行目にタブがあればタブ、なければカンマ。
-/// `"…"` で囲んだ欄の中の区切りと改行、`""` (引用符そのもの) を扱う。
+/// CSV / TSV の文字を表にする。区切りは 1 行目にタブがあればタブ、なければカンマ
+/// ([`crate::csv_text::parse`])。
 pub fn parse_text(text: &str) -> Vec<Vec<String>> {
-    let first = text.lines().next().unwrap_or("");
-    let sep = if first.contains('\t') { '\t' } else { ',' };
-    let mut rows = Vec::new();
-    let mut row = Vec::new();
-    let mut cell = String::new();
-    let mut quoted = false;
-    let mut chars = text.chars().peekable();
-    while let Some(c) = chars.next() {
-        match c {
-            '"' if quoted && chars.peek() == Some(&'"') => {
-                cell.push('"');
-                chars.next();
-            }
-            '"' => quoted = !quoted,
-            c if c == sep && !quoted => row.push(std::mem::take(&mut cell)),
-            '\r' if !quoted => {}
-            '\n' if !quoted => {
-                row.push(std::mem::take(&mut cell));
-                rows.push(std::mem::take(&mut row));
-            }
-            c => cell.push(c),
-        }
-    }
-    if !cell.is_empty() || !row.is_empty() {
-        row.push(cell);
-        rows.push(row);
-    }
-    rows
+    crate::csv_text::parse(text)
 }
 
 #[cfg(test)]

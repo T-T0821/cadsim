@@ -1,4 +1,6 @@
-//! I/O 対応表の CSV 書き出しと読み戻し
+//! I/O 対応表の CSV 書き出しと読み戻し (表の中身の組み立てと解釈)
+//!
+//! ここでは表を「行 × 欄の文字」で扱う。CSV の文字との変換は UI 層が `cadsim_io::csv_text` で行う。
 //!
 //! 書き出した CSV を Excel などで編集し (番号・スケール・OPC UA ノード・ログの列名を PLC 側に合わせる)、
 //! 読み込むと各信号の個別設定 ([`PointSettings`]) になる。行は「信号」列の名前で突き合わせる。
@@ -22,14 +24,9 @@ const HEADER: [&str; 7] = [
     "OPC UAノード",
     "ログ列名",
 ];
-/// Excel が UTF-8 と判断できるよう先頭に付ける印 (BOM)
-const BOM: char = '\u{feff}';
-
-/// I/O 一覧を CSV にする
-pub fn to_csv(table: &IoTable) -> String {
-    let mut text = String::from(BOM);
-    text += &HEADER.join(",");
-    text += "\r\n";
+/// I/O 一覧を CSV の表 (見出し行つき) にする
+pub fn to_rows(table: &IoTable) -> Vec<Vec<String>> {
+    let mut rows = vec![HEADER.map(String::from).to_vec()];
     for p in &table.points {
         let direction = if p.point.is_output() {
             "出力"
@@ -50,11 +47,9 @@ pub fn to_csv(table: &IoTable) -> String {
             &p.node,
             &p.log_column,
         ];
-        let fields: Vec<String> = row.iter().map(|f| quote(f)).collect();
-        text += &fields.join(",");
-        text += "\r\n";
+        rows.push(row.map(String::from).to_vec());
     }
-    text
+    rows
 }
 
 /// 読み込みの結果
@@ -68,9 +63,12 @@ pub struct CsvReport {
     pub errors: Vec<String>,
 }
 
-/// CSV を読み、`plan` の個別設定を書き換える。表にない信号や読めない行は飛ばして報告する。
-pub fn apply_csv(text: &str, table: &IoTable, plan: &mut AddressPlan) -> Result<CsvReport, String> {
-    let rows = parse(text.trim_start_matches(BOM));
+/// CSV の表を読み、`plan` の個別設定を書き換える。表にない信号や読めない行は飛ばして報告する。
+pub fn apply_rows(
+    rows: &[Vec<String>],
+    table: &IoTable,
+    plan: &mut AddressPlan,
+) -> Result<CsvReport, String> {
     let header_at = rows
         .iter()
         .position(|r| r.first().is_some_and(|f| f.trim() == HEADER[0]))
@@ -140,45 +138,6 @@ pub fn apply_csv(text: &str, table: &IoTable, plan: &mut AddressPlan) -> Result<
     Ok(report)
 }
 
-/// カンマ・引用符・改行を含む欄だけ引用符で囲む
-fn quote(field: &str) -> String {
-    if field.contains([',', '"', '\n', '\r']) {
-        format!("\"{}\"", field.replace('"', "\"\""))
-    } else {
-        field.to_string()
-    }
-}
-
-/// CSV を行と欄に分ける (引用符で囲んだ欄の中のカンマ・改行・"" に対応)
-fn parse(text: &str) -> Vec<Vec<String>> {
-    let mut rows = Vec::new();
-    let mut row = Vec::new();
-    let mut field = String::new();
-    let mut in_quotes = false;
-    let mut chars = text.chars().peekable();
-    while let Some(c) = chars.next() {
-        match (c, in_quotes) {
-            ('"', true) if chars.peek() == Some(&'"') => {
-                field.push('"');
-                chars.next();
-            }
-            ('"', _) => in_quotes = !in_quotes,
-            (',', false) => row.push(std::mem::take(&mut field)),
-            ('\r', false) => {}
-            ('\n', false) => {
-                row.push(std::mem::take(&mut field));
-                rows.push(std::mem::take(&mut row));
-            }
-            (c, _) => field.push(c),
-        }
-    }
-    if !field.is_empty() || !row.is_empty() {
-        row.push(field);
-        rows.push(row);
-    }
-    rows
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -199,7 +158,7 @@ mod tests {
         let (chart, _, _) = chart();
         let mut plan = AddressPlan::default();
         let table = IoTable::from_chart(&chart, &plan);
-        let report = apply_csv(&to_csv(&table), &table, &mut plan).unwrap();
+        let report = apply_rows(&to_rows(&table), &table, &mut plan).unwrap();
         assert_eq!(report.applied, table.points.len());
         assert!(report.errors.is_empty() && report.unknown.is_empty());
         assert_eq!(IoTable::from_chart(&chart, &plan), table);
@@ -210,13 +169,25 @@ mod tests {
         let (chart, cyl, axis) = chart();
         let mut plan = AddressPlan::default();
         let table = IoTable::from_chart(&chart, &plan);
-        let csv = "メモ: PLC 側の割り付け\n\
-                   信号,向き,種類,番号,スケール,OPC UAノード\n\
-                   リフタ.出端,入力,コイル,200,,\"ns=2;s=Lifter,Ext\"\n\
-                   X軸.指令位置,出力,保持レジスタ,10,0.01,\n\
-                   旧シリンダ.出,出力,コイル,5,,\n\
-                   リフタ.戻端,入力,コイル,abc,,\n";
-        let report = apply_csv(csv, &table, &mut plan).unwrap();
+        let rows: Vec<Vec<String>> = [
+            vec!["メモ: PLC 側の割り付け"],
+            vec!["信号", "向き", "種類", "番号", "スケール", "OPC UAノード"],
+            vec![
+                "リフタ.出端",
+                "入力",
+                "コイル",
+                "200",
+                "",
+                "ns=2;s=Lifter,Ext",
+            ],
+            vec!["X軸.指令位置", "出力", "保持レジスタ", "10", "0.01", ""],
+            vec!["旧シリンダ.出", "出力", "コイル", "5", "", ""],
+            vec!["リフタ.戻端", "入力", "コイル", "abc", "", ""],
+        ]
+        .into_iter()
+        .map(|r| r.into_iter().map(String::from).collect())
+        .collect();
+        let report = apply_rows(&rows, &table, &mut plan).unwrap();
         assert_eq!(report.applied, 2);
         assert_eq!(report.unknown, vec!["旧シリンダ.出".to_string()]);
         assert_eq!(report.errors.len(), 1);
@@ -234,6 +205,7 @@ mod tests {
         let (chart, _, _) = chart();
         let mut plan = AddressPlan::default();
         let table = IoTable::from_chart(&chart, &plan);
-        assert!(apply_csv("a,b,c\n", &table, &mut plan).is_err());
+        let rows = vec![vec!["a".to_string(), "b".to_string(), "c".to_string()]];
+        assert!(apply_rows(&rows, &table, &mut plan).is_err());
     }
 }

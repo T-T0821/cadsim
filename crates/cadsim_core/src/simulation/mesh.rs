@@ -1,42 +1,47 @@
 //! 干渉チェック用の三角形メッシュと、その検索木 (BVH)
 //!
-//! 形状は部品ローカル座標の三角形の集まりとして持つ。BVH (外接箱の二分木) を
+//! 形状は部品ローカル座標の三角形の集まりとして持つ。検索木 (三角形の外接箱の木) を
 //! 一度作っておけば、部品が動いても作り直さずに「近くの三角形だけ」を素早く探せる。
+//! 木の構築とたどり方は parry の [`Bvh`] に任せ、三角形どうしの判定 (交線・最短距離・内外) は
+//! 許容差の扱いを決めた自前の計算 ([`super::geometry`]) で行う。
 
 use std::cell::Cell;
 
 use glam::DVec3;
+use parry3d_f64::bounding_volume::Aabb as ParryAabb;
+use parry3d_f64::partitioning::{Bvh, BvhBuildStrategy, TraversalAction};
 
 use super::geometry::{
     Aabb, Pose, RayHit, Triangle, closest_point_on_triangle, ray_triangle, triangle_aabb,
-    triangle_centroid, triangle_normal,
+    triangle_normal,
 };
-
-/// 葉に入れる三角形の最大数
-const LEAF_SIZE: usize = 4;
 
 /// 閉じた (水密な) 三角形メッシュ。表 = 外向き。
 pub struct TriMesh {
     triangles: Vec<Triangle>,
-    nodes: Vec<Node>,
+    /// 葉の番号は `triangles` の添字
+    bvh: Bvh,
 }
 
-/// BVH のノード。`children` が None なら葉で、`triangles[start..end]` を持つ。
-struct Node {
-    aabb: Aabb,
-    children: Option<[usize; 2]>,
-    start: usize,
-    end: usize,
+fn to_parry(aabb: &Aabb) -> ParryAabb {
+    ParryAabb::new(aabb.min, aabb.max)
+}
+
+fn from_parry(aabb: &ParryAabb) -> Aabb {
+    Aabb {
+        min: aabb.mins,
+        max: aabb.maxs,
+    }
 }
 
 impl TriMesh {
-    pub fn new(mut triangles: Vec<Triangle>) -> Self {
-        let mut nodes = Vec::new();
-        if !triangles.is_empty() {
-            let len = triangles.len();
-            build_node(&mut triangles, 0, len, &mut nodes);
-        }
-        Self { triangles, nodes }
+    pub fn new(triangles: Vec<Triangle>) -> Self {
+        let leaves: Vec<ParryAabb> = triangles
+            .iter()
+            .map(|t| to_parry(&triangle_aabb(t)))
+            .collect();
+        let bvh = Bvh::from_leaves(BvhBuildStrategy::Binned, &leaves);
+        Self { triangles, bvh }
     }
 
     pub fn triangles(&self) -> &[Triangle] {
@@ -45,7 +50,11 @@ impl TriMesh {
 
     /// ローカル座標での外接箱
     pub fn aabb(&self) -> Aabb {
-        self.nodes.first().map_or(Aabb::EMPTY, |n| n.aabb)
+        if self.triangles.is_empty() {
+            Aabb::EMPTY
+        } else {
+            from_parry(&self.bvh.root_aabb())
+        }
     }
 
     /// 外接箱 `region` と重なりうる三角形を列挙する。
@@ -55,22 +64,18 @@ impl TriMesh {
 
     /// 汎用の木の探索。`enter` が false を返した枝は降りない。
     fn walk(&self, mut enter: impl FnMut(&Aabb) -> bool, mut leaf: impl FnMut(&Triangle)) {
-        if self.nodes.is_empty() {
+        if self.triangles.is_empty() {
             return;
         }
-        let mut stack = vec![0];
-        while let Some(index) = stack.pop() {
-            let node = &self.nodes[index];
-            if !enter(&node.aabb) {
-                continue;
+        self.bvh.traverse(|node| {
+            if !enter(&from_parry(&node.aabb())) {
+                return TraversalAction::Prune;
             }
-            match node.children {
-                Some(children) => stack.extend(children),
-                None => self.triangles[node.start..node.end]
-                    .iter()
-                    .for_each(&mut leaf),
+            if let Some(index) = node.leaf_data() {
+                leaf(&self.triangles[index as usize]);
             }
-        }
+            TraversalAction::Continue
+        });
     }
 
     /// 点 `p` に最も近いメッシュ上の点と、その三角形の法線。
@@ -154,85 +159,29 @@ impl TriMesh {
 /// 2つのメッシュの三角形の組を、外接箱が近いものだけ列挙する。
 ///
 /// `b_to_a` は b のローカル座標を a のローカル座標に移す変換。
-/// `enter(a_box, b_box)` が false を返した組み合わせは、その下を調べない。
+/// `enter(a_box, b_box)` が false を返した組み合わせは、その下を調べない
+/// (根元に近い数組は判定せずに降りることがある)。
 /// `visit(ta, tb)` には a のローカル座標にそろえた三角形が渡る。
 pub fn for_each_triangle_pair(
     a: &TriMesh,
     b: &TriMesh,
     b_to_a: &Pose,
-    mut enter: impl FnMut(&Aabb, &Aabb) -> bool,
+    enter: impl Fn(&Aabb, &Aabb) -> bool,
     mut visit: impl FnMut(&Triangle, &Triangle),
 ) {
-    if a.nodes.is_empty() || b.nodes.is_empty() {
+    if a.triangles.is_empty() || b.triangles.is_empty() {
         return;
     }
-    let mut stack = vec![(0, 0)];
-    while let Some((ia, ib)) = stack.pop() {
-        let (na, nb) = (&a.nodes[ia], &b.nodes[ib]);
-        if !enter(&na.aabb, &nb.aabb.transformed(b_to_a)) {
-            continue;
-        }
-        match (na.children, nb.children) {
-            (None, None) => {
-                for ta in &a.triangles[na.start..na.end] {
-                    for tb in &b.triangles[nb.start..nb.end] {
-                        visit(ta, &b_to_a.apply_triangle(tb));
-                    }
-                }
-            }
-            // 大きい方のノードを分割して降りる
-            (Some([l, r]), None) => stack.extend([(l, ib), (r, ib)]),
-            (None, Some([l, r])) => stack.extend([(ia, l), (ia, r)]),
-            (Some([al, ar]), Some([bl, br])) => {
-                if na.aabb.diagonal() >= nb.aabb.diagonal() {
-                    stack.extend([(al, ib), (ar, ib)]);
-                } else {
-                    stack.extend([(ia, bl), (ia, br)]);
-                }
-            }
-        }
-    }
-}
-
-/// 三角形を重心の位置で半分ずつに分けながら木を作る。
-fn build_node(
-    triangles: &mut [Triangle],
-    start: usize,
-    end: usize,
-    nodes: &mut Vec<Node>,
-) -> usize {
-    let slice = &mut triangles[start..end];
-    let aabb = slice
-        .iter()
-        .map(triangle_aabb)
-        .fold(Aabb::EMPTY, |acc, b| acc.union(&b));
-    let index = nodes.len();
-    nodes.push(Node {
-        aabb,
-        children: None,
-        start,
-        end,
+    let pairs = a.bvh.leaf_pairs(&b.bvh, |na, nb| {
+        enter(
+            &from_parry(&na.aabb()),
+            &from_parry(&nb.aabb()).transformed(b_to_a),
+        )
     });
-    if slice.len() <= LEAF_SIZE {
-        return index;
+    for (ia, ib) in pairs {
+        let tb = b_to_a.apply_triangle(&b.triangles[ib as usize]);
+        visit(&a.triangles[ia as usize], &tb);
     }
-    // いちばん長い軸で、重心の中央値で分ける
-    let extent = aabb.max - aabb.min;
-    let axis = if extent.x >= extent.y && extent.x >= extent.z {
-        0
-    } else if extent.y >= extent.z {
-        1
-    } else {
-        2
-    };
-    let mid = slice.len() / 2;
-    slice.select_nth_unstable_by(mid, |a, b| {
-        triangle_centroid(a)[axis].total_cmp(&triangle_centroid(b)[axis])
-    });
-    let left = build_node(triangles, start, start + mid, nodes);
-    let right = build_node(triangles, start + mid, end, nodes);
-    nodes[index].children = Some([left, right]);
-    index
 }
 
 /// スラブ法によるレイと箱の交差判定

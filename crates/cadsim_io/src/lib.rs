@@ -4,6 +4,7 @@
 //! Bevy・egui には依存しない (docs/architecture.md)。
 
 pub mod claude;
+pub mod csv_text;
 pub mod flow;
 pub mod formats;
 pub mod interchange;

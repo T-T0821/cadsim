@@ -133,6 +133,7 @@ flowchart TD
 - **内側の点**: 交線がなくても、片方がまるごと内側にある場合や、ぴったり同じ位置にある場合があります。
   表面から許容差の2倍だけ内側にずらした点を、相手の内側か (レイを飛ばして交差数の偶奇で判定) 調べます。
 - **BVH**: 三角形を外接箱の木にまとめたものです。部品ごとに一度作れば、姿勢が変わっても使い回せます。
+  木の構築と2つの木の同時のたどり方は `parry3d-f64` の `Bvh` を使い、三角形どうしの判定 (交線・最短距離・内外) は許容差の扱いを決めた自前の計算 (`geometry.rs`) で行います。
 
 ### 干渉部分の立体 (overlap.rs)
 
@@ -157,7 +158,7 @@ A∩B の表面は「A の表面のうち B の内側にある部分」と「B �
 | ファイル | 役割 | 層 |
 | --- | --- | --- |
 | `crates/cadsim_core/src/simulation/geometry.rs` | 姿勢・外接箱・三角形の交差と距離 (純粋な f64 計算) | ドメイン |
-| `crates/cadsim_core/src/simulation/mesh.rs` | `TriMesh` と BVH、内外判定、最近点 | ドメイン |
+| `crates/cadsim_core/src/simulation/mesh.rs` | `TriMesh` と BVH (`parry3d-f64` の `Bvh`)、内外判定、最近点 | ドメイン |
 | `crates/cadsim_core/src/simulation/interference.rs` | 組ごとの判定 (干渉 / 接触 / 近接) | ドメイン |
 | `crates/cadsim_core/src/simulation/overlap.rs` | 干渉部分の立体と体積 | ドメイン |
 | `src/simulation/mod.rs` | プラグイン、`SimBody`、判定の実行タイミング | UI (Bevy) |

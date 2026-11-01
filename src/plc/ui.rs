@@ -476,10 +476,12 @@ fn io_csv_buttons(
                 .set_file_name("io_table.csv")
                 .save_file()
         {
-            *notice = Some(match std::fs::write(&path, plc.export_io_csv()) {
-                Ok(()) => format!("{} に書き出しました", path.display()),
-                Err(e) => format!("書き出せませんでした: {e}"),
-            });
+            *notice = Some(
+                match std::fs::write(&path, cadsim_io::csv_text::write(plc.export_io_rows())) {
+                    Ok(()) => format!("{} に書き出しました", path.display()),
+                    Err(e) => format!("書き出せませんでした: {e}"),
+                },
+            );
         }
         if ui.button("CSV を読み込み…").clicked()
             && let Some(path) = rfd::FileDialog::new()
@@ -488,8 +490,8 @@ fn io_csv_buttons(
         {
             *notice = Some(match std::fs::read(&path) {
                 Ok(bytes) => {
-                    let text = String::from_utf8_lossy(&bytes);
-                    match plc.import_io_csv(&text, chart) {
+                    let rows = cadsim_io::csv_text::parse(&String::from_utf8_lossy(&bytes));
+                    match plc.import_io_rows(&rows, chart) {
                         Ok(report) => import_summary(&report),
                         Err(e) => e,
                     }

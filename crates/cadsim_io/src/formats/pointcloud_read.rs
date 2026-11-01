@@ -3,11 +3,11 @@
 //! どの形式も1点ずつ [`Decimator`] に渡して、読みながら間引く (全点をメモリに載せない)。
 //! 座標はモデルの単位・Y 軸が上に直してから渡す。
 //! - PLY: ASCII とバイナリ (リトル / ビッグエンディアン)。頂点の x / y / z と色 (red / green / blue)
-//! - LAS: 1.0〜1.4、点の形式 0〜10。圧縮版の LAZ は読めない
+//! - LAS / LAZ: `las` クレートで読む (LAZ は圧縮した LAS)。1.0〜1.4、点の形式 0〜10
 //! - E57: `e57` クレートで読む。スキャンが複数あればすべて、各スキャンの姿勢を当てはめて読む
 
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
+use std::io::{BufRead, BufReader, Read, Seek};
 use std::path::Path;
 
 use glam::DVec3;
@@ -15,7 +15,7 @@ use glam::DVec3;
 use cadsim_core::site::pointcloud::{CloudSettings, Decimator, PointCloud};
 
 /// 点群として読む拡張子
-pub const CLOUD_EXTENSIONS: &[&str] = &["ply", "las", "e57"];
+pub const CLOUD_EXTENSIONS: &[&str] = &["ply", "las", "laz", "e57"];
 
 pub fn is_cloud_file(path: &Path) -> bool {
     path.extension()
@@ -65,10 +65,7 @@ pub fn read_cloud(
         || File::open(path).map_err(|e| format!("{} を開けませんでした: {e}", path.display()));
     match ext.as_str() {
         "ply" => read_ply(BufReader::new(open()?), &mut push)?,
-        "las" => read_las(BufReader::new(open()?), &mut push)?,
-        "laz" => {
-            return Err("LAZ (圧縮した LAS) は読めません。LAS に展開してから開いてください".into());
-        }
+        "las" | "laz" => read_las(BufReader::new(open()?), &mut push)?,
         "e57" => read_e57(path, &mut push)?,
         _ => return Err("点群として読めない形式です".into()),
     }
@@ -279,89 +276,33 @@ fn read_ply(mut reader: impl BufRead, push: &mut Sink) -> Result<(), String> {
 // LAS
 // ---------------------------------------------------------------------------
 
-fn le_u16(b: &[u8], at: usize) -> u16 {
-    u16::from_le_bytes([b[at], b[at + 1]])
-}
+/// 一度に読む点の数 (全点をメモリに載せないよう、区切って読む)
+const LAS_CHUNK: u64 = 65_536;
 
-fn le_u32(b: &[u8], at: usize) -> u32 {
-    u32::from_le_bytes(b[at..at + 4].try_into().unwrap_or([0; 4]))
-}
-
-fn le_f64(b: &[u8], at: usize) -> f64 {
-    f64::from_le_bytes(b[at..at + 8].try_into().unwrap_or([0; 8]))
-}
-
-fn read_las(mut reader: impl Read + Seek, push: &mut Sink) -> Result<(), String> {
-    let mut header = vec![0u8; 375];
-    let read = reader.read(&mut header).map_err(|e| e.to_string())?;
-    if read < 227 || &header[..4] != b"LASF" {
-        return Err("LAS ファイルではありません".into());
-    }
-    let minor = header[25];
-    let offset_to_points = le_u32(&header, 96) as u64;
-    let format_byte = header[104];
-    if format_byte & 0xC0 != 0 {
-        return Err("LAZ (圧縮した LAS) は読めません。LAS に展開してから開いてください".into());
-    }
-    let format = format_byte & 0x3F;
-    let record_len = le_u16(&header, 105) as usize;
-    let mut count = le_u32(&header, 107) as u64;
-    if minor >= 4 && read >= 255 {
-        let count64 = u64::from_le_bytes(header[247..255].try_into().unwrap_or([0; 8]));
-        if count64 > 0 {
-            count = count64;
-        }
-    }
-    let scale = [
-        le_f64(&header, 131),
-        le_f64(&header, 139),
-        le_f64(&header, 147),
-    ];
-    let offset = [
-        le_f64(&header, 155),
-        le_f64(&header, 163),
-        le_f64(&header, 171),
-    ];
-    let rgb_at = match format {
-        2 => Some(20),
-        3 | 5 => Some(28),
-        7 | 8 | 10 => Some(30),
-        0 | 1 | 4 | 6 | 9 => None,
-        _ => return Err(format!("LAS の点の形式 {format} には対応していません")),
-    };
-    if record_len < 12 || rgb_at.is_some_and(|at| record_len < at + 6) {
-        return Err("LAS の点の長さが不正です".into());
-    }
-    reader
-        .seek(SeekFrom::Start(offset_to_points))
-        .map_err(|e| e.to_string())?;
-    // 色が 8bit で入っているファイルもあるので、最初の点で見分ける
+fn read_las(
+    reader: impl Read + Seek + Send + Sync + 'static,
+    push: &mut Sink,
+) -> Result<(), String> {
+    let mut reader =
+        las::Reader::new(reader).map_err(|e| format!("LAS / LAZ を読めませんでした: {e}"))?;
+    // 色が 8bit で入っているファイルもあるので、最初の色付きの点で見分ける
     let mut sixteen_bit: Option<bool> = None;
-    let mut chunk = vec![0u8; record_len * 4096];
-    let mut remaining = count;
-    while remaining > 0 {
-        let n = remaining.min(4096) as usize;
-        let buf = &mut chunk[..n * record_len];
-        if reader.read_exact(buf).is_err() {
+    loop {
+        let chunk = reader
+            .read_points(LAS_CHUNK)
+            .map_err(|e| format!("LAS / LAZ の点を読めませんでした: {e}"))?;
+        if chunk.is_empty() {
             break;
         }
-        for record in buf.chunks_exact(record_len) {
-            let coord = |i: usize| {
-                let raw = i32::from_le_bytes(record[i * 4..i * 4 + 4].try_into().unwrap_or([0; 4]));
-                raw as f64 * scale[i] + offset[i]
-            };
-            let color = rgb_at.map(|at| {
-                let rgb = [
-                    le_u16(record, at),
-                    le_u16(record, at + 2),
-                    le_u16(record, at + 4),
-                ];
-                let wide = *sixteen_bit.get_or_insert(rgb.iter().any(|&c| c > 255));
-                rgb.map(|c| if wide { (c >> 8) as u8 } else { c as u8 })
+        for point in chunk.points() {
+            let point = point.map_err(|e| format!("LAS / LAZ の点を読めませんでした: {e}"))?;
+            let color = point.color.map(|c| {
+                let rgb = [c.red, c.green, c.blue];
+                let wide = *sixteen_bit.get_or_insert(rgb.iter().any(|&v| v > 255));
+                rgb.map(|v| if wide { (v >> 8) as u8 } else { v as u8 })
             });
-            push(coord(0), coord(1), coord(2), color);
+            push(point.x, point.y, point.z, color);
         }
-        remaining -= n as u64;
     }
     Ok(())
 }
@@ -434,45 +375,57 @@ mod tests {
         );
     }
 
-    /// 点の形式 2 (色付き) の LAS 1.2 を作る
-    fn las(points: &[(i32, i32, i32, [u16; 3])]) -> Vec<u8> {
-        let mut h = vec![0u8; 227];
-        h[..4].copy_from_slice(b"LASF");
-        h[24] = 1;
-        h[25] = 2;
-        h[94..96].copy_from_slice(&227u16.to_le_bytes());
-        h[96..100].copy_from_slice(&227u32.to_le_bytes());
-        h[104] = 2;
-        h[105..107].copy_from_slice(&26u16.to_le_bytes());
-        h[107..111].copy_from_slice(&(points.len() as u32).to_le_bytes());
-        for (i, s) in [0.01f64, 0.01, 0.01].iter().enumerate() {
-            h[131 + i * 8..139 + i * 8].copy_from_slice(&s.to_le_bytes());
+    /// 点の形式 2 (色付き) の LAS 1.2 を作る。`compressed` なら LAZ
+    fn las_bytes(points: &[(f64, f64, f64, [u16; 3])], compressed: bool) -> Vec<u8> {
+        let mut builder = las::Builder::from((1, 2));
+        builder.point_format = las::point::Format::new(2).unwrap();
+        builder.point_format.is_compressed = compressed;
+        let header = builder.into_header().unwrap();
+        let mut writer = las::Writer::new(Cursor::new(Vec::new()), header).unwrap();
+        for &(x, y, z, [red, green, blue]) in points {
+            writer
+                .write_point(las::Point {
+                    x,
+                    y,
+                    z,
+                    color: Some(las::Color { red, green, blue }),
+                    ..Default::default()
+                })
+                .unwrap();
         }
-        h[155..163].copy_from_slice(&1000.0f64.to_le_bytes());
-        for (x, y, z, rgb) in points {
-            let mut r = vec![0u8; 26];
-            r[0..4].copy_from_slice(&x.to_le_bytes());
-            r[4..8].copy_from_slice(&y.to_le_bytes());
-            r[8..12].copy_from_slice(&z.to_le_bytes());
-            for (k, c) in rgb.iter().enumerate() {
-                r[20 + k * 2..22 + k * 2].copy_from_slice(&c.to_le_bytes());
-            }
-            h.extend(r);
-        }
-        h
+        writer.into_inner().unwrap().into_inner()
     }
 
     #[test]
-    fn las_points_are_scaled() {
-        let bytes = las(&[(100, 200, 300, [65535, 0, 32768]), (0, 0, 0, [0, 0, 0])]);
+    fn las_points_and_colors() {
+        let bytes = las_bytes(
+            &[
+                (1001.0, 2.0, 3.0, [65535, 0, 32768]),
+                (0.0, 0.0, 0.0, [0; 3]),
+            ],
+            false,
+        );
         let points = collect(|s| read_las(Cursor::new(bytes), s));
         assert_eq!(points.len(), 2);
         let (x, y, z, c) = points[0];
         assert!((x - 1001.0).abs() < 1e-9 && (y - 2.0).abs() < 1e-9 && (z - 3.0).abs() < 1e-9);
         assert_eq!(c, Some([255, 0, 128]));
-        let mut laz = las(&[]);
-        laz[104] |= 0x80;
-        assert!(read_las(Cursor::new(laz), &mut |_, _, _, _| {}).is_err());
+        assert!(
+            read_las(
+                Cursor::new(b"not a las file".to_vec()),
+                &mut |_, _, _, _| {}
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn laz_is_read_like_las() {
+        let points = [(1.0, 2.0, 3.0, [10, 20, 30]), (4.0, 5.0, 6.0, [40, 50, 60])];
+        let laz = collect(|s| read_las(Cursor::new(las_bytes(&points, true)), s));
+        let las = collect(|s| read_las(Cursor::new(las_bytes(&points, false)), s));
+        assert_eq!(laz, las);
+        assert_eq!(laz[1].3, Some([40, 50, 60]));
     }
 
     #[test]
@@ -481,7 +434,11 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         // LAS (m, Z 上): 1 m 上の点は mm のモデルで Y = 1000
         let path = dir.join("scan.las");
-        std::fs::write(&path, las(&[(0, 0, 100, [0; 3]), (100, 0, 0, [0; 3])])).unwrap();
+        std::fs::write(
+            &path,
+            las_bytes(&[(0.0, 0.0, 1.0, [0; 3]), (1.0, 0.0, 0.0, [0; 3])], false),
+        )
+        .unwrap();
         let settings = default_settings(&path, 1.0);
         assert_eq!(settings.unit_mm, 1000.0);
         let cloud = read_cloud(&path, &settings, 1.0).unwrap();
