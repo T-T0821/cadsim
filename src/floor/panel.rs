@@ -6,6 +6,8 @@ use bevy_egui::{EguiContexts, egui};
 use cadsim_core::workspace::Tool;
 
 use super::agv_sim::{Flow, compare_fleets};
+use super::heatmap::{self, HeatMetric, MoverFilter, MoverKind};
+use super::heatmap_view::HeatmapRes;
 use super::operator_plan::OperatorTask;
 use super::{AgvLayoutRes, FloorClock, FloorState, FloorTool, OperatorsRes, sample};
 use crate::safety::SafetyState;
@@ -24,6 +26,7 @@ pub fn floor_panel(
     safety: Res<SafetyState>,
     viewport: Res<ViewportRect>,
     mut dock: ResMut<Dock>,
+    mut heat: ResMut<HeatmapRes>,
 ) -> Result {
     let Some(window) = dock::panel(Tool::Floor, &dock, viewport.rect) else {
         // パネルを閉じたら、置きかけの経路や歩く先もやめる (クリックで部品を選べるように戻す)
@@ -45,6 +48,12 @@ pub fn floor_panel(
             sample::load(&mut operators, &mut layout, state);
             clock.time = 0.0;
         }
+        // 作業者・AGV の一覧が長くなっても隠れないよう、スクロールの外に置く
+        egui::CollapsingHeader::new("動線ヒートマップ")
+            .default_open(false)
+            .show(ui, |ui| {
+                heatmap_section(ui, heat.bypass_change_detection(), &operators);
+            });
         egui::ScrollArea::vertical()
             .max_height(320.0)
             .show(ui, |ui| {
@@ -629,4 +638,121 @@ fn agv_section(ui: &mut egui::Ui, layout: &mut AgvLayoutRes, state: &mut FloorSt
         ui.weak("緑: 要求をさばききれる台数。渋滞 = 交差点や前の車を待った時間の割合");
     }
     changed
+}
+
+/// 動線ヒートマップ: 表示の切り替え・数える対象・リセット・書き出しと、混み合う場所・動いた距離
+fn heatmap_section(ui: &mut egui::Ui, heat: &mut HeatmapRes, operators: &OperatorsRes) {
+    ui.label("再生している間、人と AGV が床のどこを通ったかをマス目ごとに数えます。");
+    ui.horizontal(|ui| {
+        if ui.checkbox(&mut heat.show, "床に色を表示").changed() {
+            heat.redraw();
+        }
+        if ui
+            .button("リセット")
+            .on_hover_text("記録を消して数え直す (「⏮ 最初から」でも消えます)")
+            .clicked()
+        {
+            heat.clear();
+        }
+        if ui
+            .button("画像で書き出す…")
+            .on_hover_text("通路と歩行経路の上に色を重ねた PNG を保存する")
+            .clicked()
+        {
+            heat.export_requested = true;
+        }
+    });
+    let mut redraw = false;
+    ui.horizontal(|ui| {
+        ui.label("対象");
+        for f in MoverFilter::ALL {
+            redraw |= ui.radio_value(&mut heat.filter, f, f.label()).changed();
+        }
+    });
+    ui.horizontal(|ui| {
+        ui.label("色の濃さ");
+        for m in HeatMetric::ALL {
+            redraw |= ui
+                .radio_value(&mut heat.metric, m, m.label())
+                .on_hover_text(match m {
+                    HeatMetric::Passes => "マスに入った回数。よく通る通路が濃くなる",
+                    HeatMetric::Dwell => "マスにいた時間。待ち・作業で止まる場所が濃くなる",
+                })
+                .changed();
+        }
+    });
+    if redraw {
+        heat.redraw();
+    }
+    let mut cell = heat.map.cell();
+    if ui
+        .add(
+            egui::Slider::new(&mut cell, heatmap::MIN_CELL..=heatmap::MAX_CELL)
+                .step_by(100.0)
+                .suffix(" mm")
+                .text("マス目 (変えると数え直し)"),
+        )
+        .changed()
+        && cell != heat.map.cell()
+    {
+        heat.set_cell(cell);
+    }
+
+    let (filter, metric) = (heat.filter, heat.metric);
+    let max = heat.map.max_value(filter, metric);
+    legend(ui, &metric.format(max));
+    ui.label(format!(
+        "記録した時間 {} s",
+        round_for_display(heat.map.recorded_seconds())
+    ));
+    let hot = heat.map.hotspots(filter, metric, 3);
+    if hot.is_empty() {
+        ui.weak("まだ記録がありません。「▶ 再生」で動かすと数え始めます。");
+        return;
+    }
+    ui.label("混み合う場所 (マスの中心)");
+    for (i, h) in hot.iter().enumerate() {
+        ui.label(format!(
+            "  {}. x {} m, z {} m … {}",
+            i + 1,
+            round_for_display(h.center.x / 1000.0),
+            round_for_display(h.center.y / 1000.0),
+            metric.format(h.value)
+        ));
+    }
+    ui.label("動いた距離");
+    for t in heat.map.totals() {
+        let name = match t.mover.kind {
+            MoverKind::Person => operators
+                .operators
+                .iter()
+                .find(|o| o.id == t.mover.id)
+                .map_or_else(|| format!("作業者 {}", t.mover.id), |o| o.name.clone()),
+            MoverKind::Agv => format!("AGV {}", t.mover.id + 1),
+        };
+        ui.label(format!(
+            "  {name}: {} m",
+            round_for_display(t.distance / 1000.0)
+        ));
+    }
+}
+
+/// 色の見本 (少ない → 多い)
+fn legend(ui: &mut egui::Ui, max_text: &str) {
+    ui.horizontal(|ui| {
+        ui.label("少ない");
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(120.0, 12.0), egui::Sense::hover());
+        let steps = 24;
+        for i in 0..steps {
+            let [r, g, b, _] = heatmap::heat_color(i as f64 / (steps - 1) as f64);
+            let x0 = rect.left() + rect.width() * i as f32 / steps as f32;
+            let x1 = rect.left() + rect.width() * (i + 1) as f32 / steps as f32;
+            ui.painter().rect_filled(
+                egui::Rect::from_min_max(egui::pos2(x0, rect.top()), egui::pos2(x1, rect.bottom())),
+                0.0,
+                egui::Color32::from_rgb(r, g, b),
+            );
+        }
+        ui.label(format!("多い (最大 {max_text})"));
+    });
 }
