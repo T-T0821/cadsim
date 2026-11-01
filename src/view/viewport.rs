@@ -27,6 +27,7 @@ use bevy::{
     tasks::{AsyncComputeTaskPool, Task, block_on, poll_once},
     window::PrimaryWindow,
 };
+use cadsim_core::effects::EffectSettings;
 use truck_meshalgo::prelude::*;
 // truck の prelude にも Transform トレイトがあるため Bevy 側を明示する
 use bevy::prelude::Transform;
@@ -103,6 +104,8 @@ pub struct ViewSettings {
     pub defeature_hole: f32,
     /// この半径以下のフィレットを消す (モデルの単位)
     pub defeature_fillet: f32,
+    /// 状態のエフェクト (詰まり・故障の光と煙、溶接と干渉の火花)
+    pub effects: EffectSettings,
 }
 
 impl ViewSettings {
@@ -128,6 +131,7 @@ impl Default for ViewSettings {
             defeature: false,
             defeature_hole: 20.0,
             defeature_fillet: 5.0,
+            effects: EffectSettings::default(),
         }
     }
 }

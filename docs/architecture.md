@@ -62,6 +62,7 @@ crates/
 │       │                 safety (安全機器・検知・安全距離), floor (作業者・AGV・床の幾何・作業者と AGV の 3D の形),
 │       │                 line (工程と AGV・コンベアの受け渡しと時間の進め方・PLC の信号表・ワークの位置),
 │       │                 line_draft (言葉で組むラインの下書き・整え方・並べ方),
+│       │                 effects (状態のエフェクトのきっかけ・見た目・煙と火花の粒),
 │       │                 ui_check (画面の自動確認の手順書・進め方・部品の探し方・画像の比べ方)
 │       └── usecase/      document (開く・保存・取り込み・書き出し), edit, history, compose_line (言葉でラインを組む),
 │                         report (シミュレーション結果の CSV), llm (生成 AI のポート LlmClient), help (使い方を AI に聞く), script (部品スクリプトの実行と ScriptHost ポート),
@@ -123,6 +124,7 @@ crates/
 | ライン連携 | `line::{coupler, signals, stepper, workpieces}`、`flow::sim` と `conveyor::sim` の連携の口 | — | `line/`(毎フレームの進め方・3D のワーク・ウィンドウ) |
 | 画面での動作確認の自動化 | `ui_check::{scenario, runner, widget, compare, report}` | `cadsim_io::ui_check`(PNG・JSON・HTML) | `ui_check/mod.rs`(入力を流して撮る Bevy のシステム)、`ui_check/suite.rs`(手順書ごとにアプリを起動し直す。Bevy なし) |
 | 言葉でラインを組む | `line_draft::{model, check, layout, rules}`(ドメイン)、`usecase::compose_line`(生成 AI のポート `LineDraftAi`) | `cadsim_io::line_draft_json`(AI への指示と返答の JSON) | `line_compose/`(`apply.rs` は Bevy 非依存。`TimingChart` が core に移ったら一緒に移す) |
+| 状態のエフェクト (詰まり・故障の光と煙、溶接と干渉の火花) | `effects`(きっかけと見た目・出す場所の決め方)、`effects::particles`(煙と火花の粒) | — | `effects/mod.rs`(状態を集めて光・煙・火花に写す)、表示メニュー (`ui/menu.rs`) |
 | 最初の5分 (ようこそ画面・章立てのチュートリアル) | `gamify`(章・ミッションの手順・使う道具 `workspace::Tool`・とばす・判定) | `cadsim_io::preferences_file`(とばしたミッション・ようこそ画面を閉じたか) | `ui/tutorial.rs`(ようこそ画面・カードの手順・矢印)、`ui/playful.rs`、起動時のデモラインは `project/mod.rs` の `ProjectAction::OpenDemoLine` |
 
 `drawing/collect.rs` と `motion::live_joints` は Bevy に依存しない書き方にしてあり、次の手順で core に移します。

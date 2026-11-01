@@ -1,0 +1,18 @@
+# 状態のエフェクト: サンプルのラインを回し、詰まり (赤い光と波紋) と故障 (煙) を撮る
+wait_loaded
+click "空のプロジェクトから"
+wait_loaded
+wait 30
+click "★ Lv."                  # ミッションカードを隠す
+open samples/effects_demo.cadsim
+wait_loaded
+wait 30
+scroll 740 400 4
+wait 30
+click "工程"
+wait 30
+click "▶ 実行"
+wait 30
+click_at 341 152                 # 工程シミュレーションのウィンドウを畳む
+wait 240
+screenshot running
