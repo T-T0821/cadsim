@@ -44,6 +44,8 @@ pub enum Step {
     Scroll { at: (f32, f32), lines: f32 },
     /// `key ctrl+z`: キーを押して離す
     Key(KeyChord),
+    /// `hold w 60`: キーを何フレームか押したままにしてから離す (歩行モードで歩くときなど)
+    Hold(KeyChord, u32),
     /// `type "文字"`: 入力欄に文字を打つ (先に click で入力欄を選んでおく)
     Type(String),
     /// `expect "表示名"`: 表示名の部品が画面にあることを確かめる (なければ失敗)
@@ -295,6 +297,17 @@ fn parse_step(command: &str, args: &[String]) -> Result<Step, String> {
             Step::Key(
                 KeyChord::parse(&args[0])
                     .ok_or_else(|| format!("「{}」はキーの名前ではありません", args[0]))?,
+            )
+        }
+        "hold" => {
+            count(2)?;
+            let frames = args[1]
+                .parse::<u32>()
+                .map_err(|_| format!("「{}」はフレーム数ではありません", args[1]))?;
+            Step::Hold(
+                KeyChord::parse(&args[0])
+                    .ok_or_else(|| format!("「{}」はキーの名前ではありません", args[0]))?,
+                frames,
             )
         }
         "type" => {

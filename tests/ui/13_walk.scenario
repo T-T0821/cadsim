@@ -1,0 +1,27 @@
+# 一人称で歩く: デモラインの中を作業者の目の高さで歩き、通路幅と手の届く範囲を見る
+wait_loaded
+wait 30
+click "自由にさわる"              # ようこそ画面を閉じてデモラインのまま始める
+wait_loaded
+click "★ Lv."                    # ミッションカードを隠す
+wait 30
+click "🎥 ビュー"
+click "一人称で歩く"
+wait 30
+expect "通路幅"
+screenshot 01_walk_start
+
+hold w 90                        # 1.5 秒前へ歩く
+wait 10
+screenshot 02_walked
+
+drag 740 450 540 450 right       # 右ドラッグで左を向く
+wait 10
+hold shift+w 60                  # 走って設備にぶつかる (めり込まずに止まる)
+wait 10
+screenshot 03_looked_around
+
+key esc                          # 歩くのをやめて普段のカメラに戻る
+wait 30
+expect_not "通路幅"
+screenshot 04_back_to_orbit

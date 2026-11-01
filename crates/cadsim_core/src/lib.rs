@@ -36,4 +36,5 @@ pub mod timeline;
 pub mod ui_check;
 pub mod usecase;
 pub mod video;
+pub mod walk;
 pub mod workspace;

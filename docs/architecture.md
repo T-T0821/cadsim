@@ -50,7 +50,7 @@ Cargo.toml                ワークスペース兼アプリ本体 (4. UI・フ�
 src/                      アプリ本体。assets/ の場所を変えないようにルートに置いたままにする
 ├── main.rs               プラグインを並べるだけ
 ├── resources.rs          ドメインの型を包む Resource
-├── view/                 viewport, camera, gizmo, 干渉の表示, 動画の撮影
+├── view/                 viewport, camera, gizmo, 干渉の表示, 動画の撮影, walk (一人称で歩く)
 ├── input/                shortcuts, ファイルダイアログ, ドラッグ&ドロップ
 └── ui/                   menu, tree, properties, status, 各パネル
 crates/
@@ -65,6 +65,7 @@ crates/
 │       │                 effects (状態のエフェクトのきっかけ・見た目・煙と火花の粒),
 │       │                 ui_check (画面の自動確認の手順書・進め方・部品の探し方・画像の比べ方)
 │       │                 timeline (シミュレーションの巻き戻し: 状態の写しの記録と進め直し)
+│       │                 walk (一人称で歩く: 体の寸法・ぶつかり・通路幅と手の届く範囲)
 │       └── usecase/      document (開く・保存・取り込み・書き出し), edit, history, compose_line (言葉でラインを組む),
 │                         report (シミュレーション結果の CSV), llm (生成 AI のポート LlmClient), help (使い方を AI に聞く), script (部品スクリプトの実行と ScriptHost ポート),
 │                         ports (SceneReader / SceneWriter / ProjectStore などのトレイト)
@@ -121,6 +122,7 @@ crates/
 | タイミングチャート・アニメーションの保存 | `motion::chart` | `formats::chart_record` | `project/` |
 | 文書の変更を元に戻す履歴にまとめる | `usecase::edit_tracker`(前に確定した状態との比較) | — | `history.rs` の `TrackedDoc`(各プラグインで登録) |
 | ロボット機種 (URDF) の読み込み | `motion::robot_import`(機種の型 `RobotDescription` と、チャートの関節・ロボットへの直し方) | `cadsim_io::urdf`(URDF と COLLADA の XML) | `file_io.rs`(別スレッドでの読み込み)、`motion/urdf_robot.rs`(リンクの位置を集めて関節を付ける) |
+| 一人称で歩く | `walk`(体の寸法、障害物との押し戻し、段の乗り越え、通路幅・前方の距離・手の届く部品の測定) | — | `view/walk.rs`(キーとマウスを集めてカメラに写す、左上の表示、床の線) |
 | 実機ロボット (UR) の関節角度の受信 | —(角度から関節の値への直し方 `motion::live_joints` は Bevy 非依存。`motion::chart` と一緒に手順 2 で core へ) | `cadsim_io::rtde`(RTDE の読み書きと通信スレッド) | `motion/ur_ui.rs` |
 | 生成 AI の呼び出し | `usecase::llm`(ポート `LlmClient`) | `cadsim_io::claude`(Claude API) | `assistant/`(`settings_file.rs`・`job.rs` は Bevy 非依存) |
 | チャート・ラダーの自動生成 | —(`TimingChart` がアプリ側なので `sequence_gen/{spec, ladder, log_events, usecase}.rs` はアプリ側。Bevy 非依存で、チャートと一緒に手順 2 で core へ) | `sequence_gen/json.rs`(下書き ⇔ JSON) | `sequence_gen/{mod, ui}.rs` |
