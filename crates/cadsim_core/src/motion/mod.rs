@@ -6,6 +6,7 @@
 //! | `profile.rs` | 加減速 (台形・サイクロイド) と電子カム表 |
 //! | `pose.rs` | 時刻表 → アクチュエータ・部品の姿勢 |
 //! | `kinematics.rs` | ロボットの順・逆運動学 |
+//! | `robot_import.rs` | 読み込んだロボットの機種 (URDF のリンクと関節) をチャートの関節とロボットにする |
 //! | `robot_path.rs` / `robot_time.rs` | ロボットの経路とサイクルタイムの見積もり |
 //! | `path_interference.rs` | 動作経路に沿った干渉の確認 |
 //! | `sensor.rs` | センサーの検知 |
@@ -15,6 +16,7 @@ pub mod kinematics;
 pub mod path_interference;
 pub mod pose;
 pub mod profile;
+pub mod robot_import;
 pub mod robot_path;
 pub mod robot_time;
 pub mod sensor;

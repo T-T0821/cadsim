@@ -1,0 +1,14 @@
+# ロボット機種を URDF で読み込む: 同梱の UR5e を置き、関節とロボットができることを見る
+wait_loaded
+click "空のプロジェクトから"
+wait_loaded
+wait 30
+click "★ Lv."                  # ミッションカードを隠す
+click "ファイル"
+hover "サンプルを開く"
+click "ロボット機種 UR5e (URDF)"
+wait_loaded
+wait 30
+expect "shoulder_pan_joint"
+expect "wrist_3_joint"
+screenshot 01_placed

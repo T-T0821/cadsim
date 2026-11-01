@@ -183,6 +183,9 @@ pub struct ActuatorRecord {
     pub name: String,
     pub kind: ActuatorKindRecord,
     pub axis: AxisRecord,
+    /// X / Y / Z 以外の向き (URDF から読み込んだ斜めの関節など)。あれば axis より優先
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custom_axis: Option<[f64; 3]>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub reversed: bool,
     #[serde(default)]
@@ -264,6 +267,7 @@ pub fn chart_to_record(
                     ActuatorKind::RotaryTable => ActuatorKindRecord::RotaryTable,
                 },
                 axis: axis_record(a.axis),
+                custom_axis: a.custom_axis,
                 reversed: a.reversed,
                 stroke: a.stroke,
                 pivot: a.pivot,
@@ -392,6 +396,7 @@ pub fn chart_from_record(
             Actuator {
                 name: r.name.clone(),
                 axis: axis_from(r.axis),
+                custom_axis: r.custom_axis,
                 reversed: r.reversed,
                 stroke: r.stroke,
                 pivot: r.pivot,

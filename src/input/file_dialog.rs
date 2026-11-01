@@ -76,10 +76,20 @@ fn open_dialog_if_requested(
             jobs.replace_from(path, target);
         }
     }
+    if jobs.take_urdf_dialog_request() {
+        let picked = rfd::FileDialog::new()
+            .set_title("ロボット機種 (URDF) を読み込む")
+            .add_filter("URDF", &with_upper_case(&["urdf"]))
+            .add_filter("すべてのファイル", &["*"])
+            .pick_file();
+        if let Some(path) = picked {
+            jobs.open_path(path);
+        }
+    }
     if !jobs.take_dialog_request() {
         return;
     }
-    let mut all: Vec<&str> = vec!["cadsim", "step", "stp"];
+    let mut all: Vec<&str> = vec!["cadsim", "step", "stp", "urdf"];
     all.extend(
         FORMATS
             .iter()
@@ -92,6 +102,7 @@ fn open_dialog_if_requested(
         .set_title("開く")
         .add_filter("対応しているすべての形式", &with_upper_case(&all))
         .add_filter("STEP", &with_upper_case(&["step", "stp"]))
+        .add_filter("ロボット機種 (URDF)", &with_upper_case(&["urdf"]))
         .add_filter("プロジェクト", &["cadsim"]);
     for format in FORMATS.iter().filter(|f| f.import.is_some()) {
         dialog = dialog.add_filter(format.name, &with_upper_case(format.extensions));
