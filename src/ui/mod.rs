@@ -131,6 +131,8 @@ pub struct UiState<'w> {
     /// ツールレールの印 (干渉の数・安全停止)
     pub interference: Res<'w, crate::simulation::InterferenceCheck>,
     pub safety: Res<'w, crate::safety::SafetyState>,
+    /// 一人称で歩く
+    pub walk: ResMut<'w, crate::view::walk::WalkMode>,
 }
 
 /// UI 専用のカメラ。3D カメラはパネルを除いた領域だけに描くので、

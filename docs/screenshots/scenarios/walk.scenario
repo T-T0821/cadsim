@@ -1,0 +1,14 @@
+# 一人称で歩く: デモラインの安全柵と設備の間の狭い通路で、通路幅と手の届く部品を見る
+wait_loaded
+click "自由にさわる"
+wait 30
+click "★ Lv."                  # ミッションカードを隠す
+wait 30
+click "🎥 ビュー"
+click "一人称で歩く"
+wait 30
+hold w 90
+drag 740 450 540 450 right
+hold shift+w 60
+wait 420
+screenshot narrow_aisle

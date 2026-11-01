@@ -119,6 +119,7 @@ screenshot 02_undo
 | `drag x1 y1 x2 y2 [left/right/middle]` | 押したまま動かして離す |
 | `scroll x y 量` | ホイールを回す (正で拡大) |
 | `key ctrl+z` | キーを押して離す。`ctrl` `shift` `alt` と、`a`〜`z` `0`〜`9` `f1`〜`f12` `enter` `esc` `space` `tab` `backspace` `delete` `home` `end` `left` `right` `up` `down` |
+| `hold w 60` | キーを何フレームか押したままにしてから離す (`shift+w` のように修飾キーも書ける)。歩行モードで歩くときなど |
 | `type "文字"` | 入力欄に文字を打つ (先に入力欄をクリックしておく) |
 | `expect "表示名"` | 画面にあることを確かめる (なければ失敗) |
 | `expect_not "表示名"` | 画面にないことを確かめる |
