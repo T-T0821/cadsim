@@ -1,5 +1,5 @@
 # カメラワーク: サンプル装置のまわりを一周する紹介動画を GIF にする
-# 自動確認では保存ダイアログを出さず target/ui-check/13_camera_path/saved/ に書く
+# 自動確認では保存ダイアログを出さず target/ui-check/14_camera_path/saved/ に書く
 wait_loaded
 click "空のプロジェクトから"        # ようこそ画面を閉じて空から始める
 wait_loaded
