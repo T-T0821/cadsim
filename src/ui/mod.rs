@@ -190,6 +190,8 @@ fn draw_ui(mut contexts: EguiContexts, mut state: UiState) -> Result {
     );
     tree::show(&mut root, &mut state);
     properties::show(&mut root, &mut state);
+    // 開いた道具のパネルは 3D ビューの左隣の欄に、タブで1つずつ出す
+    dock::dock_area(&mut root, &mut state.dock);
 
     // 残った領域が 3D ビュー
     let view = root.available_rect_before_wrap();
@@ -271,6 +273,7 @@ fn tool_rail(root: &mut egui::Ui, state: &mut UiState) {
         .map(|tool| RailItem {
             tool,
             open: state.dock.is_open(tool),
+            active: state.dock.is_active(tool),
             enabled: tool != Tool::Site || has_site,
             badge: match tool {
                 Tool::Interference if interfering > 0 => Some(Badge::Count(interfering)),

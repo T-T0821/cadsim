@@ -1,8 +1,9 @@
 //! 画面の道具 (ツール) の一覧と、どれを開いているか
 //!
-//! 3D ビューの上に浮かぶパネル (干渉チェック・寸法・安全・PLC 連携など) は、
-//! 画面左端のツールレールとメニューの「ツール」から開け閉めする。
-//! ここには道具の名前・分類・並び順と、開いた順番 (新しいパネルを少しずらして重ねるため) を置く。
+//! 道具 (干渉チェック・寸法・安全・PLC 連携など) は、画面左端のツールレールとメニューの「ツール」から
+//! 開け閉めする。開いた道具は 3D ビューの横の欄にタブで並び、欄に出すのは一度に1つだけにする
+//! (パネルが 3D ビューや互いに重ならないように)。
+//! ここには道具の名前・分類・並び順と、開いているタブ・出している道具を置く。
 //! Bevy・egui に依存しない。アプリ側はここを見てボタンとパネルを描くだけにする。
 
 /// 道具の分類。ツールレールではこの順に区切って並べる。
@@ -166,7 +167,7 @@ impl Tool {
         }
     }
 
-    /// ビューに浮かべる小さなパネルか (大きな作業用のウィンドウは真ん中寄りに開く)
+    /// 小さなパネルか (大きな作業用のウィンドウは欄を広く取る)
     pub fn is_panel(self) -> bool {
         !matches!(
             self,
@@ -178,59 +179,66 @@ impl Tool {
 /// どの道具を開いているか。開いた順に覚える。
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Workspace {
+    /// 開いている道具 (タブの並び。開いた順)
     open: Vec<Tool>,
+    /// いま欄に出している道具 (開いている道具のうち1つ)
+    active: Option<Tool>,
 }
 
-/// 新しく開いたパネルを前のパネルからずらす量 (画素)
-pub const CASCADE_STEP: f32 = 28.0;
-/// ずらすのはこの枚数まで。それ以上は最初の位置に戻って重ねる。
-pub const CASCADE_LIMIT: usize = 6;
-
 impl Workspace {
+    /// タブがあるか (欄に出ていなくても、タブを押せばすぐ出せる)
     pub fn is_open(&self, tool: Tool) -> bool {
         self.open.contains(&tool)
     }
 
+    /// いま欄に出している道具か
+    pub fn is_active(&self, tool: Tool) -> bool {
+        self.active == Some(tool)
+    }
+
+    /// いま欄に出している道具
+    pub fn active(&self) -> Option<Tool> {
+        self.active
+    }
+
+    /// 開くとタブを足して、その道具を欄に出す。閉じるとタブを外し、
+    /// 出していた道具なら隣のタブ (右、なければ左) に切り替える。
     pub fn set_open(&mut self, tool: Tool, open: bool) {
         if open {
             if !self.is_open(tool) {
                 self.open.push(tool);
             }
-        } else {
-            self.open.retain(|&t| t != tool);
+            self.active = Some(tool);
+        } else if let Some(i) = self.open.iter().position(|&t| t == tool) {
+            self.open.remove(i);
+            if self.active == Some(tool) {
+                self.active = self.open.get(i).or_else(|| self.open.last()).copied();
+            }
         }
     }
 
+    /// ツールレールのボタン: 出している道具なら閉じ、そうでなければ開いて欄に出す
     pub fn toggle(&mut self, tool: Tool) {
-        let open = !self.is_open(tool);
+        let open = !self.is_active(tool);
         self.set_open(tool, open);
     }
 
     /// すべて閉じる
     pub fn close_all(&mut self) {
         self.open.clear();
+        self.active = None;
     }
 
-    /// 開いている道具 (開いた順)
+    /// 開いている道具 (タブの並び)
     pub fn open_tools(&self) -> &[Tool] {
         &self.open
     }
+}
 
-    /// 開いている小さなパネルのうち、`tool` が何枚目に開いたか (0 から)。
-    /// パネルを最初に出す位置を、この数だけ右下へずらす。
-    pub fn cascade_index(&self, tool: Tool) -> usize {
-        self.open
-            .iter()
-            .filter(|t| t.is_panel())
-            .position(|&t| t == tool)
-            .unwrap_or(0)
-            % CASCADE_LIMIT
-    }
-
-    /// 小さなパネルを最初に出す位置。`origin` は 3D ビューの左上 (余白込み)。
-    pub fn panel_position(&self, tool: Tool, origin: [f32; 2]) -> [f32; 2] {
-        let step = self.cascade_index(tool) as f32 * CASCADE_STEP;
-        [origin[0] + step, origin[1] + step]
+impl Tool {
+    /// 道具の欄の標準の幅 (論理ピクセル)。大きな作業用のウィンドウは広く取る。
+    pub fn dock_width(self) -> f32 {
+        if self.is_panel() { 360.0 } else { 620.0 }
     }
 }
 
@@ -241,7 +249,7 @@ pub const PANEL_FADED: f32 = 0.15;
 
 const _: () = assert!(PANEL_FADED < PANEL_SEE_THROUGH && PANEL_SEE_THROUGH < 1.0);
 
-/// 3D ビューに浮かべたパネルの地をどれだけ濃く塗るかを決める材料
+/// 3D ビューに浮かぶウィンドウ (音の設定など) の地をどれだけ濃く塗るかを決める材料
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct PanelSight {
     /// パネルを透かす設定 (表示メニュー)
@@ -350,42 +358,56 @@ mod tests {
         assert!(!ws.is_open(Tool::Safety));
         ws.toggle(Tool::Safety);
         assert!(ws.is_open(Tool::Safety));
+        assert!(ws.is_active(Tool::Safety));
         ws.set_open(Tool::Safety, true);
         assert_eq!(ws.open_tools(), &[Tool::Safety]);
         ws.toggle(Tool::Safety);
         assert!(!ws.is_open(Tool::Safety));
+        assert_eq!(ws.active(), None);
         ws.set_open(Tool::Plc, true);
         ws.set_open(Tool::Flow, true);
         ws.close_all();
         assert!(ws.open_tools().is_empty());
+        assert_eq!(ws.active(), None);
     }
 
     #[test]
-    fn panels_cascade_in_opening_order() {
+    fn only_one_tool_is_shown_at_a_time() {
         let mut ws = Workspace::default();
         ws.set_open(Tool::Interference, true);
-        // 大きなウィンドウはずらす数に入れない
-        ws.set_open(Tool::Flow, true);
         ws.set_open(Tool::Safety, true);
-        assert_eq!(ws.cascade_index(Tool::Interference), 0);
-        assert_eq!(ws.cascade_index(Tool::Safety), 1);
-        assert_eq!(
-            ws.panel_position(Tool::Safety, [100.0, 50.0]),
-            [100.0 + CASCADE_STEP, 50.0 + CASCADE_STEP]
-        );
-        // 前のパネルを閉じたら、次に開くパネルは空いた位置に詰める
-        ws.set_open(Tool::Interference, false);
-        assert_eq!(ws.cascade_index(Tool::Safety), 0);
+        // タブは2つ、出ているのは後から開いた方だけ
+        assert_eq!(ws.open_tools(), &[Tool::Interference, Tool::Safety]);
+        assert!(ws.is_active(Tool::Safety));
+        assert!(!ws.is_active(Tool::Interference));
+        // 隠れている道具のレールのボタンを押すと、閉じずに表に出す
+        ws.toggle(Tool::Interference);
+        assert!(ws.is_open(Tool::Interference));
+        assert!(ws.is_active(Tool::Interference));
+        assert_eq!(ws.open_tools().len(), 2);
     }
 
     #[test]
-    fn cascade_wraps_around() {
+    fn closing_the_shown_tab_shows_a_neighbour() {
         let mut ws = Workspace::default();
-        let panels: Vec<Tool> = Tool::ALL.into_iter().filter(|t| t.is_panel()).collect();
-        for &tool in &panels {
+        for tool in [Tool::Library, Tool::Safety, Tool::Plc] {
             ws.set_open(tool, true);
         }
-        assert!(panels.len() > CASCADE_LIMIT);
-        assert_eq!(ws.cascade_index(panels[CASCADE_LIMIT]), 0);
+        ws.set_open(Tool::Safety, true);
+        ws.set_open(Tool::Safety, false);
+        // 右隣があれば右隣
+        assert_eq!(ws.active(), Some(Tool::Plc));
+        ws.set_open(Tool::Plc, false);
+        // 右端を閉じたら左隣
+        assert_eq!(ws.active(), Some(Tool::Library));
+        // 出ていないタブを閉じても、出ている道具は変わらない
+        ws.set_open(Tool::Safety, true);
+        ws.set_open(Tool::Library, false);
+        assert_eq!(ws.active(), Some(Tool::Safety));
+    }
+
+    #[test]
+    fn work_windows_get_a_wider_dock() {
+        assert!(Tool::Flow.dock_width() > Tool::Safety.dock_width());
     }
 }

@@ -9,7 +9,6 @@ use plantwright_core::workspace::Tool;
 use super::cloud_view::{CloudCheck, CloudDisplay};
 use super::{PlanTool, format_count};
 use crate::features::simulation::SimBody;
-use crate::viewport::camera::ViewportRect;
 use plantwright_core::drawing::format_length;
 use plantwright_core::model::Model;
 
@@ -21,7 +20,6 @@ pub fn site_panel(
     mut display: ResMut<CloudDisplay>,
     mut check: ResMut<CloudCheck>,
     bodies: Query<(&SimBody, Option<&Name>)>,
-    viewport: Res<ViewportRect>,
     mut dock: ResMut<Dock>,
 ) -> Result {
     if model.site.is_empty() {
@@ -31,7 +29,7 @@ pub fn site_panel(
         }
         return Ok(());
     }
-    let Some(window) = dock::panel(contexts.ctx_mut()?, Tool::Site, &dock, viewport.rect) else {
+    let Some(window) = dock::panel(contexts.ctx_mut()?, Tool::Site, &dock) else {
         if tool.calibrating.is_some() {
             tool.stop();
         }

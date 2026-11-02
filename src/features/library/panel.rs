@@ -53,13 +53,12 @@ pub fn palette_window(
     mut selection: ResMut<Selection>,
     mut history: ResMut<History>,
     orbit: Res<OrbitCamera>,
-    viewport: Res<ViewportRect>,
     mut custom: ResMut<CustomLibrary>,
     mut jobs: ResMut<ImportJobs>,
     mut dock: ResMut<Dock>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
-    let Some(window) = dock::panel(ctx, Tool::Library, &dock, viewport.rect) else {
+    let Some(window) = dock::panel(ctx, Tool::Library, &dock) else {
         return Ok(());
     };
     let mut open = true;

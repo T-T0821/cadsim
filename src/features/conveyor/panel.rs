@@ -11,7 +11,6 @@ use plantwright_core::conveyor::{
 
 use super::{ConveyorConfigRes, WorkState};
 use crate::document::selection::Selection;
-use crate::viewport::camera::ViewportRect;
 use plantwright_core::model::Model;
 use plantwright_core::model::NodeId;
 use plantwright_core::motion::chart::ActuatorKind;
@@ -28,37 +27,32 @@ pub fn conveyor_window(
     selection: Res<Selection>,
     chart: Res<TimingChart>,
     state: Res<WorkState>,
-    viewport: Res<ViewportRect>,
     mut dock: ResMut<Dock>,
 ) -> Result {
-    let Some(window) = dock::panel(contexts.ctx_mut()?, Tool::Conveyor, &dock, viewport.rect)
-    else {
+    let Some(window) = dock::panel(contexts.ctx_mut()?, Tool::Conveyor, &dock) else {
         return Ok(());
     };
     // 編集はコピーに対して行い、変わったときだけ書き戻す (毎フレーム計算し直さないため)
     let mut edited = config.0.clone();
     let parts = PartPicker::new(&model, selection.node);
     let mut open = true;
-    window
-        .open(&mut open)
-        .default_width(290.0)
-        .show(contexts.ctx_mut()?, |ui| {
-            counts_ui(ui, &edited, &state);
-            ui.separator();
-            egui::ScrollArea::vertical()
-                .max_height(480.0)
-                .show(ui, |ui| {
-                    kinds_ui(ui, &mut edited);
-                    ui.separator();
-                    sources_ui(ui, &mut edited, &parts);
-                    ui.separator();
-                    sinks_ui(ui, &mut edited, &parts);
-                    ui.separator();
-                    conveyors_ui(ui, &mut edited, &parts);
-                    ui.separator();
-                    grippers_ui(ui, &mut edited, &chart);
-                });
-        });
+    window.open(&mut open).show(contexts.ctx_mut()?, |ui| {
+        counts_ui(ui, &edited, &state);
+        ui.separator();
+        egui::ScrollArea::vertical()
+            .max_height(480.0)
+            .show(ui, |ui| {
+                kinds_ui(ui, &mut edited);
+                ui.separator();
+                sources_ui(ui, &mut edited, &parts);
+                ui.separator();
+                sinks_ui(ui, &mut edited, &parts);
+                ui.separator();
+                conveyors_ui(ui, &mut edited, &parts);
+                ui.separator();
+                grippers_ui(ui, &mut edited, &chart);
+            });
+    });
     if !open {
         dock.set_open(Tool::Conveyor, false);
     }

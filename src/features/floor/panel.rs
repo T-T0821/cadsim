@@ -9,7 +9,6 @@ use super::heatmap_view::HeatmapRes;
 use super::{AgvLayoutRes, FloorClock, FloorState, FloorTool, OperatorsRes, sample};
 use crate::features::safety::SafetyState;
 use crate::ui::widgets::round_for_display;
-use crate::viewport::camera::ViewportRect;
 use plantwright_core::floor::agv_sim::{Flow, compare_fleets};
 use plantwright_core::floor::heatmap::{self, HeatMetric, MoverFilter, MoverKind};
 use plantwright_core::floor::operator_plan::OperatorTask;
@@ -24,11 +23,10 @@ pub fn floor_panel(
     mut layout: ResMut<AgvLayoutRes>,
     mut state: ResMut<FloorState>,
     safety: Res<SafetyState>,
-    viewport: Res<ViewportRect>,
     mut dock: ResMut<Dock>,
     mut heat: ResMut<HeatmapRes>,
 ) -> Result {
-    let Some(window) = dock::panel(contexts.ctx_mut()?, Tool::Floor, &dock, viewport.rect) else {
+    let Some(window) = dock::panel(contexts.ctx_mut()?, Tool::Floor, &dock) else {
         // パネルを閉じたら、置きかけの経路や歩く先もやめる (クリックで部品を選べるように戻す)
         if state.tool != FloorTool::None {
             state.tool = FloorTool::None;

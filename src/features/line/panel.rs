@@ -35,7 +35,7 @@ pub fn line_window(
     conveyors: Res<ConveyorConfigRes>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
-    let Some(window) = dock::workspace_window(ctx, Tool::LineLink, &dock, [520.0, 480.0]) else {
+    let Some(window) = dock::panel(ctx, Tool::LineLink, &dock) else {
         return Ok(());
     };
     let mut open = true;

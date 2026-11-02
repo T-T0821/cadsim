@@ -11,7 +11,6 @@ use plantwright_core::workspace::Tool;
 use super::{CableSim, PhysicsState, RunRequest, RunState};
 use crate::document::selection::Selection;
 use crate::ui::widgets::{length, round_for_display, xyz_editor};
-use crate::viewport::camera::ViewportRect;
 use plantwright_core::model::Model;
 use plantwright_core::model::NodeId;
 use plantwright_core::physics::cable::{Cable, CableAnchor, CableKind, CableReport};
@@ -23,11 +22,10 @@ pub fn physics_panel(
     mut model: ResMut<Model>,
     selection: Res<Selection>,
     cables: Res<CableSim>,
-    viewport: Res<ViewportRect>,
     mut dock: ResMut<Dock>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
-    let Some(window) = dock::panel(ctx, Tool::Physics, &dock, viewport.rect) else {
+    let Some(window) = dock::panel(ctx, Tool::Physics, &dock) else {
         return Ok(());
     };
     let mut open = true;

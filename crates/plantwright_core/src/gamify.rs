@@ -934,7 +934,7 @@ pub struct Preferences {
     pub progress: Progress,
     /// 初回のようこそ画面を閉じた
     pub welcomed: bool,
-    /// 3D ビューに浮かべた道具のパネルを、カーソルが乗っていない間は透かす
+    /// 3D ビューに浮かぶウィンドウ (音の設定など) を、カーソルが乗っていない間は透かす
     pub see_through_panels: bool,
 }
 

@@ -1373,7 +1373,6 @@ fn mode_hint(tool: &AnnotateTool) -> &'static str {
 #[allow(clippy::too_many_arguments)]
 fn annotation_panel(
     mut contexts: EguiContexts,
-    viewport: Res<ViewportRect>,
     model: Res<Model>,
     cache: Res<GeometryCache>,
     mut annotations: ResMut<Annotations>,
@@ -1383,8 +1382,7 @@ fn annotation_panel(
     mut history: ResMut<History>,
     mut dock: ResMut<Dock>,
 ) -> Result {
-    let Some(window) = dock::panel(contexts.ctx_mut()?, Tool::Annotation, &dock, viewport.rect)
-    else {
+    let Some(window) = dock::panel(contexts.ctx_mut()?, Tool::Annotation, &dock) else {
         // パネルを閉じたら、置きかけの寸法もやめる (クリックで部品を選べるように戻す)
         if tool.mode != Mode::Off {
             tool.mode = Mode::Off;
@@ -1393,120 +1391,117 @@ fn annotation_panel(
         return Ok(());
     };
     let mut open = true;
-    window
-        .open(&mut open)
-        .default_width(250.0)
-        .show(contexts.ctx_mut()?, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                for mode in Mode::ALL {
-                    if ui
-                        .selectable_label(tool.mode == mode, mode.label())
-                        .clicked()
-                    {
-                        tool.mode = mode;
-                        tool.first = None;
-                        if mode != Mode::Off {
-                            // ギズモがクリックを横取りしないよう、部品の選択を外す
-                            selection.clear();
-                            if measure.active {
-                                measure.set_active(false);
-                            }
+    window.open(&mut open).show(contexts.ctx_mut()?, |ui| {
+        ui.horizontal_wrapped(|ui| {
+            for mode in Mode::ALL {
+                if ui
+                    .selectable_label(tool.mode == mode, mode.label())
+                    .clicked()
+                {
+                    tool.mode = mode;
+                    tool.first = None;
+                    if mode != Mode::Off {
+                        // ギズモがクリックを横取りしないよう、部品の選択を外す
+                        selection.clear();
+                        if measure.active {
+                            measure.set_active(false);
                         }
                     }
                 }
-            });
-            ui.weak(mode_hint(&tool));
-            ui.checkbox(&mut annotations.visible, "寸法と注記を表示");
-            ui.separator();
-
-            // 部品を消した寸法は、元に戻すときのために残っているが一覧には出さない
-            let shown = |a: &&Annotation| parts_exist(&a.kind, &model, &cache);
-            if !annotations.items.iter().any(|a| shown(&a)) {
-                ui.weak("寸法・注記はまだありません");
-                return;
-            }
-            let mut delete = None;
-            let mut select = None;
-            egui::ScrollArea::vertical()
-                .max_height(220.0)
-                .show(ui, |ui| {
-                    for annotation in annotations.items.iter().filter(shown) {
-                        ui.horizontal(|ui| {
-                            let text = format!(
-                                "{}  {}",
-                                annotation.kind.label(),
-                                value_text(&annotation.kind, &model, &cache)
-                            );
-                            let selected = annotations.selected == Some(annotation.id);
-                            if ui.selectable_label(selected, text).clicked() {
-                                select = Some((!selected).then_some(annotation.id));
-                            }
-                            if ui.small_button("削除").clicked() {
-                                delete = Some(annotation.id);
-                            }
-                        });
-                    }
-                });
-            if let Some(selected) = select {
-                annotations.selected = selected;
-            }
-            let before = annotations.items.clone();
-            if let Some(id) = delete {
-                let label = before
-                    .iter()
-                    .find(|a| a.id == id)
-                    .map_or("", |a| a.kind.label());
-                let label = format!("{label}を削除");
-                annotations.items.retain(|a| a.id != id);
-                if annotations.selected == Some(id) {
-                    annotations.selected = None;
-                }
-                record_change(&mut history, &label, before.clone(), &annotations.items);
-            }
-
-            let selected = annotations.selected;
-            if let Some(Annotation {
-                kind: AnnotationKind::Note { text, .. },
-                ..
-            }) = annotations
-                .items
-                .iter_mut()
-                .find(|a| Some(a.id) == selected)
-            {
-                ui.separator();
-                ui.label("注記の文字");
-                let response = ui.add(
-                    egui::TextEdit::multiline(text)
-                        .desired_rows(3)
-                        .desired_width(f32::INFINITY),
-                );
-                if tool.focus_note {
-                    response.request_focus();
-                    tool.focus_note = false;
-                }
-                // 打ち始めの一覧を覚えておき、入力欄から離れたときに1件の履歴にする
-                if response.gained_focus() {
-                    tool.note_before = Some(before.clone());
-                }
-                if response.lost_focus()
-                    && let Some(note_before) = tool.note_before.take()
-                {
-                    record_change(&mut history, "注記を編集", note_before, &annotations.items);
-                }
-            }
-            ui.separator();
-            if ui.button("すべて削除").clicked() {
-                let before = annotations.items.clone();
-                annotations.items.clear();
-                annotations.selected = None;
-                record_change(
-                    &mut history,
-                    "寸法と注記をすべて削除",
-                    before,
-                    &annotations.items,
-                );
             }
         });
+        ui.weak(mode_hint(&tool));
+        ui.checkbox(&mut annotations.visible, "寸法と注記を表示");
+        ui.separator();
+
+        // 部品を消した寸法は、元に戻すときのために残っているが一覧には出さない
+        let shown = |a: &&Annotation| parts_exist(&a.kind, &model, &cache);
+        if !annotations.items.iter().any(|a| shown(&a)) {
+            ui.weak("寸法・注記はまだありません");
+            return;
+        }
+        let mut delete = None;
+        let mut select = None;
+        egui::ScrollArea::vertical()
+            .max_height(220.0)
+            .show(ui, |ui| {
+                for annotation in annotations.items.iter().filter(shown) {
+                    ui.horizontal(|ui| {
+                        let text = format!(
+                            "{}  {}",
+                            annotation.kind.label(),
+                            value_text(&annotation.kind, &model, &cache)
+                        );
+                        let selected = annotations.selected == Some(annotation.id);
+                        if ui.selectable_label(selected, text).clicked() {
+                            select = Some((!selected).then_some(annotation.id));
+                        }
+                        if ui.small_button("削除").clicked() {
+                            delete = Some(annotation.id);
+                        }
+                    });
+                }
+            });
+        if let Some(selected) = select {
+            annotations.selected = selected;
+        }
+        let before = annotations.items.clone();
+        if let Some(id) = delete {
+            let label = before
+                .iter()
+                .find(|a| a.id == id)
+                .map_or("", |a| a.kind.label());
+            let label = format!("{label}を削除");
+            annotations.items.retain(|a| a.id != id);
+            if annotations.selected == Some(id) {
+                annotations.selected = None;
+            }
+            record_change(&mut history, &label, before.clone(), &annotations.items);
+        }
+
+        let selected = annotations.selected;
+        if let Some(Annotation {
+            kind: AnnotationKind::Note { text, .. },
+            ..
+        }) = annotations
+            .items
+            .iter_mut()
+            .find(|a| Some(a.id) == selected)
+        {
+            ui.separator();
+            ui.label("注記の文字");
+            let response = ui.add(
+                egui::TextEdit::multiline(text)
+                    .desired_rows(3)
+                    .desired_width(f32::INFINITY),
+            );
+            if tool.focus_note {
+                response.request_focus();
+                tool.focus_note = false;
+            }
+            // 打ち始めの一覧を覚えておき、入力欄から離れたときに1件の履歴にする
+            if response.gained_focus() {
+                tool.note_before = Some(before.clone());
+            }
+            if response.lost_focus()
+                && let Some(note_before) = tool.note_before.take()
+            {
+                record_change(&mut history, "注記を編集", note_before, &annotations.items);
+            }
+        }
+        ui.separator();
+        if ui.button("すべて削除").clicked() {
+            let before = annotations.items.clone();
+            annotations.items.clear();
+            annotations.selected = None;
+            record_change(
+                &mut history,
+                "寸法と注記をすべて削除",
+                before,
+                &annotations.items,
+            );
+        }
+    });
     if !open {
         dock.set_open(Tool::Annotation, false);
     }

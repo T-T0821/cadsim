@@ -8,7 +8,7 @@ use plantwright_core::workspace::Tool;
 use super::Review;
 use crate::document::project::ProjectState;
 use crate::ui::dock::{self, Dock};
-use crate::viewport::camera::{OrbitCamera, ViewportRect};
+use crate::viewport::camera::OrbitCamera;
 
 const OK_COLOR: egui::Color32 = egui::Color32::from_rgb(60, 200, 90);
 const WAIT_COLOR: egui::Color32 = egui::Color32::from_rgb(230, 180, 50);
@@ -19,25 +19,21 @@ pub fn review_panel(
     mut review: ResMut<Review>,
     orbit: Res<OrbitCamera>,
     project: Res<ProjectState>,
-    viewport: Res<ViewportRect>,
     mut dock: ResMut<Dock>,
 ) -> Result {
-    let Some(window) = dock::panel(contexts.ctx_mut()?, Tool::Review, &dock, viewport.rect) else {
+    let Some(window) = dock::panel(contexts.ctx_mut()?, Tool::Review, &dock) else {
         return Ok(());
     };
     let review = review.bypass_change_detection();
     let project_name = project.file_name();
     let mut open = true;
-    window
-        .open(&mut open)
-        .default_width(320.0)
-        .show(contexts.ctx_mut()?, |ui| {
-            if review.connected() {
-                connected(ui, review, &orbit, &project_name);
-            } else {
-                setup(ui, review, &project_name);
-            }
-        });
+    window.open(&mut open).show(contexts.ctx_mut()?, |ui| {
+        if review.connected() {
+            connected(ui, review, &orbit, &project_name);
+        } else {
+            setup(ui, review, &project_name);
+        }
+    });
     if !open {
         dock.set_open(Tool::Review, false);
     }

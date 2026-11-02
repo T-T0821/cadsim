@@ -1,10 +1,10 @@
-//! 画面左端のツールレールと、3D ビューに浮かべるパネルの開け閉め
+//! 画面左端のツールレールと、3D ビューの左隣の道具の欄 (タブ) の開け閉め
 //!
 //! 道具の一覧と「どれを開いているか」は `plantwright_core::workspace` が持つ。
 //! ここはそれを Bevy の Resource に包み、レールのボタンとパネルの枠を描くだけにする。
 //!
-//! 浮かべたパネルは、カーソルが乗っていない間は地を透かし、3D ビューをドラッグしている間は
-//! さらに薄くする (濃さの決め方は `plantwright_core::workspace::PanelSight`)。
+//! 道具以外で 3D ビューに浮かぶウィンドウ (音の設定など) は、カーソルが乗っていない間は地を透かし、
+//! 3D ビューをドラッグしている間はさらに薄くする (濃さの決め方は `plantwright_core::workspace::PanelSight`)。
 
 use bevy::prelude::*;
 use bevy_egui::egui::{self, Align2, Color32, CornerRadius, Stroke, pos2, vec2};
@@ -19,8 +19,6 @@ pub struct Dock(pub Workspace);
 /// レールの幅
 pub const RAIL_WIDTH: f32 = 64.0;
 const BUTTON_SIZE: egui::Vec2 = egui::vec2(54.0, 46.0);
-/// パネルを 3D ビューの端からどれだけ離して出すか
-const MARGIN: f32 = 10.0;
 
 /// 道具のアイコン (egui の絵文字フォントにある字)
 pub fn icon(tool: Tool) -> &'static str {
@@ -48,63 +46,151 @@ pub fn title(tool: Tool) -> String {
     format!("{}  {}", icon(tool), tool.title())
 }
 
-/// ビューに浮かべる小さなパネルの枠。開いていなければ None。
+/// 道具のパネルの枠。欄に出していなければ None。
+///
+/// 枠は 3D ビューの左隣の欄 ([`dock_area`] が描く) にぴったり重ねて置くので、
+/// 3D ビューにも、ほかの道具のパネルにも重ならない。題名と × は欄のタブが受け持つ。
 ///
 /// 使い方:
 /// ```ignore
-/// let Some(window) = dock::panel(ctx, Tool::Safety, &dock, viewport.rect) else { return Ok(()) };
+/// let Some(window) = dock::panel(ctx, Tool::Safety, &dock) else { return Ok(()) };
 /// let mut open = true;
 /// window.open(&mut open).show(ctx, |ui| { ... });
 /// if !open { dock.set_open(Tool::Safety, false); }
 /// ```
-pub fn panel(
-    ctx: &egui::Context,
-    tool: Tool,
-    dock: &Workspace,
-    view: Option<Rect>,
-) -> Option<egui::Window<'static>> {
-    if !dock.is_open(tool) {
+pub fn panel(ctx: &egui::Context, tool: Tool, dock: &Workspace) -> Option<egui::Window<'static>> {
+    if !dock.is_active(tool) {
         return None;
     }
-    let mut window = egui::Window::new(title(tool))
-        .id(window_id(tool))
-        .frame(see_through_frame(ctx, window_id(tool)))
-        .collapsible(true)
-        .resizable(false);
-    if let Some(view) = view {
-        let view =
-            egui::Rect::from_min_max(pos2(view.min.x, view.min.y), pos2(view.max.x, view.max.y));
-        let [x, y] = dock.panel_position(tool, [view.min.x + MARGIN, view.min.y + MARGIN]);
-        window = window
-            .pivot(Align2::LEFT_TOP)
-            .default_pos([x, y])
-            .constrain_to(view.shrink(2.0));
-    }
-    Some(window)
-}
-
-/// 大きな作業用のウィンドウの枠 (真ん中寄りに開き、大きさを変えられる)。開いていなければ None。
-pub fn workspace_window(
-    ctx: &egui::Context,
-    tool: Tool,
-    dock: &Workspace,
-    default_size: [f32; 2],
-) -> Option<egui::Window<'static>> {
-    if !dock.is_open(tool) {
-        return None;
-    }
+    // 欄をまだ描いていない (開いた最初のフレーム) ときは、次のフレームから出す
+    let body: egui::Rect = ctx.data(|d| d.get_temp(body_id()))?;
+    let margin = ctx.global_style().spacing.window_margin;
+    let content = egui::Rect::from_min_max(
+        body.min + vec2(margin.leftf(), margin.topf()),
+        body.max - vec2(margin.rightf(), margin.bottomf()),
+    );
     Some(
         egui::Window::new(title(tool))
             .id(window_id(tool))
-            .frame(see_through_frame(ctx, window_id(tool)))
-            .default_size(default_size)
-            .default_pos([320.0, 130.0])
-            .resizable(true),
+            .title_bar(false)
+            .frame(egui::Frame::new().fill(palette::NAVY).inner_margin(margin))
+            .fixed_pos(body.min)
+            .fixed_size(content.size())
+            .movable(false)
+            .collapsible(false)
+            .resizable(false)
+            .scroll(true),
     )
 }
 
 fn window_id(tool: Tool) -> egui::Id {
     egui::Id::new(("tool_window", tool.title()))
+}
+
+/// 道具の欄の中身を置く場所を egui のメモリに置く鍵
+fn body_id() -> egui::Id {
+    egui::Id::new("tool_dock_body")
+}
+
+/// 道具の欄 (3D ビューの左隣)。上に開いている道具のタブを並べ、下を出している道具のパネルに空けておく。
+/// 何も開いていなければ欄を出さない。UI の外側のパネルを描いたあと、3D ビューの領域を決める前に呼ぶ。
+pub fn dock_area(root: &mut egui::Ui, dock: &mut Workspace) {
+    let ctx = root.ctx().clone();
+    let Some(active) = dock.active() else {
+        ctx.data_mut(|d| d.remove::<egui::Rect>(body_id()));
+        return;
+    };
+    let room = root.available_rect_before_wrap().width();
+    // 小さなパネルと大きな作業用のウィンドウで別々に幅を覚える (欄の端をドラッグして変えられる)
+    egui::Panel::left(egui::Id::new(("tool_dock", active.is_panel())))
+        .resizable(true)
+        .default_size(active.dock_width())
+        .size_range(240.0..=(room * 0.6).max(260.0))
+        .frame(egui::Frame::new().fill(palette::NAVY))
+        .show(root, |ui| {
+            tab_bar(ui, dock);
+            let body = ui.available_rect_before_wrap();
+            ctx.data_mut(|d| d.insert_temp(body_id(), body));
+            ui.allocate_rect(body, egui::Sense::hover());
+        });
+}
+
+/// 欄の上のタブ。押すとその道具を出し、× で閉じる。
+fn tab_bar(ui: &mut egui::Ui, dock: &mut Workspace) {
+    let tabs = dock.open_tools().to_vec();
+    egui::Frame::new()
+        .fill(palette::INK)
+        .inner_margin(egui::Margin::symmetric(6, 5))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            egui::ScrollArea::horizontal()
+                .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 3.0;
+                        for tool in tabs {
+                            tab(ui, dock, tool);
+                        }
+                    });
+                });
+        });
+    if let Some(active) = dock.active() {
+        egui::Frame::new()
+            .inner_margin(egui::Margin {
+                left: 12,
+                right: 12,
+                top: 8,
+                bottom: 2,
+            })
+            .show(ui, |ui| {
+                ui.label(
+                    egui::RichText::new(title(active))
+                        .size(15.0)
+                        .strong()
+                        .color(palette::TEXT_STRONG),
+                );
+            });
+        ui.separator();
+    }
+}
+
+fn tab(ui: &mut egui::Ui, dock: &mut Workspace, tool: Tool) {
+    let active = dock.is_active(tool);
+    let fill = if active {
+        palette::PURPLE.gamma_multiply(0.38)
+    } else {
+        Color32::TRANSPARENT
+    };
+    egui::Frame::new()
+        .fill(fill)
+        .corner_radius(CornerRadius::same(7))
+        .inner_margin(egui::Margin::symmetric(6, 2))
+        .show(ui, |ui| {
+            ui.spacing_mut().item_spacing.x = 2.0;
+            let color = if active {
+                Color32::WHITE
+            } else {
+                palette::TEXT_FAINT
+            };
+            let label = egui::RichText::new(format!("{} {}", icon(tool), tool.short_label()))
+                .size(12.5)
+                .color(color);
+            if ui
+                .add(egui::Button::new(label).frame(false))
+                .on_hover_text(tool.title())
+                .clicked()
+            {
+                dock.set_open(tool, true);
+            }
+            let close = egui::RichText::new("×").size(13.0).color(color);
+            if ui
+                .add(egui::Button::new(close).frame(false))
+                .on_hover_text(format!("{} を閉じる", tool.title()))
+                .clicked()
+            {
+                dock.set_open(tool, false);
+            }
+        });
 }
 
 /// パネルの見え方の材料 (このフレームの分) を egui のメモリに置く鍵
@@ -163,7 +249,10 @@ pub enum Badge {
 /// レールの1つのボタンの状態
 pub struct RailItem {
     pub tool: Tool,
+    /// タブがある
     pub open: bool,
+    /// 欄に出している
+    pub active: bool,
     pub enabled: bool,
     pub badge: Option<Badge>,
     /// 使えないときの理由 (ツールチップに出す)
@@ -232,7 +321,7 @@ fn rail_button(ui: &mut egui::Ui, item: &RailItem) -> egui::Response {
         egui::WidgetInfo::selected(
             egui::WidgetType::Button,
             item.enabled,
-            item.open,
+            item.active,
             item.tool.short_label(),
         )
     });
@@ -243,16 +332,19 @@ fn rail_button(ui: &mut egui::Ui, item: &RailItem) -> egui::Response {
     if ui.is_rect_visible(rect) {
         let painter = ui.painter();
         let hovered = response.hovered() && item.enabled;
-        let fill = if item.open {
+        let fill = if item.active {
             palette::PURPLE.gamma_multiply(0.38)
+        } else if item.open {
+            // タブはあるが、いまは別の道具を出している
+            palette::PURPLE.gamma_multiply(0.16)
         } else if hovered {
             palette::NAVY_HOVER
         } else {
             Color32::TRANSPARENT
         };
         painter.rect_filled(rect, CornerRadius::same(9), fill);
-        if item.open {
-            // 開いている印: 左端の光る棒
+        if item.active {
+            // 欄に出している印: 左端の光る棒
             let bar = egui::Rect::from_min_size(
                 pos2(rect.min.x - 4.0, rect.min.y + 9.0),
                 vec2(3.0, rect.height() - 18.0),
@@ -315,8 +407,10 @@ fn rail_button(ui: &mut egui::Ui, item: &RailItem) -> egui::Response {
             "{}\n{}\n({})",
             tool.title(),
             tool.hint(),
-            if item.open {
+            if item.active {
                 "クリックで閉じる"
+            } else if item.open {
+                "クリックで表に出す"
             } else {
                 "クリックで開く"
             }

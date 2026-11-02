@@ -30,7 +30,7 @@ pub fn sequence_gen_window(
 ) -> Result {
     state.poll_jobs();
     let ctx = contexts.ctx_mut()?;
-    let Some(window) = dock::workspace_window(ctx, Tool::SequenceGen, &dock, [560.0, 520.0]) else {
+    let Some(window) = dock::panel(ctx, Tool::SequenceGen, &dock) else {
         return Ok(());
     };
     if state.generating.is_some() || state.explaining.is_some() {

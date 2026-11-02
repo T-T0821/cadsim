@@ -126,7 +126,7 @@ fn compose_window(
     mut dock: ResMut<Dock>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
-    let Some(window) = dock::workspace_window(ctx, Tool::Compose, &dock, [520.0, 560.0]) else {
+    let Some(window) = dock::panel(ctx, Tool::Compose, &dock) else {
         return Ok(());
     };
     let state = state.bypass_change_detection();
