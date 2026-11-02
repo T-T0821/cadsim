@@ -11,19 +11,19 @@ click "レビュー"                   # 左のツールレール
 expect "ホストになる"
 screenshot 01_setup
 
-click_at 480 222                   # 名前の入力欄
+click_at 470 256                   # 名前の入力欄
 type "田中"
 click "ホストになる" 2             # 見出しの次にあるボタン
 wait 10
 expect "● ホスト中"
 expect "田中 (自分)"
 expect "まだ誰もいません"
-click_at 450 485                   # チャットの入力欄
+click_at 440 519                   # チャットの入力欄
 type "よろしくお願いします"
 click "送信"
 wait 5
 expect "田中:"
-mask 340 196 320 36                # このパソコンのアドレス (マシンごとに違う)
+mask 329 230 330 36                # このパソコンのアドレス (マシンごとに違う)
 screenshot 02_hosting
 clear_masks
 
