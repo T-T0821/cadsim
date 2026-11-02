@@ -440,6 +440,10 @@ fn recording_window(
     });
     let mut open = true;
     egui::Window::new("動画の書き出し")
+        .frame(crate::ui::dock::see_through_frame(
+            ctx,
+            egui::Id::new("動画の書き出し"),
+        ))
         .open(&mut open)
         .default_pos(center)
         .pivot(egui::Align2::CENTER_TOP)

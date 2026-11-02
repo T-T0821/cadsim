@@ -24,7 +24,12 @@ pub fn simulation_panel(
     viewport: Res<ViewportRect>,
     mut dock: ResMut<Dock>,
 ) -> Result {
-    let Some(window) = dock::panel(Tool::Interference, &dock, viewport.rect) else {
+    let Some(window) = dock::panel(
+        contexts.ctx_mut()?,
+        Tool::Interference,
+        &dock,
+        viewport.rect,
+    ) else {
         return Ok(());
     };
     let names: HashMap<u32, String> = bodies

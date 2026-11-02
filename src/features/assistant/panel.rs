@@ -13,6 +13,7 @@ pub fn settings_window(mut contexts: EguiContexts, mut ai: ResMut<AiAssistant>) 
     let ctx = contexts.ctx_mut()?;
     let mut open = true;
     egui::Window::new("AI の設定")
+        .frame(crate::ui::dock::see_through_frame(ctx, egui::Id::new("AI の設定")))
         .open(&mut open)
         .default_width(420.0)
         .collapsible(false)

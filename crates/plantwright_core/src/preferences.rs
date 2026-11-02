@@ -1,4 +1,4 @@
-//! ミッションの設定 ([`Preferences`]) を JSON ファイルに読み書きする
+//! ミッションの設定と画面の好み ([`Preferences`]) を JSON ファイルに読み書きする
 //!
 //! 置き場所は OS ごとの設定フォルダ:
 //! - Windows: `%APPDATA%\plantwright\preferences.json`
@@ -27,6 +27,7 @@ struct PreferencesRecord {
     skipped_missions: Vec<String>,
     xp: u32,
     welcomed: bool,
+    see_through_panels: Option<bool>,
 }
 
 impl PreferencesRecord {
@@ -47,6 +48,7 @@ impl PreferencesRecord {
                 .collect(),
             xp: prefs.progress.xp(),
             welcomed: prefs.welcomed,
+            see_through_panels: Some(prefs.see_through_panels),
         }
     }
 
@@ -59,6 +61,7 @@ impl PreferencesRecord {
             )
             .with_skipped(self.skipped_missions.iter().map(String::as_str)),
             welcomed: self.welcomed,
+            see_through_panels: self.see_through_panels.unwrap_or(true),
         }
     }
 }
@@ -164,6 +167,7 @@ mod tests {
         let mut prefs = Preferences {
             show_missions: false,
             welcomed: true,
+            see_through_panels: false,
             ..Default::default()
         };
         prefs.progress.skip(MissionId::RunFlow);
@@ -178,6 +182,7 @@ mod tests {
         assert_eq!(back.progress.xp(), prefs.progress.xp());
         assert!(back.progress.is_skipped(MissionId::RunFlow));
         assert!(back.welcomed);
+        assert!(!back.see_through_panels);
     }
 
     #[test]
@@ -193,6 +198,7 @@ mod tests {
             assert!(prefs.show_missions);
             assert_eq!(prefs.progress.done_count(), 0);
             assert!(!prefs.welcomed);
+            assert!(prefs.see_through_panels);
         }
     }
 

@@ -28,7 +28,7 @@ pub fn floor_panel(
     mut dock: ResMut<Dock>,
     mut heat: ResMut<HeatmapRes>,
 ) -> Result {
-    let Some(window) = dock::panel(Tool::Floor, &dock, viewport.rect) else {
+    let Some(window) = dock::panel(contexts.ctx_mut()?, Tool::Floor, &dock, viewport.rect) else {
         // パネルを閉じたら、置きかけの経路や歩く先もやめる (クリックで部品を選べるように戻す)
         if state.tool != FloorTool::None {
             state.tool = FloorTool::None;

@@ -34,10 +34,10 @@ pub fn line_window(
     mut dock: ResMut<Dock>,
     conveyors: Res<ConveyorConfigRes>,
 ) -> Result {
-    let Some(window) = dock::workspace_window(Tool::LineLink, &dock, [520.0, 480.0]) else {
+    let ctx = contexts.ctx_mut()?;
+    let Some(window) = dock::workspace_window(ctx, Tool::LineLink, &dock, [520.0, 480.0]) else {
         return Ok(());
     };
-    let ctx = contexts.ctx_mut()?;
     let mut open = true;
     let mut action = None;
     let mut edits = Vec::new();

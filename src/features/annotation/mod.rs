@@ -1383,7 +1383,8 @@ fn annotation_panel(
     mut history: ResMut<History>,
     mut dock: ResMut<Dock>,
 ) -> Result {
-    let Some(window) = dock::panel(Tool::Annotation, &dock, viewport.rect) else {
+    let Some(window) = dock::panel(contexts.ctx_mut()?, Tool::Annotation, &dock, viewport.rect)
+    else {
         // パネルを閉じたら、置きかけの寸法もやめる (クリックで部品を選べるように戻す)
         if tool.mode != Mode::Off {
             tool.mode = Mode::Off;

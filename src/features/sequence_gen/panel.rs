@@ -29,10 +29,10 @@ pub fn sequence_gen_window(
     mut dock: ResMut<Dock>,
 ) -> Result {
     state.poll_jobs();
-    let Some(window) = dock::workspace_window(Tool::SequenceGen, &dock, [560.0, 520.0]) else {
+    let ctx = contexts.ctx_mut()?;
+    let Some(window) = dock::workspace_window(ctx, Tool::SequenceGen, &dock, [560.0, 520.0]) else {
         return Ok(());
     };
-    let ctx = contexts.ctx_mut()?;
     if state.generating.is_some() || state.explaining.is_some() {
         // 経過秒数の表示を進め、終わったらすぐ受け取る
         ctx.request_repaint_after(std::time::Duration::from_millis(250));

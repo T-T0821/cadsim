@@ -2,12 +2,15 @@
 //!
 //! 道具の一覧と「どれを開いているか」は `plantwright_core::workspace` が持つ。
 //! ここはそれを Bevy の Resource に包み、レールのボタンとパネルの枠を描くだけにする。
+//!
+//! 浮かべたパネルは、カーソルが乗っていない間は地を透かし、3D ビューをドラッグしている間は
+//! さらに薄くする (濃さの決め方は `plantwright_core::workspace::PanelSight`)。
 
 use bevy::prelude::*;
 use bevy_egui::egui::{self, Align2, Color32, CornerRadius, Stroke, pos2, vec2};
 
 use super::theme::palette;
-use plantwright_core::workspace::{Tool, ToolGroup, Workspace};
+use plantwright_core::workspace::{PanelSight, Tool, ToolGroup, Workspace};
 
 /// 開いている道具 (Resource の包み)
 #[derive(Resource, Default, Deref, DerefMut)]
@@ -49,17 +52,23 @@ pub fn title(tool: Tool) -> String {
 ///
 /// 使い方:
 /// ```ignore
-/// let Some(window) = dock::panel(Tool::Safety, &dock, viewport.rect) else { return Ok(()) };
+/// let Some(window) = dock::panel(ctx, Tool::Safety, &dock, viewport.rect) else { return Ok(()) };
 /// let mut open = true;
 /// window.open(&mut open).show(ctx, |ui| { ... });
 /// if !open { dock.set_open(Tool::Safety, false); }
 /// ```
-pub fn panel(tool: Tool, dock: &Workspace, view: Option<Rect>) -> Option<egui::Window<'static>> {
+pub fn panel(
+    ctx: &egui::Context,
+    tool: Tool,
+    dock: &Workspace,
+    view: Option<Rect>,
+) -> Option<egui::Window<'static>> {
     if !dock.is_open(tool) {
         return None;
     }
     let mut window = egui::Window::new(title(tool))
         .id(window_id(tool))
+        .frame(see_through_frame(ctx, window_id(tool)))
         .collapsible(true)
         .resizable(false);
     if let Some(view) = view {
@@ -76,6 +85,7 @@ pub fn panel(tool: Tool, dock: &Workspace, view: Option<Rect>) -> Option<egui::W
 
 /// 大きな作業用のウィンドウの枠 (真ん中寄りに開き、大きさを変えられる)。開いていなければ None。
 pub fn workspace_window(
+    ctx: &egui::Context,
     tool: Tool,
     dock: &Workspace,
     default_size: [f32; 2],
@@ -86,6 +96,7 @@ pub fn workspace_window(
     Some(
         egui::Window::new(title(tool))
             .id(window_id(tool))
+            .frame(see_through_frame(ctx, window_id(tool)))
             .default_size(default_size)
             .default_pos([320.0, 130.0])
             .resizable(true),
@@ -94,6 +105,50 @@ pub fn workspace_window(
 
 fn window_id(tool: Tool) -> egui::Id {
     egui::Id::new(("tool_window", tool.title()))
+}
+
+/// パネルの見え方の材料 (このフレームの分) を egui のメモリに置く鍵
+fn sight_id() -> egui::Id {
+    egui::Id::new("panel_sight")
+}
+
+/// パネルを透かすかどうかと、3D ビューの操作の様子を伝える。毎フレーム UI の最後に呼ぶ。
+/// (`hovered` はウィンドウごとに [`see_through_frame`] が調べる)
+pub fn set_sight(ctx: &egui::Context, sight: PanelSight) {
+    ctx.data_mut(|d| d.insert_temp(sight_id(), sight));
+}
+
+/// ウィンドウ `id` が、その下に描かれた別のウィンドウに重なっているか (前のフレームの配置で)
+fn over_other_window(ctx: &egui::Context, id: egui::Id) -> bool {
+    ctx.memory(|m| {
+        let Some(rect) = m.area_rect(id) else {
+            return false;
+        };
+        // 奥から手前の順に並んでいるので、自分より前に出てくるものが下にある
+        m.layer_ids()
+            .take_while(|layer| layer.id != id)
+            .filter(|layer| layer.order == egui::Order::Middle)
+            .filter(|layer| m.areas().visible_last_frame(layer))
+            .filter_map(|layer| m.area_rect(layer.id))
+            .any(|below| below.intersects(rect))
+    })
+}
+
+/// 3D ビューに浮かべるウィンドウの枠。カーソルが乗っていない間は地を透かす。
+/// `id` はウィンドウの id (`Window::id` を付けていなければ題名から作った id)。
+pub fn see_through_frame(ctx: &egui::Context, id: egui::Id) -> egui::Frame {
+    let mut sight: PanelSight = ctx.data(|d| d.get_temp(sight_id())).unwrap_or_default();
+    // 前のフレームでウィンドウを描いた場所にカーソルがあるか
+    sight.hovered = ctx
+        .pointer_hover_pos()
+        .zip(ctx.memory(|m| m.area_rect(id)))
+        .is_some_and(|(pointer, rect)| rect.contains(pointer));
+    sight.over_other_panel = over_other_window(ctx, id);
+    let opacity = ctx.animate_value_with_time(id.with("sight"), sight.opacity(), 0.15);
+    let mut frame = egui::Frame::window(&ctx.global_style());
+    frame.fill = frame.fill.gamma_multiply(opacity);
+    frame.shadow.color = frame.shadow.color.gamma_multiply(opacity * opacity);
+    frame
 }
 
 /// レールのボタンに出す小さな数字や印

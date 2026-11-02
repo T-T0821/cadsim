@@ -31,7 +31,8 @@ pub fn conveyor_window(
     viewport: Res<ViewportRect>,
     mut dock: ResMut<Dock>,
 ) -> Result {
-    let Some(window) = dock::panel(Tool::Conveyor, &dock, viewport.rect) else {
+    let Some(window) = dock::panel(contexts.ctx_mut()?, Tool::Conveyor, &dock, viewport.rect)
+    else {
         return Ok(());
     };
     // 編集はコピーに対して行い、変わったときだけ書き戻す (毎フレーム計算し直さないため)

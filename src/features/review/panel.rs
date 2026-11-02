@@ -22,7 +22,7 @@ pub fn review_panel(
     viewport: Res<ViewportRect>,
     mut dock: ResMut<Dock>,
 ) -> Result {
-    let Some(window) = dock::panel(Tool::Review, &dock, viewport.rect) else {
+    let Some(window) = dock::panel(contexts.ctx_mut()?, Tool::Review, &dock, viewport.rect) else {
         return Ok(());
     };
     let review = review.bypass_change_detection();

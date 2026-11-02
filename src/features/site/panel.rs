@@ -31,7 +31,7 @@ pub fn site_panel(
         }
         return Ok(());
     }
-    let Some(window) = dock::panel(Tool::Site, &dock, viewport.rect) else {
+    let Some(window) = dock::panel(contexts.ctx_mut()?, Tool::Site, &dock, viewport.rect) else {
         if tool.calibrating.is_some() {
             tool.stop();
         }

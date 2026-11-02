@@ -26,10 +26,10 @@ pub fn physics_panel(
     viewport: Res<ViewportRect>,
     mut dock: ResMut<Dock>,
 ) -> Result {
-    let Some(window) = dock::panel(Tool::Physics, &dock, viewport.rect) else {
+    let ctx = contexts.ctx_mut()?;
+    let Some(window) = dock::panel(ctx, Tool::Physics, &dock, viewport.rect) else {
         return Ok(());
     };
-    let ctx = contexts.ctx_mut()?;
     let mut open = true;
     window.open(&mut open).show(ctx, |ui| {
             ui.set_max_width(320.0);

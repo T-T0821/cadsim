@@ -125,10 +125,10 @@ fn compose_window(
     mut assistant: ResMut<AiAssistant>,
     mut dock: ResMut<Dock>,
 ) -> Result {
-    let Some(window) = dock::workspace_window(Tool::Compose, &dock, [520.0, 560.0]) else {
+    let ctx = contexts.ctx_mut()?;
+    let Some(window) = dock::workspace_window(ctx, Tool::Compose, &dock, [520.0, 560.0]) else {
         return Ok(());
     };
-    let ctx = contexts.ctx_mut()?;
     let state = state.bypass_change_detection();
     state.poll();
     if state.job.is_some() {

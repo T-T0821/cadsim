@@ -58,10 +58,10 @@ pub fn palette_window(
     mut jobs: ResMut<ImportJobs>,
     mut dock: ResMut<Dock>,
 ) -> Result {
-    let Some(window) = dock::panel(Tool::Library, &dock, viewport.rect) else {
+    let ctx = contexts.ctx_mut()?;
+    let Some(window) = dock::panel(ctx, Tool::Library, &dock, viewport.rect) else {
         return Ok(());
     };
-    let ctx = contexts.ctx_mut()?;
     let mut open = true;
     window.open(&mut open).show(ctx, |ui| {
         ui.weak("ビューへドラッグして配置 (+ は注視点に配置)");
@@ -309,11 +309,16 @@ pub fn io_list_window(
     }
     let rows = io_table(&model);
     let (cap_in, cap_out) = io_capacity(&model);
+    let ctx = contexts.ctx_mut()?;
     let mut open = true;
     egui::Window::new("I/O 一覧")
+        .frame(crate::ui::dock::see_through_frame(
+            ctx,
+            egui::Id::new("I/O 一覧"),
+        ))
         .open(&mut open)
         .default_pos([420.0, 120.0])
-        .show(contexts.ctx_mut()?, |ui| {
+        .show(ctx, |ui| {
             for (dir, cap) in [(IoDir::Input, cap_in), (IoDir::Output, cap_out)] {
                 let n = rows.iter().filter(|r| r.dir == dir).count();
                 let text = format!(

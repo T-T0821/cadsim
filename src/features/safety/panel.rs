@@ -19,7 +19,7 @@ pub fn safety_panel(
     viewport: Res<ViewportRect>,
     mut dock: ResMut<Dock>,
 ) -> Result {
-    let Some(window) = dock::panel(Tool::Safety, &dock, viewport.rect) else {
+    let Some(window) = dock::panel(contexts.ctx_mut()?, Tool::Safety, &dock, viewport.rect) else {
         return Ok(());
     };
     let mut open = true;

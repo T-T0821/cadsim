@@ -37,6 +37,10 @@ pub fn sound_window(mut contexts: EguiContexts, mut sound: ResMut<SoundUi>) -> R
     let before = sound_ref.settings.clone();
     let mut open = true;
     egui::Window::new("音の設定")
+        .frame(crate::ui::dock::see_through_frame(
+            ctx,
+            egui::Id::new("音の設定"),
+        ))
         .open(&mut open)
         .resizable(false)
         .collapsible(false)

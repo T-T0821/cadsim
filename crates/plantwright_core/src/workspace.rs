@@ -234,9 +234,94 @@ impl Workspace {
     }
 }
 
+/// カーソルが乗っていないパネルの地の濃さ (0 = 透明, 1 = 不透明)
+pub const PANEL_SEE_THROUGH: f32 = 0.72;
+/// 3D ビューをドラッグしている間のパネルの地の濃さ
+pub const PANEL_FADED: f32 = 0.15;
+
+const _: () = assert!(PANEL_FADED < PANEL_SEE_THROUGH && PANEL_SEE_THROUGH < 1.0);
+
+/// 3D ビューに浮かべたパネルの地をどれだけ濃く塗るかを決める材料
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PanelSight {
+    /// パネルを透かす設定 (表示メニュー)
+    pub see_through: bool,
+    /// カーソルがパネルの上にある
+    pub hovered: bool,
+    /// 入力欄に文字を打っている
+    pub typing: bool,
+    /// 別のパネルの上に重なっている (透かすと下のパネルの字と混ざって読めない)
+    pub over_other_panel: bool,
+    /// 3D ビューの上でドラッグしている (視点を回す・部品を動かす)
+    pub view_dragging: bool,
+}
+
+impl PanelSight {
+    /// パネルの地の濃さ (0〜1)。
+    ///
+    /// - 透かさない設定なら、いつも不透明 (以前と同じ見た目)。
+    /// - 3D ビューをドラッグしている間は、後ろのモデルが見えるよう大きく薄くする
+    ///   (ドラッグの途中でカーソルがパネルを横切っても薄いまま)。
+    /// - カーソルを乗せているとき・文字を打っているとき・別のパネルに重なっているときは、
+    ///   読みやすいよう不透明にする。
+    /// - それ以外は少し透かして、後ろの 3D ビューが透けて見えるようにする。
+    pub fn opacity(self) -> f32 {
+        if !self.see_through {
+            1.0
+        } else if self.view_dragging {
+            PANEL_FADED
+        } else if self.hovered || self.typing || self.over_other_panel {
+            1.0
+        } else {
+            PANEL_SEE_THROUGH
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn panel_is_opaque_unless_see_through_is_on() {
+        let off = PanelSight {
+            see_through: false,
+            view_dragging: true,
+            ..Default::default()
+        };
+        assert_eq!(off.opacity(), 1.0);
+    }
+
+    #[test]
+    fn panel_fades_while_dragging_the_view_and_solidifies_on_hover() {
+        let idle = PanelSight {
+            see_through: true,
+            ..Default::default()
+        };
+        assert_eq!(idle.opacity(), PANEL_SEE_THROUGH);
+        let hovered = PanelSight {
+            hovered: true,
+            ..idle
+        };
+        assert_eq!(hovered.opacity(), 1.0);
+        let typing = PanelSight {
+            typing: true,
+            ..idle
+        };
+        assert_eq!(typing.opacity(), 1.0);
+        let stacked = PanelSight {
+            over_other_panel: true,
+            ..idle
+        };
+        assert_eq!(stacked.opacity(), 1.0);
+        // 視点を回す途中でパネルを横切っても、薄いまま
+        let dragging = PanelSight {
+            hovered: true,
+            view_dragging: true,
+            ..idle
+        };
+        assert_eq!(dragging.opacity(), PANEL_FADED);
+    }
 
     #[test]
     fn every_tool_is_listed_once_in_group_order() {

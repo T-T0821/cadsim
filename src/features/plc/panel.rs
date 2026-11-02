@@ -38,10 +38,10 @@ pub fn plc_window(
     mut scripts: ResMut<ScriptRun>,
     mut dock: ResMut<Dock>,
 ) -> Result {
-    let Some(window) = dock::panel(Tool::Plc, &dock, viewport.rect) else {
+    let ctx = contexts.ctx_mut()?;
+    let Some(window) = dock::panel(ctx, Tool::Plc, &dock, viewport.rect) else {
         return Ok(());
     };
-    let ctx = contexts.ctx_mut()?;
     let mut mode = plc.session.mode;
 
     let mut open = true;

@@ -927,13 +927,15 @@ fn is_edit_label(label: &str) -> bool {
     label.ends_with("を編集") || label.ends_with("を追加")
 }
 
-/// ミッションの表示と進み具合。アプリを閉じても覚えておく。
+/// ミッションの表示と進み具合、画面の好み。アプリを閉じても覚えておく。
 #[derive(Clone, Debug)]
 pub struct Preferences {
     pub show_missions: bool,
     pub progress: Progress,
     /// 初回のようこそ画面を閉じた
     pub welcomed: bool,
+    /// 3D ビューに浮かべた道具のパネルを、カーソルが乗っていない間は透かす
+    pub see_through_panels: bool,
 }
 
 impl Default for Preferences {
@@ -942,6 +944,7 @@ impl Default for Preferences {
             show_missions: true,
             progress: Progress::default(),
             welcomed: false,
+            see_through_panels: true,
         }
     }
 }

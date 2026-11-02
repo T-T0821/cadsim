@@ -86,7 +86,7 @@ impl ModelingUi {
 
 pub fn show(ctx: &egui::Context, state: &mut UiState) {
     let Some(window) =
-        crate::ui::dock::workspace_window(Tool::Modeling, &state.dock, [320.0, 240.0])
+        crate::ui::dock::workspace_window(ctx, Tool::Modeling, &state.dock, [320.0, 240.0])
     else {
         return;
     };

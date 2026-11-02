@@ -225,6 +225,26 @@ fn draw_ui(mut contexts: EguiContexts, mut state: UiState) -> Result {
     state.viewport.typing_in_ui = ctx
         .memory(|m| m.focused())
         .is_some_and(|id| egui::TextEdit::load_state(&ctx, id).is_some());
+    // 3D ビューで押してドラッグしている (視点を回す・部品を動かす) 間は、浮かべたパネルを薄くする
+    let view_dragging = !ctx.egui_is_using_pointer()
+        && ctx.input(|i| {
+            i.pointer.is_decidedly_dragging()
+                && i.pointer.press_origin().is_some_and(|origin| {
+                    view.contains(origin)
+                        && ctx
+                            .layer_id_at(origin)
+                            .is_none_or(|layer| layer.order == egui::Order::Background)
+                })
+        });
+    dock::set_sight(
+        &ctx,
+        plantwright_core::workspace::PanelSight {
+            see_through: state.playful.prefs.see_through_panels,
+            typing: state.viewport.typing_in_ui,
+            view_dragging,
+            ..Default::default()
+        },
+    );
     Ok(())
 }
 
