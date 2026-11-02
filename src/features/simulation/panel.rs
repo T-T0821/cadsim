@@ -7,8 +7,6 @@ use std::collections::HashMap;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 
-use crate::viewport::camera::ViewportRect;
-
 use super::{
     InterferenceCheck, SimBody,
     measure::{MeasureTool, label_text},
@@ -21,10 +19,9 @@ pub fn simulation_panel(
     mut check: ResMut<InterferenceCheck>,
     mut measure: ResMut<MeasureTool>,
     bodies: Query<(&SimBody, Option<&Name>)>,
-    viewport: Res<ViewportRect>,
     mut dock: ResMut<Dock>,
 ) -> Result {
-    let Some(window) = dock::panel(Tool::Interference, &dock, viewport.rect) else {
+    let Some(window) = dock::panel(contexts.ctx_mut()?, Tool::Interference, &dock) else {
         return Ok(());
     };
     let names: HashMap<u32, String> = bodies

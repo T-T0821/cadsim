@@ -190,6 +190,8 @@ fn draw_ui(mut contexts: EguiContexts, mut state: UiState) -> Result {
     );
     tree::show(&mut root, &mut state);
     properties::show(&mut root, &mut state);
+    // 開いた道具のパネルは 3D ビューの左隣の欄に、タブで1つずつ出す
+    dock::dock_area(&mut root, &mut state.dock);
 
     // 残った領域が 3D ビュー
     let view = root.available_rect_before_wrap();
@@ -225,6 +227,30 @@ fn draw_ui(mut contexts: EguiContexts, mut state: UiState) -> Result {
     state.viewport.typing_in_ui = ctx
         .memory(|m| m.focused())
         .is_some_and(|id| egui::TextEdit::load_state(&ctx, id).is_some());
+    // 3D ビューで押してドラッグしている (視点を回す・部品を動かす) 間は、浮かぶウィンドウを薄くする
+    // (ctx.input の中で ctx の別の関数を呼ぶと止まるので、押した場所を先に取り出す)
+    let drag_origin = ctx.input(|i| {
+        i.pointer
+            .is_decidedly_dragging()
+            .then(|| i.pointer.press_origin())
+            .flatten()
+    });
+    let view_dragging = !ctx.egui_is_using_pointer()
+        && drag_origin.is_some_and(|origin| {
+            view.contains(origin)
+                && ctx
+                    .layer_id_at(origin)
+                    .is_none_or(|layer| layer.order == egui::Order::Background)
+        });
+    dock::set_sight(
+        &ctx,
+        plantwright_core::workspace::PanelSight {
+            see_through: state.playful.prefs.see_through_panels,
+            typing: state.viewport.typing_in_ui,
+            view_dragging,
+            ..Default::default()
+        },
+    );
     Ok(())
 }
 
@@ -251,6 +277,7 @@ fn tool_rail(root: &mut egui::Ui, state: &mut UiState) {
         .map(|tool| RailItem {
             tool,
             open: state.dock.is_open(tool),
+            active: state.dock.is_active(tool),
             enabled: tool != Tool::Site || has_site,
             badge: match tool {
                 Tool::Interference if interfering > 0 => Some(Badge::Count(interfering)),

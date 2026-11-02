@@ -461,6 +461,17 @@ fn view_menu(ui: &mut egui::Ui, state: &mut UiState) {
             state.playful.set_show_missions(show);
         }
         crate::features::sound::show_menu_items(ui, &mut state.sound);
+        let mut see_through = state.playful.prefs.see_through_panels;
+        if ui
+            .checkbox(&mut see_through, "浮かぶウィンドウを透かす")
+            .on_hover_text(
+                "音の設定や AI の設定など 3D ビューに浮かぶウィンドウを、カーソルが乗っていない間は透かす。\n\
+                 ビューをドラッグして視点を回す間は、さらに薄くして後ろのモデルを見せる",
+            )
+            .changed()
+        {
+            state.playful.set_see_through_panels(see_through);
+        }
         if ui
             .button("開いている道具をすべて閉じる")
             .on_hover_text("3D ビューに浮かべたパネルとウィンドウを閉じる")

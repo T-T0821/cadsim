@@ -95,7 +95,7 @@ pub fn show_window(
     selection: &Selection,
     dock: &mut Dock,
 ) {
-    let Some(window) = dock::workspace_window(Tool::Flow, dock, [780.0, 520.0]) else {
+    let Some(window) = dock::panel(ctx, Tool::Flow, dock) else {
         return;
     };
     let mut open = true;

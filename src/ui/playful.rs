@@ -95,6 +95,13 @@ impl PlayfulUi {
         }
     }
 
+    pub fn set_see_through_panels(&mut self, on: bool) {
+        if self.prefs.see_through_panels != on {
+            self.prefs.see_through_panels = on;
+            self.dirty = true;
+        }
+    }
+
     /// ようこそ画面を閉じた
     pub fn mark_welcomed(&mut self) {
         if !self.prefs.welcomed {

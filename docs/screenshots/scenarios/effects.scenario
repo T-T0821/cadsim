@@ -13,6 +13,6 @@ click "工程"
 wait 30
 click "▶ 実行"
 wait 30
-click_at 341 152                 # 工程シミュレーションのウィンドウを畳む
+click_at 32 650                  # レールの「工程」をもう一度押して欄を閉じ、 3D ビューを広げる (ラインは回り続ける)
 wait 240
 screenshot running

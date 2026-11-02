@@ -11,7 +11,6 @@ use super::{Plc, Protocol};
 use crate::document::selection::Selection;
 use crate::features::motion::Playback;
 use crate::features::scripting::{ScriptRun, script_controls};
-use crate::viewport::camera::ViewportRect;
 use plantwright_core::model::Model;
 use plantwright_core::motion::chart::TimingChart;
 use plantwright_core::plc::device_map::{DeviceArea, DeviceMap};
@@ -32,21 +31,20 @@ pub fn plc_window(
     chart: Res<TimingChart>,
     mut plc: ResMut<Plc>,
     mut playback: ResMut<Playback>,
-    viewport: Res<ViewportRect>,
     model: Res<Model>,
     mut selection: ResMut<Selection>,
     mut scripts: ResMut<ScriptRun>,
     mut dock: ResMut<Dock>,
 ) -> Result {
-    let Some(window) = dock::panel(Tool::Plc, &dock, viewport.rect) else {
+    let ctx = contexts.ctx_mut()?;
+    let Some(window) = dock::panel(ctx, Tool::Plc, &dock) else {
         return Ok(());
     };
-    let ctx = contexts.ctx_mut()?;
     let mut mode = plc.session.mode;
 
     let mut open = true;
-    window.open(&mut open).default_width(380.0).show(ctx, |ui| {
-        ui.horizontal(|ui| {
+    window.open(&mut open).show(ctx, |ui| {
+        ui.horizontal_wrapped(|ui| {
             for m in [
                 PlcMode::Off,
                 PlcMode::Simulated,

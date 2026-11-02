@@ -10,6 +10,10 @@ pub fn show(ctx: &egui::Context, view: egui::Rect, state: &mut UiState) {
         return;
     }
     egui::Window::new("アニメーション")
+        .frame(crate::ui::dock::see_through_frame(
+            ctx,
+            egui::Id::new("アニメーション"),
+        ))
         .pivot(egui::Align2::CENTER_BOTTOM)
         .default_pos(view.center_bottom() + egui::vec2(0.0, -12.0))
         .resizable(false)

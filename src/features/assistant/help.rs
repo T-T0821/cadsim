@@ -147,6 +147,10 @@ pub fn help_window(
     let mut open = true;
     let mut window = egui::Window::new("💬  AI に聞く")
         .id(egui::Id::new("help_chat"))
+        .frame(crate::ui::dock::see_through_frame(
+            &ctx,
+            egui::Id::new("help_chat"),
+        ))
         .open(&mut open)
         .default_width(360.0)
         .resizable(true)

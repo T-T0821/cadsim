@@ -7,7 +7,6 @@ use plantwright_core::workspace::Tool;
 
 use super::{SafetyLayoutRes, SafetyState};
 use crate::ui::widgets;
-use crate::viewport::camera::ViewportRect;
 use plantwright_core::model::Model;
 use plantwright_core::safety::device::DeviceKind;
 
@@ -16,10 +15,9 @@ pub fn safety_panel(
     mut layout: ResMut<SafetyLayoutRes>,
     mut state: ResMut<SafetyState>,
     model: Res<Model>,
-    viewport: Res<ViewportRect>,
     mut dock: ResMut<Dock>,
 ) -> Result {
-    let Some(window) = dock::panel(Tool::Safety, &dock, viewport.rect) else {
+    let Some(window) = dock::panel(contexts.ctx_mut()?, Tool::Safety, &dock) else {
         return Ok(());
     };
     let mut open = true;
