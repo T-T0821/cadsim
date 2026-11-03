@@ -88,7 +88,7 @@ pub enum ProjectAction {
         play: bool,
     },
     /// アプリに埋め込みの本物の装置のサンプル (UR5e と 2F-85) を開いて再生する
-    OpenRealRobot,
+    OpenRealRobot(RealSample),
     Save,
     SaveAs,
 }
@@ -101,7 +101,7 @@ impl ProjectAction {
             ProjectAction::New
                 | ProjectAction::OpenPath(_)
                 | ProjectAction::OpenDemoLine { .. }
-                | ProjectAction::OpenRealRobot
+                | ProjectAction::OpenRealRobot(_)
         )
     }
 }
@@ -113,7 +113,7 @@ enum LoadOrigin {
         play: bool,
     },
     /// 本物の装置のサンプル。書き出したフォルダから読むが、ファイルには結びつけない
-    RealRobot(PathBuf),
+    RealRobot(PathBuf, RealSample),
 }
 
 impl LoadOrigin {
@@ -121,7 +121,7 @@ impl LoadOrigin {
         match self {
             LoadOrigin::File(path) => file_name(path),
             LoadOrigin::DemoLine { .. } => DEMO_LINE_NAME.into(),
-            LoadOrigin::RealRobot(_) => REAL_ROBOT_NAME.into(),
+            LoadOrigin::RealRobot(_, sample) => sample.name().into(),
         }
     }
 }
@@ -224,7 +224,7 @@ impl ProjectState {
             let result = match &origin {
                 LoadOrigin::File(path) => LoadedProject::load(path),
                 LoadOrigin::DemoLine { .. } => load_demo_line(),
-                LoadOrigin::RealRobot(dir) => load_real_robot_sample(dir),
+                LoadOrigin::RealRobot(dir, sample) => load_real_robot_sample(dir, *sample),
             };
             (origin, result)
         }));
@@ -335,7 +335,7 @@ fn run_project_actions(
                             message = format!("{name} を動かしています");
                         }
                     }
-                    LoadOrigin::RealRobot(dir) => {
+                    LoadOrigin::RealRobot(dir, _) => {
                         state.path = None;
                         motion.playback.playing = true;
                         motion.playback.looping = true;
@@ -398,9 +398,9 @@ fn run_project_actions(
             jobs.loading.push(DEMO_LINE_NAME.into());
             state.start_loading(LoadOrigin::DemoLine { play });
         }
-        ProjectAction::OpenRealRobot => {
-            jobs.loading.push(REAL_ROBOT_NAME.into());
-            state.start_loading(LoadOrigin::RealRobot(real_robot_sample_dir()));
+        ProjectAction::OpenRealRobot(sample) => {
+            jobs.loading.push(sample.name().into());
+            state.start_loading(LoadOrigin::RealRobot(real_robot_sample_dir(), sample));
         }
         ProjectAction::Save | ProjectAction::SaveAs => {
             let path = match (&action, &state.path) {
