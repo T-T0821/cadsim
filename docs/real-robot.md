@@ -1,6 +1,6 @@
 # 本物の装置のサンプル(UR5e + Robotiq 2F-85)
 
-「ファイル → サンプルを開く → 本物の装置 (UR5e + Robotiq 2F-85)」で開くサンプルの中身と作り方です。
+「ファイル → サンプルを開く → 本物の装置 (UR5e + Robotiq 2F-85)」と「本物の装置のライン (UR5e + 安全柵・作業者・AGV)」で開くサンプルの中身と作り方です。
 メーカーが公開している本物の装置の形状を読み込み、plantwright の関節・ロボット・タイミングチャート・ワーク搬送の機能だけで動きを付けています。
 
 ## 使っている CAD と再配布の条件
@@ -26,6 +26,7 @@ git clone https://github.com/PickNikRobotics/ros2_robotiq_gripper.git robotiq
 pip install trimesh pycollada
 python3 tools/real_robot/convert_meshes.py ur robotiq   # ur5e.glb と robotiq_2f85.glb
 python3 tools/real_robot/make_demo.py                   # ur5e_pick_place.plantwright
+python3 tools/real_robot/make_real_line.py              # real_line.plantwright (上のセル + 安全柵・作業者・AGV・工程)
 ```
 
 | スクリプト | 内容 |
@@ -33,6 +34,7 @@ python3 tools/real_robot/make_demo.py                   # ur5e_pick_place.plantw
 | `tools/real_robot/kinematics.py` | UR5e と 2F-85 の関節の位置(ROS の記述の寸法を写したもの)と順運動学。標準ライブラリだけで動く |
 | `tools/real_robot/convert_meshes.py` | COLLADA を読んで、リンクごとに置き、色ごとにまとめて GLB に書く。`trimesh` と `pycollada` が要る |
 | `tools/real_robot/make_demo.py` | 関節・ロボット・教示点・ステップ・コンベアを書いたプロジェクトを作る。標準ライブラリだけで動く |
+| `tools/real_robot/make_real_line.py` | `ur5e_pick_place.plantwright` のセルはそのままに、`samples/demo_line.plantwright` から制御盤まわりと周辺設備を置き直して持ってきて、安全機器・作業者・AGV・工程モデルを足したラインを作る。標準ライブラリだけで動く |
 
 ### GLB の形
 

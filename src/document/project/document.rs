@@ -295,10 +295,14 @@ pub fn load_demo_line() -> Result<LoadedProject, ProjectError> {
 /// 本物の装置のサンプル (UR5e と Robotiq 2F-85 のピック & プレース、`samples/real_robot`)。
 /// 形状の glTF とライセンス文も埋め込んでおき、開くときにフォルダへ書き出して読む
 /// (プロジェクトは glTF を相対パスで参照するので、同じフォルダに並べる必要がある)。
-const REAL_ROBOT_FILES: [(&str, &[u8]); 6] = [
+const REAL_ROBOT_FILES: [(&str, &[u8]); 7] = [
     (
-        REAL_ROBOT_PROJECT,
+        RealSample::Cell.file_name(),
         include_bytes!("../../../samples/real_robot/ur5e_pick_place.plantwright"),
+    ),
+    (
+        RealSample::Line.file_name(),
+        include_bytes!("../../../samples/real_robot/real_line.plantwright"),
     ),
     (
         "ur5e.glb",
@@ -321,12 +325,38 @@ const REAL_ROBOT_FILES: [(&str, &[u8]); 6] = [
         include_bytes!("../../../samples/real_robot/LICENSE-Robotiq-2F-85.txt"),
     ),
 ];
-const REAL_ROBOT_PROJECT: &str = "ur5e_pick_place.plantwright";
-/// 読み込み中・読み込み後の表示名
-pub const REAL_ROBOT_NAME: &str = "UR5e のピック & プレース";
+/// 本物の装置のサンプルのどれを開くか
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RealSample {
+    /// UR5e と 2F-85 のピック & プレースのセルだけ
+    Cell,
+    /// セルのまわりに安全柵・作業者・AGV・制御盤・工程モデルを置いたライン
+    /// (tools/real_robot/make_real_line.py で生成)
+    Line,
+}
+
+impl RealSample {
+    pub const fn file_name(self) -> &'static str {
+        match self {
+            RealSample::Cell => "ur5e_pick_place.plantwright",
+            RealSample::Line => "real_line.plantwright",
+        }
+    }
+
+    /// 読み込み中・読み込み後の表示名
+    pub const fn name(self) -> &'static str {
+        match self {
+            RealSample::Cell => "UR5e のピック & プレース",
+            RealSample::Line => "UR5e のライン",
+        }
+    }
+}
 
 /// 埋め込みの本物の装置のサンプルを `dir` に書き出して読む。中身が同じファイルは書き直さない。
-pub fn load_real_robot_sample(dir: &Path) -> Result<LoadedProject, ProjectError> {
+pub fn load_real_robot_sample(
+    dir: &Path,
+    sample: RealSample,
+) -> Result<LoadedProject, ProjectError> {
     std::fs::create_dir_all(dir).map_err(ProjectError::Io)?;
     for (name, bytes) in REAL_ROBOT_FILES {
         let path = dir.join(name);
@@ -334,7 +364,7 @@ pub fn load_real_robot_sample(dir: &Path) -> Result<LoadedProject, ProjectError>
             std::fs::write(&path, bytes).map_err(ProjectError::Io)?;
         }
     }
-    LoadedProject::load(&dir.join(REAL_ROBOT_PROJECT))
+    LoadedProject::load(&dir.join(sample.file_name()))
 }
 
 /// 本物の装置のサンプルを書き出すフォルダ。設定ファイルと同じ場所の `samples/real_robot`

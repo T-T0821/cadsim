@@ -457,7 +457,7 @@ fn real_robot_sample_opens_and_reaches_every_point() {
 
     // メニューから開くときと同じく、埋め込みのファイルをフォルダに書き出して読む
     let dir = std::env::temp_dir().join(format!("plantwright-real-robot-{}", std::process::id()));
-    let loaded = load_real_robot_sample(&dir).expect("サンプルが読める");
+    let loaded = load_real_robot_sample(&dir, RealSample::Cell).expect("サンプルが読める");
     assert!(
         dir.join("LICENSE-UR5e.txt").exists(),
         "ライセンス文も一緒に書き出す"
@@ -503,6 +503,36 @@ fn real_robot_sample_opens_and_reaches_every_point() {
         tcp.distance(target) < 0.5,
         "TCP {tcp} が教示点 {target} からずれている"
     );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 本物の装置のライン (tools/real_robot/make_real_line.py で生成) が、セルの関節と動きをそのまま持ち、
+/// 工程モデル・安全機器・作業者・AGV の参照する部品がすべて見つかること
+#[test]
+fn real_line_sample_opens_with_floor_and_flow() {
+    let dir = std::env::temp_dir().join(format!("plantwright-real-line-{}", std::process::id()));
+    let loaded = load_real_robot_sample(&dir, RealSample::Line).expect("サンプルが読める");
+    assert!(dir.join("ur5e.glb").exists(), "形状も一緒に書き出す");
+    let mut model = Model::default();
+    let opened = loaded.open(&mut model);
+    assert!(opened.warnings.is_empty(), "{:?}", opened.warnings);
+    assert_eq!(opened.chart.actuators.len(), 13);
+    assert!(
+        opened
+            .chart
+            .schedule()
+            .moves
+            .iter()
+            .all(|m| m.reached && m.path_reached),
+        "ロボットはどの教示点にも届く"
+    );
+    assert_eq!(opened.flow.elements.len(), 5);
+    assert!(
+        opened.flow.elements.iter().all(|e| e.part.is_some()),
+        "工程はどれも 3D の部品に結びつく"
+    );
+    assert_eq!(opened.floor.safety.devices.len(), 8);
+    assert_eq!(opened.floor.operators.len(), 2);
     let _ = std::fs::remove_dir_all(&dir);
 }
 

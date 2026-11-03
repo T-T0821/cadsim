@@ -7,7 +7,7 @@ use super::UiState;
 use super::dock;
 use super::theme::palette;
 use crate::document::import::ExportScope;
-use crate::document::project::ProjectAction;
+use crate::document::project::{ProjectAction, RealSample};
 use crate::features::modeling::panel::Tab;
 use crate::features::result_export::ResultKind;
 use crate::viewport::camera::{CameraRequest, StandardView};
@@ -96,7 +96,21 @@ fn file_menu(ui: &mut egui::Ui, state: &mut UiState) {
                 )
                 .clicked()
             {
-                state.project.request(ProjectAction::OpenRealRobot);
+                state
+                    .project
+                    .request(ProjectAction::OpenRealRobot(RealSample::Cell));
+                ui.close();
+            }
+            if ui
+                .button("本物の装置のライン (UR5e + 安全柵・作業者・AGV)")
+                .on_hover_text(
+                    "UR5e と 2F-85 のセルのまわりに安全柵・制御盤・作業者・AGV・検査工程を置いたラインを開いて再生する",
+                )
+                .clicked()
+            {
+                state
+                    .project
+                    .request(ProjectAction::OpenRealRobot(RealSample::Line));
                 ui.close();
             }
             if ui
