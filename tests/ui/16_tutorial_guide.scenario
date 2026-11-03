@@ -1,0 +1,43 @@
+# チュートリアル: 次に押すボタンが光り、押すと次のボタンへ案内が進む
+wait_loaded
+click "▶ チュートリアルを始める"
+wait 20
+click "とばす ⏭"                  # 部品をえらぼう
+click "とばす ⏭"                  # ぐるっと見まわそう
+wait 20
+expect "⏸ 一時停止"
+screenshot 01_glow_pause          # 「設備を止めて、また動かそう」: 一時停止が光る
+
+click "⏸ 一時停止"
+wait 20
+screenshot 02_glow_play           # 次は再生が光り、カードの手順 1 に ✔ が付く
+click "とばす ⏭"
+click "とばす ⏭"
+click "とばす ⏭"
+click "とばす ⏭"
+click "とばす ⏭"
+click "とばす ⏭"
+click "とばす ⏭"
+click "とばす ⏭"
+click "とばす ⏭"
+click "とばす ⏭"
+click "とばす ⏭"
+click "とばす ⏭"
+click "とばす ⏭"
+click "とばす ⏭"
+wait 20
+screenshot 03_glow_rail           # 「PLC で動かそう」: ツールレールの PLC が光る
+
+click "PLC"
+wait 20
+screenshot 04_glow_mode           # パネルを開くと、中の「内蔵の模擬PLC」へ案内が進む
+
+click "内蔵の模擬PLC"
+wait 20
+expect "▶ 運転"
+screenshot 05_glow_run            # 次は「▶ 運転」
+
+click "▶ 運転"
+wait 30
+expect "■ 停止"
+screenshot 06_mission_clear       # 運転するとミッション達成

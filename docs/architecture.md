@@ -66,5 +66,5 @@ crates/
   - `src/document/project/{file, document}.rs` … プロジェクトファイルの形と開く・保存の手順。寸法 (`features::annotation`)・取り込んだアニメーション・標準部品の配置の型がアプリ側にある
   - `src/features/result_export/report/` … 干渉チェックに渡す形 (`features::simulation` の `Pose`・`TriMesh`) を使う
   - `src/viewport/defeature.rs` … 表示用メッシュの簡略化 (`bevy::math` を使っている)
-- **800 行を超えるファイル。** `plantwright_core` の `flow/sim.rs`・`formats/usd.rs`・`gamify.rs`・`model.rs`・`motion/chart.rs`・`conveyor/sim.rs`、アプリの `features/motion/panel/mod.rs`・`features/annotation/mod.rs`・`features/flow/panel/mod.rs`・`viewport/parts.rs` など。
+- **800 行を超えるファイル。** `plantwright_core` の `flow/sim.rs`・`formats/usd.rs`・`model.rs`・`motion/chart.rs`・`conveyor/sim.rs`、アプリの `features/motion/panel/mod.rs`・`features/annotation/mod.rs`・`features/flow/panel/mod.rs`・`viewport/parts.rs` など。
 - **自分の Resource を `main.rs` で登録しているもの。** `Model`・`Selection`・`GizmoTool`。プラグインの順番に関わるので、動かすときは画面を確かめる。
