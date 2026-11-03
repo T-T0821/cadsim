@@ -24,6 +24,7 @@
 
 pub mod dock;
 pub mod font;
+mod guide;
 mod licenses;
 pub mod logo;
 mod menu;

@@ -10,6 +10,7 @@ use bevy_egui::{
 };
 
 use super::dock::{self, Dock, RAIL_WIDTH};
+use super::guide::{self, GuideUi};
 use super::logo;
 use super::playful::{PlayfulUi, mascot};
 use super::theme::palette;
@@ -37,6 +38,8 @@ pub struct TutorialUi {
     point_now: bool,
     /// ようこそ画面に出すロゴ (初めて出すときに作る)
     logo: Option<egui::TextureHandle>,
+    /// 次に押すボタンを光らせる案内
+    pub guide: GuideUi,
 }
 
 impl TutorialUi {
@@ -52,23 +55,35 @@ pub fn draw(
     mut playful: ResMut<PlayfulUi>,
     mut tutorial: ResMut<TutorialUi>,
     mut project: ResMut<ProjectState>,
+    dock: Res<Dock>,
     viewport: Res<ViewportRect>,
 ) -> Result {
+    let ctx = contexts.ctx_mut()?.clone();
     let Some(rect) = viewport.rect else {
+        tutorial.guide.set_wanted(&ctx, false);
         return Ok(());
     };
-    let ctx = contexts.ctx_mut()?.clone();
     let view = egui::Rect::from_min_max(pos2(rect.min.x, rect.min.y), pos2(rect.max.x, rect.max.y));
     let now = ctx.input(|i| i.time);
 
     if !playful.prefs.welcomed || tutorial.welcome_requested {
+        tutorial.guide.set_wanted(&ctx, false);
         welcome(&ctx, view, now, &mut playful, &mut tutorial, &mut project);
         return Ok(());
     }
-    if playful.prefs.show_missions
-        && let Some(next) = playful.prefs.progress.next()
-    {
-        pointer(&ctx, view, now, next, &mut tutorial);
+    let next = playful
+        .prefs
+        .progress
+        .next()
+        .filter(|_| playful.prefs.show_missions);
+    tutorial.guide.set_wanted(&ctx, next.is_some());
+    if let Some(next) = next {
+        let tool_open = next.tool.is_some_and(|tool| dock.is_open(tool));
+        guide::glow_next_button(&ctx, now, next, tool_open, &mut tutorial.guide);
+        // 押すボタンが光っているときは、場所の矢印は 3D ビューの枠だけにする (矢印が光るボタンと重ならないように)
+        if tutorial.guide.current_step.is_none() || next.place == Place::Viewport {
+            pointer(&ctx, view, now, next, &mut tutorial);
+        }
     }
     Ok(())
 }
@@ -296,14 +311,30 @@ pub fn mission_body(
     }
 
     if playful.show_steps {
+        // 光らせているボタンの手順を「いまここ」として目立たせ、前の手順は済んだ印にする
+        let current = tutorial.guide.current_step;
         for (i, step) in next.steps.iter().enumerate() {
             ui.horizontal_top(|ui| {
-                ui.label(
-                    egui::RichText::new(format!("{}", i + 1))
-                        .strong()
-                        .color(palette::YELLOW),
-                );
-                ui.add(egui::Label::new(*step).wrap());
+                let (mark, text) = match current {
+                    Some(c) if i < c => (
+                        egui::RichText::new("✔").color(palette::GREEN),
+                        egui::RichText::new(*step).weak(),
+                    ),
+                    Some(c) if i == c => (
+                        egui::RichText::new(format!("▶{}", i + 1))
+                            .strong()
+                            .color(palette::YELLOW),
+                        egui::RichText::new(*step).strong().color(Color32::WHITE),
+                    ),
+                    _ => (
+                        egui::RichText::new(format!("{}", i + 1))
+                            .strong()
+                            .color(palette::YELLOW),
+                        egui::RichText::new(*step),
+                    ),
+                };
+                ui.label(mark);
+                ui.add(egui::Label::new(text).wrap());
             });
         }
         ui.add(

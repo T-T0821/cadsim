@@ -157,6 +157,8 @@ impl Plugin for PlayfulPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(PlayfulUi::load())
             .init_resource::<TutorialUi>()
+            // 画面に出た部品は egui の描画が終わってから集め、次のフレームの案内に使う
+            .add_systems(Last, super::guide::collect_shown)
             .add_systems(Update, (track_missions, save_preferences).chain());
     }
 }
