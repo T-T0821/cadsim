@@ -7,7 +7,7 @@ STEP などの CAD データを読み込み、部品を動かしながら干渉�
 
 ![サンプルのアセンブリを開いたところ](docs/screenshots/start/overview.png)
 
-[デモ動画を見る(約 3 分半)](docs/media/plantwright_demo.mp4)
+[デモ動画を見る(約 2 分半)](docs/media/plantwright_demo.mp4)
 
 画面ごとの詳しい使い方は [操作マニュアル](docs/src/introduction.md)(画像付き)にまとめています。
 
