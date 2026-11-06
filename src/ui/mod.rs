@@ -70,8 +70,7 @@ pub struct UiPlugin;
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<crate::features::modeling::panel::ModelingUi>()
-            .init_resource::<dock::Dock>()
+        app.init_resource::<dock::Dock>()
             .add_plugins((playful::PlayfulPlugin, logo::LogoPlugin))
             .add_systems(Startup, spawn_ui_camera)
             .add_systems(
@@ -87,10 +86,12 @@ impl Plugin for UiPlugin {
                     playful::draw_overlay,
                     tutorial::draw,
                     // 動作シミュレーション・物理演算・PLC 連携で部品が動いている間はギズモで編集しない
+                    // 穴をあける道具を使っている間も、ギズモがクリックを横取りしないよう出さない
                     transform_gizmo_system
                         .run_if(at_design_pose)
                         .run_if(physics_stopped)
-                        .run_if(not(plc_active)),
+                        .run_if(not(plc_active))
+                        .run_if(crate::features::modeling::hole_tool_off),
                 )
                     .chain(),
             );
@@ -114,6 +115,8 @@ pub struct UiState<'w> {
     pub motion: MotionUi<'w>,
     pub documents: ResMut<'w, crate::features::drawing::DocumentExport>,
     pub modeling: ResMut<'w, crate::features::modeling::panel::ModelingUi>,
+    /// 3D ビューで面をクリックして穴をあける道具
+    pub hole_tool: ResMut<'w, plantwright_core::modeling::hole_tool::HoleTool>,
     pub flow: FlowUi<'w>,
     pub diagnostics: Res<'w, DiagnosticsStore>,
     pub render_stats: Res<'w, RenderStats>,

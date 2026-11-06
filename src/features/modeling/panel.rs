@@ -1,16 +1,15 @@
 //! 「モデリング」ウィンドウ: 円柱・押し出し・穴あけ・ブーリアン
 //!
-//! 作成メニューから開く。形状の計算は `modeling` が受け持ち、ここは入力を集めて呼ぶだけ。
+//! 作成メニューかプロパティの「形を編集」から開く。形状の計算は `modeling` が受け持ち、ここは入力を集めて呼ぶだけ。
+//! 穴あけのタブは、3D ビューで面をクリックして置く道具 (`HoleTool`) の寸法を数値でも直せる欄。
 
 use bevy::math::DVec3;
 use bevy_egui::egui;
 
-use crate::features::modeling::{add_solid, apply_boolean, drill_hole, node_solid};
+use crate::features::modeling::{add_solid, apply_boolean, confirm_hole, node_solid};
 use crate::ui::UiState;
 use plantwright_core::model::NodeId;
 use plantwright_core::modeling::BooleanOp;
-use plantwright_core::modeling::HoleAxis;
-use plantwright_core::modeling::HoleSpec;
 use plantwright_core::modeling::cylinder;
 use plantwright_core::modeling::extrude;
 use plantwright_core::modeling::parse_outline;
@@ -45,12 +44,6 @@ pub struct ModelingUi {
     height: f64,
     outline: String,
     extrude_height: f64,
-    hole_center: [f64; 3],
-    hole_axis: HoleAxis,
-    hole_diameter: f64,
-    hole_depth: f64,
-    /// 穴の位置を最後に合わせた部品 (選択が変わったら合わせ直す)
-    hole_for: Option<NodeId>,
     boolean_op: BooleanOp,
     boolean_other: Option<NodeId>,
     error: Option<String>,
@@ -64,11 +57,6 @@ impl Default for ModelingUi {
             height: 200.0,
             outline: "0,0; 400,0; 400,200; 200,300; 0,200".into(),
             extrude_height: 100.0,
-            hole_center: [0.0; 3],
-            hole_axis: HoleAxis::Y,
-            hole_diameter: 20.0,
-            hole_depth: 0.0,
-            hole_for: None,
             boolean_op: BooleanOp::Subtract,
             boolean_other: None,
             error: None,
@@ -203,58 +191,91 @@ fn selected_part(state: &UiState) -> Option<NodeId> {
         .filter(|&id| state.model.get(id).is_some_and(|n| n.kind.is_part()))
 }
 
+/// 穴あけ: 3D ビューで面をクリックして置く。ここでは道具の開始と、直径・深さの数値での修正
 fn hole_tab(ui: &mut egui::Ui, state: &mut UiState) {
     let unit = state.model.unit.clone();
     let Some(id) = selected_part(state) else {
-        ui.label("穴をあける部品 (箱か、ここで作った部品) を選んでください");
+        state.hole_tool.stop();
+        ui.label("穴をあける部品 (箱か、ここで作った部品) をクリックして選んでください");
         return;
     };
     if let Err(e) = node_solid(&state.model, id) {
+        state.hole_tool.stop();
         ui.label(e);
         return;
     }
-    // 選んだ部品が変わったら、穴の位置を部品の上の面の真ん中にする
-    if state.modeling.hole_for != Some(id)
-        && let Some(b) = state.model.world_bounds(id)
-    {
-        let c = b.center();
-        state.modeling.hole_center = [c.x, b.max.y, c.z];
-        state.modeling.hole_for = Some(id);
-    }
     ui.label(format!("対象: {}", state.model.path_label(id)));
-    let m = &mut state.modeling;
-    ui.horizontal(|ui| {
-        ui.label("中心 X / Y / Z");
-        for v in &mut m.hole_center {
-            ui.add(egui::DragValue::new(v).speed(1.0).max_decimals(3));
+    if !state.hole_tool.active {
+        ui.label("3D ビューで面をクリックすると、そこが穴の入口になります");
+        if ui.button("面をクリックして穴をあける").clicked() {
+            start_hole_tool(state);
         }
-    });
-    ui.horizontal(|ui| {
-        ui.label("向き");
-        for axis in [HoleAxis::X, HoleAxis::Y, HoleAxis::Z] {
-            ui.radio_value(&mut m.hole_axis, axis, axis.label());
-        }
-    });
-    number(ui, "直径", &mut m.hole_diameter, &unit);
-    number(ui, "深さ", &mut m.hole_depth, &unit);
-    ui.weak(
-        "深さ 0 で貫通。深さを入れると中心を入口にして、正なら軸の - 向き、負なら + 向きに掘ります",
-    );
-    if ui.button("穴をあける").clicked() {
-        let hole = HoleSpec {
-            center: DVec3::from(m.hole_center),
-            axis: m.hole_axis,
-            diameter: m.hole_diameter,
-            depth: m.hole_depth,
-        };
-        match drill_hole(&mut state.model, &mut state.history, id, &hole) {
-            Ok(()) => {
-                state.modeling.error = None;
-                state.jobs.messages.push("穴をあけました".into());
-            }
-            Err(e) => state.modeling.error = Some(e),
-        }
+        return;
     }
+    ui.weak(state.hole_tool.hint());
+    if let Some(draft) = state.hole_tool.draft.as_mut() {
+        ui.horizontal(|ui| {
+            ui.label("直径");
+            ui.add(
+                egui::DragValue::new(&mut draft.diameter)
+                    .speed(0.5)
+                    .range(0.001..=f64::MAX)
+                    .max_decimals(3),
+            );
+            ui.label(&unit);
+        });
+        ui.horizontal(|ui| {
+            ui.label("深さ");
+            let mut depth = draft.depth.unwrap_or(0.0);
+            if ui
+                .add(
+                    egui::DragValue::new(&mut depth)
+                        .speed(0.5)
+                        .range(0.0..=f64::MAX)
+                        .max_decimals(3),
+                )
+                .changed()
+            {
+                draft.set_depth(depth);
+            }
+            ui.label(&unit);
+            ui.weak(if draft.depth.is_none() {
+                "(貫通)"
+            } else {
+                "(0 で貫通)"
+            });
+        });
+    }
+    ui.horizontal(|ui| {
+        let placed = state.hole_tool.draft.is_some();
+        if ui
+            .add_enabled(placed, egui::Button::new("✔ 穴をあける"))
+            .on_hover_text("Enter")
+            .clicked()
+        {
+            confirm_hole(
+                &mut state.hole_tool,
+                &mut state.model,
+                &mut state.history,
+                &mut state.jobs,
+            );
+        }
+        if ui.button("やめる").on_hover_text("Esc").clicked() {
+            state.hole_tool.stop();
+        }
+    });
+    if let Some(e) = &state.hole_tool.error {
+        ui.colored_label(egui::Color32::from_rgb(240, 90, 90), e);
+    }
+}
+
+/// 穴あけの道具を始める (ギズモがクリックを横取りしないよう、ギズモの操作中の印も消す)
+pub fn start_hole_tool(state: &mut UiState) {
+    state.hole_tool.start();
+    state.selection.face = None;
+    state.gizmo.focused = false;
+    state.modeling.open_tab(Tab::Hole);
+    state.dock.set_open(Tool::Modeling, true);
 }
 
 fn boolean_tab(ui: &mut egui::Ui, state: &mut UiState) {

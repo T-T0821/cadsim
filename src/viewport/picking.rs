@@ -24,6 +24,7 @@ use bevy::{
 
 use crate::document::selection::Selection;
 use crate::features::annotation::annotate_tool_off;
+use crate::features::modeling::hole_tool_off;
 use crate::features::simulation::measure::not_measuring;
 use crate::viewport::camera::{alt_pressed, pointer_in_3d_view};
 use crate::viewport::gizmo::gizmo_not_focused;
@@ -45,6 +46,7 @@ impl Plugin for PartPickingPlugin {
                 .run_if(gizmo_not_focused)
                 .run_if(not_measuring)
                 .run_if(annotate_tool_off)
+                .run_if(hole_tool_off)
                 .run_if(crate::features::motion::teach_tool_off)
                 .run_if(crate::features::site::plan_tool_off),
         );
@@ -58,6 +60,8 @@ fn part_picking_backend(
     mut picker: PartPicker,
     mut output: MessageWriter<PointerHits>,
 ) {
+    // レイが無いフレームでも部品の変更を取り込む (Changed の差分を見逃さないため)
+    picker.refresh();
     for (&ray_id, &ray) in ray_map.iter() {
         let Ok(camera) = cameras.get(ray_id.camera) else {
             continue;

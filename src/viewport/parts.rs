@@ -960,6 +960,8 @@ pub struct PartHit {
     pub face: usize,
     /// 当たった点 (ワールド座標)
     pub point: Vec3,
+    /// 当たった面の向き (ワールド座標の単位ベクトル。曲面では面の平均の向き)
+    pub normal: Vec3,
 }
 
 /// 表示中の部品にレイを当てる。部品の外接箱の BVH → 部品内の三角形の BVH の順に調べるので、
@@ -990,8 +992,11 @@ pub struct PickScene {
 }
 
 impl PartPicker<'_, '_> {
-    /// 部品が変わっていれば外接箱の BVH を作り直す
-    fn refresh(&mut self) {
+    /// 部品が変わっていれば外接箱の BVH を作り直す。
+    ///
+    /// `Changed` の判定はこのシステムが前に走ったときからの差分なので、レイが無いフレームでも
+    /// 毎フレーム呼ぶ (呼ばないと、ポインタが 3D ビューの外にある間の変更を見逃す)。
+    pub fn refresh(&mut self) {
         let removed = self.removed.read().count() > 0;
         if self.scene.bvh.is_some() && !removed && self.changed.is_empty() {
             return;
@@ -1039,11 +1044,18 @@ impl PartPicker<'_, '_> {
         let (entity, view, transform) = views.get(parts[index as usize]).ok()?;
         let (o, d) = local_ray(transform);
         let (face, _) = view.display.mesh.ray_cast(o, d)?;
+        let normal = view
+            .display
+            .mesh
+            .face_normal(face)
+            .map(|n| transform.affine().transform_vector3(n).normalize_or_zero())
+            .unwrap_or(Vec3::Y);
         Some(PartHit {
             entity,
             node: view.node,
             face,
             point: origin + dir * t,
+            normal,
         })
     }
 }

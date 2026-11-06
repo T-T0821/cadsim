@@ -594,6 +594,10 @@ fn create_menu(ui: &mut egui::Ui, state: &mut UiState) {
             if ui.button(text).clicked() {
                 state.modeling.open_tab(tab);
                 state.dock.set_open(Tool::Modeling, true);
+                // 穴あけは、部品を選んでいればすぐ面をクリックできるようにする
+                if tab == Tab::Hole && part_can_be_modeled(state) {
+                    crate::features::modeling::panel::start_hole_tool(state);
+                }
                 ui.close();
             }
         }
@@ -901,4 +905,12 @@ pub fn add_box(state: &mut UiState) {
     state.history.record_added(&state.model, id, label);
     state.selection.select(id);
     state.selection.reveal_in_tree = true;
+}
+
+/// 選択中の部品が穴あけ・ブーリアンの対象になる (箱かモデリングで作った部品)
+pub fn part_can_be_modeled(state: &UiState) -> bool {
+    state
+        .selection
+        .node
+        .is_some_and(|id| crate::features::modeling::node_solid(&state.model, id).is_ok())
 }
