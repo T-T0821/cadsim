@@ -10,8 +10,12 @@
 //! 演算できるのは箱とここで作った部品だけ。STEP などから取り込んだ部品は、
 //! 元のファイルとのつながりを保つため対象外 (エラーで知らせる)。
 //! 穴あけ・ブーリアンは、元に戻すための [`ModelChange`] を返す。
+//!
+//! 形を変えるたびに「何をしたか」を [`features::ShapeHistory`] として部品に残す ([`replace_shape`])。
+//! あとから数値を直す・1 つ消す ([`edit_feature`]・[`remove_feature`]) ときは出発点から作り直す。
 
 pub mod extrude_tool;
+pub mod features;
 pub mod hole_tool;
 pub mod ops;
 pub mod record;
@@ -20,6 +24,7 @@ use std::sync::Arc;
 
 use glam::{DMat4, DVec2, DVec3};
 
+use self::features::{Base, Feature, ShapeHistory};
 use crate::history::ModelChange;
 use crate::kernel::{BooleanKind, Brep};
 use crate::math::euler_deg_to_quat;
@@ -29,8 +34,16 @@ use crate::shape::{ImportedShape, tessellate_breps};
 /// B-rep を [`ModeledSource`] に詰める・取り出す (トレイト)。実装は `modeling::record`
 /// (`crate::modeling::record` の JSON)
 pub trait SolidStore {
-    fn save(&self, name: String, solid: &Brep) -> Result<ModeledSource, String>;
+    /// 形と、その形に至る編集履歴を詰める
+    fn save(
+        &self,
+        name: String,
+        solid: &Brep,
+        history: &ShapeHistory,
+    ) -> Result<ModeledSource, String>;
     fn load(&self, source: &ModeledSource) -> Result<Brep, String>;
+    /// 詰めてある編集履歴 (無ければ空)
+    fn history(&self, source: &ModeledSource) -> ShapeHistory;
 }
 
 /// カーネルの +Z 向きの形を、Y が上のモデルの座標に合わせる回転
@@ -95,7 +108,8 @@ pub fn parse_outline(text: &str) -> Result<Vec<DVec2>, String> {
         .collect()
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum BooleanOp {
     Union,
     Subtract,
@@ -127,12 +141,16 @@ pub fn boolean(a: &Brep, b: &Brep, op: BooleanOp) -> Result<Brep, String> {
 
 /// B-rep を表示用のメッシュと稜線にする
 pub fn shape_from_solid(solid: &Brep) -> ImportedShape {
+    let (faces, edges) = tessellate_breps(std::slice::from_ref(solid), display_tolerance(solid));
+    ImportedShape::new(Vec::new(), faces, edges, None)
+}
+
+/// 表示用にメッシュにするときの、曲面からのずれの上限 (形の大きさの 0.05%)
+pub(crate) fn display_tolerance(solid: &Brep) -> f64 {
     let size = solid
         .loose_bounds()
         .map_or(1.0, |b| (b.max - b.min).length());
-    let tol = (size * 0.0005).max(1e-6);
-    let (faces, edges) = tessellate_breps(std::slice::from_ref(solid), tol);
-    ImportedShape::new(Vec::new(), faces, edges, None)
+    (size * 0.0005).max(1e-6)
 }
 
 /// 部品の形状を、部品の座標系の B-rep で取り出す (箱とモデリングで作った部品だけ)
@@ -164,7 +182,7 @@ pub fn add_solid(
     solid: &Brep,
     position: DVec3,
 ) -> Result<NodeId, String> {
-    let source = Arc::new(store.save(name.clone(), solid)?);
+    let source = Arc::new(store.save(name.clone(), solid, &ShapeHistory::default())?);
     let shape = Arc::new(shape_from_solid(solid));
     Ok(model.add_node(
         None,
@@ -178,19 +196,50 @@ pub fn add_solid(
     ))
 }
 
-/// 部品 `id` の形を `solid` (部品の座標系) に置き換える。箱は配置を部品の置き場所に移す
+/// 部品 `id` の今の編集履歴。出発点を覚えていない部品は、今の形を出発点にする。
+/// 箱は [`normalize_box`] のあとで呼ぶ (原点を中心にした箱が出発点になる)
+pub fn history_of(
+    model: &Model,
+    store: &dyn SolidStore,
+    id: NodeId,
+) -> Result<ShapeHistory, String> {
+    let node = model.get(id).ok_or("部品が見つかりません")?;
+    match &node.kind {
+        NodeKind::Box(part) => Ok(ShapeHistory {
+            base: Some(Base::Box { size: part.size }),
+            features: Vec::new(),
+        }),
+        NodeKind::Imported {
+            source: StepSource::Modeled(source),
+            ..
+        } => {
+            let mut history = store.history(source);
+            if history.base.is_none() {
+                history.base = Some(Base::Solid {
+                    smlib: store.load(source)?.to_text()?,
+                });
+            }
+            Ok(history)
+        }
+        _ => Ok(ShapeHistory::default()),
+    }
+}
+
+/// 部品 `id` の形を `solid` (部品の座標系) に置き換え、そこに至る編集履歴 `history` を残す。
+/// 箱は配置を部品の置き場所に移す
 fn replace_shape(
     model: &mut Model,
     store: &dyn SolidStore,
     id: NodeId,
     solid: &Brep,
+    history: &ShapeHistory,
 ) -> Result<(), String> {
     let node = model.get(id).ok_or("部品が見つかりません")?;
     let name = match &node.kind {
         NodeKind::Imported { product, .. } => product.clone(),
         _ => node.name.clone(),
     };
-    let source = Arc::new(store.save(name.clone(), solid)?);
+    let source = Arc::new(store.save(name.clone(), solid, history)?);
     let shape = Arc::new(shape_from_solid(solid));
     let node = model.get_mut(id).ok_or("部品が見つかりません")?;
     node.kind = NodeKind::Imported {
@@ -296,11 +345,21 @@ pub fn drill_hole(
     } else {
         (hole.center - dir * margin, dir, -hole.depth + margin)
     };
-    let tool = oriented_cylinder(hole.diameter / 2.0, length, start, drill_dir)?;
-    let result = tool
-        .transformed(to_local)
-        .and_then(|tool| boolean(&solid, &tool, BooleanOp::Subtract));
-    let result = match result {
+    // 穴を部品の座標系で覚える (あとから直せるように)
+    let local_start = to_local.transform_point3(start);
+    let local_end = to_local.transform_point3(start + drill_dir * length);
+    let local_length = local_start.distance(local_end);
+    let feature = Feature::Hole {
+        start: local_start.to_array(),
+        dir: ((local_end - local_start) / local_length).to_array(),
+        length: local_length,
+        diameter: hole.diameter * local_length / length,
+    };
+    let result = history_of(model, store, id).and_then(|mut history| {
+        history.features.push(feature);
+        feature_result(&history, &solid)
+    });
+    let (result, history) = match result {
         Ok(r) => r,
         Err(e) => {
             if let Some(b) = &before {
@@ -309,12 +368,18 @@ pub fn drill_hole(
             return Err(e);
         }
     };
-    replace_shape(model, store, id, &result)?;
+    replace_shape(model, store, id, &result, &history)?;
     let name = model.get(id).map(|n| n.name.clone()).unwrap_or_default();
     Ok(ModelChange {
         label: format!("{name} に穴をあける"),
         changes: vec![(before, model.snapshot(id))],
     })
+}
+
+/// 履歴の最後の編集を `solid` にかける。履歴ごと返す
+fn feature_result(history: &ShapeHistory, solid: &Brep) -> Result<(Brep, ShapeHistory), String> {
+    let last = history.features.last().ok_or("編集がありません")?;
+    Ok((last.apply(solid)?, history.clone()))
 }
 
 /// `start` から `dir` 方向へ長さ `length` の円柱 (ワールド)
@@ -343,10 +408,15 @@ pub fn apply_boolean(
     let solid_a = node_solid(model, store, a)?;
     // b を a の座標系に持ってくる
     let b_to_a = model.world_matrix(a).inverse() * model.world_matrix(b);
-    let result = match solid_b
-        .transformed(b_to_a)
-        .and_then(|solid_b| boolean(&solid_a, &solid_b, op))
-    {
+    let result = solid_b.transformed(b_to_a).and_then(|solid_b| {
+        let mut history = history_of(model, store, a)?;
+        history.features.push(Feature::Boolean {
+            other: solid_b.to_text()?,
+            op,
+        });
+        feature_result(&history, &solid_a)
+    });
+    let (result, history) = match result {
         Ok(r) => r,
         Err(e) => {
             if let Some(s) = &before_a {
@@ -355,7 +425,7 @@ pub fn apply_boolean(
             return Err(e);
         }
     };
-    replace_shape(model, store, a, &result)?;
+    replace_shape(model, store, a, &result, &history)?;
     let names = [a, b].map(|id| model.get(id).map(|n| n.name.clone()).unwrap_or_default());
     model.remove(b);
     Ok(ModelChange {
@@ -364,18 +434,96 @@ pub fn apply_boolean(
     })
 }
 
+/// 部品 `id` の編集履歴を `change` で書き換え、出発点から形を作り直す。元に戻すための変更を返す
+fn rebuild_with(
+    model: &mut Model,
+    store: &dyn SolidStore,
+    id: NodeId,
+    what: &str,
+    change: impl FnOnce(&mut ShapeHistory) -> Result<(), String>,
+) -> Result<ModelChange, String> {
+    let mut history = history_of(model, store, id)?;
+    if !history.editable() {
+        return Err("この部品は形の記録を持っていないので編集できません".into());
+    }
+    change(&mut history)?;
+    let solid = history.rebuild()?;
+    let before = model.snapshot(id);
+    normalize_box(model, id);
+    replace_shape(model, store, id, &solid, &history)?;
+    let name = model.get(id).map(|n| n.name.clone()).unwrap_or_default();
+    Ok(ModelChange {
+        label: format!("{name} の{what}"),
+        changes: vec![(before, model.snapshot(id))],
+    })
+}
+
+/// 編集履歴の `index` 番目を `feature` に差し替えて形を作り直す
+pub fn edit_feature(
+    model: &mut Model,
+    store: &dyn SolidStore,
+    id: NodeId,
+    index: usize,
+    feature: Feature,
+) -> Result<ModelChange, String> {
+    let what = format!("{}を直す", feature.label());
+    rebuild_with(model, store, id, &what, |history| {
+        *history
+            .features
+            .get_mut(index)
+            .ok_or("その編集は見つかりません")? = feature;
+        Ok(())
+    })
+}
+
+/// 編集履歴の `index` 番目を消して形を作り直す
+pub fn remove_feature(
+    model: &mut Model,
+    store: &dyn SolidStore,
+    id: NodeId,
+    index: usize,
+) -> Result<ModelChange, String> {
+    let label = history_of(model, store, id)?
+        .features
+        .get(index)
+        .map(Feature::label)
+        .ok_or("その編集は見つかりません")?;
+    rebuild_with(model, store, id, &format!("{label}を消す"), |history| {
+        history.features.remove(index);
+        Ok(())
+    })
+}
+
+/// 編集履歴の出発点を `base` に差し替えて形を作り直す (箱の寸法を直す)
+pub fn edit_base(
+    model: &mut Model,
+    store: &dyn SolidStore,
+    id: NodeId,
+    base: Base,
+) -> Result<ModelChange, String> {
+    rebuild_with(model, store, id, "出発点の形を直す", |history| {
+        history.base = Some(base);
+        Ok(())
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// テスト用: B-rep をそのまま覚えておく
+    /// テスト用: B-rep と履歴をそのまま覚えておく
     #[derive(Default)]
-    pub(super) struct MemoryStore(std::sync::Mutex<Vec<Brep>>);
+    pub(super) struct MemoryStore(std::sync::Mutex<Vec<(Brep, ShapeHistory)>>);
 
     impl SolidStore for MemoryStore {
-        fn save(&self, name: String, solid: &Brep) -> Result<ModeledSource, String> {
+        fn save(
+            &self,
+            name: String,
+            solid: &Brep,
+            history: &ShapeHistory,
+        ) -> Result<ModeledSource, String> {
             let mut solids = self.0.lock().unwrap();
-            solids.push(solid.clone());
+            solids.push((solid.clone(), history.clone()));
             Ok(ModeledSource {
                 id: crate::shape::next_shape_id(),
                 name,
@@ -385,7 +533,16 @@ mod tests {
 
         fn load(&self, source: &ModeledSource) -> Result<Brep, String> {
             let i: usize = source.json.parse().map_err(|_| "?".to_owned())?;
-            Ok(self.0.lock().unwrap()[i].clone())
+            Ok(self.0.lock().unwrap()[i].0.clone())
+        }
+
+        fn history(&self, source: &ModeledSource) -> ShapeHistory {
+            source
+                .json
+                .parse::<usize>()
+                .ok()
+                .and_then(|i| self.0.lock().unwrap().get(i).map(|s| s.1.clone()))
+                .unwrap_or_default()
         }
     }
 
@@ -483,5 +640,99 @@ mod tests {
         assert!(model.get(b).is_some());
         // 無い部品は演算できない
         assert!(node_solid(&model, &store, 999).is_err());
+    }
+
+    #[test]
+    fn hole_can_be_edited_and_removed_later() {
+        let mut model = Model::default();
+        let store = MemoryStore::default();
+        let id = model.add_box([100.0, 40.0, 100.0], [200.0, 20.0, 0.0]);
+        let hole = HoleSpec {
+            center: DVec3::new(210.0, 0.0, 5.0),
+            axis: HoleAxis::Y,
+            diameter: 20.0,
+            depth: 0.0,
+        };
+        drill_hole(&mut model, &store, id, &hole).unwrap();
+        let history = history_of(&model, &store, id).unwrap();
+        assert!(matches!(history.base, Some(Base::Box { .. })));
+        assert_eq!(history.features.len(), 1);
+        let Feature::Hole {
+            start, diameter, ..
+        } = &history.features[0]
+        else {
+            panic!("穴が記録される");
+        };
+        // 部品の座標系で覚える (箱の中心が原点)
+        assert!((start[0] - 10.0).abs() < 1e-6 && (start[2] - 5.0).abs() < 1e-6);
+        assert!((diameter - 20.0).abs() < 1e-9);
+
+        // 直径を直す
+        let mut edited = history.features[0].clone();
+        edited.set_value(40.0).unwrap();
+        let change = edit_feature(&mut model, &store, id, 0, edited).unwrap();
+        assert!(change.label.contains("穴 φ40"));
+        let volume = |model: &Model| {
+            let NodeKind::Imported { shape, .. } = &model.get(id).unwrap().kind else {
+                panic!()
+            };
+            shape.stats.volume
+        };
+        let expected = 400_000.0 - std::f64::consts::PI * 400.0 * 40.0;
+        assert!((volume(&model) - expected).abs() / expected < 0.01);
+        // 位置は変わらない
+        let b = model.world_bounds(id).unwrap();
+        assert!((b.center() - DVec3::new(200.0, 20.0, 0.0)).length() < 1e-6);
+
+        // 消すと箱の形に戻る (ノードは形状の部品のまま)
+        remove_feature(&mut model, &store, id, 0).unwrap();
+        assert!((volume(&model) - 400_000.0).abs() < 1e-3);
+        assert!(history_of(&model, &store, id).unwrap().features.is_empty());
+        assert!(remove_feature(&mut model, &store, id, 5).is_err());
+
+        // 出発点の箱の寸法も直せる
+        edit_base(
+            &mut model,
+            &store,
+            id,
+            Base::Box {
+                size: [50.0, 40.0, 100.0],
+            },
+        )
+        .unwrap();
+        assert!((volume(&model) - 200_000.0).abs() < 1e-3);
+        change.undo(&mut model);
+    }
+
+    #[test]
+    fn parts_without_a_record_start_from_their_current_shape() {
+        let mut model = Model::default();
+        let store = MemoryStore::default();
+        let cyl = cylinder(20.0, 100.0).unwrap();
+        let id = add_solid(&mut model, &store, "円柱".into(), &cyl, DVec3::ZERO).unwrap();
+        assert!(history_of(&model, &store, id).unwrap().features.is_empty());
+        drill_hole(
+            &mut model,
+            &store,
+            id,
+            &HoleSpec {
+                center: DVec3::new(0.0, 50.0, 0.0),
+                axis: HoleAxis::X,
+                diameter: 10.0,
+                depth: 0.0,
+            },
+        )
+        .unwrap();
+        let history = history_of(&model, &store, id).unwrap();
+        assert!(matches!(history.base, Some(Base::Solid { .. })));
+        assert_eq!(history.features.len(), 1);
+        // 作り直しても同じ形になる
+        let again = history.rebuild().unwrap();
+        let now = node_solid(&model, &store, id).unwrap();
+        let (a, b) = (
+            again.mass_properties(1.0).unwrap().volume,
+            now.mass_properties(1.0).unwrap().volume,
+        );
+        assert!((a - b).abs() / b < 1e-6, "{a} {b}");
     }
 }

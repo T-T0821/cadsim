@@ -3,7 +3,8 @@
 //! `crate::modeling::SolidStore` の実装 ([`JsonSolids`]) と、
 //! `ModeledSource` から形状を作り直すメソッド (`solid`・`to_imported`)。
 //!
-//! JSON は `{"smlib": "<SMLib の .smb のテキスト>"}`。形状カーネルを SMLib に替える前の
+//! JSON は `{"smlib": "<SMLib の .smb のテキスト>", "base": …, "features": […]}`。`base` と
+//! `features` は形の編集履歴 (`crate::modeling::features`) で、無いこともある。形状カーネルを SMLib に替える前の
 //! ファイルは truck の B-rep をそのまま JSON にしていたので、読むときはその形も受け付けて
 //! 面を1つずつ SMLib の B-rep に組み立て直す ([`legacy_truck_solid`])。
 
@@ -16,6 +17,7 @@ use serde_json::Value;
 
 use crate::kernel::{BSplineCurve, BSplineSurface, Brep, EdgeCurve, FaceSpec, Frame, Surface};
 use crate::model::ModeledSource;
+use crate::modeling::features::ShapeHistory;
 use crate::modeling::{SolidStore, shape_from_solid};
 use crate::shape::{ImportNode, ImportedFile, next_shape_id};
 
@@ -23,12 +25,21 @@ use crate::shape::{ImportNode, ImportedFile, next_shape_id};
 pub struct JsonSolids;
 
 impl SolidStore for JsonSolids {
-    fn save(&self, name: String, solid: &Brep) -> Result<ModeledSource, String> {
-        ModeledSource::new(name, solid)
+    fn save(
+        &self,
+        name: String,
+        solid: &Brep,
+        history: &ShapeHistory,
+    ) -> Result<ModeledSource, String> {
+        ModeledSource::new(name, solid, history)
     }
 
     fn load(&self, source: &ModeledSource) -> Result<Brep, String> {
         source.solid()
+    }
+
+    fn history(&self, source: &ModeledSource) -> ShapeHistory {
+        source.history()
     }
 }
 
@@ -37,13 +48,17 @@ impl SolidStore for JsonSolids {
 struct SolidRecord {
     /// SMLib の .smb のテキスト
     smlib: String,
+    /// 形の編集履歴 (出発点と編集の列)。古いファイルには無い
+    #[serde(flatten)]
+    history: ShapeHistory,
 }
 
 /// `ModeledSource` (B-rep を JSON で持つ) と B-rep の変換
 impl ModeledSource {
-    pub fn new(name: String, solid: &Brep) -> Result<Self, String> {
+    pub fn new(name: String, solid: &Brep, history: &ShapeHistory) -> Result<Self, String> {
         let record = SolidRecord {
             smlib: solid.to_text()?,
+            history: history.clone(),
         };
         let json =
             serde_json::to_string(&record).map_err(|e| format!("形状を保存できません: {e}"))?;
@@ -64,6 +79,13 @@ impl ModeledSource {
             return legacy_truck_solid(&value);
         }
         Err("形状を読めませんでした (知らない形式です)".into())
+    }
+
+    /// 形の編集履歴。読めなければ空 (作り直せない)
+    pub fn history(&self) -> ShapeHistory {
+        serde_json::from_str::<SolidRecord>(&self.json)
+            .map(|r| r.history)
+            .unwrap_or_default()
     }
 
     /// モデルに取り込める形 (部品1つの木) にする
@@ -372,6 +394,13 @@ mod tests {
             panic!()
         };
         assert!(source.json.starts_with("{\"smlib\":"));
+        // 編集履歴も一緒に残る (箱が出発点、ブーリアンが 1 つ)
+        let history = source.history();
+        assert!(matches!(
+            history.base,
+            Some(crate::modeling::features::Base::Box { .. })
+        ));
+        assert_eq!(history.features.len(), 1);
         let again = source.to_imported().unwrap().root.shape.unwrap();
         assert_eq!(again.faces.len(), shape.faces.len());
         assert!((again.stats.max - shape.stats.max).length() < 1e-6);
@@ -395,6 +424,7 @@ mod tests {
             };
             let solid = source.solid().unwrap();
             assert!(solid.is_solid());
+            assert!(!source.history().editable());
             let shape = shape_from_solid(&solid);
             let error = (shape.stats.volume - expected).abs() / expected;
             assert!(error < 0.003, "{} {expected}", shape.stats.volume);

@@ -35,6 +35,15 @@ wait 60
 expect "穴をあけました"
 screenshot 05_hole_done
 
+# 形の編集履歴: あけた穴がプロパティに並び、🗑 で消すと箱の形に戻る
+expect "形の編集履歴"
+expect "穴 φ"
+click "🗑"                        # 履歴の穴の行の 🗑 (「🗑 削除」ではなく、文字が同じもの)
+wait_loaded
+wait 30
+expect_not "穴 φ"
+screenshot 06_history_removed
+
 click "作成"
 click "円柱を追加…"
 wait 10

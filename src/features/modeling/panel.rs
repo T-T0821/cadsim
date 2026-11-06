@@ -49,6 +49,8 @@ pub struct ModelingUi {
     boolean_op: BooleanOp,
     boolean_other: Option<NodeId>,
     error: Option<String>,
+    /// プロパティの「形の編集履歴」で直せなかったときの理由
+    pub history_error: Option<String>,
 }
 
 impl Default for ModelingUi {
@@ -62,6 +64,7 @@ impl Default for ModelingUi {
             boolean_op: BooleanOp::Subtract,
             boolean_other: None,
             error: None,
+            history_error: None,
         }
     }
 }

@@ -16,6 +16,7 @@ use glam::DVec3;
 use plantwright_core::kernel::Brep;
 
 use plantwright_core::modeling::extrude_tool::ExtrudeTool;
+use plantwright_core::modeling::features::{Base, Feature, ShapeHistory};
 use plantwright_core::modeling::hole_tool::HoleTool;
 use plantwright_core::modeling::record::JsonSolids;
 use plantwright_core::modeling::*;
@@ -27,8 +28,7 @@ use crate::document::selection::Selection;
 use crate::ui::font::install_japanese_font;
 use crate::viewport::camera::keyboard_free;
 use crate::viewport::gizmo::transform_gizmo_system;
-use plantwright_core::model::Model;
-use plantwright_core::model::NodeId;
+use plantwright_core::model::{Model, NodeId, NodeKind, StepSource};
 
 pub struct ModelingPlugin;
 
@@ -152,6 +152,54 @@ pub fn confirm_hole(
         }
         Err(e) => tool.error = Some(e),
     }
+}
+
+/// 部品の形の編集履歴 (モデリングで作った部品だけ)。出発点を覚えていなければ None
+pub fn shape_history(model: &Model, id: NodeId) -> Option<ShapeHistory> {
+    match &model.get(id)?.kind {
+        NodeKind::Imported {
+            source: StepSource::Modeled(source),
+            ..
+        } => Some(source.history()).filter(ShapeHistory::editable),
+        _ => None,
+    }
+}
+
+/// 編集履歴の `index` 番目を `feature` に差し替えて形を作り直す。元に戻せるよう履歴に積む
+pub fn edit_feature(
+    model: &mut Model,
+    history: &mut History,
+    id: NodeId,
+    index: usize,
+    feature: Feature,
+) -> Result<(), String> {
+    let change = plantwright_core::modeling::edit_feature(model, &JsonSolids, id, index, feature)?;
+    history.push(change);
+    Ok(())
+}
+
+/// 編集履歴の `index` 番目を消して形を作り直す。元に戻せるよう履歴に積む
+pub fn remove_feature(
+    model: &mut Model,
+    history: &mut History,
+    id: NodeId,
+    index: usize,
+) -> Result<(), String> {
+    let change = plantwright_core::modeling::remove_feature(model, &JsonSolids, id, index)?;
+    history.push(change);
+    Ok(())
+}
+
+/// 編集履歴の出発点 (箱の寸法) を直して形を作り直す。元に戻せるよう履歴に積む
+pub fn edit_base(
+    model: &mut Model,
+    history: &mut History,
+    id: NodeId,
+    base: Base,
+) -> Result<(), String> {
+    let change = plantwright_core::modeling::edit_base(model, &JsonSolids, id, base)?;
+    history.push(change);
+    Ok(())
 }
 
 /// 部品 `a` と `b` のブーリアン。結果は `a` に入れ、`b` は消す。元に戻せるよう履歴に積む
