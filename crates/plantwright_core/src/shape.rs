@@ -53,6 +53,23 @@ pub struct ImportedShape {
     pub stats: ShapeStats,
     /// 表示用のまとめたメッシュ・BVH・簡略形状。重いので読み込みのスレッドで作っておく。
     pub mesh: Arc<PartMesh>,
+    /// 読み込みで形状を直した結果 (STEP)
+    pub repair: ShapeRepair,
+}
+
+/// 読み込みで形状を直した結果。STEP の面を縫い合わせても閉じなかったシェル (面の集まり) を数える
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
+pub struct ShapeRepair {
+    /// すき間を閉じて閉じた形にできたシェルの数
+    pub healed: usize,
+    /// 直しても閉じなかったシェルの数 (質量は計算できない。表示・断面は使える)
+    pub open: usize,
+}
+
+impl ShapeRepair {
+    pub fn is_empty(&self) -> bool {
+        self.healed == 0 && self.open == 0
+    }
 }
 
 /// 部品の計測値 (メッシュから計算するので近似値)
@@ -126,6 +143,7 @@ impl ImportedShape {
             color,
             stats,
             mesh,
+            repair: ShapeRepair::default(),
         }
     }
 }

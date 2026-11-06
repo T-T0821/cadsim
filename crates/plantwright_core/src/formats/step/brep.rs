@@ -11,6 +11,17 @@ use ruststep::ast::Parameter;
 use super::{Entities, arg_ref, args, as_real, as_refs, as_str, axis2_placement, cartesian_point};
 use crate::kernel::{BSplineCurve, BSplineSurface, Brep, EdgeCurve, FaceSpec, Frame, Surface};
 
+/// シェルを縫い合わせた結果
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ShellRepair {
+    /// そのまま閉じた形になった
+    Closed,
+    /// すき間を直して閉じた形にした
+    Healed,
+    /// 直しても閉じなかった
+    Open,
+}
+
 /// 辺1本分: EDGE_CURVE の id (POLY_LOOP の辺は None) と、輪郭の向きの曲線
 type LoopEdge = (Option<u64>, EdgeCurve);
 
@@ -46,7 +57,7 @@ impl<'a, 'e> Converter<'a, 'e> {
 
     /// シェル (CLOSED_SHELL / OPEN_SHELL) を B-rep にする。
     /// 戻り値の文字列は、読めなかった面があったときの注意
-    pub fn shell(&self, id: u64) -> Result<(Brep, Option<String>), String> {
+    pub fn shell(&self, id: u64) -> Result<(Brep, Option<String>, ShellRepair), String> {
         let params = self
             .e
             .get(id, "CLOSED_SHELL")
@@ -66,11 +77,26 @@ impl<'a, 'e> Converter<'a, 'e> {
         }
         let tol = (loop_size(&faces) * 1e-5).max(1e-6);
         let (mut brep, failed) = Brep::from_faces(&faces, tol)?;
-        // 閉じなかったシェルは、すき間を直してみる (直って閉じたときだけ使う)
+        let mut repair = ShellRepair::Closed;
+        // 閉じなかったシェルは、すき間を直してみる。だめなら縫い合わせの許容誤差を 10 倍ずつ
+        // (形の大きさの 1% まで) 広げて縫い直す。閉じたときだけその形を使う
         if !brep.is_solid() {
+            repair = ShellRepair::Open;
             let mut healed = brep.clone();
             if healed.heal().is_ok() && healed.is_solid() {
                 brep = healed;
+                repair = ShellRepair::Healed;
+            } else {
+                for scale in [10.0, 100.0, 1000.0] {
+                    let Ok((mut wide, _)) = Brep::from_faces(&faces, tol * scale) else {
+                        continue;
+                    };
+                    if wide.is_solid() || (wide.heal().is_ok() && wide.is_solid()) {
+                        brep = wide;
+                        repair = ShellRepair::Healed;
+                        break;
+                    }
+                }
             }
         }
         let skipped = errors.len() + failed;
@@ -84,7 +110,7 @@ impl<'a, 'e> Converter<'a, 'e> {
                 face_ids.len()
             )
         });
-        Ok((brep, warning))
+        Ok((brep, warning, repair))
     }
 
     fn face(&self, id: u64) -> Result<FaceSpec, String> {

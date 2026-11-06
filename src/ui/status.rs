@@ -47,9 +47,46 @@ pub fn show(root: &mut egui::Ui, state: &mut UiState) {
                 if let Some(message) = state.jobs.messages.last() {
                     ui.weak(message);
                 }
+                repair_notice(ui, state);
             });
         });
     });
+}
+
+/// STEP を読み込んで形状を直したときの案内。押すたびに直した部品を順に選んで寄る
+fn repair_notice(ui: &mut egui::Ui, state: &mut UiState) {
+    let Some(report) = &state.repair.report else {
+        return;
+    };
+    let message = report.message();
+    let warn = !report.open.is_empty();
+    if ui
+        .small_button("消す")
+        .on_hover_text("この案内を消す")
+        .clicked()
+    {
+        state.repair.dismiss();
+        return;
+    }
+    let text = egui::RichText::new(format!("🔧 {message}"));
+    let text = if warn {
+        text.color(ui.visuals().warn_fg_color)
+    } else {
+        text
+    };
+    if ui
+        .link(text)
+        .on_hover_text("押すと直した部品を選んで寄ります (押すたびに次の部品)")
+        .clicked()
+        && let Some(id) = state.repair.next_part(&state.model)
+    {
+        state.selection.select(id);
+        state.selection.reveal_in_tree = true;
+        state
+            .camera
+            .write(crate::viewport::camera::CameraRequest::FitSelection);
+    }
+    ui.separator();
 }
 
 /// 読み込み中のファイルを 3D ビューの上に出す
