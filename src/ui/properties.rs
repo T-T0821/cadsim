@@ -78,16 +78,6 @@ fn selected_node(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
     crate::features::modeling::panel::repair_section(ui, state, id);
     ui.separator();
 
-    let mass = egui::CollapsingHeader::new("質量・重心")
-        .default_open(true)
-        .show(ui, |ui| {
-            crate::features::modeling::panel::mass_section(ui, state, id)
-        });
-    if mass.body_returned.is_none() {
-        // 閉じている間は重心の球も出さない
-        state.mass.centroid = None;
-    }
-
     if matches!(
         state.model.get(id).map(|n| &n.kind),
         Some(NodeKind::Standard(_))
@@ -102,6 +92,15 @@ fn selected_node(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
         egui::CollapsingHeader::new("形の編集履歴")
             .default_open(true)
             .show(ui, |ui| shape_history_section(ui, state, id, &history));
+    }
+    let mass = egui::CollapsingHeader::new("質量・重心")
+        .default_open(true)
+        .show(ui, |ui| {
+            crate::features::modeling::panel::mass_section(ui, state, id)
+        });
+    if mass.body_returned.is_none() {
+        // 閉じている間は重心の球も出さない
+        state.mass.centroid = None;
     }
     let is_box = matches!(state.model.get(id).map(|n| &n.kind), Some(NodeKind::Box(_)));
     egui::CollapsingHeader::new(if is_box {
