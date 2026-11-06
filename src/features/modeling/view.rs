@@ -263,6 +263,238 @@ fn round3(v: f64) -> f64 {
     (v * 1000.0).round() / 1000.0
 }
 
+// ---------------------------------------------------------------------------
+// 丸める・面取り・肉抜きの道具
+//
+// 選んだ辺はオレンジ、カーソルの下の辺は黄色で、形状より手前に描く。面をクリックで周りの辺を
+// まとめて選べるので、カーソルの下の面の周りの辺も薄い黄色で出す。矢印は根元から先の点まで。
+// 結果のプレビューは半透明の青いメッシュで、出している間は元の部品の面を隠す (稜線は残す)。
+// ---------------------------------------------------------------------------
+
+use plantwright_core::model::Model;
+use plantwright_core::modeling::shape_tool::{self, Hover, PartGeometry, ShapeTool};
+
+const PICKED_COLOR: Color = Color::srgb(1.0, 0.55, 0.1);
+const HOVER_COLOR: Color = Color::srgb(1.0, 0.95, 0.3);
+const ARROW_COLOR: Color = Color::srgb(0.25, 0.65, 1.0);
+const ERROR_COLOR: Color = Color::srgb(0.95, 0.3, 0.3);
+/// ドラッグ中にプレビューを作り直す間隔 (秒)。形状カーネルの計算が毎フレームだと重いため
+const PREVIEW_INTERVAL: f32 = 0.12;
+
+/// 結果のプレビューの表示
+#[derive(Resource, Default)]
+pub struct ShapePreview {
+    /// 今のプレビューを作ったときの (部品, 道具, 選んだもの, 値)
+    key: Option<(u32, shape_tool::ShapeOp, Vec<usize>, u64)>,
+    entity: Option<Entity>,
+    material: Option<bevy::asset::Handle<StandardMaterial>>,
+    /// 前にプレビューを作った時刻
+    built_at: f32,
+    /// プレビューを出している部品 (元の部品の面を隠す)
+    pub hidden_node: Option<u32>,
+}
+
+/// 選んだ辺・面と値が変わったら、結果の形を作り直して半透明で出す。作れなければ理由を案内に出す
+#[allow(clippy::too_many_arguments)]
+pub fn update_shape_preview(
+    mut commands: Commands,
+    mut tool: ResMut<ShapeTool>,
+    model: Res<Model>,
+    time: Res<Time>,
+    mut preview: ResMut<ShapePreview>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    let key = tool
+        .node
+        .filter(|_| tool.ready())
+        .map(|node| (node, tool.op, tool.picks.clone(), tool.value.to_bits()));
+    let clear = |preview: &mut ShapePreview, commands: &mut Commands| {
+        if let Some(entity) = preview.entity.take() {
+            commands.entity(entity).despawn();
+        }
+        preview.hidden_node = None;
+    };
+    let Some(key) = key else {
+        clear(&mut preview, &mut commands);
+        preview.key = None;
+        return;
+    };
+    let now = time.elapsed_secs();
+    if preview.key.as_ref() == Some(&key) || now - preview.built_at < PREVIEW_INTERVAL {
+        // プレビューの位置は部品に合わせ続ける
+        if let Some(entity) = preview.entity {
+            commands
+                .entity(entity)
+                .insert(world_transform(&model, key.0));
+        }
+        return;
+    }
+    preview.key = Some(key.clone());
+    preview.built_at = now;
+    let solid = shape_tool::preview_solid(
+        &model,
+        &plantwright_core::modeling::record::JsonSolids,
+        &tool,
+    );
+    clear(&mut preview, &mut commands);
+    match solid {
+        Ok(solid) => {
+            tool.error = None;
+            let shape = plantwright_core::modeling::shape_from_solid(&solid);
+            let mesh = Mesh::new(
+                bevy::mesh::PrimitiveTopology::TriangleList,
+                bevy::asset::RenderAssetUsages::RENDER_WORLD,
+            )
+            .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, shape.mesh.positions.clone())
+            .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, shape.mesh.normals.clone());
+            let material = preview
+                .material
+                .get_or_insert_with(|| {
+                    materials.add(StandardMaterial {
+                        base_color: Color::srgba(0.35, 0.7, 1.0, 0.55),
+                        alpha_mode: AlphaMode::Blend,
+                        double_sided: true,
+                        cull_mode: None,
+                        ..default()
+                    })
+                })
+                .clone();
+            preview.entity = Some(
+                commands
+                    .spawn((
+                        Mesh3d(meshes.add(mesh)),
+                        MeshMaterial3d(material),
+                        world_transform(&model, key.0),
+                    ))
+                    .id(),
+            );
+            preview.hidden_node = Some(key.0);
+        }
+        Err(e) => tool.error = Some(e),
+    }
+}
+
+fn world_transform(model: &Model, node: u32) -> Transform {
+    Transform::from_matrix(model.world_matrix(node).as_mat4())
+}
+
+/// プレビューを出している間は、元の部品の面を描かない (稜線は残るので元の形と見比べられる)
+pub fn hide_previewed_part(
+    preview: Res<ShapePreview>,
+    mut parts: Query<(&crate::features::simulation::SimBody, &mut Visibility)>,
+) {
+    let Some(node) = preview.hidden_node else {
+        return;
+    };
+    for (body, mut visibility) in &mut parts {
+        if body.id == node {
+            visibility.set_if_neq(Visibility::Hidden);
+        }
+    }
+}
+
+/// 選んだ辺・カーソルの下の辺と、値を決める矢印
+pub fn draw_shape_tool(
+    mut gizmos: Gizmos<HoleGizmos>,
+    tool: Res<ShapeTool>,
+    geometry: Res<PartGeometry>,
+    camera: Single<&GlobalTransform, With<Camera3d>>,
+) {
+    if !tool.active || tool.node != Some(geometry.node) {
+        return;
+    }
+    let edge = |gizmos: &mut Gizmos<HoleGizmos>, e: usize, color: Color| {
+        if let Some(points) = geometry.edges.get(e) {
+            gizmos.linestrip(points.iter().map(|p| p.as_vec3()), color);
+        }
+    };
+    // 選んだもの (肉抜きは面の周りの辺で見せる)
+    for &pick in &tool.picks {
+        if tool.op.picks_faces() {
+            for e in geometry.face_edges(pick) {
+                edge(&mut gizmos, e, PICKED_COLOR);
+            }
+        } else {
+            edge(&mut gizmos, pick, PICKED_COLOR);
+        }
+    }
+    match tool.hovered {
+        Some(Hover::Edge(e)) => edge(&mut gizmos, e, HOVER_COLOR),
+        Some(Hover::Face(f)) => {
+            for e in geometry.face_edges(f) {
+                edge(&mut gizmos, e, HOVER_COLOR.with_alpha(0.6));
+            }
+        }
+        None => {}
+    }
+    // 矢印
+    let Some((base, dir)) = tool.arrow(&geometry) else {
+        return;
+    };
+    if tool.op.picks_faces() || !tool.picks.is_empty() {
+        let tip = (base + dir * tool.value).as_vec3();
+        let color = if tool.error.is_some() {
+            ERROR_COLOR
+        } else {
+            ARROW_COLOR
+        };
+        gizmos.line(base.as_vec3(), tip, color);
+        let radius = camera.translation().distance(tip) * 0.008;
+        let handle = if tool.error.is_some() {
+            ERROR_COLOR
+        } else if tool.handle_hovered || tool.dragging {
+            HANDLE_HOVER_COLOR
+        } else {
+            HANDLE_COLOR
+        };
+        gizmos.sphere(Isometry3d::from_translation(tip), radius, handle);
+    }
+}
+
+/// 矢印の先に値を出す (案内はビューの下の共通の案内バー。`ui::view_hints`)
+pub fn draw_shape_labels(
+    mut contexts: EguiContexts,
+    tool: Res<ShapeTool>,
+    geometry: Res<PartGeometry>,
+    viewport: Res<ViewportRect>,
+    camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
+) -> Result {
+    if !tool.active {
+        return Ok(());
+    }
+    let ctx = contexts.ctx_mut()?;
+    let Some(view) = viewport.rect.map(|r| {
+        egui::Rect::from_min_max(egui::pos2(r.min.x, r.min.y), egui::pos2(r.max.x, r.max.y))
+    }) else {
+        return Ok(());
+    };
+    let painter = ctx
+        .layer_painter(egui::LayerId::new(
+            egui::Order::Background,
+            egui::Id::new("shape_tool_labels"),
+        ))
+        .with_clip_rect(view);
+    let (camera, camera_transform) = *camera;
+    if (tool.op.picks_faces() || !tool.picks.is_empty())
+        && tool.node == Some(geometry.node)
+        && let Some(tip) = tool.handle_position(&geometry)
+        && let Ok(screen) = camera.world_to_viewport(camera_transform, tip.as_vec3())
+    {
+        label(
+            &painter,
+            egui::pos2(screen.x + 12.0, screen.y - 10.0),
+            &format!("{} {}", tool.op.value_label(), round3(tool.value)),
+            if tool.handle_hovered || tool.dragging {
+                egui::Color32::from_rgb(60, 60, 20)
+            } else {
+                egui::Color32::from_rgba_unmultiplied(20, 50, 90, 220)
+            },
+        );
+    }
+    Ok(())
+}
+
 const SECTION_PLANE_COLOR: Color = Color::srgba(0.95, 0.45, 0.2, 0.8);
 const SECTION_CUT_COLOR: Color = Color::srgb(1.0, 0.3, 0.15);
 const CENTROID_COLOR: Color = Color::srgb(0.9, 0.2, 0.75);

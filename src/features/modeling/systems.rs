@@ -1,4 +1,4 @@
-//! 穴あけ・押し出し・断面の道具のマウスとキーの読み方
+//! 穴あけ・押し出し・丸め・断面の道具のマウスとキーの読み方
 //!
 //! 穴あけ:
 //! - 部品の面にカーソルを乗せると面が光り、クリックするとそこが穴の入口になる
@@ -9,7 +9,11 @@
 //! - 床をクリックして頂点を置き、最初の点をクリック (か Enter) で形を閉じる
 //! - 上の点をドラッグで高さ、頂点をドラッグで形を直す。Enter で押し出す
 //!
-//! 寸法の計算は `plantwright_core::modeling::{hole_tool, extrude_tool}`。
+//! 丸める・面取り・肉抜き:
+//! - 辺 (肉抜きは面) にカーソルを乗せると光り、クリックで選ぶ (Shift で足す・外す。辺の道具で面を押すと周りの辺)
+//! - 矢印の先の点をドラッグで半径・幅・肉厚。Enter で確定、Esc で取り消す
+//!
+//! 寸法の計算は `plantwright_core::modeling::{hole_tool, extrude_tool, shape_tool}`。
 //! ここはカーソルの位置をレイにして渡すだけ。
 //!
 //! 断面の道具 (`section_*`) も同じ作り: 矢印の先をドラッグで平面を動かし、面のクリックで向きをそろえる。
@@ -19,12 +23,13 @@ use bevy::{
     ecs::change_detection::DetectChangesMut, math::DVec3, prelude::*, window::PrimaryWindow,
 };
 
-use super::{confirm_extrude, confirm_hole};
+use super::{confirm_extrude, confirm_hole, confirm_shape};
 use crate::document::history::History;
 use crate::document::import::ImportJobs;
 use crate::document::selection::Selection;
 use crate::viewport::camera::{ViewportRect, alt_pressed};
 use crate::viewport::gizmo::GizmoTool;
+use crate::viewport::parts::PartPicker;
 use crate::viewport::picking::PartUnderPointer;
 use plantwright_core::model::Model;
 use plantwright_core::modeling::extrude_tool::{self, ExtrudeTool};
@@ -32,10 +37,13 @@ use plantwright_core::modeling::hole_tool::{Handle, HoleDraft, HoleTool};
 use plantwright_core::modeling::record::JsonSolids;
 use plantwright_core::modeling::repair::RepairNotice;
 use plantwright_core::modeling::section_tool::SectionTool;
+use plantwright_core::modeling::shape_tool::{Hover, PartGeometry, ShapeTool};
 use plantwright_core::pointer::PointerLock;
 
 /// つまみをつかめる範囲 (画面上のピクセル)
 const HANDLE_PIXELS: f32 = 14.0;
+/// 辺を選べる範囲 (画面上のピクセル)。細い線でも取りやすいよう太めにとる
+const EDGE_PIXELS: f64 = 6.0;
 
 /// Enter で穴をあけ、Esc で置きかけの穴を取り消す (もう一度で道具をやめる)
 pub fn hole_keys(
@@ -296,6 +304,148 @@ pub fn extrude_input(
     }
 }
 
+/// 丸める・面取り・肉抜き: Enter で確定、Esc で選択を外す (もう一度で道具をやめる)
+pub fn shape_keys(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut tool: ResMut<ShapeTool>,
+    mut model: ResMut<Model>,
+    mut history: ResMut<History>,
+    mut jobs: ResMut<ImportJobs>,
+) {
+    if !tool.active {
+        return;
+    }
+    if keys.just_pressed(KeyCode::Escape) {
+        tool.cancel();
+    }
+    if keys.any_just_pressed([KeyCode::Enter, KeyCode::NumpadEnter]) {
+        confirm_shape(&mut tool, &mut model, &mut history, &mut jobs);
+    }
+}
+
+/// 丸める・面取り・肉抜き: 辺・面のホバーとクリック、矢印の先のドラッグ
+#[allow(clippy::too_many_arguments)]
+pub fn shape_input(
+    buttons: Res<ButtonInput<MouseButton>>,
+    keys: Res<ButtonInput<KeyCode>>,
+    window: Single<&Window, With<PrimaryWindow>>,
+    camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
+    viewport: Res<ViewportRect>,
+    mut picker: PartPicker,
+    model: Res<Model>,
+    gizmo: Res<GizmoTool>,
+    mut tool: ResMut<ShapeTool>,
+    mut geometry: ResMut<PartGeometry>,
+    mut selection: ResMut<Selection>,
+) {
+    // 部品の外接箱の BVH は、道具を使っていないフレームでも部品の変更を取り込む (Changed を見逃さないため)
+    picker.refresh();
+    if !tool.active {
+        return;
+    }
+    // 対象は道具を始めたときの部品。選択が変わったり部品が消えたりしたら道具をやめる
+    let Some(target) = tool
+        .node
+        .filter(|&id| selection.node == Some(id) && model.get(id).is_some())
+    else {
+        tool.stop();
+        return;
+    };
+    // 辺と面の形は、部品が変わったときだけ取り直す
+    if geometry.node != target || geometry.edges.is_empty() || model.is_changed() {
+        match PartGeometry::of(&model, target) {
+            Some(g) => *geometry = g,
+            None => {
+                tool.stop();
+                return;
+            }
+        }
+    }
+    let (camera, camera_transform) = *camera;
+    let cursor = window.cursor_position();
+    let ctrl = keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]);
+    let shift = keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
+    let step = (gizmo.snap.always || ctrl).then_some(gizmo.snap.size_step);
+
+    // ドラッグ中: カーソルのレイを矢印の線に落として値にする
+    if tool.dragging {
+        if !buttons.pressed(MouseButton::Left) {
+            tool.dragging = false;
+            return;
+        }
+        if let Some(cursor) = cursor
+            && let Ok(ray) = camera.viewport_to_world(camera_transform, cursor)
+            && let Some((base, dir)) = tool.arrow(&geometry)
+            && let Some(p) =
+                closest_on_line(ray.origin.as_dvec3(), ray.direction.as_dvec3(), base, dir)
+        {
+            tool.set_value_from_point(&geometry, p, step);
+        }
+        return;
+    }
+
+    let on_view = cursor.is_some() && !viewport.pointer_on_ui;
+    let to_screen = |p: DVec3| camera.world_to_viewport(camera_transform, p.as_vec3()).ok();
+    // 矢印の先のホバー
+    tool.handle_hovered = on_view
+        && match (cursor, tool.handle_position(&geometry)) {
+            (Some(cursor), Some(handle)) => {
+                to_screen(handle).is_some_and(|s| s.distance(cursor) <= HANDLE_PIXELS)
+            }
+            _ => false,
+        };
+
+    // 辺・面のホバー (対象の部品だけ)
+    // カーソルの下の面は、このフレームのカーソルでレイを当てて求める (picking のホバーは1フレーム遅れ、
+    // カーソルを動かしてすぐのクリックで面を取りこぼすため)
+    let hit = cursor
+        .filter(|_| on_view && !tool.handle_hovered)
+        .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor).ok())
+        .and_then(|ray| picker.cast(ray))
+        .filter(|hit| hit.node == target);
+    let project = |p: DVec3| to_screen(p).map(|s| s.as_dvec2());
+    let edge = match cursor {
+        Some(cursor) if on_view && !tool.handle_hovered && !tool.op.picks_faces() => camera
+            .viewport_to_world(camera_transform, cursor)
+            .ok()
+            .and_then(|ray| {
+                geometry.pick_edge(
+                    (ray.origin.as_dvec3(), ray.direction.as_dvec3()),
+                    project,
+                    cursor.as_dvec2(),
+                    EDGE_PIXELS,
+                    hit.map(|h| h.point.as_dvec3()),
+                )
+            }),
+        _ => None,
+    };
+    tool.hovered = edge
+        .map(Hover::Edge)
+        .or_else(|| hit.map(|h| Hover::Face(h.face)));
+    // カーソルの下の面は、選択中の面の強調で光らせる (辺に乗っているときは辺だけ)
+    let face = match tool.hovered {
+        Some(Hover::Face(f)) => Some(f),
+        _ => None,
+    };
+    if selection.face != face {
+        selection.face = face;
+    }
+
+    // Alt + 左ドラッグはカメラのオービット
+    if !buttons.just_pressed(MouseButton::Left) || alt_pressed(&keys) || !on_view {
+        return;
+    }
+    if tool.handle_hovered {
+        tool.dragging = true;
+        return;
+    }
+    if let Some(hover) = tool.hovered {
+        let geometry = &*geometry;
+        tool.click(hover, shift, geometry);
+    }
+}
+
+/// レイと平面 (点 `p`、法線 `n`) の交点。平行なら None
 /// 断面の道具: Esc か Enter で閉じる
 pub fn section_keys(keys: Res<ButtonInput<KeyCode>>, mut tool: ResMut<SectionTool>) {
     if tool.active && keys.any_just_pressed([KeyCode::Escape, KeyCode::Enter, KeyCode::NumpadEnter])

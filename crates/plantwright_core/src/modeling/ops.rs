@@ -98,10 +98,25 @@ pub fn fillet_edges(
     radius: f64,
 ) -> Result<ModelChange, String> {
     modify(model, store, id, "丸める", |solid| {
-        Ok(Feature::Fillet {
-            edges: features::edge_keys(solid, &kernel_edges(solid, edges)?)?,
-            radius,
-        })
+        fillet_feature(solid, edges, radius)
+    })
+}
+
+/// 辺 `edges` (表示メッシュの番号) を半径 `radius` で丸める編集。形は [`Feature::apply`] で作る
+pub(super) fn fillet_feature(
+    solid: &Brep,
+    edges: &[usize],
+    radius: f64,
+) -> Result<Feature, String> {
+    if edges.is_empty() {
+        return Err("丸める辺を選んでください".into());
+    }
+    if radius <= 0.0 {
+        return Err("半径は 0 より大きくしてください".into());
+    }
+    Ok(Feature::Fillet {
+        edges: features::edge_keys(solid, &kernel_edges(solid, edges)?)?,
+        radius,
     })
 }
 
@@ -114,10 +129,25 @@ pub fn chamfer_edges(
     distance: f64,
 ) -> Result<ModelChange, String> {
     modify(model, store, id, "面取りする", |solid| {
-        Ok(Feature::Chamfer {
-            edges: features::edge_keys(solid, &kernel_edges(solid, edges)?)?,
-            distance,
-        })
+        chamfer_feature(solid, edges, distance)
+    })
+}
+
+/// 辺 `edges` (表示メッシュの番号) を `distance` ずつ面取りする編集
+pub(super) fn chamfer_feature(
+    solid: &Brep,
+    edges: &[usize],
+    distance: f64,
+) -> Result<Feature, String> {
+    if edges.is_empty() {
+        return Err("面取りする辺を選んでください".into());
+    }
+    if distance <= 0.0 {
+        return Err("面取りの大きさは 0 より大きくしてください".into());
+    }
+    Ok(Feature::Chamfer {
+        edges: features::edge_keys(solid, &kernel_edges(solid, edges)?)?,
+        distance,
     })
 }
 
@@ -130,10 +160,22 @@ pub fn shell(
     open_faces: &[usize],
 ) -> Result<ModelChange, String> {
     modify(model, store, id, "中空にする", |solid| {
-        Ok(Feature::Shell {
-            open_faces: features::face_keys(solid, &kernel_faces(solid, open_faces)?)?,
-            thickness,
-        })
+        shell_feature(solid, thickness, open_faces)
+    })
+}
+
+/// 厚み `thickness` の中空にする編集。`open_faces` (表示メッシュの番号) の面は開ける
+pub(super) fn shell_feature(
+    solid: &Brep,
+    thickness: f64,
+    open_faces: &[usize],
+) -> Result<Feature, String> {
+    if thickness <= 0.0 {
+        return Err("肉厚は 0 より大きくしてください".into());
+    }
+    Ok(Feature::Shell {
+        open_faces: features::face_keys(solid, &kernel_faces(solid, open_faces)?)?,
+        thickness,
     })
 }
 

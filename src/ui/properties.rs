@@ -14,6 +14,7 @@ use plantwright_core::math::split_placement;
 use plantwright_core::model::NodeId;
 use plantwright_core::model::NodeKind;
 use plantwright_core::modeling::features::{Base, ShapeHistory};
+use plantwright_core::modeling::shape_tool::ShapeOp;
 use plantwright_core::physics::settings::BeltDrive;
 use plantwright_core::physics::settings::BodyMode;
 use plantwright_core::physics::settings::ColliderShape;
@@ -263,7 +264,8 @@ fn actions(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
     });
 }
 
-/// 形を編集する道具 (箱とモデリングで作った部品だけ): 穴あけは 3D で面をクリック、ブーリアンはパネルで
+/// 形を編集する道具 (箱とモデリングで作った部品だけ): 穴あけは 3D で面をクリック、丸める・面取り・肉抜きは
+/// 3D で辺・面をクリック、ブーリアンはパネルで
 fn modeling_actions(ui: &mut egui::Ui, state: &mut UiState) {
     if !super::menu::part_can_be_modeled(state) {
         return;
@@ -282,6 +284,30 @@ fn modeling_actions(ui: &mut egui::Ui, state: &mut UiState) {
                 state.hole_tool.stop();
             } else {
                 crate::features::modeling::panel::start_hole_tool(state);
+            }
+        }
+        for op in ShapeOp::ALL {
+            let using = state.shape_tool.active && state.shape_tool.op == op;
+            if ui
+                .selectable_label(using, op.label())
+                .on_hover_text(match op {
+                    ShapeOp::Fillet => {
+                        "3D ビューで辺をクリック (面なら周りの辺をまとめて)、矢印の先をドラッグで半径。Enter で確定"
+                    }
+                    ShapeOp::Chamfer => {
+                        "3D ビューで辺をクリック (面なら周りの辺をまとめて)、矢印の先をドラッグで幅。Enter で確定"
+                    }
+                    ShapeOp::Shell => {
+                        "開ける面をクリックし、矢印の先をドラッグで肉厚。面を選ばなければ閉じた中空。Enter で確定"
+                    }
+                })
+                .clicked()
+            {
+                if using {
+                    state.shape_tool.stop();
+                } else {
+                    crate::features::modeling::panel::start_shape_tool(state, op);
+                }
             }
         }
         if ui

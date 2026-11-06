@@ -2,6 +2,7 @@
 //!
 //! 作成メニューかプロパティの「形を編集」から開く。形状の計算は `modeling` が受け持ち、ここは入力を集めて呼ぶだけ。
 //! 穴あけのタブは、3D ビューで面をクリックして置く道具 (`HoleTool`) の寸法を数値でも直せる欄。
+//! 丸め・肉抜きのタブは、3D ビューで辺・面を指す道具 (`ShapeTool`) の値を数値でも直せる欄。
 //!
 //! 末尾はプロパティに出す「調べる」欄 (断面の道具・質量と重心・形状の修復の説明)。計算は
 //! `plantwright_core::modeling::{section_tool, mass, repair}`。
@@ -10,7 +11,7 @@ use bevy::math::DVec3;
 use bevy_egui::egui;
 
 use crate::features::modeling::{
-    add_solid, apply_boolean, confirm_extrude, confirm_hole, node_solid,
+    add_solid, apply_boolean, confirm_extrude, confirm_hole, confirm_shape, node_solid,
 };
 use crate::ui::UiState;
 use crate::ui::widgets::{round_for_display, row};
@@ -23,6 +24,7 @@ use plantwright_core::modeling::parse_outline;
 use plantwright_core::modeling::record::JsonSolids;
 use plantwright_core::modeling::repair::{describe, part_repair};
 use plantwright_core::modeling::section_tool::SectionAxis;
+use plantwright_core::modeling::shape_tool::{PartGeometry, ShapeOp};
 use plantwright_core::workspace::Tool;
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
@@ -31,17 +33,26 @@ pub enum Tab {
     Cylinder,
     Extrude,
     Hole,
+    /// 丸める・面取り・肉抜き
+    Shape,
     Boolean,
 }
 
 impl Tab {
-    const ALL: [Tab; 4] = [Tab::Cylinder, Tab::Extrude, Tab::Hole, Tab::Boolean];
+    const ALL: [Tab; 5] = [
+        Tab::Cylinder,
+        Tab::Extrude,
+        Tab::Hole,
+        Tab::Shape,
+        Tab::Boolean,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
             Tab::Cylinder => "円柱",
             Tab::Extrude => "押し出し",
             Tab::Hole => "穴あけ",
+            Tab::Shape => "丸め・肉抜き",
             Tab::Boolean => "ブーリアン",
         }
     }
@@ -109,6 +120,7 @@ pub fn show(ctx: &egui::Context, state: &mut UiState) {
                 Tab::Cylinder => cylinder_tab(ui, state),
                 Tab::Extrude => extrude_tab(ui, state),
                 Tab::Hole => hole_tab(ui, state),
+                Tab::Shape => shape_tab(ui, state),
                 Tab::Boolean => boolean_tab(ui, state),
             }
             if let Some(error) = &state.modeling.error {
@@ -272,6 +284,7 @@ pub fn start_extrude_tool(state: &mut UiState) {
     state.extrude_tool.start(0.0);
     state.hole_tool.stop();
     state.section_tool.stop();
+    state.shape_tool.stop();
     state.selection.clear();
     state.gizmo.focused = false;
     state.modeling.open_tab(Tab::Extrude);
@@ -366,10 +379,91 @@ fn hole_tab(ui: &mut egui::Ui, state: &mut UiState) {
 /// 穴あけの道具を始める (ギズモがクリックを横取りしないよう、ギズモの操作中の印も消す)
 pub fn start_hole_tool(state: &mut UiState) {
     state.section_tool.stop();
+    state.shape_tool.stop();
     state.hole_tool.start();
     state.selection.face = None;
     state.gizmo.focused = false;
     state.modeling.open_tab(Tab::Hole);
+    state.dock.set_open(Tool::Modeling, true);
+}
+
+/// 丸める・面取り・肉抜き: 3D ビューで辺・面を選ぶ。ここでは道具の開始と、値の数値での修正
+fn shape_tab(ui: &mut egui::Ui, state: &mut UiState) {
+    let unit = state.model.unit.clone();
+    let Some(id) = selected_part(state) else {
+        state.shape_tool.stop();
+        ui.label("形を変える部品 (箱か、ここで作った部品) をクリックして選んでください");
+        return;
+    };
+    if let Err(e) = node_solid(&state.model, id) {
+        state.shape_tool.stop();
+        ui.label(e);
+        return;
+    }
+    ui.label(format!("対象: {}", state.model.path_label(id)));
+    ui.horizontal(|ui| {
+        for op in ShapeOp::ALL {
+            let using = state.shape_tool.active && state.shape_tool.op == op;
+            if ui.selectable_label(using, op.label()).clicked() && !using {
+                start_shape_tool(state, op);
+            }
+        }
+    });
+    if !state.shape_tool.active {
+        ui.label("道具を選ぶと、3D ビューで辺 (肉抜きは面) をクリックして選べます");
+        return;
+    }
+    ui.weak(state.shape_tool.hint());
+    let tool = &mut *state.shape_tool;
+    ui.horizontal(|ui| {
+        ui.label(tool.op.value_label());
+        ui.add(
+            egui::DragValue::new(&mut tool.value)
+                .speed(0.1)
+                .range(0.001..=f64::MAX)
+                .max_decimals(3),
+        );
+        ui.label(&unit);
+    });
+    ui.label(tool.summary());
+    let (ready, label) = (tool.ready(), tool.op.label());
+    ui.horizontal(|ui| {
+        if ui
+            .add_enabled(ready, egui::Button::new(format!("✔ {label}")))
+            .on_hover_text("Enter")
+            .clicked()
+        {
+            confirm_shape(
+                &mut state.shape_tool,
+                &mut state.model,
+                &mut state.history,
+                &mut state.jobs,
+            );
+        }
+        if ui.button("やめる").on_hover_text("Esc").clicked() {
+            state.shape_tool.stop();
+        }
+    });
+    if let Some(e) = &state.shape_tool.error {
+        ui.colored_label(egui::Color32::from_rgb(240, 90, 90), e);
+    }
+}
+
+/// 丸める・面取り・肉抜きの道具を、選択中の部品に始める (穴あけはやめ、ギズモの操作中の印も消す)
+pub fn start_shape_tool(state: &mut UiState, op: ShapeOp) {
+    let Some(id) = selected_part(state) else {
+        return;
+    };
+    let Some(geometry) = PartGeometry::of(&state.model, id) else {
+        return;
+    };
+    state.hole_tool.stop();
+    state.extrude_tool.stop();
+    state.section_tool.stop();
+    state.shape_tool.start(op, id, &geometry);
+    state.selection.face = None;
+    state.gizmo.focused = false;
+    state.modeling.open_tab(Tab::Shape);
     state.dock.set_open(Tool::Modeling, true);
 }
 
@@ -469,6 +563,7 @@ pub fn inspect_actions(ui: &mut egui::Ui, state: &mut UiState, target: Option<No
             } else {
                 state.hole_tool.stop();
                 state.extrude_tool.stop();
+                state.shape_tool.stop();
                 state.role_tool.stop();
                 state.gizmo.focused = false;
                 state.section_tool.start(target, bounds);

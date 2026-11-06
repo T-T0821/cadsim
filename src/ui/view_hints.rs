@@ -16,13 +16,15 @@ use crate::features::site::PlanTool;
 use plantwright_core::modeling::extrude_tool::ExtrudeTool;
 use plantwright_core::modeling::hole_tool::HoleTool;
 use plantwright_core::modeling::section_tool::SectionTool;
+use plantwright_core::modeling::shape_tool::ShapeTool;
 use plantwright_core::part_role::RoleTool;
 use plantwright_core::pointer::ViewHint;
 
-/// 使っている道具の案内を、優先順 (穴あけ > 押し出し > 断面 > 部品の役割 > 寸法 > 計測 > 平面図 > 教示) に1つだけ出す
+/// 使っている道具の案内を、優先順 (穴あけ > 丸め・面取り・肉抜き > 押し出し > 断面 > 部品の役割 > 寸法 > 計測 > 平面図 > 教示) に1つだけ出す
 #[allow(clippy::too_many_arguments)]
 pub fn gather_hints(
     hole: Res<HoleTool>,
+    shape: Res<ShapeTool>,
     extrude: Res<ExtrudeTool>,
     section: Res<SectionTool>,
     role: Res<RoleTool>,
@@ -36,6 +38,11 @@ pub fn gather_hints(
         match &hole.error {
             Some(error) => Some((error.clone(), true)),
             None => Some((hole.hint().to_owned(), false)),
+        }
+    } else if shape.active {
+        match &shape.error {
+            Some(error) => Some((error.clone(), true)),
+            None => Some((shape.hint(), false)),
         }
     } else if extrude.active {
         match &extrude.error {
