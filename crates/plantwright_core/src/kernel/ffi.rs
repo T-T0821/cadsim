@@ -6,6 +6,8 @@ use std::ffi::{c_char, c_void};
 
 /// SMLib の `SmBrep*`
 pub type BrepPtr = *mut c_void;
+/// 断面の線 (C++ の PwLines*)
+pub type LinesPtr = *mut c_void;
 /// `PwMesh*` (テッセレーションの結果)
 pub type MeshPtr = *mut c_void;
 
@@ -113,4 +115,50 @@ unsafe extern "C" {
     pub fn pw_mesh_edge_count(mesh: MeshPtr) -> i32;
     pub fn pw_mesh_edge(mesh: MeshPtr, i: i32, points: *mut *const f64, npoints: *mut i32);
     pub fn pw_mesh_free(mesh: MeshPtr);
+
+    // 形を作り変える操作と問い合わせ (cpp/ops.cpp)
+    pub fn pw_fillet_edges(
+        brep: BrepPtr,
+        edges: *const u32,
+        n: i32,
+        size: f64,
+        kind: i32,
+        out: *mut BrepPtr,
+    ) -> i32;
+    pub fn pw_remove_fillets(brep: BrepPtr, out: *mut BrepPtr) -> i32;
+    pub fn pw_shell(
+        brep: BrepPtr,
+        thickness: f64,
+        faces: *const u32,
+        n: i32,
+        out: *mut BrepPtr,
+    ) -> i32;
+    pub fn pw_offset(brep: BrepPtr, distance: f64, out: *mut BrepPtr) -> i32;
+    pub fn pw_revolve(
+        points: *const f64,
+        n: i32,
+        base: *const f64,
+        axis: *const f64,
+        angle: f64,
+        out: *mut BrepPtr,
+    ) -> i32;
+    pub fn pw_pipe(path: *const f64, n: i32, radius: f64, out: *mut BrepPtr) -> i32;
+    pub fn pw_sweep(
+        profile: *const f64,
+        np: i32,
+        path: *const f64,
+        nq: i32,
+        out: *mut BrepPtr,
+    ) -> i32;
+    pub fn pw_mass_properties(brep: BrepPtr, density: f64, out: *mut f64) -> i32;
+    pub fn pw_section(
+        brep: BrepPtr,
+        origin: *const f64,
+        normal: *const f64,
+        samples: i32,
+    ) -> LinesPtr;
+    pub fn pw_lines_count(lines: LinesPtr) -> i32;
+    pub fn pw_lines_get(lines: LinesPtr, points: *mut *const f64, counts: *mut *const u32);
+    pub fn pw_lines_free(lines: LinesPtr);
+    pub fn pw_heal(brep: BrepPtr) -> i32;
 }

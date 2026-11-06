@@ -71,7 +71,8 @@ src/                                アプリ (Bevy + egui)
 2. Rust から呼ぶための薄い C の層が `cpp/kernel.cpp`、その宣言が `kernel/ffi.rs`。Rust 側は `Brep`(`kernel/brep.rs`)のメソッドだけを使う: 直方体・円柱・押し出し、移動・回転・拡大、和・差・積、テッセレーション、テキスト形式での保存と読み込み、面からの組み立て(`Brep::from_faces`)。
 3. SMLib は1つの共有の状態で動き、同時に複数のスレッドから呼べないので、呼び出しはすべて1つのロックで順番にする。
 4. テッセレーションは面ごとのメッシュ(頂点・曲面の正確な法線・三角形)と、辺ごとのポリラインを返す(`MeshedBrep`)。面の縁の頂点と辺のポリラインの点は同じ座標になる。
-5. 面からの組み立ては、面ごとに曲面を輪郭の曲線で切り取り(`TrimSurfaceWithModelSpaceCurves`)、縫い合わせて閉じていればソリッドにする。STEP の読み込みと、以前の truck の形式で保存したモデリングの形状の読み込みに使う。
+5. 形を作り変える操作(フィレット・面取り・シェル・オフセット・回転・パイプ・スイープ・修復)と、質量特性・断面は `kernel/ops.rs` と `cpp/ops.cpp`。どれも元の形は変えずに複製に対して行う。辺と面の番号は `SmApiGetEdges` / `SmApiGetFaces` の並びで、テッセレーションの番号と同じ。モデリング操作としての使い方は [modeling.md](modeling.md)。
+6. 面からの組み立ては、面ごとに曲面を輪郭の曲線で切り取り(`TrimSurfaceWithModelSpaceCurves`)、縫い合わせて閉じていればソリッドにする。STEP の読み込みと、以前の truck の形式で保存したモデリングの形状の読み込みに使う。
 
 ### STEP の読み込み(`plantwright_core/src/formats/step/`)
 
