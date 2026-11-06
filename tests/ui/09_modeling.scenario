@@ -3,12 +3,37 @@ wait_loaded
 click "空のプロジェクトから"        # ようこそ画面を閉じて空から始める
 wait_loaded
 wait 30
+click "★ Lv."                     # チュートリアルのカードを閉じる (3D のクリック位置に重なるため)
 click "作成"
 click "箱を追加"
 wait_loaded
-wait 30
+wait 420                          # ミッション達成の表示が消えるのを待つ
 expect "選択: "
 screenshot 01_box
+
+# 穴あけの道具: プロパティの「穴をあける」→ 3D で面をクリック → 点をドラッグ → Enter
+click "穴をあける"
+wait 10
+click "モデル"                     # モデリングパネルを開く (穴あけタブに数値が出る)
+wait 10
+click "🔍 拡大"                    # 箱を画面いっぱいに
+wait 90
+drag 600 300 900 500 right        # 少し回して上の面を見やすく
+screenshot 02_hole_tool
+click_at 740 280                  # 上の面をクリック → 貫通の穴が置かれる
+wait 30
+expect "(面 #"                      # クリックした面が選ばれた (穴の寸法の文字は 3D に描くので expect では見ない)
+screenshot 03_hole_placed
+drag 756 286 790 300              # 直径の点をドラッグ
+wait 10
+drag 738 500 738 420              # 底の点を手前に引いて深さを決める
+wait 10
+screenshot 04_hole_dragged
+key Enter                         # 確定
+wait_loaded
+wait 60
+expect "穴をあけました"
+screenshot 05_hole_done
 
 click "作成"
 click "円柱を追加…"

@@ -17,6 +17,7 @@ use plantwright_core::physics::settings::BeltDrive;
 use plantwright_core::physics::settings::BodyMode;
 use plantwright_core::physics::settings::ColliderShape;
 use plantwright_core::physics::settings::LocalAxis;
+use plantwright_core::workspace::Tool;
 
 pub fn show(root: &mut egui::Ui, state: &mut UiState) {
     egui::Panel::right("properties")
@@ -68,6 +69,7 @@ fn selected_node(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
     general_section(ui, state, id);
     ui.add_space(4.0);
     actions(ui, state, id);
+    modeling_actions(ui, state);
     ui.separator();
 
     if matches!(
@@ -236,6 +238,40 @@ fn actions(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
         if ui.button("🗑 削除").clicked() {
             state.history.remove(&mut state.model, id);
             state.selection.clear();
+        }
+    });
+}
+
+/// 形を編集する道具 (箱とモデリングで作った部品だけ): 穴あけは 3D で面をクリック、ブーリアンはパネルで
+fn modeling_actions(ui: &mut egui::Ui, state: &mut UiState) {
+    if !super::menu::part_can_be_modeled(state) {
+        return;
+    }
+    ui.horizontal_wrapped(|ui| {
+        ui.label("形を編集:");
+        let drilling = state.hole_tool.active;
+        if ui
+            .selectable_label(drilling, "穴をあける")
+            .on_hover_text(
+                "3D ビューで面をクリックし、丸い点をドラッグで直径、矢印の先で深さ。Enter で確定",
+            )
+            .clicked()
+        {
+            if drilling {
+                state.hole_tool.stop();
+            } else {
+                crate::features::modeling::panel::start_hole_tool(state);
+            }
+        }
+        if ui
+            .button("ブーリアン…")
+            .on_hover_text("ほかの部品と 和 / 差 / 積")
+            .clicked()
+        {
+            state
+                .modeling
+                .open_tab(crate::features::modeling::panel::Tab::Boolean);
+            state.dock.set_open(Tool::Modeling, true);
         }
     });
 }

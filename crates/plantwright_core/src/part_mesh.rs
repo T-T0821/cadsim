@@ -122,6 +122,23 @@ impl PartMesh {
         Some((self.triangle_face[tri as usize] as usize, t))
     }
 
+    /// 面の向き (面の三角形の法線を面積で重み付けして平均したもの)。
+    /// 曲面では平均した向きになる。面が無ければ None
+    pub fn face_normal(&self, face: usize) -> Option<Vec3> {
+        let mut sum = Vec3::ZERO;
+        for (i, _) in self
+            .triangle_face
+            .iter()
+            .enumerate()
+            .filter(|&(_, &f)| f as usize == face)
+        {
+            let [a, b, c] = self.triangle(i);
+            // 外積の長さは三角形の面積の2倍なので、そのまま重みになる
+            sum += (b - a).cross(c - a);
+        }
+        sum.try_normalize()
+    }
+
     /// 1つの面だけの三角形 (選択した面の強調表示に使う)
     pub fn face_triangles(&self, face: usize) -> (Vec<Vec3>, Vec<Vec3>) {
         let mut positions = Vec::new();
@@ -226,6 +243,8 @@ mod tests {
         let (positions, normals) = mesh.face_triangles(face);
         assert!(positions.iter().all(|p| (p.y - 0.5).abs() < 1e-6));
         assert!(normals.iter().all(|n| n.y > 0.99));
+        assert!(mesh.face_normal(face).unwrap().distance(Vec3::Y) < 1e-5);
+        assert_eq!(mesh.face_normal(999), None);
         assert_eq!(mesh.ray_cast(Vec3::new(5.0, 5.0, 0.0), Vec3::NEG_Y), None);
     }
 
