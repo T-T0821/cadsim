@@ -121,6 +121,24 @@ impl Runner {
         }
     }
 
+    /// いま止めても、マウスのボタンやキーを押したままにしないか。
+    /// 押す・離すを何フレームかに分ける手順の途中だけ false (時間切れで止めるときに見る)
+    pub fn interruptible(&self) -> bool {
+        self.phase == 0
+            || !matches!(
+                self.lines.get(self.pc).map(|l| &l.step),
+                Some(
+                    Step::Click(_)
+                        | Step::DoubleClick(_)
+                        | Step::ClickAt { .. }
+                        | Step::Drag { .. }
+                        | Step::Scroll { .. }
+                        | Step::Key(_)
+                        | Step::Hold(..)
+                )
+            )
+    }
+
     /// 失敗して止まったときの理由
     pub fn failure(&self) -> Option<&Failure> {
         self.failure.as_ref()
@@ -458,6 +476,38 @@ mod tests {
             }
         }
         panic!("終わらない");
+    }
+
+    #[test]
+    fn 押したままの途中では止められない() {
+        let widgets = vec![button("保存", 100.0, 50.0)];
+        let mut runner = Runner::new(parse("click \"保存\"\nwait_loaded").unwrap());
+        let obs = Observation {
+            busy: false,
+            capturing: false,
+            widgets: &widgets,
+        };
+        assert!(runner.interruptible());
+        // 場所が止まっているのを確かめる 2 フレームと、動かす・押す
+        let mut seen_pressed = false;
+        for _ in 0..40 {
+            let command = runner.tick(&obs);
+            if let Command::Inputs(inputs) = &command
+                && inputs.contains(&Input::Button {
+                    button: MouseButton::Left,
+                    pressed: true,
+                })
+            {
+                seen_pressed = true;
+                assert!(!runner.interruptible(), "押したまま止めてはいけない");
+            }
+            if command == Command::Finished {
+                break;
+            }
+        }
+        assert!(seen_pressed);
+        // 離したあと (wait_loaded の途中・終わり) は止められる
+        assert!(runner.interruptible());
     }
 
     #[test]

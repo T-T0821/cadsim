@@ -10,6 +10,8 @@
 //! 結果の返事の組み立て ([`call_result`])、画面写真を返せる形にすること ([`screenshot_png`]) を受け持つ。
 //! 標準入力を読むスレッドや入力の流し込み、撮影はアプリ側 (`src/features/ui_check/mcp.rs`)。
 
+use std::time::Duration;
+
 use serde_json::{Map, Value, json};
 
 use super::compare::Image;
@@ -19,6 +21,29 @@ use super::scenario::{self, KeyChord, Line, MouseButton, Step, WidgetQuery};
 pub const SERVER_NAME: &str = "plantwright";
 /// 相手がプロトコルの版を言わなかったときに使う版
 const DEFAULT_PROTOCOL: &str = "2025-06-18";
+
+/// 1つの呼び出しにかけてよい時間。AI のアプリはおよそ 60 秒で待つのをやめるので、その前に返事をする
+pub const CALL_DEADLINE: Duration = Duration::from_secs(45);
+
+/// 時間切れで止めたときの理由。`frames` はその間に描けたフレーム数
+pub fn deadline_message(elapsed: Duration, frames: u32) -> String {
+    let fps = frames as f64 / elapsed.as_secs_f64().max(0.001);
+    format!(
+        "{} 秒で終わらなかったので止めました (画面の描画が遅く、およそ {fps:.1} FPS)。\
+         残りの手順は流していません。screenshot で様子を見てから続けてください",
+        elapsed.as_secs()
+    )
+}
+
+/// egui のクリックの時間の上限 (押してから離すまで, ダブルクリックの2回目まで) を、1 フレームの長さ (秒) から決める。
+///
+/// 手順はクリックの押す・離すを続くフレームに、ダブルクリックの2回を2フレーム後に流すので、
+/// 描画が遅いとそれだけで egui の既定 (0.8 秒・0.3 秒) を超え、長押しや別々のクリックになってしまう。
+/// 上限は 3 フレーム分まで延ばす。別々の呼び出しのクリックは 5 フレーム以上離れるので、ダブルクリックにはならない
+pub fn click_timing(frame_secs: f64) -> (f64, f64) {
+    let frames = 3.0 * frame_secs.max(0.0);
+    (frames.max(0.8), frames.max(0.3))
+}
 
 /// 初めにAIに渡す使い方の説明
 const INSTRUCTIONS: &str = "plantwright (工場の設備とラインの 3D シミュレーター) の画面を操作します。\
@@ -584,6 +609,22 @@ mod tests {
         assert_eq!(r["result"]["isError"], true);
         let r: Value = serde_json::from_str(&call_result(&json!(9), &[], None)).unwrap();
         assert_eq!(r["result"]["content"][0]["text"], "できました");
+    }
+
+    #[test]
+    fn deadline_message_tells_the_frame_rate() {
+        let text = deadline_message(Duration::from_secs(45), 36);
+        assert!(text.contains("45 秒"), "{text}");
+        assert!(text.contains("0.8 FPS"), "{text}");
+    }
+
+    #[test]
+    fn click_timing_stretches_with_slow_frames() {
+        // ふつうの速さでは egui の既定のまま
+        assert_eq!(click_timing(1.0 / 60.0), (0.8, 0.3));
+        // 1 FPS なら 3 秒まで
+        assert_eq!(click_timing(1.0), (3.0, 3.0));
+        assert_eq!(click_timing(-1.0), (0.8, 0.3));
     }
 
     #[test]
