@@ -1,79 +1,46 @@
 //! モデリング操作 (ドメイン + ユースケース): 円柱・押し出し・穴あけ・ブーリアン
 //!
-//! 形状は truck の B-rep (`truck_modeling::Solid`, f64) で作る。ブーリアン (和・差・積) は
-//! `truck_shapeops` を使う。作った形状はモデルの「部品」として加え、出どころに B-rep を詰めておく
+//! 形状は形状カーネル (SMLib) の B-rep ([`Brep`], f64) で作り、ブーリアン (和・差・積) もカーネルで行う。
+//! 作った形状はモデルの「部品」として加え、出どころに B-rep を詰めておく
 //! ([`ModeledSource`])。詰め方 (プロジェクトファイルに埋め込む JSON) は `modeling::record` が
 //! [`SolidStore`] として渡す。開き直すとそこから形状を作り直すので、続けて穴をあけたり
 //! ブーリアンをかけたりできる。
 //!
 //! 演算できるのは箱とここで作った部品だけ。STEP などから取り込んだ部品は、
-//! 曲線・曲面の種類が違うので対象外 (エラーで知らせる)。
+//! 元のファイルとのつながりを保つため対象外 (エラーで知らせる)。
 //! 穴あけ・ブーリアンは、元に戻すための [`ModelChange`] を返す。
 
 pub mod record;
 
-use std::f64::consts::TAU;
 use std::sync::Arc;
 
 use glam::{DMat4, DVec2, DVec3};
-use truck_meshalgo::prelude::*;
-use truck_modeling::{Solid, Wire, builder};
 
 use crate::history::ModelChange;
+use crate::kernel::{BooleanKind, Brep};
 use crate::math::euler_deg_to_quat;
 use crate::model::{BoxPart, Model, ModeledSource, NodeId, NodeKind, StepSource};
-use crate::part_mesh::PartMesh;
-use crate::shape::{ImportedShape, mesh_stats, next_shape_id};
-
-/// ブーリアンの許容誤差 (形状の大きさに対する割合)
-const BOOLEAN_TOL_RATIO: f64 = 2e-4;
+use crate::shape::{ImportedShape, tessellate_breps};
 
 /// B-rep を [`ModeledSource`] に詰める・取り出す (トレイト)。実装は `modeling::record`
 /// (`crate::modeling::record` の JSON)
 pub trait SolidStore {
-    fn save(&self, name: String, solid: &Solid) -> Result<ModeledSource, String>;
-    fn load(&self, source: &ModeledSource) -> Result<Solid, String>;
+    fn save(&self, name: String, solid: &Brep) -> Result<ModeledSource, String>;
+    fn load(&self, source: &ModeledSource) -> Result<Brep, String>;
 }
 
-fn matrix(m: DMat4) -> Matrix4 {
-    Matrix4::from(m.to_cols_array_2d())
+/// カーネルの +Z 向きの形を、Y が上のモデルの座標に合わせる回転
+fn z_to_y() -> DMat4 {
+    DMat4::from_rotation_x(-std::f64::consts::FRAC_PI_2)
 }
 
 /// 底面の中心を原点に置いた、Y 方向に立つ円柱
-pub fn cylinder(radius: f64, height: f64) -> Result<Solid, String> {
-    if radius <= 0.0 || height <= 0.0 {
-        return Err("半径と高さは 0 より大きくしてください".into());
-    }
-    // 4つの 1/4 円でつくる。X・Z の端に頂点が来るので、メッシュの外接箱が実寸どおりになる
-    let at = |angle: f64| Point3::new(radius * angle.cos(), 0.0, -radius * angle.sin());
-    let vertices: Vec<_> = (0..4)
-        .map(|i| builder::vertex(at(TAU * i as f64 / 4.0)))
-        .collect();
-    let circle: Wire = (0..4)
-        .map(|i| {
-            let transit = at(TAU * (i as f64 + 0.5) / 4.0);
-            builder::circle_arc(&vertices[i], &vertices[(i + 1) % 4], transit)
-        })
-        .collect();
-    let disk =
-        builder::try_attach_plane(&[circle]).map_err(|e| format!("円を作れません: {e:?}"))?;
-    let disk = oriented(disk, Vector3::unit_y());
-    Ok(builder::tsweep(&disk, Vector3::new(0.0, height, 0.0)))
-}
-
-/// 面の向きを `normal` にそろえる (押し出す向きと逆なら裏返す)
-fn oriented(mut face: truck_modeling::Face, normal: Vector3) -> truck_modeling::Face {
-    use truck_modeling::ParametricSurface3D;
-    let surface = face.oriented_surface();
-    let n = surface.normal(0.5, 0.5);
-    if n.dot(normal) < 0.0 {
-        face.invert();
-    }
-    face
+pub fn cylinder(radius: f64, height: f64) -> Result<Brep, String> {
+    Brep::cylinder_z(radius, height)?.transformed(z_to_y())
 }
 
 /// 床の上の多角形 (上から見た X, Z ではなく、図面と同じ「右 +X・上 -Z」の (u, v)) を Y 方向に押し出す
-pub fn extrude(outline: &[DVec2], height: f64) -> Result<Solid, String> {
+pub fn extrude(outline: &[DVec2], height: f64) -> Result<Brep, String> {
     let mut points: Vec<DVec2> = Vec::new();
     for &p in outline {
         if points.last().is_none_or(|q| q.distance(p) > 1e-9) {
@@ -96,18 +63,10 @@ pub fn extrude(outline: &[DVec2], height: f64) -> Result<Solid, String> {
     if area.abs() < 1e-12 {
         return Err("面積のない形は押し出せません".into());
     }
-    let vertices: Vec<_> = points
-        .iter()
-        .map(|p| builder::vertex(Point3::new(p.x, 0.0, -p.y)))
-        .collect();
-    let wire: truck_modeling::Wire = (0..vertices.len())
-        .map(|i| builder::line(&vertices[i], &vertices[(i + 1) % vertices.len()]))
-        .collect();
-    let face = builder::try_attach_plane(&[wire]).map_err(|_| {
+    let vertices: Vec<DVec3> = points.iter().map(|p| DVec3::new(p.x, 0.0, -p.y)).collect();
+    Brep::extrude(&vertices, DVec3::new(0.0, height, 0.0)).map_err(|_| {
         "多角形の面を作れませんでした (辺が交差していないか確かめてください)".to_owned()
-    })?;
-    let face = oriented(face, Vector3::unit_y());
-    Ok(builder::tsweep(&face, Vector3::new(0.0, height, 0.0)))
+    })
 }
 
 /// "0,0; 100,0; 100,50" のような文字から多角形の頂点を読む
@@ -149,73 +108,34 @@ impl BooleanOp {
     }
 }
 
-/// 2つの形状のブーリアン。`tol` は許容誤差
-pub fn boolean(a: &Solid, b: &Solid, op: BooleanOp, tol: f64) -> Result<Solid, String> {
-    let failed = || {
+/// 2つの形状のブーリアン
+pub fn boolean(a: &Brep, b: &Brep, op: BooleanOp) -> Result<Brep, String> {
+    let kind = match op {
+        BooleanOp::Union => BooleanKind::Union,
+        BooleanOp::Subtract => BooleanKind::Difference,
+        BooleanOp::Intersect => BooleanKind::Intersection,
+    };
+    a.boolean(b, kind).map_err(|_| {
         "演算できませんでした。面や辺がぴったり重なっているときは、少しずらしてから試してください"
             .to_owned()
-    };
-    match op {
-        BooleanOp::Union => truck_shapeops::or(a, b, tol).ok_or_else(failed),
-        BooleanOp::Intersect => truck_shapeops::and(a, b, tol).ok_or_else(failed),
-        BooleanOp::Subtract => {
-            let mut inverted = b.clone();
-            inverted.not();
-            truck_shapeops::and(a, &inverted, tol).ok_or_else(failed)
-        }
-    }
+    })
 }
 
 /// B-rep を表示用のメッシュと稜線にする
-pub fn shape_from_solid(solid: &Solid) -> ImportedShape {
-    let compressed = solid.compress();
-    let mut min = DVec3::splat(f64::MAX);
-    let mut max = DVec3::splat(f64::MIN);
-    for shell in &compressed.boundaries {
-        for p in &shell.vertices {
-            min = min.min(DVec3::new(p.x, p.y, p.z));
-            max = max.max(DVec3::new(p.x, p.y, p.z));
-        }
-    }
-    let size = if min.x <= max.x {
-        (max - min).length()
-    } else {
-        1.0
-    };
+pub fn shape_from_solid(solid: &Brep) -> ImportedShape {
+    let size = solid
+        .loose_bounds()
+        .map_or(1.0, |b| (b.max - b.min).length());
     let tol = (size * 0.0005).max(1e-6);
-    let mut faces = Vec::new();
-    let mut edges = Vec::new();
-    for shell in &compressed.boundaries {
-        let meshed = shell.robust_triangulation(tol);
-        for face in meshed.faces {
-            if let Some(mut poly) = face.surface {
-                if !face.orientation {
-                    poly.invert();
-                }
-                faces.push(poly);
-            }
-        }
-        edges.extend(meshed.edges.into_iter().map(|e| e.curve.0));
-    }
-    let mut stats = mesh_stats(&faces);
-    stats.edge_count = edges.len();
-    let mesh = Arc::new(PartMesh::new(&faces, &edges));
-    ImportedShape {
-        id: next_shape_id(),
-        breps: Vec::new(),
-        faces,
-        edges,
-        color: None,
-        stats,
-        mesh,
-    }
+    let (faces, edges) = tessellate_breps(std::slice::from_ref(solid), tol);
+    ImportedShape::new(Vec::new(), faces, edges, None)
 }
 
 /// 部品の形状を、部品の座標系の B-rep で取り出す (箱とモデリングで作った部品だけ)
-pub fn node_solid(model: &Model, store: &dyn SolidStore, id: NodeId) -> Result<Solid, String> {
+pub fn node_solid(model: &Model, store: &dyn SolidStore, id: NodeId) -> Result<Brep, String> {
     let node = model.get(id).ok_or("部品が見つかりません")?;
     match &node.kind {
-        NodeKind::Box(part) => Ok(part.build_solid()),
+        NodeKind::Box(part) => part.build_solid(),
         NodeKind::Imported {
             source: StepSource::Modeled(source),
             ..
@@ -232,23 +152,12 @@ pub fn node_solid(model: &Model, store: &dyn SolidStore, id: NodeId) -> Result<S
     }
 }
 
-fn tolerance_for(solid: &Solid) -> f64 {
-    let mut min = DVec3::splat(f64::MAX);
-    let mut max = DVec3::splat(f64::MIN);
-    for v in solid.vertex_iter() {
-        let p = v.point();
-        min = min.min(DVec3::new(p.x, p.y, p.z));
-        max = max.max(DVec3::new(p.x, p.y, p.z));
-    }
-    ((max - min).length() * BOOLEAN_TOL_RATIO).max(1e-6)
-}
-
 /// 新しい部品として加える (最上位、位置 `position`)。加えたノードの id を返す
 pub fn add_solid(
     model: &mut Model,
     store: &dyn SolidStore,
     name: String,
-    solid: &Solid,
+    solid: &Brep,
     position: DVec3,
 ) -> Result<NodeId, String> {
     let source = Arc::new(store.save(name.clone(), solid)?);
@@ -270,7 +179,7 @@ fn replace_shape(
     model: &mut Model,
     store: &dyn SolidStore,
     id: NodeId,
-    solid: &Solid,
+    solid: &Brep,
 ) -> Result<(), String> {
     let node = model.get(id).ok_or("部品が見つかりません")?;
     let name = match &node.kind {
@@ -384,8 +293,9 @@ pub fn drill_hole(
         (hole.center - dir * margin, dir, -hole.depth + margin)
     };
     let tool = oriented_cylinder(hole.diameter / 2.0, length, start, drill_dir)?;
-    let tool = builder::transformed(&tool, matrix(to_local));
-    let result = boolean(&solid, &tool, BooleanOp::Subtract, tolerance_for(&solid));
+    let result = tool
+        .transformed(to_local)
+        .and_then(|tool| boolean(&solid, &tool, BooleanOp::Subtract));
     let result = match result {
         Ok(r) => r,
         Err(e) => {
@@ -404,11 +314,10 @@ pub fn drill_hole(
 }
 
 /// `start` から `dir` 方向へ長さ `length` の円柱 (ワールド)
-fn oriented_cylinder(radius: f64, length: f64, start: DVec3, dir: DVec3) -> Result<Solid, String> {
+fn oriented_cylinder(radius: f64, length: f64, start: DVec3, dir: DVec3) -> Result<Brep, String> {
     let base = cylinder(radius, length)?;
     let rotation = glam::DQuat::from_rotation_arc(DVec3::Y, dir.normalize());
-    let m = DMat4::from_rotation_translation(rotation, start);
-    Ok(builder::transformed(&base, matrix(m)))
+    base.transformed(DMat4::from_rotation_translation(rotation, start))
 }
 
 /// 部品 `a` と `b` のブーリアン。結果は `a` に入れ、`b` は消す。元に戻すための変更を返す
@@ -430,9 +339,10 @@ pub fn apply_boolean(
     let solid_a = node_solid(model, store, a)?;
     // b を a の座標系に持ってくる
     let b_to_a = model.world_matrix(a).inverse() * model.world_matrix(b);
-    let solid_b = builder::transformed(&solid_b, matrix(b_to_a));
-    let tol = tolerance_for(&solid_a).min(tolerance_for(&solid_b));
-    let result = match boolean(&solid_a, &solid_b, op, tol) {
+    let result = match solid_b
+        .transformed(b_to_a)
+        .and_then(|solid_b| boolean(&solid_a, &solid_b, op))
+    {
         Ok(r) => r,
         Err(e) => {
             if let Some(s) = &before_a {
@@ -456,20 +366,20 @@ mod tests {
 
     /// テスト用: B-rep をそのまま覚えておく
     #[derive(Default)]
-    struct MemoryStore(std::sync::Mutex<Vec<Solid>>);
+    struct MemoryStore(std::sync::Mutex<Vec<Brep>>);
 
     impl SolidStore for MemoryStore {
-        fn save(&self, name: String, solid: &Solid) -> Result<ModeledSource, String> {
+        fn save(&self, name: String, solid: &Brep) -> Result<ModeledSource, String> {
             let mut solids = self.0.lock().unwrap();
             solids.push(solid.clone());
             Ok(ModeledSource {
-                id: next_shape_id(),
+                id: crate::shape::next_shape_id(),
                 name,
                 json: (solids.len() - 1).to_string(),
             })
         }
 
-        fn load(&self, source: &ModeledSource) -> Result<Solid, String> {
+        fn load(&self, source: &ModeledSource) -> Result<Brep, String> {
             let i: usize = source.json.parse().map_err(|_| "?".to_owned())?;
             Ok(self.0.lock().unwrap()[i].clone())
         }
@@ -477,18 +387,12 @@ mod tests {
 
     /// 向きをそろえた三角形から求めた符号付き体積 (外向きなら正)
     fn signed_volume(shape: &ImportedShape) -> f64 {
-        let mut volume = 0.0;
-        for poly in &shape.faces {
-            let positions = poly.positions();
-            for tri in poly.faces().triangle_iter() {
-                let [a, b, c] = tri.map(|v| {
-                    let p = positions[v.pos];
-                    DVec3::new(p.x, p.y, p.z)
-                });
-                volume += a.dot(b.cross(c)) / 6.0;
-            }
-        }
-        volume
+        shape
+            .faces
+            .iter()
+            .flat_map(|poly| poly.triangle_points())
+            .map(|[a, b, c]| a.dot(b.cross(c)) / 6.0)
+            .sum()
     }
 
     #[test]

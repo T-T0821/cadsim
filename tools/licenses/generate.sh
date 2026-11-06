@@ -20,6 +20,7 @@ append() { # 見出し, ファイル
     cat "$2"
   } >> "$tmp"
 }
+append "形状カーネル SMLib (NVIDIA usd-brep, crates/plantwright_core/vendor/smlib) - Apache License 2.0" crates/plantwright_core/vendor/smlib/LICENSE
 append "同梱フォント Noto Sans JP (assets/fonts/NotoSansJP-Subset.otf) - SIL Open Font License 1.1" assets/fonts/OFL.txt
 append "サンプル形状 UR5e (samples/real_robot/ur5e.glb, ur5e_urdf) - BSD 3-Clause" samples/real_robot/LICENSE-UR5e.txt
 append "サンプル形状 Robotiq 2F-85 (samples/real_robot/robotiq_2f85.glb) - BSD 3-Clause" samples/real_robot/LICENSE-Robotiq-2F-85.txt

@@ -20,17 +20,11 @@ bevy_egui = "0.43"
 # ウィンドウのアイコンを付けるためだけに使う。Bevy が使っている winit と同じ版にする
 winit = { version = "0.30", default-features = false }
 rfd = "0.17.2"
-ruststep = "0.4"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 transform-gizmo = "0.11"
-truck-meshalgo = "0.4"
-truck-modeling = "0.6"
-truck-stepio = "0.3"
-truck-topology = "0.6"
 glam = { version = "0.33.12", features = ["serde"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
-truck-shapeops = { version = "0.4", default-features = false }
 lopdf = "0.46"
 krilla = "0.8"
 rust_xlsxwriter = "0.102"

@@ -7,11 +7,11 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use glam::{DAffine3, DMat4, DVec3};
-use truck_meshalgo::prelude::*;
 
 use super::{Animation, NodeTransform, Scene, SceneNode, TriMesh};
+use crate::kernel::FaceMesh;
 use crate::model::{Model, NodeId, NodeKind};
-use crate::shape::{ImportNode, ImportedFile, ImportedShape};
+use crate::shape::{ImportNode, ImportedFile, ImportedShape, tessellate_breps};
 
 /// 箱を書き出すときのテッセレーションの許容誤差 (モデル単位)
 const BOX_TESSELLATION_TOL: f64 = 0.005;
@@ -126,28 +126,14 @@ fn build_node(
 
 /// 三角形メッシュを表示用の形状にする。B-rep は持たない。
 fn mesh_shape(mesh: &TriMesh, scale: f64, color: Option<[f32; 3]>) -> ImportedShape {
-    let positions: Vec<Point3> = mesh
-        .positions
-        .iter()
-        .map(|p| {
-            let p = *p * scale;
-            Point3::new(p.x, p.y, p.z)
-        })
-        .collect();
+    let positions: Vec<DVec3> = mesh.positions.iter().map(|p| *p * scale).collect();
     let edges = feature_edges(&positions, &mesh.triangles);
-    let faces = Faces::from_iter(mesh.triangles.iter().map(|t| t.map(|i| i as usize)));
-    let poly = PolygonMesh::new(
-        StandardAttributes {
-            positions,
-            ..Default::default()
-        },
-        faces,
-    );
-    ImportedShape::new(Vec::new(), vec![poly], edges, color)
+    let face = FaceMesh::new(positions, Vec::new(), mesh.triangles.clone());
+    ImportedShape::new(Vec::new(), vec![face], edges, color)
 }
 
 /// 面が折れている辺と、穴の縁の辺を線分で返す (メッシュには B-rep の稜線がないので代わりに描く)
-fn feature_edges(positions: &[Point3], triangles: &[[u32; 3]]) -> Vec<Vec<Point3>> {
+fn feature_edges(positions: &[DVec3], triangles: &[[u32; 3]]) -> Vec<Vec<DVec3>> {
     // 同じ位置の頂点をまとめる (面ごとに頂点を分けたメッシュでも辺がつながるように)
     let mut weld: HashMap<[i64; 3], usize> = HashMap::new();
     let quantum = 1e-9_f64.max(bounds_size(positions) * 1e-7);
@@ -165,7 +151,7 @@ fn feature_edges(positions: &[Point3], triangles: &[[u32; 3]]) -> Vec<Vec<Point3
         (b - a).cross(c - a).normalize()
     };
     // 辺 (小さい番号, 大きい番号) → (元の頂点2つ, 隣の面の法線)
-    let mut edges: HashMap<(usize, usize), (usize, usize, Vec<Vector3>)> = HashMap::new();
+    let mut edges: HashMap<(usize, usize), (usize, usize, Vec<DVec3>)> = HashMap::new();
     for t in triangles {
         let n = normal(t);
         for k in 0..3 {
@@ -191,13 +177,10 @@ fn feature_edges(positions: &[Point3], triangles: &[[u32; 3]]) -> Vec<Vec<Point3
         .collect()
 }
 
-fn bounds_size(positions: &[Point3]) -> f64 {
+fn bounds_size(positions: &[DVec3]) -> f64 {
     let (lo, hi) = positions.iter().fold(
         (DVec3::splat(f64::MAX), DVec3::splat(f64::MIN)),
-        |(lo, hi), p| {
-            let p = DVec3::new(p.x, p.y, p.z);
-            (lo.min(p), hi.max(p))
-        },
+        |(lo, hi), &p| (lo.min(p), hi.max(p)),
     );
     if lo.x <= hi.x {
         (hi - lo).length()
@@ -262,35 +245,22 @@ pub fn model_to_scene(model: &Model, roots: &[NodeId]) -> (Scene, HashMap<NodeId
 
 /// 部品の形状を1つの三角形メッシュにする (部品の座標系、モデル単位)
 fn node_mesh(kind: &NodeKind) -> Option<TriMesh> {
-    let polys: Vec<PolygonMesh> = match kind {
+    let faces: Vec<FaceMesh> = match kind {
         NodeKind::Assembly { .. } | NodeKind::Standard(_) => return None,
         NodeKind::Box(part) => {
-            let meshed = part.build_solid().triangulation(BOX_TESSELLATION_TOL);
-            meshed.boundaries()[0]
-                .face_iter()
-                .filter_map(|face| {
-                    let mut poly = face.surface()?;
-                    if !face.orientation() {
-                        poly.invert();
-                    }
-                    Some(poly)
-                })
-                .collect()
+            let solid = part.build_solid().ok()?;
+            tessellate_breps(&[solid], BOX_TESSELLATION_TOL).0
         }
         NodeKind::Imported { shape, .. } | NodeKind::StandardBody { shape, .. } => {
             shape.faces.clone()
         }
     };
     let mut mesh = TriMesh::default();
-    for poly in &polys {
+    for face in &faces {
         let offset = mesh.positions.len() as u32;
-        mesh.positions
-            .extend(poly.positions().iter().map(|p| DVec3::new(p.x, p.y, p.z)));
-        mesh.triangles.extend(
-            poly.faces()
-                .triangle_iter()
-                .map(|t| t.map(|v| v.pos as u32 + offset)),
-        );
+        mesh.positions.extend_from_slice(&face.positions);
+        mesh.triangles
+            .extend(face.triangles.iter().map(|t| t.map(|v| v + offset)));
     }
     Some(mesh)
 }

@@ -24,7 +24,7 @@
 //!
 //! 再生中の部品の位置は [`SimulationPose`] に入る。干渉チェックのシステムを
 //! `.after(MotionSet::Pose)` で登録し、`SimulationPose` が変わったフレームだけ
-//! `builder::transformed(&part.build_solid(), pose.to_truck_matrix())` で動いた後の
+//! `part.build_solid()?.transformed(pose.to_dmat4())` で動いた後の
 //! B-rep を作って判定すればよい (動かない部品は `parts` に入っていない)。
 
 mod export;

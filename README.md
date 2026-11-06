@@ -47,7 +47,7 @@ cargo run --release -- --stress 5000  # 部品 5000 個ほどの負荷テスト�
 cargo run --release -- --physics      # 物理演算のサンプルライン(ワーク 100 個)を開いて流し始める
 ```
 
-初回はビルドに数分かかります。Linux では先に `libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev` を入れてください。
+初回はビルドに数分かかります。形状カーネルなどの C++ のソースも一緒にビルドするので、C++ のコンパイラ(Windows は Visual Studio の C++ ビルドツール、Mac は Xcode のコマンドラインツール、Linux は g++)が要ります。Linux では先に `g++ libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev` を入れてください。
 
 Rust を入れずに Docker だけでビルドすることもできます。VS Code の「Dev Containers: Reopen in Container」でこのフォルダを開くか、ホストの端末で次を実行します。
 

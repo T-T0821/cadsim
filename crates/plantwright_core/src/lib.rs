@@ -20,6 +20,7 @@ pub mod flow;
 pub mod formats;
 pub mod gamify;
 pub mod history;
+pub mod kernel;
 pub mod library;
 pub mod line;
 pub mod line_draft;

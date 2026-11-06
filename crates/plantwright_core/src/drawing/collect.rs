@@ -4,25 +4,18 @@
 //! まとまりは最上位のノード。最上位がアセンブリ1つだけなら、その子を1台ずつの設備とみなす。
 
 use glam::DVec3;
-use truck_meshalgo::prelude::*;
 
 use super::{DrawingInput, DrawingItem, DrawingPart};
+use crate::kernel::FaceMesh;
 use crate::model::{Model, NodeId, NodeKind};
+use crate::shape::tessellate_breps;
 use crate::site::underlay::unit_in_mm;
 
 /// 箱のテッセレーションの許容誤差 (モデル単位)
 const BOX_TOL: f64 = 0.005;
 
-fn to_dvec(p: &Point3) -> DVec3 {
-    DVec3::new(p.x, p.y, p.z)
-}
-
-fn polygon_triangles(poly: &PolygonMesh) -> Vec<[DVec3; 3]> {
-    let positions = poly.positions();
-    poly.faces()
-        .triangle_iter()
-        .map(|tri| tri.map(|v| to_dvec(&positions[v.pos])))
-        .collect()
+fn mesh_triangles(mesh: &FaceMesh) -> Vec<[DVec3; 3]> {
+    mesh.triangle_points().collect()
 }
 
 /// 面ごとの三角形と、稜線の折れ線
@@ -33,25 +26,13 @@ fn part_geometry(kind: &NodeKind) -> Option<PartGeometry> {
     match kind {
         NodeKind::Assembly { .. } | NodeKind::Standard(_) => None,
         NodeKind::Box(part) => {
-            let meshed = part.build_solid().triangulation(BOX_TOL);
-            let shell = meshed.boundaries().first()?.clone();
-            let edges = shell
-                .edge_iter()
-                .map(|edge| edge.curve().iter().map(to_dvec).collect())
-                .collect();
-            let faces = shell
-                .face_iter()
-                .map(|face| polygon_triangles(&face.surface().unwrap_or_default()))
-                .collect();
-            Some((faces, edges))
+            let solid = part.build_solid().ok()?;
+            let (faces, edges) = tessellate_breps(&[solid], BOX_TOL);
+            Some((faces.iter().map(mesh_triangles).collect(), edges))
         }
         NodeKind::Imported { shape, .. } | NodeKind::StandardBody { shape, .. } => Some((
-            shape.faces.iter().map(polygon_triangles).collect(),
-            shape
-                .edges
-                .iter()
-                .map(|line| line.iter().map(to_dvec).collect())
-                .collect(),
+            shape.faces.iter().map(mesh_triangles).collect(),
+            shape.edges.clone(),
         )),
     }
 }

@@ -6,12 +6,11 @@
 //!
 //! Bevy に依存しない計算だけを置き、Bevy の `Mesh` への変換は viewport.rs が行う。
 
-use glam::Vec3;
+use glam::{DVec3, Vec3};
 use std::collections::HashMap;
-use truck_meshalgo::prelude::*;
-use truck_topology::Shell;
 
 use crate::bvh::{Bounds, Bvh, ray_triangle};
+use crate::kernel::FaceMesh;
 
 pub struct PartMesh {
     /// 三角形ごとに3頂点ずつ並べた位置と法線 (頂点は共有しない)
@@ -32,8 +31,8 @@ pub struct PartMesh {
 const COARSE_CELLS: u32 = 10;
 
 impl PartMesh {
-    /// truck の面メッシュ (f64) と稜線から作る
-    pub fn new(faces: &[PolygonMesh], edges: &[Vec<Point3>]) -> PartMesh {
+    /// 面メッシュ (f64) と稜線から作る
+    pub fn new(faces: &[FaceMesh], edges: &[Vec<DVec3>]) -> PartMesh {
         PartMesh::from_faces(
             faces.iter().enumerate().map(|(i, poly)| (i as u32, poly)),
             edges,
@@ -41,33 +40,31 @@ impl PartMesh {
     }
 
     /// 面の番号を指定して作る (形状を簡略化して面が抜けても、元の番号のままにするため)
-    pub fn with_face_ids(faces: &[(u32, PolygonMesh)], edges: &[Vec<Point3>]) -> PartMesh {
+    pub fn with_face_ids(faces: &[(u32, FaceMesh)], edges: &[Vec<DVec3>]) -> PartMesh {
         PartMesh::from_faces(faces.iter().map(|(i, poly)| (*i, poly)), edges)
     }
 
     fn from_faces<'a>(
-        faces: impl Iterator<Item = (u32, &'a PolygonMesh)>,
-        edges: &[Vec<Point3>],
+        faces: impl Iterator<Item = (u32, &'a FaceMesh)>,
+        edges: &[Vec<DVec3>],
     ) -> PartMesh {
         let mut positions = Vec::new();
         let mut normals = Vec::new();
         let mut triangle_face = Vec::new();
         for (face, poly) in faces {
-            let points = poly.positions();
-            let poly_normals = poly.normals();
-            for tri in poly.faces().triangle_iter() {
-                let [a, b, c] = tri.map(|v| to_vec3(&points[v.pos]));
+            for tri in &poly.triangles {
+                let [a, b, c] = tri.map(|v| poly.positions[v as usize].as_vec3());
                 let flat = (b - a).cross(c - a).normalize_or_zero();
                 if flat == Vec3::ZERO {
                     continue; // つぶれた三角形 (簡略化で頂点が重なったものなど)
                 }
-                for (v, p) in tri.iter().zip([a, b, c]) {
-                    // 曲面は truck が付けた頂点法線を使う。面の向きを反転して法線が
-                    // 三角形の裏を向いているときや、法線が無いときは平らな法線にする。
-                    let n = v
-                        .nor
-                        .and_then(|i| poly_normals.get(i))
-                        .map(|n| to_vec3(&Point3::new(n.x, n.y, n.z)).normalize_or_zero())
+                for (&v, p) in tri.iter().zip([a, b, c]) {
+                    // 曲面はカーネルが付けた頂点法線を使う。法線が三角形の裏を向いているときや、
+                    // 法線が無いときは平らな法線にする。
+                    let n = poly
+                        .normals
+                        .get(v as usize)
+                        .map(|n| n.as_vec3().normalize_or_zero())
                         .filter(|n| n.dot(flat) > 0.0)
                         .unwrap_or(flat);
                     positions.push(p);
@@ -78,7 +75,7 @@ impl PartMesh {
         }
         let edges: Vec<Vec<Vec3>> = edges
             .iter()
-            .map(|line| line.iter().map(to_vec3).collect())
+            .map(|line| line.iter().map(|p| p.as_vec3()).collect())
             .collect();
         PartMesh::from_triangles(positions, normals, triangle_face, edges)
     }
@@ -192,47 +189,21 @@ impl PartMesh {
     }
 }
 
-/// テッセレーション済みのシェルの稜線 (ポリライン)。
-/// `Shell::edge_iter` は面ごとに稜線を返して隣り合う面で重複するので、圧縮形式から取る。
-pub fn shell_edges(
-    shell: &Shell<Point3, PolylineCurve<Point3>, Option<PolygonMesh>>,
-) -> Vec<Vec<Point3>> {
-    shell
-        .compress()
-        .edges
-        .into_iter()
-        .map(|edge| edge.curve.0)
-        .collect()
-}
-
-fn to_vec3(p: &Point3) -> Vec3 {
-    Vec3::new(p.x as f32, p.y as f32, p.z as f32)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use truck_modeling::builder;
+    use crate::kernel::Brep;
+    use glam::DMat4;
 
     /// 箱 (2 x 1 x 1、6面) の表示メッシュ
     fn box_mesh() -> PartMesh {
-        let v = builder::vertex(Point3::new(-1.0, -0.5, -0.5));
-        let e = builder::tsweep(&v, Vector3::new(2.0, 0.0, 0.0));
-        let f = builder::tsweep(&e, Vector3::new(0.0, 1.0, 0.0));
-        let solid = builder::tsweep(&f, Vector3::new(0.0, 0.0, 1.0));
-        let meshed = solid.triangulation(0.01);
-        let shell = &meshed.boundaries()[0];
-        let faces: Vec<PolygonMesh> = shell
-            .face_iter()
-            .map(|f| {
-                let mut poly = f.surface().unwrap_or_default();
-                if !f.orientation() {
-                    poly.invert();
-                }
-                poly
-            })
-            .collect();
-        PartMesh::new(&faces, &shell_edges(shell))
+        let solid = Brep::cuboid(DVec3::new(2.0, 1.0, 1.0))
+            .unwrap()
+            .transformed(DMat4::from_translation(DVec3::new(-1.0, -0.5, -0.5)))
+            .unwrap();
+        let meshed = solid.tessellate(0.01, 25.0);
+        let faces: Vec<FaceMesh> = meshed.faces.into_iter().filter_map(|f| f.mesh).collect();
+        PartMesh::new(&faces, &meshed.edges)
     }
 
     #[test]

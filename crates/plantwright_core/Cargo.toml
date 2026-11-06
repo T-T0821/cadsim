@@ -9,6 +9,10 @@ description = "plantwright のうち Bevy の描画・egui を使わないもの
 # アプリ側のテストからテスト用のシーン (formats::test_util) を使う
 test-util = []
 
+[build-dependencies]
+# 形状カーネル SMLib (C++) をビルドする (build.rs)
+cc = "1"
+
 [dependencies]
 # Bevy の Resource を設計データの型に直接付ける。描画を含まない ECS だけで、アプリの bevy と同じ版
 bevy_ecs = "0.20"
@@ -18,13 +22,8 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 # 干渉チェックの検索木 (三角形の外接箱の BVH)。純 Rust
 parry3d-f64 = "0.31"
-# 形状カーネル (B-rep とテッセレーション)、STEP (AP203 / AP214 / AP242) の読み込み
-truck-meshalgo = "0.4"
-truck-modeling = "0.6"
-truck-stepio = "0.3"
-truck-topology = "0.6"
-# ブーリアン (和・差・積)
-truck-shapeops = { version = "0.4", default-features = false }
+# STEP (AP203 / AP214 / AP242) の構文の読み込み。形状は形状カーネル SMLib (vendor/smlib) で組み立てる
+ruststep = "0.4"
 # 点群の LAS / LAZ (圧縮した LAS) の読み込み。純 Rust
 las = { version = "0.11", features = ["laz"] }
 # 画像 (PNG / JPEG) の読み書き

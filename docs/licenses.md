@@ -11,6 +11,14 @@
 - 同梱フォント `assets/fonts/NotoSansJP-Subset.otf` は SIL Open Font License 1.1(`assets/fonts/OFL.txt`)。
 - サンプルの形状 `samples/real_robot/` は BSD 3-Clause(出典は [real-robot.md](real-robot.md))。
 
+## 同梱している C++ のソース
+
+| ソース | ライセンス | 守ること |
+| --- | --- | --- |
+| 形状カーネル SMLib(NVIDIA の [usd-brep](https://github.com/NVIDIA-Omniverse/usd-brep) v1.0.1 の `source/SMLib` と `source/SM_API`)。`crates/plantwright_core/vendor/smlib/` | Apache-2.0(`vendor/smlib/LICENSE`) | ライセンス文と著作権表示を付けて配る(ライセンス一覧に入れている)。ソースを改変したら、改変したファイルにその旨を書く。いまは改変していない |
+
+形状カーネルの候補だった OpenCASCADE は LGPL なので使わない。
+
 ## 依存クレートのライセンス
 
 ### 許可しているライセンス

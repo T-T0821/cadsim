@@ -4,9 +4,8 @@
 //!
 //! 1. ruststep で STEP をパースし、エンティティを id で引ける表にする。
 //! 2. 製品構成 (PRODUCT_DEFINITION と NEXT_ASSEMBLY_USAGE_OCCURRENCE) からアセンブリの木を作る。
-//! 3. 各部品の形状 (MANIFOLD_SOLID_BREP など) を truck-stepio で B-rep (f64) に変換し、
-//!    表示用にテッセレーションする。同じ部品を何度使っていても形状は1回だけ作る。
-//!    テッセレーションは部品 (製品) ごとに CPU のコア数ぶん並列に行う。
+//! 3. 各部品の形状 (MANIFOLD_SOLID_BREP など) のシェルを面ごとに読み ([`brep`])、形状カーネルで
+//!    B-rep に組み立てて表示用にテッセレーションする。同じ部品を何度使っていても形状は1回だけ作る。
 //! 4. 色 (STYLED_ITEM) と長さの単位も読む。
 //!
 //! STEP は Z 軸が上なので、Y 軸が上の Bevy に合わせる回転はルートの配置に入れる。
@@ -15,19 +14,15 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use glam::{DMat4, DVec3};
-use truck_meshalgo::prelude::*;
+use ruststep::ast::{EntityInstance, Name, Parameter, Record};
 
-use truck_stepio::r#in::{
-    Table,
-    ruststep::{
-        self,
-        ast::{EntityInstance, Name, Parameter, Record},
-    },
-};
+mod brep;
 
+use crate::kernel::Brep;
+use crate::shape::tessellate_breps;
 pub use crate::shape::{
-    Brep, ImportNode, ImportedFile, ImportedShape, ShapeStats, brep_tolerance, mesh_stats,
-    next_shape_id, tessellation_tolerance,
+    ImportNode, ImportedFile, ImportedShape, ShapeStats, brep_tolerance, mesh_stats, next_shape_id,
+    tessellation_tolerance,
 };
 
 /// STEP の文字列を読み込む。`file_name` はルートノードの名前になる。
@@ -36,11 +31,11 @@ pub fn import_step(text: &str, file_name: &str) -> Result<ImportedFile, String> 
         ruststep::parser::parse(text).map_err(|e| format!("STEP の構文を読めませんでした: {e}"))?;
     let instances: Vec<&EntityInstance> = exchange.data.iter().flat_map(|d| &d.entities).collect();
     let entities = Entities::new(&instances);
-    let table = Table::from_iter(instances.iter().copied());
+    let converter = brep::Converter::new(&entities);
 
     let mut builder = TreeBuilder {
         entities: &entities,
-        table: &table,
+        converter: &converter,
         structure: ProductStructure::read(&entities),
         colors: read_colors(&entities),
         shapes: HashMap::new(),
@@ -369,7 +364,7 @@ fn vec3(p: &Parameter) -> Option<DVec3> {
 
 struct TreeBuilder<'a, 'e> {
     entities: &'a Entities<'e>,
-    table: &'a Table,
+    converter: &'a brep::Converter<'a, 'e>,
     structure: ProductStructure,
     /// 形状アイテム (ソリッドやシェル) の id → 色
     colors: HashMap<u64, [f32; 3]>,
@@ -409,7 +404,10 @@ impl TreeBuilder<'_, '_> {
 
         if nodes.is_empty() {
             // 製品構成が書かれていないファイル: シェルをそのまま部品として並べる
-            let mut shells: Vec<u64> = self.table.shell.keys().copied().collect();
+            let mut shells: Vec<u64> = ["CLOSED_SHELL", "OPEN_SHELL"]
+                .into_iter()
+                .flat_map(|name| self.entities.all(name).map(|(id, _)| id))
+                .collect();
             shells.sort_unstable();
             let jobs: Vec<(u64, ShapeJob)> = shells
                 .into_iter()
@@ -522,8 +520,7 @@ impl TreeBuilder<'_, '_> {
             .collect()
     }
 
-    /// 形状を持つ製品をすべて先にまとめて作る。いちばん重いテッセレーションを
-    /// CPU のコア数ぶん並列に行い、木を組み立てるときはできたものを引くだけにする。
+    /// 形状を持つ製品をすべて先にまとめて作る。木を組み立てるときはできたものを引くだけにする。
     fn prepare_shapes(&mut self) {
         let mut products: Vec<u64> = self.structure.representations.keys().copied().collect();
         products.sort_unstable();
@@ -558,18 +555,13 @@ impl TreeBuilder<'_, '_> {
     fn convert_shells(&mut self, shells: &[u64], name: &str) -> Option<ShapeJob> {
         let mut breps = Vec::new();
         for &id in shells {
-            let converted = self
-                .table
-                .shell
-                .get(&id)
-                .ok_or_else(|| "未対応のシェル".to_owned())
-                .and_then(|holder| {
-                    self.table
-                        .to_compressed_shell(holder)
-                        .map_err(|e| e.to_string())
-                });
-            match converted {
-                Ok(brep) => breps.push(brep),
+            match self.converter.shell(id) {
+                Ok((brep, warning)) => {
+                    breps.push(brep);
+                    if let Some(warning) = warning {
+                        self.warnings.push(format!("{name}: 形状 #{id}: {warning}"));
+                    }
+                }
                 Err(err) => self
                     .warnings
                     .push(format!("{name}: 形状 #{id} を読めませんでした ({err})")),
@@ -585,26 +577,24 @@ impl TreeBuilder<'_, '_> {
         })
     }
 
-    /// 変換した B-rep を並列にテッセレーションする。`key` は結果を見分けるための値。
-    fn tessellate_all<K: Send>(
+    /// 変換した B-rep をテッセレーションする。`key` は結果を見分けるための値。
+    /// 形状カーネルは1度に1つしか動かないので、順にする
+    fn tessellate_all<K>(
         &mut self,
         jobs: Vec<(K, ShapeJob)>,
     ) -> Vec<(K, Option<Arc<ImportedShape>>)> {
-        parallel_map(jobs, |(key, job)| {
-            let name = job.name;
-            (key, name, tessellate(job.breps, job.color))
-        })
-        .into_iter()
-        .map(|(key, name, shape)| {
-            if shape.faces.is_empty() {
-                self.warnings
-                    .push(format!("{name}: 面をメッシュにできませんでした"));
-                (key, None)
-            } else {
-                (key, Some(Arc::new(shape)))
-            }
-        })
-        .collect()
+        jobs.into_iter()
+            .map(|(key, job)| {
+                let shape = tessellate(job.breps, job.color);
+                if shape.faces.is_empty() {
+                    self.warnings
+                        .push(format!("{}: 面をメッシュにできませんでした", job.name));
+                    (key, None)
+                } else {
+                    (key, Some(Arc::new(shape)))
+                }
+            })
+            .collect()
     }
 }
 
@@ -613,39 +603,6 @@ struct ShapeJob {
     name: String,
     breps: Vec<Brep>,
     color: Option<[f32; 3]>,
-}
-
-/// `items` を CPU のコア数ぶんのスレッドで `f` にかけ、元の順に並べて返す
-fn parallel_map<T: Send, R: Send>(items: Vec<T>, f: impl Fn(T) -> R + Sync) -> Vec<R> {
-    let threads = std::thread::available_parallelism()
-        .map_or(1, |n| n.get())
-        .min(items.len());
-    if threads <= 1 {
-        return items.into_iter().map(f).collect();
-    }
-    let count = items.len();
-    // 重さが形状ごとにばらばらなので、空いたスレッドが次の1つを取りに来る形にする
-    let queue = std::sync::Mutex::new(items.into_iter().enumerate());
-    let results = std::sync::Mutex::new(Vec::with_capacity(count));
-    std::thread::scope(|scope| {
-        for _ in 0..threads {
-            scope.spawn(|| {
-                loop {
-                    let next = queue.lock().map(|mut q| q.next()).ok().flatten();
-                    let Some((index, item)) = next else {
-                        break;
-                    };
-                    let result = f(item);
-                    if let Ok(mut results) = results.lock() {
-                        results.push((index, result));
-                    }
-                }
-            });
-        }
-    });
-    let mut results = results.into_inner().unwrap_or_default();
-    results.sort_by_key(|(index, _)| *index);
-    results.into_iter().map(|(_, r)| r).collect()
 }
 
 /// 表現 (REPRESENTATION の仲間) が持つアイテムの id
@@ -797,23 +754,7 @@ fn read_length_unit(e: &Entities) -> String {
 
 /// B-rep を表示用の面メッシュと稜線に変換し、寸法・体積・表面積を求める
 fn tessellate(breps: Vec<Brep>, color: Option<[f32; 3]>) -> ImportedShape {
-    let tol = brep_tolerance(&breps);
-
-    let mut faces = Vec::new();
-    let mut edges = Vec::new();
-    for brep in &breps {
-        let meshed = brep.robust_triangulation(tol);
-        for face in meshed.faces {
-            if let Some(mut poly) = face.surface {
-                if !face.orientation {
-                    poly.invert();
-                }
-                faces.push(poly);
-            }
-        }
-        edges.extend(meshed.edges.into_iter().map(|e| e.curve.0));
-    }
-
+    let (faces, edges) = tessellate_breps(&breps, brep_tolerance(&breps));
     ImportedShape::new(breps, faces, edges, color)
 }
 
@@ -821,13 +762,7 @@ fn tessellate(breps: Vec<Brep>, color: Option<[f32; 3]>) -> ImportedShape {
 mod tests {
     use super::*;
 
-    #[test]
-    fn parallel_map_keeps_order() {
-        let out = parallel_map((0..100).collect(), |i: u64| i * i);
-        assert_eq!(out, (0..100).map(|i| i * i).collect::<Vec<_>>());
-    }
-
-    const SAMPLE: &str = include_str!("../../../../assets/sample_assembly.step");
+    const SAMPLE: &str = include_str!("../../../../../assets/sample_assembly.step");
 
     fn find<'a>(node: &'a ImportNode, name: &str) -> Option<&'a ImportNode> {
         if node.name == name {
