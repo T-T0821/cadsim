@@ -242,14 +242,14 @@ fn axis_dir(axis: HoleAxis) -> DVec3 {
     }
 }
 
-fn snap(value: f64, step: Option<f64>) -> f64 {
+pub(crate) fn snap(value: f64, step: Option<f64>) -> f64 {
     match step {
         Some(s) if s > 0.0 => (value / s).round() * s,
         _ => value,
     }
 }
 
-fn round3(v: f64) -> f64 {
+pub(crate) fn round3(v: f64) -> f64 {
     (v * 1000.0).round() / 1000.0
 }
 

@@ -1,14 +1,20 @@
-//! 穴あけ道具のマウスとキーの読み方
+//! 穴あけ・押し出しの道具のマウスとキーの読み方
 //!
+//! 穴あけ:
 //! - 部品の面にカーソルを乗せると面が光り、クリックするとそこが穴の入口になる
 //! - 置いた穴の「直径の点」「底の中心」をドラッグすると直径・深さが変わる (Ctrl で刻みにそろえる)
 //! - Enter で穴をあけ、Esc で取り消す
 //!
-//! 寸法の計算は `plantwright_core::modeling::hole_tool`。ここはカーソルの位置をレイにして渡すだけ。
+//! 押し出し:
+//! - 床をクリックして頂点を置き、最初の点をクリック (か Enter) で形を閉じる
+//! - 上の点をドラッグで高さ、頂点をドラッグで形を直す。Enter で押し出す
+//!
+//! 寸法の計算は `plantwright_core::modeling::{hole_tool, extrude_tool}`。
+//! ここはカーソルの位置をレイにして渡すだけ。
 
 use bevy::{math::DVec3, prelude::*, window::PrimaryWindow};
 
-use super::confirm_hole;
+use super::{confirm_extrude, confirm_hole};
 use crate::document::history::History;
 use crate::document::import::ImportJobs;
 use crate::document::selection::Selection;
@@ -16,6 +22,7 @@ use crate::viewport::camera::{ViewportRect, alt_pressed};
 use crate::viewport::gizmo::GizmoTool;
 use crate::viewport::picking::PartUnderPointer;
 use plantwright_core::model::Model;
+use plantwright_core::modeling::extrude_tool::{self, ExtrudeTool};
 use plantwright_core::modeling::hole_tool::{Handle, HoleDraft, HoleTool};
 
 /// つまみをつかめる範囲 (画面上のピクセル)
@@ -145,6 +152,138 @@ pub fn hole_input(
             diameter,
         ));
         tool.error = None;
+    }
+}
+
+/// Enter で形を閉じる (閉じていれば押し出す)、Esc で1つ戻る
+pub fn extrude_keys(
+    keys: Res<ButtonInput<KeyCode>>,
+    mut tool: ResMut<ExtrudeTool>,
+    mut model: ResMut<Model>,
+    mut history: ResMut<History>,
+    mut selection: ResMut<Selection>,
+    mut jobs: ResMut<ImportJobs>,
+) {
+    if !tool.active {
+        return;
+    }
+    if keys.just_pressed(KeyCode::Escape) {
+        tool.cancel();
+    }
+    if keys.any_just_pressed([KeyCode::Enter, KeyCode::NumpadEnter]) {
+        if tool.closed {
+            confirm_extrude(
+                &mut tool,
+                &mut model,
+                &mut history,
+                &mut selection,
+                &mut jobs,
+            );
+        } else {
+            tool.close();
+        }
+    }
+}
+
+/// 床のクリックで頂点を置く、つまみのドラッグ
+pub fn extrude_input(
+    buttons: Res<ButtonInput<MouseButton>>,
+    keys: Res<ButtonInput<KeyCode>>,
+    window: Single<&Window, With<PrimaryWindow>>,
+    camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
+    viewport: Res<ViewportRect>,
+    gizmo: Res<GizmoTool>,
+    mut tool: ResMut<ExtrudeTool>,
+) {
+    if !tool.active {
+        return;
+    }
+    let (camera, camera_transform) = *camera;
+    let cursor = window.cursor_position();
+    let on_view = cursor.is_some() && !viewport.pointer_on_ui;
+    let ctrl = keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]);
+    let step = (gizmo.snap.always || ctrl).then_some(gizmo.snap.translate_step);
+    let cursor_ray = |cursor: Vec2| {
+        camera
+            .viewport_to_world(camera_transform, cursor)
+            .ok()
+            .map(|ray| (ray.origin.as_dvec3(), ray.direction.as_dvec3()))
+    };
+    let floor = DVec3::new(0.0, tool.floor_y, 0.0);
+    let to_screen = |p: DVec3| camera.world_to_viewport(camera_transform, p.as_vec3()).ok();
+
+    // ドラッグ中
+    if let Some(handle) = tool.dragging {
+        if !buttons.pressed(MouseButton::Left) {
+            tool.dragging = None;
+            return;
+        }
+        if let Some((origin, dir)) = cursor.and_then(cursor_ray) {
+            match handle {
+                extrude_tool::Handle::Height => {
+                    let center = tool.center();
+                    if let Some(p) = closest_on_line(origin, dir, center, DVec3::Y) {
+                        tool.set_height_from_point(p, step);
+                    }
+                }
+                extrude_tool::Handle::Vertex(i) => {
+                    if let Some(p) = ray_plane(origin, dir, floor, DVec3::Y) {
+                        tool.move_point(i, p, step);
+                    }
+                }
+            }
+        }
+        return;
+    }
+
+    // カーソルの下の床の点 (閉じるまでは次の頂点の候補)
+    let floor_point = cursor
+        .filter(|_| on_view)
+        .and_then(cursor_ray)
+        .and_then(|(o, d)| ray_plane(o, d, floor, DVec3::Y))
+        // 床を裏から見ているときは置けない
+        .filter(|p| p.y.is_finite());
+    tool.hover_point = (!tool.closed).then_some(floor_point).flatten();
+
+    // つまみのホバー: 閉じたら高さの点と頂点、閉じる前は最初の点 (クリックで閉じる)
+    let handles: Vec<extrude_tool::Handle> = if tool.closed {
+        std::iter::once(extrude_tool::Handle::Height)
+            .chain((0..tool.points.len()).map(extrude_tool::Handle::Vertex))
+            .collect()
+    } else if tool.points.len() >= 3 {
+        vec![extrude_tool::Handle::Vertex(0)]
+    } else {
+        Vec::new()
+    };
+    tool.hovered = match cursor {
+        Some(cursor) if on_view => handles
+            .into_iter()
+            .filter_map(|handle| {
+                let screen = to_screen(tool.handle_position(handle))?;
+                let distance = screen.distance(cursor);
+                (distance <= HANDLE_PIXELS).then_some((distance, handle))
+            })
+            .min_by(|a, b| a.0.total_cmp(&b.0))
+            .map(|(_, handle)| handle),
+        _ => None,
+    };
+
+    // Alt + 左ドラッグはカメラのオービット
+    if !buttons.just_pressed(MouseButton::Left) || alt_pressed(&keys) || !on_view {
+        return;
+    }
+    match tool.hovered {
+        // 閉じる前に最初の点をクリック → 閉じる
+        Some(extrude_tool::Handle::Vertex(0)) if !tool.closed => {
+            tool.close();
+        }
+        Some(handle) => tool.dragging = Some(handle),
+        None => {
+            if let Some(p) = floor_point {
+                tool.add_point(p, step);
+                tool.error = None;
+            }
+        }
     }
 }
 

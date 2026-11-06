@@ -136,5 +136,13 @@ fn view_items(ui: &mut egui::Ui, state: &mut UiState) -> bool {
         super::menu::add_box(state);
         done = true;
     }
+    if ui
+        .button("床に描いて押し出す")
+        .on_hover_text("床をクリックして形を描き、上に押し出す")
+        .clicked()
+    {
+        crate::features::modeling::panel::start_extrude_tool(state);
+        done = true;
+    }
     done
 }

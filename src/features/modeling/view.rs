@@ -8,6 +8,7 @@ use bevy::{math::DVec3, prelude::*};
 use bevy_egui::{EguiContexts, egui};
 
 use crate::viewport::camera::ViewportRect;
+use plantwright_core::modeling::extrude_tool::{self, ExtrudeTool};
 use plantwright_core::modeling::hole_tool::{Handle, HoleTool};
 
 const HOLE_COLOR: Color = Color::srgb(0.25, 0.65, 1.0);
@@ -71,14 +72,81 @@ pub fn draw_preview(
     }
 }
 
-/// つまみの横に寸法、ビューの下に案内を出す
+/// 押し出し: 床に描いた形 (閉じる前はカーソルまでの線も)、閉じたら上の面と縦の線、つまみ
+pub fn draw_extrude_preview(
+    mut gizmos: Gizmos<HoleGizmos>,
+    tool: Res<ExtrudeTool>,
+    camera: Single<&GlobalTransform, With<Camera3d>>,
+) {
+    if !tool.active {
+        return;
+    }
+    let base: Vec<Vec3> = tool.points.iter().map(|p| p.as_vec3()).collect();
+    if tool.closed {
+        let top: Vec<Vec3> = tool.top_points().iter().map(|p| p.as_vec3()).collect();
+        let mut ring = base.clone();
+        ring.extend(base.first().copied());
+        gizmos.linestrip(ring, HOLE_COLOR);
+        let mut ring = top.clone();
+        ring.extend(top.first().copied());
+        gizmos.linestrip(ring, HOLE_COLOR.with_alpha(0.8));
+        for (a, b) in base.iter().zip(&top) {
+            gizmos.line(*a, *b, HOLE_COLOR.with_alpha(0.5));
+        }
+        // 高さの軸
+        gizmos.line(
+            tool.center().as_vec3(),
+            tool.handle_position(extrude_tool::Handle::Height).as_vec3(),
+            HOLE_COLOR.with_alpha(0.8),
+        );
+    } else {
+        if base.len() >= 2 {
+            gizmos.linestrip(base.clone(), HOLE_COLOR);
+        }
+        if let (Some(last), Some(hover)) = (base.last(), tool.hover_point) {
+            gizmos.line(*last, hover.as_vec3(), HOLE_COLOR.with_alpha(0.6));
+        }
+    }
+
+    // つまみ: 閉じたら高さの点と頂点、閉じる前は頂点 (最初の点は大きめ: クリックで閉じる)
+    let handles: Vec<extrude_tool::Handle> = if tool.closed {
+        std::iter::once(extrude_tool::Handle::Height)
+            .chain((0..base.len()).map(extrude_tool::Handle::Vertex))
+            .collect()
+    } else {
+        (0..base.len()).map(extrude_tool::Handle::Vertex).collect()
+    };
+    for handle in handles {
+        let p = tool.handle_position(handle).as_vec3();
+        let closing = !tool.closed && handle == extrude_tool::Handle::Vertex(0) && base.len() >= 3;
+        let radius = camera.translation().distance(p) * if closing { 0.011 } else { 0.007 };
+        let color = if tool.hovered == Some(handle) || tool.dragging == Some(handle) {
+            HANDLE_HOVER_COLOR
+        } else {
+            HANDLE_COLOR
+        };
+        gizmos.sphere(Isometry3d::from_translation(p), radius, color);
+    }
+    if let Some(hover) = tool.hover_point.filter(|_| tool.hovered.is_none()) {
+        let p = hover.as_vec3();
+        let radius = camera.translation().distance(p) * 0.005;
+        gizmos.sphere(
+            Isometry3d::from_translation(p),
+            radius,
+            HANDLE_COLOR.with_alpha(0.6),
+        );
+    }
+}
+
+/// つまみの横に寸法を出す (穴あけ・押し出し)
 pub fn draw_labels(
     mut contexts: EguiContexts,
     tool: Res<HoleTool>,
+    extrude: Res<ExtrudeTool>,
     viewport: Res<ViewportRect>,
     camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
 ) -> Result {
-    if !tool.active {
+    if !tool.active && !extrude.active {
         return Ok(());
     }
     let ctx = contexts.ctx_mut()?;
@@ -126,6 +194,39 @@ pub fn draw_labels(
         }
     }
 
+    // 押し出し: 高さと、描いている途中の辺の長さ
+    if extrude.active {
+        let mut labels: Vec<(DVec3, String, bool)> = Vec::new();
+        if extrude.closed {
+            let strong = matches!(
+                extrude.hovered.or(extrude.dragging),
+                Some(extrude_tool::Handle::Height)
+            );
+            labels.push((
+                extrude.handle_position(extrude_tool::Handle::Height),
+                format!("高さ {}", round3(extrude.height)),
+                strong,
+            ));
+        } else if let (Some(length), Some(hover)) = (extrude.pending_length(), extrude.hover_point)
+        {
+            labels.push((hover, format!("{}", round3(length)), false));
+        }
+        for (at, text, strong) in labels {
+            let Ok(screen) = camera.world_to_viewport(camera_transform, at.as_vec3()) else {
+                continue;
+            };
+            label(
+                &painter,
+                egui::pos2(screen.x + 12.0, screen.y - 10.0),
+                &text,
+                if strong {
+                    egui::Color32::from_rgb(60, 60, 20)
+                } else {
+                    egui::Color32::from_rgba_unmultiplied(20, 50, 90, 220)
+                },
+            );
+        }
+    }
     // 案内はビュー共通の案内バー (ui/view_hints.rs) に出す
     Ok(())
 }

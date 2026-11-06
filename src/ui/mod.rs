@@ -122,6 +122,8 @@ pub struct UiState<'w> {
     pub modeling: ResMut<'w, crate::features::modeling::panel::ModelingUi>,
     /// 3D ビューで面をクリックして穴をあける道具
     pub hole_tool: ResMut<'w, plantwright_core::modeling::hole_tool::HoleTool>,
+    /// 3D ビューの床に形を描いて押し出す道具
+    pub extrude_tool: ResMut<'w, plantwright_core::modeling::extrude_tool::ExtrudeTool>,
     pub flow: FlowUi<'w>,
     pub diagnostics: Res<'w, DiagnosticsStore>,
     pub render_stats: Res<'w, RenderStats>,

@@ -11,6 +11,7 @@
 //! 元のファイルとのつながりを保つため対象外 (エラーで知らせる)。
 //! 穴あけ・ブーリアンは、元に戻すための [`ModelChange`] を返す。
 
+pub mod extrude_tool;
 pub mod hole_tool;
 pub mod ops;
 pub mod record;

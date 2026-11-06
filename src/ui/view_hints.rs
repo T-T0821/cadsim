@@ -13,12 +13,14 @@ use crate::features::annotation::AnnotateTool;
 use crate::features::motion::panel::robot::RobotUiState;
 use crate::features::simulation::measure::MeasureTool;
 use crate::features::site::PlanTool;
+use plantwright_core::modeling::extrude_tool::ExtrudeTool;
 use plantwright_core::modeling::hole_tool::HoleTool;
 use plantwright_core::pointer::ViewHint;
 
-/// 使っている道具の案内を、優先順 (形を編集 > 寸法 > 計測 > 平面図 > 教示) に1つだけ出す
+/// 使っている道具の案内を、優先順 (穴あけ > 押し出し > 寸法 > 計測 > 平面図 > 教示) に1つだけ出す
 pub fn gather_hints(
     hole: Res<HoleTool>,
+    extrude: Res<ExtrudeTool>,
     annotate: Res<AnnotateTool>,
     measure: Res<MeasureTool>,
     plan: Res<PlanTool>,
@@ -29,6 +31,11 @@ pub fn gather_hints(
         match &hole.error {
             Some(error) => Some((error.clone(), true)),
             None => Some((hole.hint().to_owned(), false)),
+        }
+    } else if extrude.active {
+        match &extrude.error {
+            Some(error) => Some((error.clone(), true)),
+            None => Some((extrude.hint().to_owned(), false)),
         }
     } else {
         annotate
@@ -53,10 +60,12 @@ pub fn gather_hints(
 
 /// 案内バーと部品名を描く。`view` は 3D ビューの領域
 pub fn show(ctx: &egui::Context, view: egui::Rect, state: &mut UiState) {
-    let painter = ctx.layer_painter(egui::LayerId::new(
-        egui::Order::Background,
-        egui::Id::new("view_hints"),
-    ));
+    let painter = ctx
+        .layer_painter(egui::LayerId::new(
+            egui::Order::Background,
+            egui::Id::new("view_hints"),
+        ))
+        .with_clip_rect(view);
 
     if let Some(text) = state.hint.text.clone() {
         let background = if state.hint.error {
@@ -64,11 +73,18 @@ pub fn show(ctx: &egui::Context, view: egui::Rect, state: &mut UiState) {
         } else {
             egui::Color32::from_rgba_unmultiplied(20, 50, 90, 220)
         };
-        let galley =
-            painter.layout_no_wrap(text, egui::FontId::proportional(14.0), egui::Color32::WHITE);
+        // ビューが狭ければ折り返す
+        let galley = painter.layout(
+            text,
+            egui::FontId::proportional(14.0),
+            egui::Color32::WHITE,
+            (view.width() - 48.0).max(80.0),
+        );
         let size = galley.size() + egui::vec2(16.0, 10.0);
-        let rect =
-            egui::Rect::from_center_size(egui::pos2(view.center().x, view.max.y - 28.0), size);
+        let rect = egui::Rect::from_center_size(
+            egui::pos2(view.center().x, view.max.y - 18.0 - size.y / 2.0),
+            size,
+        );
         painter.rect_filled(rect, 6.0, background);
         painter.galley(
             rect.min + egui::vec2(8.0, 5.0),

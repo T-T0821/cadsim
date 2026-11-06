@@ -1,0 +1,35 @@
+# 押し出しを 3D で描く: 床をクリックして頂点 → Enter で閉じる → 上の点をドラッグで高さ → Enter で押し出す
+wait_loaded
+click "空のプロジェクトから"
+wait_loaded
+wait 30
+click "★ Lv."                     # チュートリアルのカードを閉じる (3D のクリック位置に重なるため)
+click "モデル"                     # モデリングパネル
+wait 10
+click "押し出し"
+wait 10
+click "床に描いて押し出す"
+wait 10
+expect "1つ目の頂点"
+click_at 900 350                  # 床に 4 つの頂点
+wait 5
+click_at 1080 350
+wait 5
+click_at 1080 520
+wait 5
+click_at 900 520
+wait 5
+expect "4 頂点"
+screenshot 01_points
+key enter                         # 形を閉じる
+wait 10
+expect "高さ"
+screenshot 02_closed
+drag 990 255 990 330              # 上の点を下げて高さを決める
+wait 10
+screenshot 03_height
+key enter                         # 押し出す
+wait_loaded
+wait 420                          # ミッション達成の表示が消えるのを待つ
+expect "押し出しの形を作りました"
+screenshot 04_done
