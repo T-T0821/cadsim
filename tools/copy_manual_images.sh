@@ -28,4 +28,5 @@ heatmap/floor.png               heatmap_floor.png
 heatmap/panel.png               heatmap_panel.png
 menus/video_camera_path.png     video_camera_path.png
 walk/narrow_aisle.png           walk_narrow_aisle.png
+part_role/cylinder.png          part_role_cylinder.png
 LIST

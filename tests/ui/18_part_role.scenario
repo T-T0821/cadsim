@@ -1,0 +1,43 @@
+# 部品の役割: 箱を選んで「シリンダ」にし、矢印の先をドラッグしてストロークを決める
+wait_loaded
+click "空のプロジェクトから"        # ようこそ画面を閉じて空から始める
+wait_loaded
+wait 30
+click "★ Lv."                     # チュートリアルのカードを閉じる (3D のクリック位置に重なるため)
+click "作成"
+click "箱を追加"
+wait_loaded
+wait 420                          # ミッション達成の表示が消えるのを待つ
+click "🔍 拡大"                    # 箱を画面いっぱいに
+wait 90
+expect "シミュレーションの役割"
+screenshot 01_role_buttons
+
+click "シリンダ"                   # 寸法から決めた既定値で、矢印と動いた先の箱が出る
+wait 20
+screenshot 02_cylinder_draft
+
+click_at 740 300                  # 上の面をクリック → 上へ出るシリンダになる
+wait 20
+screenshot 03_push_up
+drag 736 117 736 165              # 矢印の先を下へ引いてストロークを短く
+wait 20
+screenshot 04_stroke_dragged
+key Enter                         # 確定: チャートにシリンダと「出 → 戻」が入る
+wait 420                          # ミッション達成の表示が消えるのを待つ
+expect "3D で調整"                 # プロパティに付いた役割が出る
+expect "外す"
+screenshot 05_confirmed
+
+key ctrl+z                        # 元に戻すと役割も消える
+wait 30
+expect_not "3D で調整"
+screenshot 06_undone
+
+click "コンベア"                   # 上面に緑の矢印 (流れる向きと速さ)
+wait 20
+screenshot 07_conveyor_draft
+key Escape                        # 取り消すと何も残らない
+wait 10
+expect_not "3D で調整"
+screenshot 08_cancelled

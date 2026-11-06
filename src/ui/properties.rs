@@ -88,6 +88,7 @@ fn selected_node(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
             .default_open(true)
             .show(ui, |ui| shape_history_section(ui, state, id, &history));
     }
+    crate::features::part_role::panel::properties_section(ui, state, id);
     let is_box = matches!(state.model.get(id).map(|n| &n.kind), Some(NodeKind::Box(_)));
     egui::CollapsingHeader::new(if is_box {
         "形状と配置"

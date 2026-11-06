@@ -124,6 +124,8 @@ pub struct UiState<'w> {
     pub hole_tool: ResMut<'w, plantwright_core::modeling::hole_tool::HoleTool>,
     /// 3D ビューの床に形を描いて押し出す道具
     pub extrude_tool: ResMut<'w, plantwright_core::modeling::extrude_tool::ExtrudeTool>,
+    /// 部品の役割 (シリンダ・コンベアなど) を 3D で決める道具
+    pub role_tool: ResMut<'w, plantwright_core::part_role::RoleTool>,
     pub flow: FlowUi<'w>,
     pub diagnostics: Res<'w, DiagnosticsStore>,
     pub render_stats: Res<'w, RenderStats>,

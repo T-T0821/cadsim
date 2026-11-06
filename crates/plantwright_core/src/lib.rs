@@ -29,6 +29,7 @@ pub mod model;
 pub mod modeling;
 pub mod motion;
 pub mod part_mesh;
+pub mod part_role;
 pub mod physics;
 pub mod plc;
 pub mod pointer;
