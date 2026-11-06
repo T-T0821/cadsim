@@ -111,6 +111,9 @@ pub struct SensorRecord {
     pub range: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mounted_on: Option<u32>,
+    /// センサー本体の部品 (部品の役割から付けたとき。`parts` と同じ子の番号の並び)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub part: Option<NodePath>,
 }
 
 /// ステップの開始条件: センサー `sensor` が `on` になっていること
@@ -293,6 +296,7 @@ pub fn chart_to_record(
                 reversed: s.reversed,
                 range: s.range,
                 mounted_on: s.mounted_on,
+                part: s.part.and_then(&part_path),
             })
             .collect(),
         steps: chart
@@ -453,6 +457,7 @@ pub fn chart_from_record(
                 range: r.range,
                 // 消えたアクチュエータに載っていたら外す
                 mounted_on: r.mounted_on.filter(|p| ids.contains(p)),
+                part: r.part.as_deref().and_then(&find_part),
                 ..Sensor::new(r.id, kind)
             }
         })
@@ -693,6 +698,7 @@ mod tests {
             let s = chart.sensors.iter_mut().find(|s| s.id == sensor).unwrap();
             s.mounted_on = Some(table);
             s.position = [5.0, 6.0, 7.0];
+            s.part = Some(12);
         }
         chart.steps = vec![
             Step {

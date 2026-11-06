@@ -105,6 +105,7 @@ pub fn place(
                     name: format!("{prefix}{}", s.name),
                     position: (DVec3::from(s.position) + at).to_array(),
                     mounted_on: s.mounted_on.and_then(|m| actuator_ids.get(&m).copied()),
+                    part: None,
                     ..s
                 };
             }

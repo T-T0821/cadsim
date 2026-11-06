@@ -130,6 +130,8 @@ pub struct UiState<'w> {
     pub mass: ResMut<'w, plantwright_core::modeling::mass::MassCache>,
     /// STEP を読み込んだときの形状の修復の案内 (ステータスバー)
     pub repair: ResMut<'w, plantwright_core::modeling::repair::RepairNotice>,
+    /// 部品の役割 (シリンダ・コンベアなど) を 3D で決める道具
+    pub role_tool: ResMut<'w, plantwright_core::part_role::RoleTool>,
     pub flow: FlowUi<'w>,
     pub diagnostics: Res<'w, DiagnosticsStore>,
     pub render_stats: Res<'w, RenderStats>,

@@ -93,6 +93,7 @@ fn selected_node(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
             .default_open(true)
             .show(ui, |ui| shape_history_section(ui, state, id, &history));
     }
+    crate::features::part_role::panel::properties_section(ui, state, id);
     let mass = egui::CollapsingHeader::new("質量・重心")
         .default_open(true)
         .show(ui, |ui| {

@@ -83,6 +83,32 @@ impl Aabb {
     }
 }
 
+/// レイ (始点 `origin`・向き `dir`) と平面 (点 `p`・法線 `n`) の交点。平行なら None
+pub fn ray_plane(origin: DVec3, dir: DVec3, p: DVec3, n: DVec3) -> Option<DVec3> {
+    let denom = dir.dot(n);
+    if denom.abs() < 1e-12 {
+        return None;
+    }
+    let t = (p - origin).dot(n) / denom;
+    Some(origin + dir * t)
+}
+
+/// レイにいちばん近い、直線 (点 `p`・向き `d`) の上の点。平行なら None
+pub fn closest_on_line(origin: DVec3, dir: DVec3, p: DVec3, d: DVec3) -> Option<DVec3> {
+    let w = p - origin;
+    let a = dir.dot(dir);
+    let b = dir.dot(d);
+    let c = d.dot(d);
+    let denom = a * c - b * b;
+    if denom.abs() < 1e-12 {
+        return None;
+    }
+    let e = w.dot(dir);
+    let f = w.dot(d);
+    let s = (b * e - a * f) / denom;
+    Some(p + d * s)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -111,5 +137,29 @@ mod tests {
         };
         let rotated = aabb.transformed(DMat4::from_rotation_z(FRAC_PI_2));
         assert!((rotated.size() - DVec3::new(1.0, 2.0, 1.0)).length() < 1e-9);
+    }
+
+    #[test]
+    fn ray_meets_plane_and_line() {
+        let p = ray_plane(
+            DVec3::new(1.0, 10.0, 2.0),
+            DVec3::NEG_Y,
+            DVec3::new(0.0, 3.0, 0.0),
+            DVec3::Y,
+        );
+        assert_eq!(p, Some(DVec3::new(1.0, 3.0, 2.0)));
+        assert_eq!(ray_plane(DVec3::ZERO, DVec3::X, DVec3::Y, DVec3::Y), None);
+        let q = closest_on_line(
+            DVec3::new(10.0, 4.0, 0.0),
+            DVec3::NEG_X,
+            DVec3::ZERO,
+            DVec3::Y,
+        )
+        .unwrap();
+        assert!((q - DVec3::new(0.0, 4.0, 0.0)).length() < 1e-9);
+        assert_eq!(
+            closest_on_line(DVec3::ZERO, DVec3::Y, DVec3::X, DVec3::Y),
+            None
+        );
     }
 }

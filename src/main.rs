@@ -27,8 +27,8 @@ use bevy_egui::EguiPlugin;
 use document::{dialog, history, import, project, scene_asset, selection};
 use features::{
     animation, annotation, assistant, conveyor, custom_part, drawing, effects, floor, flow,
-    library, line, line_compose, modeling, motion, physics, plc, result_export, review, safety,
-    scripting, sequence_gen, simulation, site, sound, ui_check, video,
+    library, line, line_compose, modeling, motion, part_role, physics, plc, result_export, review,
+    safety, scripting, sequence_gen, simulation, site, sound, ui_check, video,
 };
 use viewport::{camera, gizmo, picking, render_quality, shortcuts, walk};
 
@@ -63,7 +63,11 @@ fn main() {
             history::HistoryPlugin,
             ui::UiPlugin,
             simulation::SimulationPlugin,
-            (annotation::AnnotationPlugin, modeling::ModelingPlugin),
+            (
+                annotation::AnnotationPlugin,
+                modeling::ModelingPlugin,
+                part_role::PartRolePlugin,
+            ),
             (
                 motion::MotionPlugin,
                 plc::PlcPlugin,

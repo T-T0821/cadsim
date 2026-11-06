@@ -469,6 +469,7 @@ pub fn inspect_actions(ui: &mut egui::Ui, state: &mut UiState, target: Option<No
             } else {
                 state.hole_tool.stop();
                 state.extrude_tool.stop();
+                state.role_tool.stop();
                 state.gizmo.focused = false;
                 state.section_tool.start(target, bounds);
             }

@@ -1,0 +1,19 @@
+# 部品の役割: 箱をシリンダにして、上の面をクリックしたところ
+wait_loaded
+click "空のプロジェクトから"
+wait_loaded
+wait 30
+click "★ Lv."                  # ミッションカードを隠す
+click "作成"
+click "箱を追加"
+wait_loaded
+wait 420                         # ミッション達成の表示が消えるのを待つ
+click "🔍 拡大"
+wait 90
+click "シリンダ"
+wait 20
+click_at 740 300                 # 上の面をクリック → 上へ出る
+wait 20
+drag 736 117 736 150             # 矢印の先をドラッグ
+wait 40
+screenshot cylinder
