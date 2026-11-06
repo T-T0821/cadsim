@@ -36,7 +36,7 @@ use plantwright_core::motion::profile;
 use plantwright_core::motion::robot_path;
 use plantwright_core::motion::robot_time;
 use plantwright_core::motion::sensor;
-mod panel;
+pub mod panel;
 mod sensor_view;
 mod targets;
 mod teach;

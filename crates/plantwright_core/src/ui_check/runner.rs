@@ -240,11 +240,15 @@ impl Runner {
                     },
                 )
             }
-            Step::ClickAt(x, y) => {
+            Step::ClickAt {
+                at,
+                button,
+                presses,
+            } => {
                 if self.phase == 0 {
-                    self.target = (*x, *y);
+                    self.target = *at;
                 }
-                self.click_phases(1, left, SETTLE_FRAMES)
+                self.click_phases(*presses, *button, SETTLE_FRAMES)
             }
             Step::Drag { from, to, button } => {
                 let phase = self.phase;

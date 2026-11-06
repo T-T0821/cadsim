@@ -117,7 +117,7 @@ screenshot 02_undo
 | `click "表示名" [何番目]` | 表示名の部品をクリックする。表示名が同じものが複数あれば上から何番目か |
 | `double_click "表示名" [何番目]` | ダブルクリック |
 | `hover "表示名" [何番目]` | マウスを乗せる (ツールチップやサブメニューを出す) |
-| `click_at x y` | 座標をクリックする (3D ビューの部品など、表示名がないもの) |
+| `click_at x y [left\|right\|double]` | 座標をクリックする (3D ビューの部品など、表示名がないもの)。`right` で右クリック (メニューを開く)、`double` でダブルクリック |
 | `drag x1 y1 x2 y2 [left/right/middle]` | 押したまま動かして離す |
 | `scroll x y 量` | ホイールを回す (正で拡大) |
 | `key ctrl+z` | キーを押して離す。`ctrl` `shift` `alt` と、`a`〜`z` `0`〜`9` `f1`〜`f12` `enter` `esc` `space` `tab` `backspace` `delete` `home` `end` `left` `right` `up` `down` |

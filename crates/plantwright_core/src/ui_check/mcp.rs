@@ -328,7 +328,11 @@ pub fn tool_steps(name: &str, args: &Value) -> Result<Vec<Line>, String> {
         "click" => vec![Step::Click(query()?)],
         "double_click" => vec![Step::DoubleClick(query()?)],
         "hover" => vec![Step::Hover(query()?)],
-        "click_at" => vec![Step::ClickAt(number(args, "x")?, number(args, "y")?)],
+        "click_at" => vec![Step::ClickAt {
+            at: (number(args, "x")?, number(args, "y")?),
+            button: MouseButton::Left,
+            presses: 1,
+        }],
         "drag" => {
             let button = match args.get("button").and_then(Value::as_str) {
                 None | Some("left") => MouseButton::Left,
@@ -533,7 +537,11 @@ mod tests {
         );
         assert_eq!(
             steps("click_at", json!({ "x": 10.5, "y": 20 })).unwrap(),
-            vec![Step::ClickAt(10.5, 20.0)]
+            vec![Step::ClickAt {
+                at: (10.5, 20.0),
+                button: MouseButton::Left,
+                presses: 1,
+            }]
         );
         let script = steps(
             "run_script",

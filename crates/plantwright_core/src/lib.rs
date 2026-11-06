@@ -31,6 +31,7 @@ pub mod motion;
 pub mod part_mesh;
 pub mod physics;
 pub mod plc;
+pub mod pointer;
 pub mod preferences;
 pub mod remap;
 pub mod render_quality;

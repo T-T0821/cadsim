@@ -32,8 +32,13 @@ pub enum Step {
     DoubleClick(WidgetQuery),
     /// `hover "表示名" [何番目]`: マウスを乗せるだけ (ツールチップやサブメニューを開く)
     Hover(WidgetQuery),
-    /// `click_at x y`: ウィンドウの座標をクリックする (3D ビューの部品を選ぶときなど)
-    ClickAt(f32, f32),
+    /// `click_at x y [left|right|double]`: ウィンドウの座標をクリックする (3D ビューの部品を選ぶときなど)。
+    /// right は右クリック (メニューを開く)、double はダブルクリック
+    ClickAt {
+        at: (f32, f32),
+        button: MouseButton,
+        presses: u32,
+    },
     /// `drag x1 y1 x2 y2 [ボタン]`: 押したまま動かして離す。ボタンは left (既定) / right / middle
     Drag {
         from: (f32, f32),
@@ -267,8 +272,24 @@ fn parse_step(command: &str, args: &[String]) -> Result<Step, String> {
         "double_click" => Step::DoubleClick(query()?),
         "hover" => Step::Hover(query()?),
         "click_at" => {
-            count(2)?;
-            Step::ClickAt(num(0)?, num(1)?)
+            if args.len() != 2 && args.len() != 3 {
+                return Err("click_at には x y (と left / right / double) を書きます".into());
+            }
+            let (button, presses) = match args.get(2).map(|s| s.as_str()) {
+                None | Some("left") => (MouseButton::Left, 1),
+                Some("right") => (MouseButton::Right, 1),
+                Some("double") => (MouseButton::Left, 2),
+                Some(other) => {
+                    return Err(format!(
+                        "「{other}」は left / right / double のどれでもありません"
+                    ));
+                }
+            };
+            Step::ClickAt {
+                at: (num(0)?, num(1)?),
+                button,
+                presses,
+            }
         }
         "drag" => {
             if args.len() != 4 && args.len() != 5 {

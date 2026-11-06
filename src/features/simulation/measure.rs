@@ -224,3 +224,20 @@ pub fn label_text(number: usize, m: &Measurement) -> String {
         d.z
     )
 }
+
+impl MeasureTool {
+    /// ビューの下に出す案内 (計測中だけ)
+    pub fn hint(&self) -> Option<String> {
+        if !self.active {
+            return None;
+        }
+        Some(
+            if self.pending.is_some() {
+                "2点目をクリックしてください (頂点の近くは頂点に吸い付く)。Esc で1点目を取り消し"
+            } else {
+                "部品の表面をクリックして1点目を決めてください (M か Esc で計測をやめる)"
+            }
+            .to_owned(),
+        )
+    }
+}

@@ -358,3 +358,20 @@ fn pick_plan_point(
         tool.points.push(point);
     }
 }
+
+impl PlanTool {
+    /// ビューの下に出す案内 (縮尺合わせ中だけ)
+    pub fn hint(&self) -> Option<String> {
+        self.calibrating?;
+        Some(
+            match self.points.len() {
+                0 => {
+                    "平面図の上で、実際の長さが分かる線の1点目をクリックしてください (Esc でやめる)"
+                }
+                1 => "2点目をクリックしてください (Esc で1点目を取り消し)",
+                _ => "2点の実際の距離をパネルに入れると縮尺が決まります",
+            }
+            .to_owned(),
+        )
+    }
+}

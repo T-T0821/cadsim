@@ -9,6 +9,8 @@
 //! - 当たった部品と面は `HitData` の `extra` に `PartHit` として載せる。
 //!   クリックでの選択は `PointerPress`、計測・寸法・教示点・レビューの指さしは `PartUnderPointer`
 //!   (Bevy の `HoverMap`) から読む。
+//! - ダブルクリックでその部品を画面いっぱいに、右クリック (動かさずに離す) で部品のメニューを開く。
+//!   判定は `plantwright_core::pointer` (`ClickWatch`)、メニューを描くのは `ui/context_menu.rs`。
 
 use bevy::{
     ecs::system::SystemParam,
@@ -26,30 +28,37 @@ use crate::document::selection::Selection;
 use crate::features::annotation::annotate_tool_off;
 use crate::features::modeling::hole_tool_off;
 use crate::features::simulation::measure::not_measuring;
-use crate::viewport::camera::{alt_pressed, pointer_in_3d_view};
+use crate::viewport::camera::{CameraRequest, ViewportRect, alt_pressed, pointer_in_3d_view};
 use crate::viewport::gizmo::gizmo_not_focused;
 use crate::viewport::parts::{PartHit, PartPicker};
+use bevy::window::PrimaryWindow;
 use plantwright_core::model::Model;
+use plantwright_core::pointer::{ClickWatch, PartMenu, PointerLock, ViewOverlay};
 
 pub struct PartPickingPlugin;
 
 impl Plugin for PartPickingPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            PreUpdate,
-            part_picking_backend.in_set(PickingSystems::Backend),
-        )
-        .add_systems(
-            Update,
-            pick_part
-                .run_if(pointer_in_3d_view)
-                .run_if(gizmo_not_focused)
-                .run_if(not_measuring)
-                .run_if(annotate_tool_off)
-                .run_if(hole_tool_off)
-                .run_if(crate::features::motion::teach_tool_off)
-                .run_if(crate::features::site::plan_tool_off),
-        );
+        app.init_resource::<ClickWatch>()
+            .init_resource::<ViewOverlay>()
+            .init_resource::<PointerLock>()
+            .add_systems(
+                PreUpdate,
+                part_picking_backend.in_set(PickingSystems::Backend),
+            )
+            .add_systems(
+                Update,
+                pick_part
+                    .run_if(pointer_in_3d_view)
+                    .run_if(gizmo_not_focused)
+                    .run_if(not_measuring)
+                    .run_if(annotate_tool_off)
+                    .run_if(hole_tool_off)
+                    .run_if(pointer_free)
+                    .run_if(crate::features::motion::teach_tool_off)
+                    .run_if(crate::features::site::plan_tool_off),
+            )
+            .add_systems(Update, context_click);
     }
 }
 
@@ -96,11 +105,16 @@ impl PartUnderPointer<'_> {
 }
 
 /// 3D ビューで左ボタンを押したら、押した部品と面を選ぶ (何もないところなら選択を外す)
+#[allow(clippy::too_many_arguments)]
 fn pick_part(
     buttons: Res<ButtonInput<MouseButton>>,
     keys: Res<ButtonInput<KeyCode>>,
     mut presses: MessageReader<PointerPress>,
     model: Res<Model>,
+    time: Res<Time>,
+    window: Single<&Window, With<PrimaryWindow>>,
+    mut clicks: ResMut<ClickWatch>,
+    mut camera: MessageWriter<CameraRequest>,
     mut selection: ResMut<Selection>,
 ) {
     // 選択を止めている間 (ギズモの操作中など) に溜まったものは捨てる。
@@ -116,6 +130,9 @@ fn pick_part(
         })
         .last()
         .and_then(|press| press.hit.extra_as::<PartHit>().copied());
+    let double = window
+        .cursor_position()
+        .is_some_and(|p| clicks.left_pressed(p.into(), time.elapsed_secs_f64()));
     match hit {
         Some(hit) => {
             // 標準部品は本体ではなく部品全体を選ぶ (面の強調もしない)
@@ -123,7 +140,61 @@ fn pick_part(
             selection.node = Some(target);
             selection.face = (target == hit.node).then_some(hit.face);
             selection.reveal_in_tree = true;
+            // ダブルクリックでその部品を画面いっぱいに
+            if double {
+                camera.write(CameraRequest::FitSelection);
+            }
         }
         None => selection.clear(),
+    }
+}
+
+/// 3D でクリックを使う道具がないとき (`PointerLock` を参照)
+pub fn pointer_free(lock: Res<PointerLock>) -> bool {
+    lock.is_free()
+}
+
+/// 右ボタンを押して動かさずに離したら、その場所にメニューを開く (動かしたら見回しなので開かない)。
+/// 部品の上なら部品のメニュー (その部品を選ぶ)、何もないところならビューのメニュー。
+#[allow(clippy::too_many_arguments)]
+fn context_click(
+    buttons: Res<ButtonInput<MouseButton>>,
+    keys: Res<ButtonInput<KeyCode>>,
+    window: Single<&Window, With<PrimaryWindow>>,
+    viewport: Res<ViewportRect>,
+    under_pointer: PartUnderPointer,
+    model: Res<Model>,
+    lock: Res<PointerLock>,
+    mut clicks: ResMut<ClickWatch>,
+    mut overlay: ResMut<ViewOverlay>,
+    mut selection: ResMut<Selection>,
+) {
+    let Some(cursor) = window.cursor_position() else {
+        return;
+    };
+    let at: [f32; 2] = cursor.into();
+    if buttons.just_pressed(MouseButton::Right) {
+        // メニューの上やパネルの上で押したとき、道具がクリックを使っているときは、
+        // メニューを閉じるだけ (Alt + 右はズーム)
+        if !viewport.pointer_on_ui
+            && !alt_pressed(&keys)
+            && overlay.menu.is_none()
+            && lock.is_free()
+        {
+            clicks.right_pressed(at);
+        } else {
+            overlay.menu = None;
+            clicks.right_released(at);
+        }
+    }
+    if buttons.just_released(MouseButton::Right)
+        && let Some(at) = clicks.right_released(at)
+    {
+        let node = under_pointer.hit().map(|hit| model.pick_target(hit.node));
+        if let Some(node) = node {
+            selection.select(node);
+            selection.reveal_in_tree = true;
+        }
+        overlay.menu = Some(PartMenu { node, at });
     }
 }
