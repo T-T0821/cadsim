@@ -51,6 +51,8 @@ pub struct Sensor {
     pub mounted_on: Option<u32>,
     /// 強制 ON / OFF (動作確認用)。`None` なら検知結果どおり。
     pub force: Option<bool>,
+    /// センサー本体の部品 (部品の「役割」から付けたとき)。検知には使わない
+    pub part: Option<u32>,
 }
 
 impl Sensor {
@@ -70,6 +72,7 @@ impl Sensor {
             range,
             mounted_on: None,
             force: None,
+            part: None,
         }
     }
 

@@ -143,6 +143,31 @@ impl MotionUi<'_> {
     pub fn chart_mut(&mut self) -> &mut TimingChart {
         &mut self.chart
     }
+
+    /// ワーク搬送の設定 (書き換えるときは `chart_and_conveyors_mut`)
+    pub fn conveyors(&self) -> &plantwright_core::conveyor::ConveyorConfig {
+        &self.conveyors
+    }
+
+    /// チャートと書き換え用のワーク搬送の設定を一度に借りる
+    pub fn chart_and_conveyors_mut(
+        &mut self,
+    ) -> (
+        &mut TimingChart,
+        &mut plantwright_core::conveyor::ConveyorConfig,
+    ) {
+        (&mut self.chart, &mut self.conveyors)
+    }
+
+    /// チャートでアクチュエータの行を選ぶ (部品の役割から開いたとき)
+    pub fn focus_actuator(&mut self, id: u32) {
+        self.state.select_actuator(id);
+    }
+
+    /// チャートでセンサーの行を選ぶ
+    pub fn focus_sensor(&mut self, id: u32) {
+        self.state.select_sensor(id);
+    }
 }
 
 /// 画面下のタイミングチャートのパネル。ステータスバーの上、左右のパネルより外側に置く。

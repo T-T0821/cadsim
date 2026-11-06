@@ -15,12 +15,15 @@ use crate::features::simulation::measure::MeasureTool;
 use crate::features::site::PlanTool;
 use plantwright_core::modeling::extrude_tool::ExtrudeTool;
 use plantwright_core::modeling::hole_tool::HoleTool;
+use plantwright_core::part_role::RoleTool;
 use plantwright_core::pointer::ViewHint;
 
-/// 使っている道具の案内を、優先順 (穴あけ > 押し出し > 寸法 > 計測 > 平面図 > 教示) に1つだけ出す
+/// 使っている道具の案内を、優先順 (穴あけ > 押し出し > 部品の役割 > 寸法 > 計測 > 平面図 > 教示) に1つだけ出す
+#[allow(clippy::too_many_arguments)]
 pub fn gather_hints(
     hole: Res<HoleTool>,
     extrude: Res<ExtrudeTool>,
+    role: Res<RoleTool>,
     annotate: Res<AnnotateTool>,
     measure: Res<MeasureTool>,
     plan: Res<PlanTool>,
@@ -37,6 +40,8 @@ pub fn gather_hints(
             Some(error) => Some((error.clone(), true)),
             None => Some((extrude.hint().to_owned(), false)),
         }
+    } else if role.active() {
+        Some((role.hint(), false))
     } else {
         annotate
             .hint()

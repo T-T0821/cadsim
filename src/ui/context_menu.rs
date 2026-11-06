@@ -106,6 +106,18 @@ fn part_items(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) -> bool {
         }
     }
     ui.separator();
+    ui.menu_button("役割を付ける", |ui| {
+        for kind in plantwright_core::part_role::RoleKind::ALL {
+            if ui.button(kind.label()).on_hover_text(kind.help()).clicked()
+                && crate::features::part_role::panel::start_new_role(state, id, kind)
+            {
+                done = true;
+            }
+        }
+    })
+    .response
+    .on_hover_text("シリンダ・コンベア・センサーなどにして、3D で向きや長さを決める");
+    ui.separator();
     if ui.button("🗑 削除").clicked() {
         state.history.remove(&mut state.model, id);
         state.selection.clear();
