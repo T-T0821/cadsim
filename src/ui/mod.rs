@@ -22,6 +22,7 @@
 //! egui のパネルは「外側から順に場所を取る」ので、1つのシステムの中で
 //! 上 → 下 → 左 → 右 の順に描き、残った領域を 3D ビューにする。
 
+mod context_menu;
 pub mod dock;
 pub mod font;
 mod guide;
@@ -36,6 +37,7 @@ pub mod theme;
 mod tree;
 mod tutorial;
 mod view_cube;
+mod view_hints;
 pub mod widgets;
 
 use bevy::{
@@ -72,7 +74,9 @@ impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<dock::Dock>()
             .add_plugins((playful::PlayfulPlugin, logo::LogoPlugin))
+            .init_resource::<plantwright_core::pointer::ViewHint>()
             .add_systems(Startup, spawn_ui_camera)
+            .add_systems(Update, view_hints::gather_hints)
             .add_systems(
                 EguiPrimaryContextPass,
                 (
@@ -91,7 +95,8 @@ impl Plugin for UiPlugin {
                         .run_if(at_design_pose)
                         .run_if(physics_stopped)
                         .run_if(not(plc_active))
-                        .run_if(crate::features::modeling::hole_tool_off),
+                        .run_if(crate::features::modeling::hole_tool_off)
+                        .run_if(crate::viewport::picking::pointer_free),
                 )
                     .chain(),
             );
@@ -143,6 +148,12 @@ pub struct UiState<'w> {
     pub sound: ResMut<'w, crate::features::sound::SoundUi>,
     /// 3D ビューの画質 (影・陰影・光のにじみ)
     pub render_quality: ResMut<'w, crate::viewport::render_quality::RenderQualityUi>,
+    /// ビューの下の案内 (道具が書く)
+    pub hint: Res<'w, plantwright_core::pointer::ViewHint>,
+    /// 右クリックのメニューと、カーソルの下の部品名
+    pub overlay: ResMut<'w, plantwright_core::pointer::ViewOverlay>,
+    /// カーソルの下の部品 (部品名の表示)
+    pub under_pointer: crate::viewport::picking::PartUnderPointer<'w>,
 }
 
 /// UI 専用のカメラ。3D カメラはパネルを除いた領域だけに描くので、
@@ -201,6 +212,8 @@ fn draw_ui(mut contexts: EguiContexts, mut state: UiState) -> Result {
     let view = root.available_rect_before_wrap();
     state.viewport.rect = Some(Rect::new(view.min.x, view.min.y, view.max.x, view.max.y));
     view_cube::show(&ctx, view, &mut state);
+    view_hints::show(&ctx, view, &mut state);
+    context_menu::show(&ctx, &mut state);
     status::show_notifications(&ctx, view, &mut state);
     crate::features::animation::panel::show(&ctx, view, &mut state);
     replace::show(&ctx, &mut state);

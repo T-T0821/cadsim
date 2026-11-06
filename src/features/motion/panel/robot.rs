@@ -939,3 +939,14 @@ pub fn export_melfa(
         Err(e) => format!("{} に書き込めませんでした: {e}", path.display()),
     });
 }
+
+impl RobotUiState {
+    /// ビューの下に出す案内 (教示点を 3D で置いている間だけ)
+    pub fn hint(&self) -> Option<String> {
+        self.placing?;
+        Some(
+            "部品の表面をクリックすると、そこに教示点を置きます (もう一度ボタンを押すとやめる)"
+                .to_owned(),
+        )
+    }
+}

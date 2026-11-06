@@ -1475,6 +1475,26 @@ fn annotation_panel(
     Ok(())
 }
 
+impl AnnotateTool {
+    /// ビューの下に出す案内 (寸法・注記を置いている間だけ)
+    pub fn hint(&self) -> Option<String> {
+        let text = match (self.mode, self.first.is_some()) {
+            (Mode::Off, _) => return None,
+            (Mode::PointDistance, false) => "1点目の頂点か面をクリックしてください (Esc でやめる)",
+            (Mode::PointDistance, true) => {
+                "2点目をクリックすると点間の寸法を置きます (Esc で1点目を取り消し)"
+            }
+            (Mode::EdgeLength, _) => "辺をクリックすると長さの寸法を置きます (Esc でやめる)",
+            (Mode::FaceDistance, false) => "1つ目の面をクリックしてください (Esc でやめる)",
+            (Mode::FaceDistance, true) => {
+                "2つ目の面をクリックすると面間の寸法を置きます (Esc で1つ目を取り消し)"
+            }
+            (Mode::Note, _) => "注記を付ける場所をクリックしてください (Esc でやめる)",
+        };
+        Some(text.to_owned())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

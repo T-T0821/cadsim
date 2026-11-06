@@ -30,4 +30,18 @@ expect "選択: "
 # そこで撮ると 1 フレームのずれで文字の位置が変わり、写真が基準と合わなくなる
 wait 420
 screenshot 04_picked_in_view
+
+# 右クリック (動かさずに離す) で部品のメニュー。Esc で閉じる
+click_at 740 360 right
+wait 10
+expect "これだけ表示"
+screenshot 05_context_menu
+key esc
+wait 10
+expect_not "これだけ表示"
+
+# ダブルクリックでその部品を画面いっぱいに
+click_at 740 360 double
+wait 90
+screenshot 06_double_click_fit
 key esc

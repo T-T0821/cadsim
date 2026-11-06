@@ -126,27 +126,7 @@ pub fn draw_labels(
         }
     }
 
-    // 案内 (エラーがあればそれを赤く)
-    let (text, background) = match &tool.error {
-        Some(e) => (
-            e.clone(),
-            egui::Color32::from_rgba_unmultiplied(120, 30, 30, 230),
-        ),
-        None => (
-            tool.hint().to_owned(),
-            egui::Color32::from_rgba_unmultiplied(20, 50, 90, 220),
-        ),
-    };
-    let galley =
-        painter.layout_no_wrap(text, egui::FontId::proportional(14.0), egui::Color32::WHITE);
-    let size = galley.size() + egui::vec2(16.0, 10.0);
-    let rect = egui::Rect::from_center_size(egui::pos2(view.center().x, view.max.y - 28.0), size);
-    painter.rect_filled(rect, 6.0, background);
-    painter.galley(
-        rect.min + egui::vec2(8.0, 5.0),
-        galley,
-        egui::Color32::WHITE,
-    );
+    // 案内はビュー共通の案内バー (ui/view_hints.rs) に出す
     Ok(())
 }
 
