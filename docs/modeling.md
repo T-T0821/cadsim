@@ -61,16 +61,33 @@ SMLib の機能を使う操作です。画面からの操作はまだなく、co
 | 質量特性 | `ops::mass_properties` | 体積・表面積・質量・重心・重心まわりの慣性モーメントと慣性乗積(ワールド座標)。STEP の部品も対象。複数の本体は平行軸の定理でまとめる |
 | 断面 | `ops::section` | 平面で切った断面の線(ワールド座標のポリライン) |
 
-- 作り変える操作は穴あけと同じく、箱とここで作った部品が対象で、元に戻すための `ModelChange` を返す。失敗したら部品は元のまま。
+- 作り変える操作は穴あけと同じく、箱とここで作った部品が対象で、元に戻すための `ModelChange` を返す。失敗したら部品は元のまま。どの操作も `modify` → `replace_shape` を通り、そこで形の編集履歴に記録される(次の節)。
 - 辺と面の番号は、部品の表示メッシュ(`ImportedShape::edges` / `faces`)の番号。表示では点が1つしかない辺やメッシュにできなかった面を飛ばしているので、カーネルの番号に直してから渡す。
 - STEP の読み込みでは、縫い合わせても閉じなかったシェルに形状の修復(`Brep::heal`)をかけ、閉じたときだけ修復した形を使う。
 
+## 形の編集履歴 (`modeling/features.rs`)
+
+穴あけ・ブーリアン・フィレット・面取り・シェル・オフセット・フィレットの削除は、できた B-rep と一緒に「何をしたか」を `ShapeHistory` として部品に残します。記録する場所は `replace_shape` の 1 か所で、`drill_hole`・`apply_boolean`・`ops::modify` はそれぞれ `Feature` を 1 つ作って履歴の末尾に足し、`Feature::apply` で形を作ります(直接カーネルを呼ばない。あとから作り直すときと同じ道を通すため)。
+
+| 型 | 中身 |
+| --- | --- |
+| `Base` | 出発点の形。`Box { size }`(原点を中心にした箱。`normalize_box` のあとの箱と同じ)か `Solid { smlib }`(円柱・押し出しなど、最初の編集をかけたときの形をそのまま覚える) |
+| `Feature` | 1 つの編集。`Hole`(部品座標の始点・向き・長さ・直径)、`Fillet` / `Chamfer`(辺の印と半径・大きさ)、`Shell`(開ける面の印と厚み)、`Offset`、`RemoveFillets`、`Boolean`(部品座標に置いた相手の SMLib テキストと演算) |
+| `EdgeKey` | 辺の印: 部品座標の中点(長さの半分の位置)と長さ |
+| `FaceKey` | 面の印: 面積で重み付けした中心と法線 |
+| `ShapeHistory` | `base`(無ければ作り直せない)と `features` の列。`rebuild` で出発点から順にやり直す |
+
+- 辺・面を番号で覚えると前の編集を変えたときにずれるので、印で覚えて、やり直すとき(`resolve_edges` / `resolve_faces`)に今の形のテッセレーションから最寄りの辺・面を選ぶ。形の大きさの 5% より遠ければ「形が変わりすぎた」としてエラー。
+- あとから直す・消すのは `edit_feature` / `remove_feature` / `edit_base`(core)。履歴を書き換えて `rebuild` し、`replace_shape` で置き換える。失敗したら部品は元のまま。
+- 画面はプロパティの「形の編集履歴」(`ui/properties.rs` の `shape_history_section`)。数値はドラッグを離した・入力を終えたときだけ確定する(`widgets::committed_value`。作り直しはブーリアンを含むので毎フレームは重い)。
+- 記録を持たない部品(取り込んだ形・この機能より前に保存したファイル)は履歴が空で、画面にも出ない。次に編集をかけたときに、その時の形を `Base::Solid` として覚え始める。
+
 ## 部品としての持ち方
 
-作った形は `NodeKind::Imported` の部品にし、`source` を `StepSource::Modeled(ModeledSource)` にします。`ModeledSource` は B-rep を JSON にした文字列(`{"smlib": SMLib のテキスト形式}`)を持ち、`.plantwright` の `step_files` に `Modeled { name, solid }` として埋め込みます(元のファイルがないため)。開くときは JSON から B-rep を戻してテッセレーションし直します。形状カーネルを替える前に保存したファイル(truck の B-rep をそのまま JSON にしたもの)も、面を1つずつ組み立て直して読めます。
+作った形は `NodeKind::Imported` の部品にし、`source` を `StepSource::Modeled(ModeledSource)` にします。`ModeledSource` は B-rep を JSON にした文字列(`{"smlib": SMLib のテキスト形式, "base": 出発点, "features": [編集, …]}`。`base` と `features` は形の編集履歴で、無いこともある)を持ち、`.plantwright` の `step_files` に `Modeled { name, solid }` として埋め込みます(元のファイルがないため)。開くときは JSON から B-rep を戻してテッセレーションし直します。形状カーネルを替える前に保存したファイル(truck の B-rep をそのまま JSON にしたもの)も、面を1つずつ組み立て直して読めます。
 
 箱に穴をあける・演算するときは、箱を「原点を中心にした形 + 配置」に分けてから演算し、結果を `Modeled` の部品に置き換えます。配置はそのまま残るので、ギズモで動かした位置は変わりません。
 
 ## 元に戻す
 
-形の追加は `record_added`、置き換え(穴・ブーリアン)は変更前後のノードを `ModelChange` として履歴に積みます。ブーリアンで消える2つ目の部品も同じ変更に入れるので、Ctrl+Z 1回で両方戻ります。
+形の追加は `record_added`、置き換え(穴・ブーリアン・フィレット・編集履歴の直し)は変更前後のノードを `ModelChange` として履歴に積みます。ブーリアンで消える2つ目の部品も同じ変更に入れるので、Ctrl+Z 1回で両方戻ります。

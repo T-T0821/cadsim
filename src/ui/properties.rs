@@ -4,7 +4,7 @@ use bevy::math::{DMat4, DVec3};
 use bevy_egui::egui;
 
 use super::UiState;
-use super::widgets::{length, round_for_display, row, xyz_editor};
+use super::widgets::{committed_value, committed_xyz, length, round_for_display, row, xyz_editor};
 use crate::features::motion;
 use crate::viewport::camera::CameraRequest;
 use crate::viewport::gizmo::snap_settings_ui;
@@ -13,6 +13,7 @@ use plantwright_core::math::quat_to_euler_deg;
 use plantwright_core::math::split_placement;
 use plantwright_core::model::NodeId;
 use plantwright_core::model::NodeKind;
+use plantwright_core::modeling::features::{Base, ShapeHistory};
 use plantwright_core::physics::settings::BeltDrive;
 use plantwright_core::physics::settings::BodyMode;
 use plantwright_core::physics::settings::ColliderShape;
@@ -81,6 +82,11 @@ fn selected_node(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
             .show(ui, |ui| {
                 crate::features::library::properties_section(ui, state, id)
             });
+    }
+    if let Some(history) = crate::features::modeling::shape_history(&state.model, id) {
+        egui::CollapsingHeader::new("形の編集履歴")
+            .default_open(true)
+            .show(ui, |ui| shape_history_section(ui, state, id, &history));
     }
     let is_box = matches!(state.model.get(id).map(|n| &n.kind), Some(NodeKind::Box(_)));
     egui::CollapsingHeader::new(if is_box {
@@ -274,6 +280,93 @@ fn modeling_actions(ui: &mut egui::Ui, state: &mut UiState) {
             state.dock.set_open(Tool::Modeling, true);
         }
     });
+}
+
+/// 形の編集履歴: 出発点の形と、穴・フィレットなどの編集を上から順に。数値を直す・1 つ消すと、
+/// 出発点から作り直す
+fn shape_history_section(
+    ui: &mut egui::Ui,
+    state: &mut UiState,
+    id: NodeId,
+    history: &ShapeHistory,
+) {
+    use crate::features::modeling::{edit_base, edit_feature, remove_feature};
+
+    // 何かした結果 (何もしなければ None)
+    let mut result: Option<Result<(), String>> = None;
+    if let Some(base) = &history.base {
+        ui.horizontal(|ui| {
+            ui.weak("出発点");
+            ui.label(base.label());
+        });
+        if let Base::Box { size } = base {
+            let mut edited = *size;
+            let drag_id = ui.make_persistent_id(("shape_history_base", id));
+            if committed_xyz(ui, drag_id, &mut edited) && edited.iter().all(|v| *v > 0.0) {
+                result = Some(edit_base(
+                    &mut state.model,
+                    &mut state.history,
+                    id,
+                    Base::Box { size: edited },
+                ));
+            }
+        }
+    }
+    if history.features.is_empty() {
+        ui.weak("まだ編集はありません。");
+    }
+    egui::Grid::new(("shape_history", id))
+        .num_columns(3)
+        .spacing([8.0, 4.0])
+        .show(ui, |ui| {
+            for (index, feature) in history.features.iter().enumerate() {
+                ui.label(format!("{}. {}", index + 1, feature.label()));
+                match feature.value() {
+                    Some((name, value)) => {
+                        ui.horizontal(|ui| {
+                            ui.weak(name);
+                            let drag_id = ui.make_persistent_id(("shape_history_value", id, index));
+                            if let Some(new_value) = committed_value(ui, drag_id, value) {
+                                let mut edited = feature.clone();
+                                result = Some(edited.set_value(new_value).and_then(|()| {
+                                    edit_feature(
+                                        &mut state.model,
+                                        &mut state.history,
+                                        id,
+                                        index,
+                                        edited,
+                                    )
+                                }));
+                            }
+                        });
+                    }
+                    None => {
+                        ui.label("");
+                    }
+                }
+                if ui
+                    .small_button("🗑")
+                    .on_hover_text("この編集を消して、形を作り直す")
+                    .clicked()
+                {
+                    result = Some(remove_feature(
+                        &mut state.model,
+                        &mut state.history,
+                        id,
+                        index,
+                    ));
+                }
+                ui.end_row();
+            }
+        });
+    match result {
+        Some(Err(e)) => state.modeling.history_error = Some(e),
+        Some(Ok(())) => state.modeling.history_error = None,
+        None => {}
+    }
+    if let Some(e) = &state.modeling.history_error {
+        ui.colored_label(egui::Color32::from_rgb(220, 80, 80), e);
+    }
 }
 
 /// 箱: 寸法・位置・回転のパラメータを直接編集する

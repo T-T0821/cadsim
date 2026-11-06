@@ -11,7 +11,11 @@
 
 use glam::{DMat4, DQuat, DVec2, DVec3};
 
-use super::{SolidStore, node_solid, normalize_box, replace_shape};
+use super::features::{self, Feature};
+use super::{
+    SolidStore, display_tolerance, feature_result, history_of, node_solid, normalize_box,
+    replace_shape,
+};
 use crate::history::ModelChange;
 use crate::kernel::{Brep, MassProperties};
 use crate::model::{Model, NodeId, NodeKind, StepSource};
@@ -51,26 +55,24 @@ fn kernel_faces(solid: &Brep, display: &[usize]) -> Result<Vec<usize>, String> {
         .collect()
 }
 
-fn display_tolerance(solid: &Brep) -> f64 {
-    let size = solid
-        .loose_bounds()
-        .map_or(1.0, |b| (b.max - b.min).length());
-    (size * 0.0005).max(1e-6)
-}
-
-/// 部品 `id` の形を `edit` で作り変える。失敗したら元に戻す
+/// 部品 `id` の形を、`edit` が作る編集 ([`Feature`]) で作り変え、編集履歴に残す。失敗したら元に戻す。
+/// `edit` には今の形を渡す (表示メッシュの番号を辺・面の印に直すため)
 fn modify(
     model: &mut Model,
     store: &dyn SolidStore,
     id: NodeId,
     what: &str,
-    edit: impl FnOnce(&Brep) -> Result<Brep, String>,
+    edit: impl FnOnce(&Brep) -> Result<Feature, String>,
 ) -> Result<ModelChange, String> {
     node_solid(model, store, id)?;
     let before = model.snapshot(id);
     normalize_box(model, id);
-    let result = node_solid(model, store, id).and_then(|solid| edit(&solid));
-    let result = match result {
+    let result = node_solid(model, store, id).and_then(|solid| {
+        let mut history = history_of(model, store, id)?;
+        history.features.push(edit(&solid)?);
+        feature_result(&history, &solid)
+    });
+    let (result, history) = match result {
         Ok(r) => r,
         Err(e) => {
             if let Some(b) = &before {
@@ -79,7 +81,7 @@ fn modify(
             return Err(e);
         }
     };
-    replace_shape(model, store, id, &result)?;
+    replace_shape(model, store, id, &result, &history)?;
     let name = model.get(id).map(|n| n.name.clone()).unwrap_or_default();
     Ok(ModelChange {
         label: format!("{name} を{what}"),
@@ -96,9 +98,10 @@ pub fn fillet_edges(
     radius: f64,
 ) -> Result<ModelChange, String> {
     modify(model, store, id, "丸める", |solid| {
-        solid
-            .fillet_edges(&kernel_edges(solid, edges)?, radius)
-            .map_err(|_| too_large("半径"))
+        Ok(Feature::Fillet {
+            edges: features::edge_keys(solid, &kernel_edges(solid, edges)?)?,
+            radius,
+        })
     })
 }
 
@@ -111,14 +114,11 @@ pub fn chamfer_edges(
     distance: f64,
 ) -> Result<ModelChange, String> {
     modify(model, store, id, "面取りする", |solid| {
-        solid
-            .chamfer_edges(&kernel_edges(solid, edges)?, distance)
-            .map_err(|_| too_large("面取りの大きさ"))
+        Ok(Feature::Chamfer {
+            edges: features::edge_keys(solid, &kernel_edges(solid, edges)?)?,
+            distance,
+        })
     })
-}
-
-fn too_large(what: &str) -> String {
-    format!("できませんでした。{what}が隣の面より大きくないか確かめてください")
 }
 
 /// 部品を厚み `thickness` の中空にする。`open_faces` (表示メッシュの番号) の面は開ける
@@ -130,9 +130,10 @@ pub fn shell(
     open_faces: &[usize],
 ) -> Result<ModelChange, String> {
     modify(model, store, id, "中空にする", |solid| {
-        solid
-            .shell(thickness, &kernel_faces(solid, open_faces)?)
-            .map_err(|_| "中空にできませんでした。厚みを薄くしてみてください".to_owned())
+        Ok(Feature::Shell {
+            open_faces: features::face_keys(solid, &kernel_faces(solid, open_faces)?)?,
+            thickness,
+        })
     })
 }
 
@@ -148,7 +149,7 @@ pub fn offset(
     } else {
         "やせさせる"
     };
-    modify(model, store, id, what, |solid| solid.offset(distance))
+    modify(model, store, id, what, |_| Ok(Feature::Offset { distance }))
 }
 
 /// 部品のフィレットを消して角を尖らせる
@@ -157,7 +158,9 @@ pub fn remove_fillets(
     store: &dyn SolidStore,
     id: NodeId,
 ) -> Result<ModelChange, String> {
-    modify(model, store, id, "角を尖らせる", Brep::remove_fillets)
+    modify(model, store, id, "角を尖らせる", |_| {
+        Ok(Feature::RemoveFillets)
+    })
 }
 
 /// 断面 (r, y) を Y 軸のまわりに `angle_deg` 度回した回転体。r は軸からの距離 (0 以上)

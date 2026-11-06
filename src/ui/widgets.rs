@@ -25,6 +25,32 @@ pub fn xyz_editor(
     changed
 }
 
+/// 計算の重い値 (形を作り直す寸法など) の DragValue。ドラッグ中・入力中は手元の値を見せ、
+/// ドラッグを離す・入力を終えたときだけ、変わっていれば新しい値を返す
+pub fn committed_value(ui: &mut egui::Ui, id: egui::Id, current: f64) -> Option<f64> {
+    let mut value = ui.data_mut(|d| *d.get_temp_mut_or(id, current));
+    let response = ui.add(egui::DragValue::new(&mut value).speed(0.1).max_decimals(4));
+    let editing = response.dragged() || response.has_focus();
+    ui.data_mut(|d| d.insert_temp(id, if editing { value } else { current }));
+    let done = response.drag_stopped() || response.lost_focus();
+    (done && (value - current).abs() > 1e-9).then_some(value)
+}
+
+/// [`committed_value`] の X/Y/Z 版。確定したら `values` を書き換えて true を返す
+pub fn committed_xyz(ui: &mut egui::Ui, id: egui::Id, values: &mut [f64; 3]) -> bool {
+    let mut changed = false;
+    ui.horizontal(|ui| {
+        for (i, (value, axis)) in values.iter_mut().zip(["X", "Y", "Z"]).enumerate() {
+            ui.weak(axis);
+            if let Some(v) = committed_value(ui, id.with(i), *value) {
+                *value = v;
+                changed = true;
+            }
+        }
+    });
+    changed
+}
+
 /// 表の1行 (左に項目名、右に値)
 pub fn row(ui: &mut egui::Ui, label: &str, value: impl Into<egui::WidgetText>) {
     ui.weak(label);
