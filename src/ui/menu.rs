@@ -584,11 +584,18 @@ fn create_menu(ui: &mut egui::Ui, state: &mut UiState) {
             add_box(state);
         }
         ui.separator();
-        for tab in [Tab::Cylinder, Tab::Extrude, Tab::Hole, Tab::Boolean] {
+        for tab in [
+            Tab::Cylinder,
+            Tab::Extrude,
+            Tab::Hole,
+            Tab::Shape,
+            Tab::Boolean,
+        ] {
             let text = match tab {
                 Tab::Cylinder => "円柱を追加…",
                 Tab::Extrude => "押し出しで追加…",
                 Tab::Hole => "穴をあける…",
+                Tab::Shape => "角を丸める・面取り・肉抜き…",
                 Tab::Boolean => "ブーリアン (和・差・積)…",
             };
             if ui.button(text).clicked() {
@@ -597,6 +604,12 @@ fn create_menu(ui: &mut egui::Ui, state: &mut UiState) {
                 // 穴あけは、部品を選んでいればすぐ面をクリックできるようにする
                 if tab == Tab::Hole && part_can_be_modeled(state) {
                     crate::features::modeling::panel::start_hole_tool(state);
+                }
+                if tab == Tab::Shape && part_can_be_modeled(state) {
+                    crate::features::modeling::panel::start_shape_tool(
+                        state,
+                        plantwright_core::modeling::shape_tool::ShapeOp::Fillet,
+                    );
                 }
                 ui.close();
             }

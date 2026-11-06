@@ -5,6 +5,10 @@
 //!
 //! 穴あけは 3D ビューで面をクリックして置く道具 ([`HoleTool`]) で行う。道具の状態と寸法の計算は
 //! `plantwright_core::modeling::hole_tool`、マウスの読み方は `systems`、3D の線と文字は `view`。
+//!
+//! 丸める (フィレット)・面取り・肉抜き (シェル) も同じ形の道具 ([`ShapeTool`]): 3D ビューで辺か面を
+//! クリックし、矢印の先をドラッグで半径・幅・肉厚、半透明のプレビューを見て Enter。状態と計算は
+//! `plantwright_core::modeling::shape_tool`。
 
 pub mod panel;
 pub mod systems;
@@ -19,6 +23,7 @@ use plantwright_core::modeling::extrude_tool::ExtrudeTool;
 use plantwright_core::modeling::features::{Base, Feature, ShapeHistory};
 use plantwright_core::modeling::hole_tool::HoleTool;
 use plantwright_core::modeling::record::JsonSolids;
+use plantwright_core::modeling::shape_tool::{self, PartGeometry, ShapeTool};
 use plantwright_core::modeling::*;
 use plantwright_core::pointer::PointerLock;
 
@@ -36,6 +41,9 @@ impl Plugin for ModelingPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<HoleTool>()
             .init_resource::<ExtrudeTool>()
+            .init_resource::<ShapeTool>()
+            .init_resource::<PartGeometry>()
+            .init_resource::<view::ShapePreview>()
             .init_resource::<panel::ModelingUi>()
             .init_gizmo_group::<view::HoleGizmos>()
             .add_systems(Startup, view::configure_gizmos)
@@ -49,12 +57,23 @@ impl Plugin for ModelingPlugin {
                     systems::extrude_keys.run_if(keyboard_free),
                     systems::extrude_input,
                     view::draw_extrude_preview,
+                    shape_lock,
+                    systems::shape_keys.run_if(keyboard_free),
+                    systems::shape_input,
+                    view::update_shape_preview,
+                    view::draw_shape_tool,
                 )
                     .chain(),
             )
+            // 部品の表示 (viewport::parts) が毎フレーム決める表示/非表示の後で、プレビュー中の部品を隠す
+            .add_systems(
+                PostUpdate,
+                view::hide_previewed_part
+                    .before(bevy::camera::visibility::VisibilitySystems::VisibilityPropagate),
+            )
             .add_systems(
                 EguiPrimaryContextPass,
-                view::draw_labels
+                (view::draw_labels, view::draw_shape_labels)
                     .after(install_japanese_font)
                     // UI がビューの領域とカーソルの位置を決めた後で描く
                     .after(transform_gizmo_system),
@@ -75,6 +94,38 @@ fn extrude_lock(tool: Res<ExtrudeTool>, mut lock: ResMut<PointerLock>) {
         }
     } else if lock.held_by() == Some("extrude") {
         lock.release("extrude");
+    }
+}
+
+/// 丸める・面取り・肉抜きの道具を使っている間は、クリックを道具のものにする (選択・ギズモ・右クリックメニューを止める)
+fn shape_lock(tool: Res<ShapeTool>, mut lock: ResMut<PointerLock>) {
+    if tool.active {
+        if lock.held_by() != Some("shape_tool") {
+            lock.hold("shape_tool");
+        }
+    } else if lock.held_by() == Some("shape_tool") {
+        lock.release("shape_tool");
+    }
+}
+
+/// 丸める・面取り・肉抜きを確定する (Enter かパネルのボタン)。うまくいけば道具をやめ、
+/// 失敗したら選んだ辺・面はそのまま残してエラーを出す
+pub fn confirm_shape(
+    tool: &mut ShapeTool,
+    model: &mut Model,
+    history: &mut History,
+    jobs: &mut ImportJobs,
+) {
+    if !tool.ready() {
+        return;
+    }
+    match shape_tool::apply(model, &JsonSolids, tool) {
+        Ok(change) => {
+            history.push(change);
+            jobs.messages.push(tool.op.done_message().into());
+            tool.finish();
+        }
+        Err(e) => tool.error = Some(e),
     }
 }
 
@@ -232,5 +283,19 @@ mod tests {
         };
         drill_hole(&mut model, &mut history, id, &hole).unwrap();
         assert!(history.undo_label().unwrap().contains("穴"));
+    }
+
+    #[test]
+    fn confirming_shell_is_recorded_in_history() {
+        let mut model = Model::default();
+        let mut history = History::default();
+        let mut jobs = ImportJobs::default();
+        let id = model.add_box([100.0, 40.0, 100.0], [0.0; 3]);
+        let geometry = PartGeometry::of(&model, id).unwrap();
+        let mut tool = ShapeTool::default();
+        tool.start(shape_tool::ShapeOp::Shell, id, &geometry);
+        confirm_shape(&mut tool, &mut model, &mut history, &mut jobs);
+        assert!(!tool.active, "{:?}", tool.error);
+        assert!(history.undo_label().unwrap().contains("中空"));
     }
 }

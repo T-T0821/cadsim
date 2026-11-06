@@ -44,6 +44,35 @@ wait 30
 expect_not "穴 φ"
 screenshot 06_history_removed
 
+# 角を丸める道具: プロパティの「角を丸める」→ 3D で辺をクリック → 矢印の先をドラッグ → Enter
+click "角を丸める"
+wait 30
+screenshot 07_fillet_tool
+click_at 900 296                  # 上の面の手前左の辺をクリック
+wait 30
+expect "辺 1 本"
+screenshot 08_fillet_edge
+drag 898 297 935 345              # 矢印の先の点を内側へ引いて半径を大きく
+wait 30
+screenshot 09_fillet_dragged
+key Enter                         # 確定
+wait_loaded
+wait 30
+expect "角を丸めました"
+screenshot 10_fillet_done
+
+# 肉抜き: 上の面をクリックして開ける面に。穴と丸みのある形は中空にできないので、理由が赤く出る
+click "肉抜き"
+wait 30
+click_at 1090 262                 # 上の面をクリック (開ける面)
+wait 30
+expect "開ける面 1 枚"
+expect "中空にできませんでした"
+screenshot 11_shell_error
+key Escape                        # 選んだ面を外す
+key Escape                        # 道具をやめる
+wait 10
+
 click "作成"
 click "円柱を追加…"
 wait 10

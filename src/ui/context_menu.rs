@@ -104,6 +104,13 @@ fn part_items(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) -> bool {
             crate::features::modeling::panel::start_hole_tool(state);
             done = true;
         }
+        for op in plantwright_core::modeling::shape_tool::ShapeOp::ALL {
+            if ui.button(op.label()).clicked() {
+                state.selection.select(id);
+                crate::features::modeling::panel::start_shape_tool(state, op);
+                done = true;
+            }
+        }
     }
     ui.separator();
     ui.menu_button("役割を付ける", |ui| {

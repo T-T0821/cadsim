@@ -122,6 +122,8 @@ pub struct UiState<'w> {
     pub modeling: ResMut<'w, crate::features::modeling::panel::ModelingUi>,
     /// 3D ビューで面をクリックして穴をあける道具
     pub hole_tool: ResMut<'w, plantwright_core::modeling::hole_tool::HoleTool>,
+    /// 3D ビューで辺・面を指して丸める・面取り・肉抜きする道具
+    pub shape_tool: ResMut<'w, plantwright_core::modeling::shape_tool::ShapeTool>,
     /// 3D ビューの床に形を描いて押し出す道具
     pub extrude_tool: ResMut<'w, plantwright_core::modeling::extrude_tool::ExtrudeTool>,
     /// 部品の役割 (シリンダ・コンベアなど) を 3D で決める道具
