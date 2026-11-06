@@ -14,6 +14,8 @@ click "サンプル工場"
 wait 10
 click "工程"
 wait 10
+scroll 460 500 -6                # 一覧の下のほうの搬送まで送る
+wait 10
 click "[搬送] フォークリフト"
 wait 10
 expect "同時に運べる数"

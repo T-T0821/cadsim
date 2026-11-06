@@ -151,5 +151,7 @@ README の画面写真も同じしくみで撮っています。手順書は `do
 tools/ui_check.sh docs/screenshots/scenarios --update --baseline docs/screenshots
 ```
 
+操作マニュアル (`docs/src/`) でも同じ写真を使っているものは、撮り直したあと `tools/copy_manual_images.sh` で `docs/src/images/` に写します。
+
 ミッションのお知らせやハイライトが写り込まないよう、手順書の初めで `click "★ Lv."` を押してミッションカードを隠し、
 撮る前に `wait 420` ほど待っています。
