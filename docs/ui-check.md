@@ -82,6 +82,7 @@ target/ui-check/<手順書>/log.txt              アプリのログ (落ちた�
 | アダプター | `plantwright_core::ui_check::files` | PNG の読み書き、結果の JSON、報告書の HTML |
 | UI | `src/features/ui_check/mod.rs` | Bevy のシステム。画面の様子を集めて runner に渡し、返ってきた入力を流して写真を撮る |
 | UI | `src/features/ui_check/suite.rs` | 手順書ごとにアプリを起動し直して流し、一覧を書く (Bevy なし) |
+| MCP | `plantwright_core::ui_check::mcp`・`src/features/ui_check/mcp.rs` | `--mcp` で、AI のツール呼び出しを手順に直して同じ runner で流す ([mcp.md](mcp.md)) |
 
 ### 基準画像と環境
 
