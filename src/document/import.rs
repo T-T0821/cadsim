@@ -217,6 +217,8 @@ pub struct ImportJobs {
     pub site_files: Vec<PathBuf>,
     /// 読み込んだばかりの URDF のロボット (motion が関節をチャートに足す)
     pub robots: Vec<ImportedRobot>,
+    /// 読み込んだばかりの木のルート (modeling が形状の修復の案内を出す)
+    pub imported: Vec<NodeId>,
     /// 「URDF を読み込む」が押された (URDF だけを選ぶダイアログを出す)
     urdf_dialog_requested: bool,
     /// Bevy のアセットとして読むファイル (`scene_asset` が取り出す)
@@ -238,6 +240,7 @@ impl Default for ImportJobs {
             browser_requested: false,
             units: UnitOptions::default(),
             site_files: Vec::new(),
+            imported: Vec::new(),
             robots: Vec::new(),
             urdf_dialog_requested: false,
             asset_requests: Vec::new(),
@@ -532,6 +535,7 @@ fn add_imported(
         animations.add_clips(clips, &ids);
     }
     history.record_added(model, root, format!("{name} を読み込み"));
+    jobs.imported.push(root);
     if let Some(description) = robot {
         // メーカーのメッシュはリンクの継ぎ目で重なるので、ロボットの中どうしの干渉は調べない
         if let Some(node) = model.get_mut(root) {

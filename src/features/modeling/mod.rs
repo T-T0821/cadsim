@@ -1,10 +1,13 @@
-//! モデリング操作 (円柱・押し出し・穴あけ・ブーリアン)
+//! モデリング操作 (円柱・押し出し・穴あけ・ブーリアン) と、形を調べる機能 (断面・質量・修復の案内)
 //!
 //! 計算と変更の作り方は `plantwright_core::modeling`、B-rep を JSON に詰めるのは `plantwright_core::modeling::record`。
 //! ここは JSON の詰め方を渡し、元に戻す履歴に積むだけ。
 //!
 //! 穴あけは 3D ビューで面をクリックして置く道具 ([`HoleTool`]) で行う。道具の状態と寸法の計算は
 //! `plantwright_core::modeling::hole_tool`、マウスの読み方は `systems`、3D の線と文字は `view`。
+//!
+//! 調べる機能も同じ並び: 断面 ([`SectionTool`]、平面を 3D でドラッグ)、質量・重心 ([`MassCache`]、
+//! プロパティの欄と 3D の球)、STEP の修復の案内 ([`RepairNotice`]、ステータスバー)。
 
 pub mod panel;
 pub mod systems;
@@ -18,7 +21,10 @@ use plantwright_core::kernel::Brep;
 use plantwright_core::modeling::extrude_tool::ExtrudeTool;
 use plantwright_core::modeling::features::{Base, Feature, ShapeHistory};
 use plantwright_core::modeling::hole_tool::HoleTool;
+use plantwright_core::modeling::mass::MassCache;
 use plantwright_core::modeling::record::JsonSolids;
+use plantwright_core::modeling::repair::RepairNotice;
+use plantwright_core::modeling::section_tool::SectionTool;
 use plantwright_core::modeling::*;
 use plantwright_core::pointer::PointerLock;
 
@@ -36,8 +42,12 @@ impl Plugin for ModelingPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<HoleTool>()
             .init_resource::<ExtrudeTool>()
+            .init_resource::<SectionTool>()
+            .init_resource::<MassCache>()
+            .init_resource::<RepairNotice>()
             .init_resource::<panel::ModelingUi>()
             .init_gizmo_group::<view::HoleGizmos>()
+            .init_gizmo_group::<view::SectionGizmos>()
             .add_systems(Startup, view::configure_gizmos)
             .add_systems(
                 Update,
@@ -53,8 +63,20 @@ impl Plugin for ModelingPlugin {
                     .chain(),
             )
             .add_systems(
+                Update,
+                (
+                    systems::repair_notice,
+                    systems::section_keys.run_if(keyboard_free),
+                    systems::section_input,
+                    systems::section_refresh,
+                    view::draw_section,
+                    view::draw_centroid,
+                )
+                    .chain(),
+            )
+            .add_systems(
                 EguiPrimaryContextPass,
-                view::draw_labels
+                (view::draw_labels, view::draw_section_labels)
                     .after(install_japanese_font)
                     // UI がビューの領域とカーソルの位置を決めた後で描く
                     .after(transform_gizmo_system),
@@ -62,9 +84,9 @@ impl Plugin for ModelingPlugin {
     }
 }
 
-/// 穴あけの道具を使っていない (クリックで部品を選ぶ・ギズモを出す条件)
-pub fn hole_tool_off(tool: Res<HoleTool>) -> bool {
-    !tool.active
+/// 穴あけ・断面の道具を使っていない (クリックで部品を選ぶ・ギズモを出す条件)
+pub fn hole_tool_off(tool: Res<HoleTool>, section: Res<SectionTool>) -> bool {
+    !tool.active && !section.active
 }
 
 /// 押し出しの道具を使っている間は、クリックを道具のものにする (選択・ギズモ・右クリックメニューを止める)

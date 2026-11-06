@@ -196,7 +196,11 @@ pub fn sweep(profile: &[DVec2], path: &[DVec3]) -> Result<Brep, String> {
 }
 
 /// 部品の形の B-rep (部品の座標系)。箱・モデリングの部品・STEP の部品
-fn part_solids(model: &Model, store: &dyn SolidStore, id: NodeId) -> Result<Vec<Brep>, String> {
+pub(crate) fn part_solids(
+    model: &Model,
+    store: &dyn SolidStore,
+    id: NodeId,
+) -> Result<Vec<Brep>, String> {
     let node = model.get(id).ok_or("部品が見つかりません")?;
     match &node.kind {
         NodeKind::Imported {
@@ -232,7 +236,7 @@ pub fn mass_properties(
 }
 
 /// いくつかの形の質量特性を1つにまとめる (慣性モーメントは平行軸の定理で全体の重心まわりに直す)
-fn combine(parts: &[MassProperties]) -> MassProperties {
+pub(crate) fn combine(parts: &[MassProperties]) -> MassProperties {
     let mass: f64 = parts.iter().map(|p| p.mass).sum();
     let centroid = if mass > 0.0 {
         parts.iter().map(|p| p.centroid * p.mass).sum::<DVec3>() / mass

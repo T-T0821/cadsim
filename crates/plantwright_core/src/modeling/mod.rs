@@ -1,5 +1,7 @@
 //! モデリング操作 (ドメイン + ユースケース): 円柱・押し出し・穴あけ・ブーリアン。
-//! フィレット・面取り・シェル・回転体・パイプ・スイープ・質量特性・断面は [`ops`]
+//! フィレット・面取り・シェル・回転体・パイプ・スイープ・質量特性・断面は [`ops`]。
+//! 画面で使う道具の状態は、穴あけ [`hole_tool`]・断面 [`section_tool`]、部品の質量の表示 [`mass`]、
+//! STEP を読み込んだときの修復の案内 [`repair`]
 //!
 //! 形状は形状カーネル (SMLib) の B-rep ([`Brep`], f64) で作り、ブーリアン (和・差・積) もカーネルで行う。
 //! 作った形状はモデルの「部品」として加え、出どころに B-rep を詰めておく
@@ -17,8 +19,11 @@
 pub mod extrude_tool;
 pub mod features;
 pub mod hole_tool;
+pub mod mass;
 pub mod ops;
 pub mod record;
+pub mod repair;
+pub mod section_tool;
 
 use std::sync::Arc;
 

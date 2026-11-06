@@ -1,0 +1,42 @@
+# 調べる機能: 質量・重心、断面、STEP を読み込んだときの形状の修復の案内
+wait_loaded
+click "空のプロジェクトから"        # ようこそ画面を閉じて空から始める
+wait_loaded
+open assets/sample_assembly.step
+wait_loaded
+wait 60
+click "★ Lv."                     # チュートリアルのカードを閉じる (3D に重なるため)
+wait 30
+
+# 部品を選ぶだけで質量・重心が出る。材質を選ぶと質量が変わる
+click "⚙ BasePlate_1"
+expect "質量・重心"
+click "水 (既定)"                  # 材質のドロップダウン
+wait 10
+click "鉄 (SS400)  7.85 g/cm³"
+wait 10
+expect "鉄 (SS400)"
+screenshot 01_mass
+
+# 断面: プロパティの「断面」→ 平面と切り口が出る。向きを変えて、Esc で閉じる
+click "断面"
+wait 10
+expect "断面を閉じる (Esc)"
+screenshot 02_section_x
+click "⇄ 反転"
+click "Z軸"
+wait 10
+screenshot 03_section_z
+key esc
+wait 5
+expect_not "断面を閉じる (Esc)"
+
+# すき間のある STEP を読み込むと、自動で閉じてステータスバーに案内が出る
+open tests/ui/data/gap_box.step
+wait_loaded
+wait 60
+expect "🔧 形状のすき間を 1 件閉じました"
+click "🔧 形状のすき間を 1 件閉じました"   # 押すと直した部品を選んで寄る
+wait 60
+expect "選択: "
+screenshot 04_repair_notice

@@ -19,11 +19,11 @@ use ruststep::ast::{EntityInstance, Name, Parameter, Record};
 mod brep;
 
 use crate::kernel::Brep;
-use crate::shape::tessellate_breps;
 pub use crate::shape::{
     ImportNode, ImportedFile, ImportedShape, ShapeStats, brep_tolerance, mesh_stats, next_shape_id,
     tessellation_tolerance,
 };
+use crate::shape::{ShapeRepair, tessellate_breps};
 
 /// STEP の文字列を読み込む。`file_name` はルートノードの名前になる。
 pub fn import_step(text: &str, file_name: &str) -> Result<ImportedFile, String> {
@@ -554,10 +554,16 @@ impl TreeBuilder<'_, '_> {
     /// シェルを B-rep に変換する (テッセレーションはまだしない)。読めたものが無ければ None。
     fn convert_shells(&mut self, shells: &[u64], name: &str) -> Option<ShapeJob> {
         let mut breps = Vec::new();
+        let mut repair = ShapeRepair::default();
         for &id in shells {
             match self.converter.shell(id) {
-                Ok((brep, warning)) => {
+                Ok((brep, warning, shell_repair)) => {
                     breps.push(brep);
+                    match shell_repair {
+                        brep::ShellRepair::Closed => {}
+                        brep::ShellRepair::Healed => repair.healed += 1,
+                        brep::ShellRepair::Open => repair.open += 1,
+                    }
                     if let Some(warning) = warning {
                         self.warnings.push(format!("{name}: 形状 #{id}: {warning}"));
                     }
@@ -574,6 +580,7 @@ impl TreeBuilder<'_, '_> {
             name: name.to_owned(),
             color: shells.iter().find_map(|s| self.colors.get(s).copied()),
             breps,
+            repair,
         })
     }
 
@@ -585,7 +592,8 @@ impl TreeBuilder<'_, '_> {
     ) -> Vec<(K, Option<Arc<ImportedShape>>)> {
         jobs.into_iter()
             .map(|(key, job)| {
-                let shape = tessellate(job.breps, job.color);
+                let mut shape = tessellate(job.breps, job.color);
+                shape.repair = job.repair;
                 if shape.faces.is_empty() {
                     self.warnings
                         .push(format!("{}: 面をメッシュにできませんでした", job.name));
@@ -603,6 +611,7 @@ struct ShapeJob {
     name: String,
     breps: Vec<Brep>,
     color: Option<[f32; 3]>,
+    repair: ShapeRepair,
 }
 
 /// 表現 (REPRESENTATION の仲間) が持つアイテムの id
@@ -821,5 +830,113 @@ mod tests {
         let tip = shaft.placement.transform_point3(DVec3::Z);
         assert!((origin - DVec3::new(-130.0, 0.0, 70.0)).length() < 1e-9);
         assert!((tip - origin - DVec3::X).length() < 1e-9);
+    }
+
+    /// 一辺 10 の立方体のシェルだけを書いた STEP。`top_gap` だけ上の面を浮かせ、
+    /// `skip_top` なら上の面を書かない (開いたシェル)
+    fn cube_step(top_gap: f64, skip_top: bool) -> String {
+        let s = 10.0;
+        let faces = [
+            (DVec3::ZERO, DVec3::Y * s, DVec3::X * s),
+            (
+                DVec3::new(0.0, 0.0, s + top_gap),
+                DVec3::X * s,
+                DVec3::Y * s,
+            ),
+            (DVec3::ZERO, DVec3::X * s, DVec3::Z * s),
+            (DVec3::new(0.0, s, 0.0), DVec3::Z * s, DVec3::X * s),
+            (DVec3::ZERO, DVec3::Z * s, DVec3::Y * s),
+            (DVec3::new(s, 0.0, 0.0), DVec3::Y * s, DVec3::Z * s),
+        ];
+        let mut lines = Vec::new();
+        let mut next = 1;
+        let mut add = |text: String, lines: &mut Vec<String>| {
+            let id = next;
+            next += 1;
+            lines.push(format!("#{id}={text};"));
+            id
+        };
+        let point = |p: DVec3| format!("CARTESIAN_POINT('',({:?},{:?},{:?}))", p.x, p.y, p.z);
+        let mut face_ids = Vec::new();
+        for (i, (p, u, v)) in faces.into_iter().enumerate() {
+            if skip_top && i == 1 {
+                continue;
+            }
+            let pts: Vec<usize> = [p, p + u, p + u + v, p + v]
+                .into_iter()
+                .map(|q| add(point(q), &mut lines))
+                .collect();
+            let n = u.cross(v).normalize();
+            let x = u.normalize();
+            let origin = pts[0];
+            let dz = add(
+                format!("DIRECTION('',({:?},{:?},{:?}))", n.x, n.y, n.z),
+                &mut lines,
+            );
+            let dx = add(
+                format!("DIRECTION('',({:?},{:?},{:?}))", x.x, x.y, x.z),
+                &mut lines,
+            );
+            let axis = add(
+                format!("AXIS2_PLACEMENT_3D('',#{origin},#{dz},#{dx})"),
+                &mut lines,
+            );
+            let plane = add(format!("PLANE('',#{axis})"), &mut lines);
+            let refs: Vec<String> = pts.iter().map(|id| format!("#{id}")).collect();
+            let poly = add(format!("POLY_LOOP('',({}))", refs.join(",")), &mut lines);
+            let bound = add(format!("FACE_OUTER_BOUND('',#{poly},.T.)"), &mut lines);
+            face_ids.push(add(
+                format!("ADVANCED_FACE('',(#{bound}),#{plane},.T.)"),
+                &mut lines,
+            ));
+        }
+        let refs: Vec<String> = face_ids.iter().map(|id| format!("#{id}")).collect();
+        let kind = if skip_top {
+            "OPEN_SHELL"
+        } else {
+            "CLOSED_SHELL"
+        };
+        add(format!("{kind}('',({}))", refs.join(",")), &mut lines);
+        format!(
+            "ISO-10303-21;\nHEADER;\nFILE_DESCRIPTION((''),'2;1');\nFILE_NAME('cube.step','',(''),(''),'','','');\n\
+             FILE_SCHEMA(('AUTOMOTIVE_DESIGN'));\nENDSEC;\nDATA;\n{}\nENDSEC;\nEND-ISO-10303-21;\n",
+            lines.join("\n")
+        )
+    }
+
+    fn only_shape(file: &ImportedFile) -> Arc<ImportedShape> {
+        fn find(node: &ImportNode) -> Option<Arc<ImportedShape>> {
+            node.shape
+                .clone()
+                .or_else(|| node.children.iter().find_map(find))
+        }
+        find(&file.root).expect("形状がない")
+    }
+
+    #[test]
+    fn closed_cube_needs_no_repair() {
+        let file = import_step(&cube_step(0.0, false), "cube.step").unwrap();
+        let shape = only_shape(&file);
+        assert!(shape.repair.is_empty(), "{:?}", shape.repair);
+        assert!(shape.breps[0].is_solid());
+    }
+
+    #[test]
+    fn small_gap_is_closed_on_import() {
+        // 上の面が 0.2 浮いている (最初の縫い合わせでは閉じず、許容誤差を広げると閉じる)
+        let file = import_step(&cube_step(0.2, false), "cube.step").unwrap();
+        let shape = only_shape(&file);
+        assert_eq!(shape.repair, ShapeRepair { healed: 1, open: 0 });
+        assert!(shape.breps[0].is_solid());
+        // 大きすぎるすき間は閉じない
+        let file = import_step(&cube_step(1.0, false), "cube.step").unwrap();
+        assert_eq!(only_shape(&file).repair, ShapeRepair { healed: 0, open: 1 });
+    }
+
+    #[test]
+    fn missing_face_is_reported_as_open() {
+        let file = import_step(&cube_step(0.0, true), "cube.step").unwrap();
+        let shape = only_shape(&file);
+        assert_eq!(shape.repair, ShapeRepair { healed: 0, open: 1 });
     }
 }

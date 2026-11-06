@@ -2,6 +2,9 @@
 //!
 //! 作成メニューかプロパティの「形を編集」から開く。形状の計算は `modeling` が受け持ち、ここは入力を集めて呼ぶだけ。
 //! 穴あけのタブは、3D ビューで面をクリックして置く道具 (`HoleTool`) の寸法を数値でも直せる欄。
+//!
+//! 末尾はプロパティに出す「調べる」欄 (断面の道具・質量と重心・形状の修復の説明)。計算は
+//! `plantwright_core::modeling::{section_tool, mass, repair}`。
 
 use bevy::math::DVec3;
 use bevy_egui::egui;
@@ -10,11 +13,16 @@ use crate::features::modeling::{
     add_solid, apply_boolean, confirm_extrude, confirm_hole, node_solid,
 };
 use crate::ui::UiState;
+use crate::ui::widgets::{round_for_display, row};
 use plantwright_core::model::NodeId;
 use plantwright_core::modeling::BooleanOp;
 use plantwright_core::modeling::cylinder;
 use plantwright_core::modeling::extrude;
+use plantwright_core::modeling::mass::{MATERIALS, format_mass, material_name};
 use plantwright_core::modeling::parse_outline;
+use plantwright_core::modeling::record::JsonSolids;
+use plantwright_core::modeling::repair::{describe, part_repair};
+use plantwright_core::modeling::section_tool::SectionAxis;
 use plantwright_core::workspace::Tool;
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
@@ -263,6 +271,7 @@ fn extrude_tool_section(ui: &mut egui::Ui, state: &mut UiState, unit: &str) {
 pub fn start_extrude_tool(state: &mut UiState) {
     state.extrude_tool.start(0.0);
     state.hole_tool.stop();
+    state.section_tool.stop();
     state.selection.clear();
     state.gizmo.focused = false;
     state.modeling.open_tab(Tab::Extrude);
@@ -356,6 +365,7 @@ fn hole_tab(ui: &mut egui::Ui, state: &mut UiState) {
 
 /// 穴あけの道具を始める (ギズモがクリックを横取りしないよう、ギズモの操作中の印も消す)
 pub fn start_hole_tool(state: &mut UiState) {
+    state.section_tool.stop();
     state.hole_tool.start();
     state.selection.face = None;
     state.gizmo.focused = false;
@@ -423,5 +433,259 @@ fn boolean_tab(ui: &mut egui::Ui, state: &mut UiState) {
             }
             Err(e) => state.modeling.error = Some(e),
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// プロパティに出す「調べる」欄: 断面・質量と重心・形状の修復
+// ---------------------------------------------------------------------------
+
+/// これより部品の多いアセンブリは、ボタンを押すまで質量を計算しない (選んだだけで固まらないよう)
+const MASS_AUTO_PARTS: usize = 100;
+
+/// 「調べる: 断面」。`target` は選んだ部品かアセンブリ、None ならモデル全体
+pub fn inspect_actions(ui: &mut egui::Ui, state: &mut UiState, target: Option<NodeId>) {
+    let bounds = match target {
+        Some(id) => state.model.world_bounds(id),
+        None => state.model.scene_bounds(),
+    };
+    let Some(bounds) = bounds else {
+        return;
+    };
+    ui.horizontal_wrapped(|ui| {
+        ui.label("調べる:");
+        let active = state.section_tool.active;
+        let hover = match target {
+            Some(_) => "選んだ部品を平面で切って切り口を見る。矢印の先をドラッグで動かし、面をクリックでその面に平行にする",
+            None => "モデル全体を平面で切って切り口を見る。矢印の先をドラッグで動かし、面をクリックでその面に平行にする",
+        };
+        if ui
+            .selectable_label(active, "断面")
+            .on_hover_text(hover)
+            .clicked()
+        {
+            if active {
+                state.section_tool.stop();
+            } else {
+                state.hole_tool.stop();
+                state.extrude_tool.stop();
+                state.gizmo.focused = false;
+                state.section_tool.start(target, bounds);
+            }
+        }
+    });
+    if state.section_tool.active {
+        section_controls(ui, state);
+    }
+}
+
+/// 断面の向きと位置を数値でも直せる欄
+fn section_controls(ui: &mut egui::Ui, state: &mut UiState) {
+    let unit = state.model.unit.clone();
+    let tool = &mut state.section_tool;
+    egui::Frame::group(ui.style()).show(ui, |ui| {
+        ui.horizontal(|ui| {
+            ui.weak("向き");
+            for axis in SectionAxis::ALL {
+                if ui
+                    .selectable_label(tool.is_axis(axis), format!("{}軸", axis.label()))
+                    .on_hover_text(format!("{} 軸に垂直な平面で切る", axis.label()))
+                    .clicked()
+                {
+                    tool.set_axis(axis);
+                }
+            }
+            if ui
+                .button("⇄ 反転")
+                .on_hover_text("平面の矢印の向きを逆にする")
+                .clicked()
+            {
+                tool.flip();
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.weak("位置");
+            let (lo, hi) = tool.range;
+            let mut offset = tool.offset;
+            if ui
+                .add(egui::Slider::new(&mut offset, lo..=hi).suffix(format!(" {unit}")))
+                .on_hover_text("対象の中心からの距離")
+                .changed()
+            {
+                tool.offset = offset.clamp(lo, hi);
+            }
+        });
+        if tool.lines.is_empty() {
+            ui.weak("この位置では切り口がありません");
+        }
+        if ui.button("断面を閉じる (Esc)").clicked() {
+            tool.stop();
+        }
+    });
+}
+
+/// 「質量・重心」: 材質を選ぶと質量が変わる。重心は 3D に球で出る
+pub fn mass_section(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
+    let unit = state.model.unit.clone();
+    let parts: Vec<NodeId> = state
+        .model
+        .subtree(id)
+        .into_iter()
+        .filter(|&p| state.model.get(p).is_some_and(|n| n.kind.is_part()))
+        .collect();
+    if parts.is_empty() {
+        state.mass.centroid = None;
+        ui.weak("形を持つ部品がありません");
+        return;
+    }
+
+    material_picker(ui, state, id, &parts);
+
+    let requested_id = ui.make_persistent_id(("mass_requested", id));
+    let requested = parts.len() <= MASS_AUTO_PARTS
+        || ui.data(|d| d.get_temp::<bool>(requested_id).unwrap_or(false));
+    if !requested {
+        state.mass.centroid = None;
+        ui.weak(format!(
+            "部品が {} 個あるので、押したときに計算します",
+            parts.len()
+        ));
+        if ui.button("質量を計算").clicked() {
+            ui.data_mut(|d| d.insert_temp(requested_id, true));
+        }
+        return;
+    }
+    let Some(s) = state.mass.summary(&state.model, &JsonSolids, id) else {
+        state.mass.centroid = None;
+        ui.weak("形を持つ部品がありません");
+        return;
+    };
+    state.mass.centroid = (s.parts > 0).then_some((id, s.centroid));
+    if s.parts == 0 {
+        ui.weak("閉じた形の部品が無いので計算できません");
+    } else {
+        egui::Grid::new("mass")
+            .num_columns(2)
+            .spacing([12.0, 4.0])
+            .show(ui, |ui| {
+                row(ui, "質量", format_mass(s.mass_kg));
+                row(
+                    ui,
+                    "体積",
+                    format!("{} {unit}³", round_for_display(s.volume)),
+                );
+                row(
+                    ui,
+                    "表面積",
+                    format!("{} {unit}²", round_for_display(s.area)),
+                );
+                if parts.len() > 1 {
+                    row(ui, "部品", format!("{} 個の合計", s.parts));
+                }
+            });
+        // 3 つ並ぶ値は長いので、パネルを広げないよう表の外に 2 行で出す
+        ui.weak("重心 (X, Y, Z)");
+        ui.label(format!(
+            "{}, {}, {}",
+            round_for_display(s.centroid.x),
+            round_for_display(s.centroid.y),
+            round_for_display(s.centroid.z)
+        ));
+        ui.weak("慣性モーメント (kg·m²)")
+            .on_hover_text("重心を通り X / Y / Z 軸に平行な軸まわり");
+        ui.label(format!(
+            "{}, {}, {}",
+            inertia_text(s.inertia.x),
+            inertia_text(s.inertia.y),
+            inertia_text(s.inertia.z)
+        ));
+        ui.weak("形状カーネルで正確に計算。重心は 3D に紫の球で出ます");
+    }
+    if !s.skipped.is_empty() {
+        let names = s
+            .skipped
+            .iter()
+            .take(3)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("、");
+        let more = if s.skipped.len() > 3 {
+            format!(" ほか {} 個", s.skipped.len() - 3)
+        } else {
+            String::new()
+        };
+        ui.colored_label(
+            ui.visuals().warn_fg_color,
+            format!("閉じた形でないので計算に入れていません: {names}{more}"),
+        );
+    }
+}
+
+/// 慣性モーメント (kg·m²)。小さな部品でも 0 に見えないよう、小さい値は指数で書く
+fn inertia_text(v: f64) -> String {
+    if v == 0.0 || v.abs() >= 0.01 {
+        format!("{v:.4}")
+    } else {
+        format!("{v:.2e}")
+    }
+}
+
+/// 材質のドロップダウン。部品の密度 (物理演算と同じ値) を書きかえる。アセンブリなら中の部品をまとめて
+fn material_picker(ui: &mut egui::Ui, state: &mut UiState, id: NodeId, parts: &[NodeId]) {
+    let densities: Vec<f64> = parts
+        .iter()
+        .filter_map(|&p| state.model.get(p).map(|n| n.physics.density))
+        .collect();
+    let same = densities.windows(2).all(|w| w[0] == w[1]);
+    let current = match (same, densities.first()) {
+        (true, Some(&d)) => material_name(d)
+            .map(str::to_owned)
+            .unwrap_or_else(|| format!("その他 ({d} g/cm³)")),
+        _ => "部品ごとに違う".to_owned(),
+    };
+    let mut chosen = None;
+    ui.horizontal(|ui| {
+        ui.weak("材質");
+        egui::ComboBox::from_id_salt(("material", id))
+            .selected_text(current)
+            .show_ui(ui, |ui| {
+                for (name, density) in MATERIALS {
+                    let selected = same && densities.first() == Some(&density);
+                    if ui
+                        .selectable_label(selected, format!("{name}  {density} g/cm³"))
+                        .clicked()
+                    {
+                        chosen = Some(density);
+                    }
+                }
+            })
+            .response
+            .on_hover_text(if parts.len() > 1 {
+                "中の部品すべての材質をまとめて変えます。物理演算の重さにも使われます"
+            } else {
+                "物理演算の重さにも使われます"
+            });
+    });
+    if let Some(density) = chosen {
+        state.history.begin_edit(&state.model, id);
+        for &p in parts {
+            if let Some(node) = state.model.get_mut(p) {
+                node.physics.density = density;
+            }
+        }
+        state.history.finish_edit(&state.model);
+    }
+}
+
+/// 「形状の修復」: STEP の読み込みで直した部品・直せなかった部品の説明
+pub fn repair_section(ui: &mut egui::Ui, state: &UiState, id: NodeId) {
+    let Some(repair) = part_repair(&state.model, id) else {
+        return;
+    };
+    let text = describe(repair);
+    if repair.open > 0 {
+        ui.colored_label(ui.visuals().warn_fg_color, format!("⚠ {text}"));
+    } else {
+        ui.label(format!("✔ {text}"));
     }
 }
