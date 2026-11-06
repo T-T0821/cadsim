@@ -6,7 +6,7 @@
 pub mod panel;
 
 use glam::DVec3;
-use truck_modeling::Solid;
+use plantwright_core::kernel::Brep;
 
 use plantwright_core::modeling::record::JsonSolids;
 use plantwright_core::modeling::*;
@@ -16,7 +16,7 @@ use plantwright_core::model::Model;
 use plantwright_core::model::NodeId;
 
 /// 部品の形状を、部品の座標系の B-rep で取り出す (箱とモデリングで作った部品だけ)
-pub fn node_solid(model: &Model, id: NodeId) -> Result<Solid, String> {
+pub fn node_solid(model: &Model, id: NodeId) -> Result<Brep, String> {
     plantwright_core::modeling::node_solid(model, &JsonSolids, id)
 }
 
@@ -24,7 +24,7 @@ pub fn node_solid(model: &Model, id: NodeId) -> Result<Solid, String> {
 pub fn add_solid(
     model: &mut Model,
     name: String,
-    solid: &Solid,
+    solid: &Brep,
     position: DVec3,
 ) -> Result<NodeId, String> {
     plantwright_core::modeling::add_solid(model, &JsonSolids, name, solid, position)

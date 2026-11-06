@@ -1,7 +1,7 @@
 //! 標準部品ライブラリ
 //!
 //! - `catalog`: 部品の種類・寸法パラメータ・I/O 点・アクチュエータ動作 (Bevy 非依存)
-//! - `geometry`: パラメータから truck の B-rep を作る (Bevy 非依存)
+//! - `geometry`: パラメータから B-rep を作る (Bevy 非依存)
 //! - `ui`: 部品パレット (ドラッグで配置)、プロパティ、I/O 一覧、光軸などの表示
 //!
 //! 配置した部品はモデルの木に `NodeKind::Standard` のノードとして入り、その子に本体
@@ -26,18 +26,16 @@ use std::sync::{Arc, LazyLock, Mutex};
 
 use bevy::math::{DMat4, DQuat, DVec3};
 use bevy::prelude::*;
-use truck_meshalgo::prelude::*;
-use truck_modeling::builder;
 
 pub use catalog::{IoDir, Motion, PartKind, Spec};
 pub use panel::{add_menu, drop_on_viewport, io_list_window, palette_window, properties_section};
 
 use plantwright_core::formats::step::ImportedShape;
-use plantwright_core::formats::step::mesh_stats;
-use plantwright_core::formats::step::next_shape_id;
+use plantwright_core::kernel::Brep;
 use plantwright_core::model::Model;
 use plantwright_core::model::NodeId;
 use plantwright_core::model::NodeKind;
+use plantwright_core::shape::tessellate_breps;
 
 /// 標準部品のテッセレーションの許容誤差 (mm)。小さな円柱が多いので細かめにする。
 const TESSELLATION_TOL_MM: f64 = 0.3;
@@ -132,8 +130,8 @@ fn body_shapes(spec: &Spec, scale: f64) -> BodyShapes {
                     let solid = if scale == 1.0 {
                         body.solid
                     } else {
-                        let s = Vector3::new(scale, scale, scale);
-                        builder::scaled(&body.solid, Point3::origin(), s)
+                        let s = DMat4::from_scale(DVec3::splat(scale));
+                        body.solid.transformed(s).expect("拡大縮小できる")
                     };
                     let shape = tessellate(&solid, body.color, TESSELLATION_TOL_MM * scale);
                     (body.name, Arc::new(shape))
@@ -143,37 +141,10 @@ fn body_shapes(spec: &Spec, scale: f64) -> BodyShapes {
         .clone()
 }
 
-/// truck のソリッドを表示用の面メッシュと稜線にする
-fn tessellate(solid: &truck_modeling::Solid, color: [f32; 3], tol: f64) -> ImportedShape {
-    let meshed = solid.triangulation(tol);
-    let mut faces = Vec::new();
-    let mut edges = Vec::new();
-    for shell in meshed.boundaries() {
-        edges.extend(
-            shell
-                .edge_iter()
-                .map(|e| e.curve().iter().copied().collect::<Vec<_>>()),
-        );
-        faces.extend(shell.face_iter().map(|face| {
-            let mut poly = face.surface().unwrap_or_default();
-            if !face.orientation() {
-                poly.invert();
-            }
-            poly
-        }));
-    }
-    let mut stats = mesh_stats(&faces);
-    stats.edge_count = edges.len();
-    let mesh = Arc::new(plantwright_core::part_mesh::PartMesh::new(&faces, &edges));
-    ImportedShape {
-        id: next_shape_id(),
-        breps: Vec::new(),
-        faces,
-        edges,
-        color: Some(color),
-        stats,
-        mesh,
-    }
+/// ソリッドを表示用の面メッシュと稜線にする
+fn tessellate(solid: &Brep, color: [f32; 3], tol: f64) -> ImportedShape {
+    let (faces, edges) = tessellate_breps(std::slice::from_ref(solid), tol);
+    ImportedShape::new(Vec::new(), faces, edges, Some(color))
 }
 
 /// モデルにある標準部品のノード (ツリーの表示順)

@@ -7,7 +7,7 @@
 | ファイル | 層 | 内容 |
 | --- | --- | --- |
 | `catalog.rs` | ドメイン(Bevy なし) | 部品の種類 (`PartKind`)、寸法パラメータ (`ParamSpec` / `Spec`)、I/O 点 (`IoPoint`)、アクチュエータ動作 (`ActuatorSpec` / `Motion`)、センサーの検出範囲 (`SensingSpec`)、コンベアの搬送面 (`ConveyingSurface`) |
-| `geometry.rs` | ドメイン(Bevy なし) | パラメータから truck の B-rep を本体ごとに作る。直方体と円柱の組み合わせで、座標は部品ローカルの mm(取付け面の中心が原点、Y が上) |
+| `geometry.rs` | ドメイン(Bevy なし) | パラメータから B-rep を本体ごとに作る。直方体と円柱の組み合わせで、座標は部品ローカルの mm(取付け面の中心が原点、Y が上) |
 | `mod.rs` | モデル操作 | モデルの木への追加 (`add_standard`)、本体の作り直し (`rebuild_bodies`)、動作テストの表示位置 (`display_matrix`)、I/O 一覧 (`io_table` / `io_capacity`) |
 | `ui.rs` | UI | 部品パレットとドラッグ & ドロップ、「作成 → 標準部品」メニュー、プロパティの「標準部品」欄、I/O 一覧、光軸と搬送方向の表示 |
 

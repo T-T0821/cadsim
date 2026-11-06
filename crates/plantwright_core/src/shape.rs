@@ -8,16 +8,10 @@ use std::sync::{
 };
 
 use glam::{DMat4, DVec3};
-use truck_meshalgo::prelude::*;
-// truck の B-rep の曲線・曲面の型。truck-stepio にあるが、STEP の読み書きではなく形状カーネルの型として使う
-use truck_stepio::r#in::alias::{Curve3D, Surface};
-use truck_topology::compress::CompressedShell;
 
 use crate::animation::Animation;
+use crate::kernel::{Brep, FaceMesh};
 use crate::part_mesh::PartMesh;
-
-/// truck の B-rep (f64)。表示用メッシュの元であり、今後の計測や干渉チェックにも使う。
-pub type Brep = CompressedShell<Point3, Curve3D, Surface>;
 
 /// 読み込んだファイル全体
 pub struct ImportedFile {
@@ -48,12 +42,12 @@ pub struct ImportNode {
 pub struct ImportedShape {
     /// 共有されている形状を見分けるための番号 (メッシュのキャッシュに使う)
     pub id: usize,
-    /// 元の B-rep。表示の簡略化 (穴・フィレットを消す) で使う。
+    /// 元の B-rep (SMLib)。表示の簡略化 (穴・フィレットを消す) で使う。
     pub breps: Vec<Brep>,
     /// 面ごとの三角形メッシュ (部品の座標系, f64)
-    pub faces: Vec<PolygonMesh>,
+    pub faces: Vec<FaceMesh>,
     /// 稜線のポリライン (部品の座標系, f64)
-    pub edges: Vec<Vec<Point3>>,
+    pub edges: Vec<Vec<DVec3>>,
     /// STEP に書かれていた色 (sRGB 0..1)
     pub color: Option<[f32; 3]>,
     pub stats: ShapeStats,
@@ -72,13 +66,29 @@ pub struct ShapeStats {
     pub edge_count: usize,
 }
 
-/// B-rep のテッセレーションの許容誤差。部品の大きさ (頂点の範囲) に合わせる。
+/// テッセレーションで1つの三角形・線分のあいだに曲面や曲線が曲がってよい角度 (度)
+pub const TESSELLATION_ANGLE_DEG: f64 = 20.0;
+
+/// B-rep を表示用の面メッシュと稜線にする。`tol` は曲面からのずれの上限。
+/// メッシュにできなかった面は飛ばす (面の番号は飛ばした後の並び)
+pub fn tessellate_breps(breps: &[Brep], tol: f64) -> (Vec<FaceMesh>, Vec<Vec<DVec3>>) {
+    let mut faces = Vec::new();
+    let mut edges = Vec::new();
+    for brep in breps {
+        let meshed = brep.tessellate(tol, TESSELLATION_ANGLE_DEG);
+        faces.extend(meshed.faces.into_iter().filter_map(|f| f.mesh));
+        edges.extend(meshed.edges.into_iter().filter(|e| e.len() >= 2));
+    }
+    (faces, edges)
+}
+
+/// B-rep のテッセレーションの許容誤差。部品の大きさ (外接箱) に合わせる。
 pub fn brep_tolerance(breps: &[Brep]) -> f64 {
     let mut min = DVec3::splat(f64::MAX);
     let mut max = DVec3::splat(f64::MIN);
-    for p in breps.iter().flat_map(|b| &b.vertices) {
-        min = min.min(DVec3::new(p.x, p.y, p.z));
-        max = max.max(DVec3::new(p.x, p.y, p.z));
+    for b in breps.iter().filter_map(Brep::loose_bounds) {
+        min = min.min(b.min);
+        max = max.max(b.max);
     }
     tessellation_tolerance(min, max)
 }
@@ -101,8 +111,8 @@ impl ImportedShape {
     /// メッシュから形状を作り、計測値と共有用の番号を付ける
     pub fn new(
         breps: Vec<Brep>,
-        faces: Vec<PolygonMesh>,
-        edges: Vec<Vec<Point3>>,
+        faces: Vec<FaceMesh>,
+        edges: Vec<Vec<DVec3>>,
         color: Option<[f32; 3]>,
     ) -> Self {
         let mut stats = mesh_stats(&faces);
@@ -127,7 +137,7 @@ pub fn next_shape_id() -> usize {
 }
 
 /// 三角形メッシュから外接箱・体積・表面積を計算する
-pub fn mesh_stats(faces: &[PolygonMesh]) -> ShapeStats {
+pub fn mesh_stats(faces: &[FaceMesh]) -> ShapeStats {
     let mut stats = ShapeStats {
         min: DVec3::splat(f64::MAX),
         max: DVec3::splat(f64::MIN),
@@ -135,17 +145,11 @@ pub fn mesh_stats(faces: &[PolygonMesh]) -> ShapeStats {
         ..Default::default()
     };
     for poly in faces {
-        let positions = poly.positions();
-        for p in positions {
-            let p = DVec3::new(p.x, p.y, p.z);
+        for &p in &poly.positions {
             stats.min = stats.min.min(p);
             stats.max = stats.max.max(p);
         }
-        for tri in poly.faces().triangle_iter() {
-            let [a, b, c] = tri.map(|v| {
-                let p = positions[v.pos];
-                DVec3::new(p.x, p.y, p.z)
-            });
+        for [a, b, c] in poly.triangle_points() {
             stats.area += (b - a).cross(c - a).length() / 2.0;
             // 原点と三角形で作る四面体の符号付き体積を足し合わせる
             stats.volume += a.dot(b.cross(c)) / 6.0;

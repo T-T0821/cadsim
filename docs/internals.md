@@ -10,9 +10,9 @@
 | Rust | 1.97.1 以上(依存crateの要件) |
 | bevy | 0.20 |
 | bevy_egui | 0.43 |
-| truck-modeling | 0.6 |
-| truck-meshalgo | 0.4 |
-| truck-stepio | 0.3 |
+| SMLib(NVIDIA の形状カーネル usd-brep。同梱の C++ ソースをビルド) | 1.0.1 |
+| ruststep(STEP の構文の読み込み) | 0.4 |
+| cc(SMLib のビルド) | 1 |
 | transform-gizmo | 0.11 |
 | rfd(ファイル選択ダイアログ) | 0.17 |
 | serde / serde_json(プロジェクトファイル、glTF の書き出し) | 1 |
@@ -21,7 +21,6 @@
 | stl_io(STL の読み書き) | 0.11 |
 | openusd(OpenUSD の読み書き。純 Rust) | 0.8 |
 | rhai(部品スクリプト。純 Rust) | 1 |
-| truck-shapeops(ブーリアン演算) | 0.4 |
 | glam(f64 のベクトル・行列。bevy_math と同じ版) | 0.33 |
 | lopdf(PDF の平面図の読み込み) | 0.46 |
 | image(PNG / JPEG の平面図) | 0.25 |
@@ -64,11 +63,21 @@ src/                                アプリ (Bevy + egui)
 
 ## 各機能のしくみ
 
-### STEP の読み込み(`plantwright_core/src/formats/step.rs`)
+### 形状カーネル(`plantwright_core/src/kernel/`)
+
+形状の B-rep・ブーリアン・テッセレーションは NVIDIA の SMLib(usd-brep、Apache-2.0)を使う。
+
+1. C++ のソースは `crates/plantwright_core/vendor/smlib/` に手を加えずに置き、`build.rs` が `cc` で静的ライブラリにしてリンクする(C++17 のコンパイラが要る。TBB は使わない)。
+2. Rust から呼ぶための薄い C の層が `cpp/kernel.cpp`、その宣言が `kernel/ffi.rs`。Rust 側は `Brep`(`kernel/brep.rs`)のメソッドだけを使う: 直方体・円柱・押し出し、移動・回転・拡大、和・差・積、テッセレーション、テキスト形式での保存と読み込み、面からの組み立て(`Brep::from_faces`)。
+3. SMLib は1つの共有の状態で動き、同時に複数のスレッドから呼べないので、呼び出しはすべて1つのロックで順番にする。
+4. テッセレーションは面ごとのメッシュ(頂点・曲面の正確な法線・三角形)と、辺ごとのポリラインを返す(`MeshedBrep`)。面の縁の頂点と辺のポリラインの点は同じ座標になる。
+5. 面からの組み立ては、面ごとに曲面を輪郭の曲線で切り取り(`TrimSurfaceWithModelSpaceCurves`)、縫い合わせて閉じていればソリッドにする。STEP の読み込みと、以前の truck の形式で保存したモデリングの形状の読み込みに使う。
+
+### STEP の読み込み(`plantwright_core/src/formats/step/`)
 
 1. `ruststep` で STEP をパースし、`#id` からレコードを引ける表を作る。
 2. `PRODUCT_DEFINITION` を製品、`NEXT_ASSEMBLY_USAGE_OCCURRENCE` を親子関係として木を組む。配置は `CONTEXT_DEPENDENT_SHAPE_REPRESENTATION` → `ITEM_DEFINED_TRANSFORMATION` の2つの `AXIS2_PLACEMENT_3D` から「子 → 親」の行列を求める。
-3. 部品の形状(`MANIFOLD_SOLID_BREP` などのシェル)は `truck-stepio` で truck の B-rep に変換し、`robust_triangulation` で面ごとのメッシュと稜線にする。許容誤差は部品の大きさ(と一番薄い方向の寸法)に合わせる。
+3. 部品の形状(`MANIFOLD_SOLID_BREP` などのシェル)は面ごとに曲面(平面・円柱・円錐・球・トーラス・B スプライン・回転面・押し出し面)と輪郭の辺(直線・円・楕円・B スプライン・折れ線)を読み(`step/brep.rs`)、形状カーネルで B-rep に組み立てて、面ごとのメッシュと稜線にする。輪郭は FACE_BOUND と ORIENTED_EDGE の向きを反映し、円柱などの継ぎ目の辺は外して別々の輪郭にする。許容誤差は部品の大きさ(と一番薄い方向の寸法)に合わせる。形状カーネルは同時に1つしか動かないので、部品は順に処理する。
 4. 同じ製品の形状は `Arc` で共有し、Bevy 側のメッシュも形状ごとに1回だけ作る。
 5. STEP は Z 軸が上なので、ルートの配置に「Z 上 → Y 上」の回転を入れて Bevy の座標に合わせる。
 
@@ -86,7 +95,7 @@ src/                                アプリ (Bevy + egui)
 1. `Scene` はノードの並び(名前・親・親から見た移動 / 回転 / 拡大・三角形メッシュ・色)とアニメーション(ノードごとの「時刻 → 姿勢」のキー)。親は必ず子より前に並ぶ。
 2. `Scene` は常にメートル・Y 軸が上で持つ。glTF はそのまま、OBJ / STL は「OBJ / STL の単位」の設定で換算する。`Model` はファイルの単位(STEP なら多くは mm)で持つので、`model_io.rs` が位置とメッシュを換算する。
 3. 取り込んだメッシュは STEP の部品と同じ `ImportedShape`(B-rep なし)になる。稜線は B-rep がないので、隣の面と 30° 以上折れている辺と穴の縁を描く。
-4. 書き出しでは、箱は truck でテッセレーションし、STEP の部品は表示用のメッシュをそのまま使う。glTF には形状ごとのメッシュ・色ごとのマテリアル・ノードの階層・アニメーション(線形補間の移動 / 回転 / 拡大)を書く。OBJ は部品ごとにワールド座標へ焼き込んだ `o`、STL は全体を1つの形状にまとめる。
+4. 書き出しでは、箱は形状カーネルでテッセレーションし、STEP の部品は表示用のメッシュをそのまま使う。glTF には形状ごとのメッシュ・色ごとのマテリアル・ノードの階層・アニメーション(線形補間の移動 / 回転 / 拡大)を書く。OBJ は部品ごとにワールド座標へ焼き込んだ `o`、STL は全体を1つの形状にまとめる。
 5. glTF のアニメーションは、移動・回転・拡大の別々のチャンネルをノードごとの姿勢のキーにまとめて取り込む(Step はそのまま、CubicSpline は値だけを使って線形で近似)。再生中は `animation.rs` が毎フレームそのノードの配置を書き換える。
 6. プロジェクト(`.plantwright`)には取り込んだファイルの場所を保存し、開くときにこの経路で読み直す。
 7. 「開く」やドラッグ&ドロップで取り込むファイルのうち、ファイル 1 つで読める形式 (STEP / glTF / OBJ / STL / USD) は Bevy のアセットとして読む (`scene_asset.rs`)。下の「アセットとして読む・更新で読み直す」を参照。
@@ -202,7 +211,7 @@ egui のパネルを上・下・左・右の順に置き、残った領域を 3D
 
 ### 箱とギズモ
 
-1. 箱(`BoxPart`)は寸法・位置・回転を f64 で持ち、編集されると truck で B-rep ソリッドを作り直す(`tsweep` を3回 → `rotated` → `translated`)。
+1. 箱(`BoxPart`)は寸法・位置・回転を f64 で持ち、編集されると形状カーネルで B-rep ソリッドを作り直す(原点の角から直方体を作り、中心へ移してから回転・移動する)。
 2. ギズモ(`src/viewport/gizmo.rs`)は transform-gizmo で計算し、egui の背景レイヤーに描く。箱ならパラメータに、取り込んだ部品やアセンブリなら親から見た配置(f64 の行列)に書き戻す。スナップは移動・回転を transform-gizmo の機能に任せ、拡大縮小の寸法だけ `snap_size` で丸める。
 
 ### タイミングチャートと干渉チェックのつながり(`motion/`)

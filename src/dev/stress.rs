@@ -4,18 +4,15 @@
 //! を何度も使い回す。形状は1種類につき1回だけテッセレーションし、インスタンスで共有する。
 //! `cargo run --release -- --stress 5000` やメニューの「負荷テスト用シーン」で開く。
 
-use std::f64::consts::TAU;
 use std::sync::Arc;
 
-use bevy::math::{DMat4, DVec3};
-use truck_meshalgo::prelude::*;
-use truck_modeling::{Solid, builder};
+use bevy::math::{DMat4, DQuat, DVec3};
+use plantwright_core::kernel::Brep;
 
 use plantwright_core::formats::step::ImportNode;
 use plantwright_core::formats::step::ImportedFile;
 use plantwright_core::formats::step::ImportedShape;
-use plantwright_core::formats::step::tessellation_tolerance;
-use plantwright_core::part_mesh::shell_edges;
+use plantwright_core::shape::{brep_tolerance, tessellate_breps};
 
 /// 1ユニットの部品数 (板1 + 脚4 + モーター1 + ローラー8 + ボルト16)
 pub const PARTS_PER_STATION: usize = 30;
@@ -61,7 +58,7 @@ struct Shapes {
 
 impl Shapes {
     fn new() -> Self {
-        let shape = |solids: Vec<Solid>, rgb: [f32; 3]| Arc::new(tessellate(&solids, rgb));
+        let shape = |solids: Vec<Brep>, rgb: [f32; 3]| Arc::new(tessellate(&solids, rgb));
         Self {
             plate: shape(vec![cuboid([600.0, 20.0, 400.0])], [0.62, 0.66, 0.70]),
             leg: shape(vec![cuboid([40.0, 500.0, 40.0])], [0.45, 0.48, 0.52]),
@@ -156,59 +153,28 @@ fn assembly(name: String, placement: DMat4, children: Vec<ImportNode>) -> Import
 }
 
 // ---------------------------------------------------------------------------
-// 形状の作成 (truck)
+// 形状の作成
 // ---------------------------------------------------------------------------
 
 /// 原点を中心にした直方体
-fn cuboid([w, h, d]: [f64; 3]) -> Solid {
-    let v = builder::vertex(Point3::new(-w / 2.0, -h / 2.0, -d / 2.0));
-    let e = builder::tsweep(&v, Vector3::new(w, 0.0, 0.0));
-    let f = builder::tsweep(&e, Vector3::new(0.0, h, 0.0));
-    builder::tsweep(&f, Vector3::new(0.0, 0.0, d))
+fn cuboid([w, h, d]: [f64; 3]) -> Brep {
+    let size = DVec3::new(w, h, d);
+    Brep::cuboid(size)
+        .and_then(|b| b.transformed(DMat4::from_translation(-size / 2.0)))
+        .expect("直方体は作れる")
 }
 
-/// `base` から `axis` (Y か Z) の向きに伸びる円柱
-fn cylinder(radius: f64, height: f64, axis: DVec3, base: DVec3) -> Solid {
-    let axis_v = Vector3::new(axis.x, axis.y, axis.z);
-    // 軸に垂直な方向に半径ぶん離した点を、軸のまわりに1周させて円を作る
-    let start = if axis.x.abs() > 0.9 {
-        DVec3::Y
-    } else {
-        DVec3::X
-    } * radius
-        + base;
-    let v = builder::vertex(Point3::new(start.x, start.y, start.z));
-    let circle = builder::rsweep(&v, Point3::new(base.x, base.y, base.z), axis_v, Rad(TAU));
-    let disk = builder::try_attach_plane(&[circle]).expect("円は平面に貼れる");
-    builder::tsweep(&disk, axis_v * height)
+/// `base` から `axis` の向きに伸びる円柱
+fn cylinder(radius: f64, height: f64, axis: DVec3, base: DVec3) -> Brep {
+    let rotation = DQuat::from_rotation_arc(DVec3::Z, axis.normalize());
+    Brep::cylinder_z(radius, height)
+        .and_then(|b| b.transformed(DMat4::from_rotation_translation(rotation, base)))
+        .expect("円柱は作れる")
 }
 
-/// truck のソリッドを表示用の面メッシュと稜線にする
-fn tessellate(solids: &[Solid], color: [f32; 3]) -> ImportedShape {
-    let mut min = DVec3::splat(f64::MAX);
-    let mut max = DVec3::splat(f64::MIN);
-    for v in solids.iter().flat_map(|s| s.vertex_iter()) {
-        let p = v.point();
-        min = min.min(DVec3::new(p.x, p.y, p.z));
-        max = max.max(DVec3::new(p.x, p.y, p.z));
-    }
-    let tol = tessellation_tolerance(min, max);
-
-    let mut faces = Vec::new();
-    let mut edges = Vec::new();
-    for solid in solids {
-        let meshed = solid.triangulation(tol);
-        for shell in meshed.boundaries() {
-            for face in shell.face_iter() {
-                let mut poly = face.surface().unwrap_or_default();
-                if !face.orientation() {
-                    poly.invert();
-                }
-                faces.push(poly);
-            }
-            edges.extend(shell_edges(shell));
-        }
-    }
+/// ソリッドを表示用の面メッシュと稜線にする
+fn tessellate(solids: &[Brep], color: [f32; 3]) -> ImportedShape {
+    let (faces, edges) = tessellate_breps(solids, brep_tolerance(solids));
     ImportedShape::new(Vec::new(), faces, edges, Some(color))
 }
 

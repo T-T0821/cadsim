@@ -8,9 +8,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use crate::kernel::Brep;
 use glam::{DMat4, DVec3};
-use truck_meshalgo::prelude::{EuclideanSpace, Point3, Rad, Vector3};
-use truck_modeling::{Solid, builder};
 
 use crate::custom_part::CustomInstance;
 use crate::library::Spec;
@@ -143,21 +142,14 @@ pub struct BoxPart {
 }
 
 impl BoxPart {
-    /// パラメータから truck の B-rep ソリッドを作る。
-    pub fn build_solid(&self) -> Solid {
-        let [w, h, d] = self.size;
-        let v = builder::vertex(Point3::new(-w / 2.0, -h / 2.0, -d / 2.0));
-        let e = builder::tsweep(&v, Vector3::new(w, 0.0, 0.0));
-        let f = builder::tsweep(&e, Vector3::new(0.0, h, 0.0));
-        let mut solid = builder::tsweep(&f, Vector3::new(0.0, 0.0, d));
-        let axes = [Vector3::unit_x(), Vector3::unit_y(), Vector3::unit_z()];
-        for (axis, deg) in axes.into_iter().zip(self.rotation_deg) {
-            if deg != 0.0 {
-                solid = builder::rotated(&solid, Point3::origin(), axis, Rad(deg.to_radians()));
-            }
-        }
-        let [x, y, z] = self.position;
-        builder::translated(&solid, Vector3::new(x, y, z))
+    /// パラメータから B-rep ソリッドを作る (中心が位置、X → Y → Z の順に回す)
+    pub fn build_solid(&self) -> Result<Brep, String> {
+        let size = DVec3::from(self.size);
+        let m = DMat4::from_rotation_translation(
+            euler_deg_to_quat(self.rotation_deg),
+            DVec3::from(self.position),
+        ) * DMat4::from_translation(-size / 2.0);
+        Brep::cuboid(size)?.transformed(m)
     }
 
     /// 回転後の外接箱 (箱の8つの角から厳密に求める)
@@ -879,7 +871,7 @@ pub struct ModeledSource {
     pub id: usize,
     /// 製品名 (ツリーと部品表に出る名前)
     pub name: String,
-    /// `Solid` を serde_json で書いたもの
+    /// B-rep を `modeling::record` の形で書いた JSON
     pub json: String,
 }
 

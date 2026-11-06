@@ -7,7 +7,6 @@
 use std::collections::HashMap;
 
 use glam::{DMat4, DQuat, DVec3};
-use truck_modeling::Matrix4;
 
 use super::chart::Schedule;
 use super::chart::{Actuator, ActuatorKind, TimingChart};
@@ -60,21 +59,10 @@ impl RigidPose {
         self.rotation * p + self.translation
     }
 
+    /// 形状に適用するための行列。干渉チェックでは `solid.transformed(pose.to_dmat4())` で
+    /// 再生中の位置にある B-rep を得られる。
     pub fn to_dmat4(self) -> DMat4 {
         DMat4::from_rotation_translation(self.rotation, self.translation)
-    }
-
-    /// truck の形状に適用するための行列。
-    /// 干渉チェックでは `builder::transformed(&solid, pose.to_truck_matrix())` で
-    /// 再生中の位置にある B-rep を得られる。
-    #[allow(dead_code)]
-    pub fn to_truck_matrix(self) -> Matrix4 {
-        let c = self.to_dmat4().to_cols_array();
-        // cgmath (truck) の Matrix4::new も列優先で並べる
-        Matrix4::new(
-            c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8], c[9], c[10], c[11], c[12], c[13],
-            c[14], c[15],
-        )
     }
 }
 
@@ -172,7 +160,6 @@ pub fn part_poses_for(
 mod tests {
     use super::*;
     use crate::motion::chart::{Action, Axis, Easing, Step};
-    use truck_modeling::{EuclideanSpace, Point3, Transform as _};
 
     #[test]
     fn cylinder_on_axis_moves_with_it() {
@@ -221,20 +208,13 @@ mod tests {
     }
 
     #[test]
-    fn truck_matrix_matches_pose() {
+    fn matrix_matches_pose() {
         let pose = RigidPose {
             rotation: DQuat::from_rotation_z(0.7),
             translation: DVec3::new(1.0, 2.0, 3.0),
         };
         let p = DVec3::new(0.3, -1.0, 2.0);
-        let expected = pose.transform_point(p);
-        let got =
-            pose.to_truck_matrix()
-                .transform_point(Point3::from_vec(truck_modeling::Vector3::new(
-                    p.x, p.y, p.z,
-                )));
-        assert!((got.x - expected.x).abs() < 1e-12);
-        assert!((got.y - expected.y).abs() < 1e-12);
-        assert!((got.z - expected.z).abs() < 1e-12);
+        let got = pose.to_dmat4().transform_point3(p);
+        assert!((got - pose.transform_point(p)).length() < 1e-12);
     }
 }

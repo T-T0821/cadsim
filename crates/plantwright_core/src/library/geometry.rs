@@ -1,11 +1,13 @@
-//! 標準部品の形状 (truck の B-rep)
+//! 標準部品の形状 (B-rep)
 //!
 //! 部品は複数の本体 (body) からできている。アクチュエータが動かすのは本体単位なので、
 //! シリンダのロッドやチャックの爪は別の本体にしてある。並び順は [`catalog::body`] と合わせる。
 
-use std::f64::consts::{FRAC_PI_2, TAU};
+use std::f64::consts::FRAC_PI_2;
 
-use truck_modeling::{Point3, Rad, Solid, Vector3, builder};
+use glam::{DMat4, DVec3};
+
+use crate::kernel::Brep;
 
 use super::catalog::{PartKind, Spec};
 
@@ -13,7 +15,7 @@ use super::catalog::{PartKind, Spec};
 pub struct Body {
     pub name: &'static str,
     /// 部品ローカル座標 (mm) のソリッド
-    pub solid: Solid,
+    pub solid: Brep,
     /// 表示色 (sRGB)
     pub color: [f32; 3],
 }
@@ -44,42 +46,27 @@ enum Dir {
 }
 
 /// mm で指定した直方体 (min..max)
-fn cuboid(min: [f64; 3], max: [f64; 3]) -> Solid {
-    let [x0, y0, z0] = min;
-    let [x1, y1, z1] = max;
-    let v = builder::vertex(Point3::new(x0, y0, z0));
-    let e = builder::tsweep(&v, Vector3::new(x1 - x0, 0.0, 0.0));
-    let f = builder::tsweep(&e, Vector3::new(0.0, y1 - y0, 0.0));
-    builder::tsweep(&f, Vector3::new(0.0, 0.0, z1 - z0))
+fn cuboid(min: [f64; 3], max: [f64; 3]) -> Brep {
+    let (min, max) = (DVec3::from_array(min), DVec3::from_array(max));
+    Brep::cuboid(max - min)
+        .and_then(|b| b.transformed(DMat4::from_translation(min)))
+        .expect("直方体は作れる")
 }
 
 /// mm で指定した円柱。`start` は底面の中心、`dir` の向きに `length` 伸ばす。
-fn cylinder(start: [f64; 3], dir: Dir, radius: f64, length: f64) -> Solid {
-    let (r, l) = (radius, length);
-    let v = builder::vertex(Point3::new(r, 0.0, 0.0));
-    let circle = builder::rsweep(&v, Point3::new(0.0, 0.0, 0.0), Vector3::unit_y(), Rad(TAU));
-    let disk = builder::try_attach_plane(&[circle]).expect("円は平面に張れる");
-    let along_y = builder::tsweep(&disk, Vector3::new(0.0, l, 0.0));
-    let oriented = match dir {
-        Dir::Y => along_y,
-        Dir::X => builder::rotated(
-            &along_y,
-            Point3::new(0.0, 0.0, 0.0),
-            Vector3::unit_z(),
-            Rad(-FRAC_PI_2),
-        ),
-        Dir::Z => builder::rotated(
-            &along_y,
-            Point3::new(0.0, 0.0, 0.0),
-            Vector3::unit_x(),
-            Rad(FRAC_PI_2),
-        ),
+fn cylinder(start: [f64; 3], dir: Dir, radius: f64, length: f64) -> Brep {
+    // 円柱は +Z 向きに作るので、`dir` に向ける
+    let rotation = match dir {
+        Dir::Z => DMat4::IDENTITY,
+        Dir::X => DMat4::from_rotation_y(FRAC_PI_2),
+        Dir::Y => DMat4::from_rotation_x(-FRAC_PI_2),
     };
-    let [x, y, z] = start;
-    builder::translated(&oriented, Vector3::new(x, y, z))
+    Brep::cylinder_z(radius, length)
+        .and_then(|b| b.transformed(DMat4::from_translation(DVec3::from_array(start)) * rotation))
+        .expect("円柱は作れる")
 }
 
-fn body(name: &'static str, solid: Solid, color: [f32; 3]) -> Body {
+fn body(name: &'static str, solid: Brep, color: [f32; 3]) -> Body {
     Body { name, solid, color }
 }
 
@@ -384,17 +371,9 @@ mod tests {
     use super::*;
     use crate::library::catalog::body as idx;
 
-    fn bbox(solid: &Solid) -> ([f64; 3], [f64; 3]) {
-        let mut min = [f64::MAX; 3];
-        let mut max = [f64::MIN; 3];
-        for v in solid.vertex_iter() {
-            let p = v.point();
-            for (i, c) in [p.x, p.y, p.z].into_iter().enumerate() {
-                min[i] = min[i].min(c);
-                max[i] = max[i].max(c);
-            }
-        }
-        (min, max)
+    fn bbox(solid: &Brep) -> ([f64; 3], [f64; 3]) {
+        let b = solid.bounds().unwrap();
+        (b.min.to_array(), b.max.to_array())
     }
 
     #[test]
@@ -404,14 +383,7 @@ mod tests {
             let list = bodies(&spec);
             assert!(!list.is_empty(), "{kind:?}");
             for b in &list {
-                assert_eq!(b.solid.boundaries().len(), 1, "{kind:?} {}", b.name);
-                assert!(
-                    b.solid.boundaries()[0].shell_condition()
-                        == truck_modeling::ShellCondition::Closed,
-                    "{kind:?} {}",
-                    b.name
-                );
-                // 円柱の頂点は円周上の1点だけなので、床より下に出ていないことだけ見る
+                assert!(b.solid.is_solid(), "{kind:?} {}", b.name);
                 assert!(bbox(&b.solid).0[1] >= -1e-9, "{kind:?} {}", b.name);
             }
         }

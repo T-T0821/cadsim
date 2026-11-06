@@ -28,9 +28,6 @@ use bevy::{
     tasks::{AsyncComputeTaskPool, Task, block_on, poll_once},
 };
 use plantwright_core::effects::EffectSettings;
-use truck_meshalgo::prelude::*;
-// truck の prelude にも Transform トレイトがあるため Bevy 側を明示する
-use bevy::prelude::Transform;
 
 use crate::document::selection::Selection;
 use crate::features::flow::FlowColors;
@@ -50,7 +47,7 @@ use plantwright_core::model::Model;
 use plantwright_core::model::NodeId;
 use plantwright_core::model::NodeKind;
 use plantwright_core::part_mesh::PartMesh;
-use plantwright_core::part_mesh::shell_edges;
+use plantwright_core::shape::tessellate_breps;
 
 /// 箱のテッセレーションの許容誤差 (モデル単位)
 const BOX_TESSELLATION_TOL: f64 = 0.005;
@@ -320,22 +317,16 @@ fn rebuild_dirty_parts(
         let assets = match &node.kind {
             NodeKind::Assembly { .. } | NodeKind::Standard(_) => continue,
             NodeKind::Box(part) => {
-                let meshed = part.build_solid().triangulation(BOX_TESSELLATION_TOL);
-                let shell = &meshed.boundaries()[0];
-                let edges = shell_edges(shell);
-                let faces: Vec<PolygonMesh> = shell
-                    .face_iter()
-                    .map(|face| {
-                        let mut poly = face.surface().unwrap_or_default();
-                        if !face.orientation() {
-                            poly.invert();
-                        }
-                        poly
-                    })
-                    .collect();
+                let (faces, edges) = match part.build_solid() {
+                    Ok(solid) => tessellate_breps(&[solid], BOX_TESSELLATION_TOL),
+                    Err(err) => {
+                        warn!("箱の形状を作れませんでした: {err}");
+                        continue;
+                    }
+                };
                 PartAssets {
                     display: upload(Arc::new(PartMesh::new(&faces, &edges)), &mut meshes),
-                    sim: Arc::new(simulation::trimesh_from_polygons(&faces)),
+                    sim: Arc::new(simulation::trimesh_from_faces(&faces)),
                     shape: None,
                 }
             }
@@ -344,7 +335,7 @@ fn rebuild_dirty_parts(
                 .entry(shape.id)
                 .or_insert_with(|| PartAssets {
                     display: upload(shape.mesh.clone(), &mut meshes),
-                    sim: Arc::new(simulation::trimesh_from_polygons(&shape.faces)),
+                    sim: Arc::new(simulation::trimesh_from_faces(&shape.faces)),
                     shape: Some(shape.clone()),
                 })
                 .clone(),
@@ -965,7 +956,7 @@ pub struct PartHit {
     /// 部品のエンティティ (`SimBody` を持つ)
     pub entity: Entity,
     pub node: NodeId,
-    /// 面の番号 (truck の面の並び)
+    /// 面の番号 (形状の面の並び)
     pub face: usize,
     /// 当たった点 (ワールド座標)
     pub point: Vec3,

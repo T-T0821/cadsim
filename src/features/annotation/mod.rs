@@ -8,7 +8,7 @@
 //!
 //! 寸法は「どの部品のどこか」で覚えるので、部品を動かすと寸法線も付いて動く。
 //! 箱の点は箱の半寸法で割った -1..1 の値で覚えるので、箱の寸法を変えても同じ頂点や面に付いたまま。
-//! 値は truck の B-rep / f64 のメッシュから計算し、表示のときだけ f32 にする。
+//! 値は B-rep をテッセレーションした f64 のメッシュから計算し、表示のときだけ f32 にする。
 //!
 //! 寸法と注記はプロジェクトファイル (.plantwright) に保存され、追加・削除・文字の編集は
 //! 元に戻す (Ctrl+Z) の対象になる。部品を消しても寸法は消さずに隠すだけなので、
@@ -25,9 +25,9 @@ use bevy::{
     window::PrimaryWindow,
 };
 use bevy_egui::{EguiContexts, EguiPrimaryContextPass, egui};
+use plantwright_core::kernel::FaceMesh;
+use plantwright_core::shape::tessellate_breps;
 use serde::{Deserialize, Serialize};
-use truck_meshalgo::prelude::*;
-use truck_modeling::Solid;
 
 use crate::document::history::{Command, History};
 use crate::document::selection::Selection;
@@ -436,10 +436,6 @@ struct PartGeometry {
     faces: Vec<FaceGeometry>,
 }
 
-fn to_dvec(p: &Point3) -> DVec3 {
-    DVec3::new(p.x, p.y, p.z)
-}
-
 fn polyline_length(points: &[DVec3]) -> f64 {
     points.windows(2).map(|w| w[0].distance(w[1])).sum()
 }
@@ -468,53 +464,20 @@ fn push_unique(points: &mut Vec<DVec3>, p: DVec3) {
     }
 }
 
-/// 箱の B-rep から取り出す。面の並びは truck の面の並び (= ビューのピッキングの面番号)。
-fn solid_geometry(solid: &Solid) -> PartGeometry {
-    let mut g = PartGeometry::default();
-    for face in solid.face_iter() {
-        let outline: Vec<DVec3> = face
-            .boundaries()
-            .first()
-            .map(|wire| wire.vertex_iter().map(|v| to_dvec(&v.point())).collect())
-            .unwrap_or_default();
-        let n = outline.len();
-        // ニューウェル法で多角形の法線を求める
-        let mut normal = DVec3::ZERO;
-        let mut segments = Vec::new();
-        for (i, &p) in outline.iter().enumerate() {
-            let q = outline[(i + 1) % n];
-            normal += p.cross(q);
-            segments.push([p, q]);
-            push_unique(&mut g.vertices, p);
-            let exists = g.edges.iter().any(|e| {
-                (same_point(e[0], p) && same_point(e[1], q))
-                    || (same_point(e[0], q) && same_point(e[1], p))
-            });
-            if !exists {
-                g.edges.push(vec![p, q]);
-            }
-        }
-        g.faces.push(FaceGeometry {
-            outline: segments,
-            center: outline.iter().copied().sum::<DVec3>() / n.max(1) as f64,
-            normal: normal.normalize_or_zero(),
-            planar: true,
-        });
-    }
-    g
-}
+/// 箱の許容誤差 (平面だけなので三角形の数には効かない)
+const BOX_TOL: f64 = 0.005;
 
 /// 三角形メッシュの面から中心・法線・輪郭を求める
-fn mesh_face_geometry(poly: &PolygonMesh) -> FaceGeometry {
-    let positions: Vec<DVec3> = poly.positions().iter().map(to_dvec).collect();
+fn mesh_face_geometry(poly: &FaceMesh) -> FaceGeometry {
+    let positions = &poly.positions;
     let mut area_sum = 0.0;
     let mut center = DVec3::ZERO;
     let mut normal_sum = DVec3::ZERO;
     let mut normals = Vec::new();
     // 1つの三角形にしか使われていない辺が輪郭
     let mut edge_use: HashMap<(usize, usize), (usize, [DVec3; 2])> = HashMap::new();
-    for tri in poly.faces().triangle_iter() {
-        let idx = tri.map(|v| v.pos);
+    for tri in &poly.triangles {
+        let idx = tri.map(|v| v as usize);
         let [a, b, c] = idx.map(|i| positions[i]);
         let cross = (b - a).cross(c - a);
         let area = cross.length() / 2.0;
@@ -550,14 +513,15 @@ fn mesh_face_geometry(poly: &PolygonMesh) -> FaceGeometry {
     }
 }
 
-/// STEP から取り込んだ部品の形状から取り出す。面の並びは `ImportedShape::faces` の並び。
-fn imported_geometry(faces: &[PolygonMesh], edges: &[Vec<Point3>]) -> PartGeometry {
+/// 部品の形状のメッシュから取り出す。面の並びは `ImportedShape::faces` の並び
+/// (= ビューのピッキングの面番号)。
+fn imported_geometry(faces: &[FaceMesh], edges: &[Vec<DVec3>]) -> PartGeometry {
     let mut g = PartGeometry {
         faces: faces.iter().map(mesh_face_geometry).collect(),
         ..default()
     };
     for line in edges {
-        let points: Vec<DVec3> = line.iter().map(to_dvec).collect();
+        let points = line.clone();
         if let (Some(&first), Some(&last)) = (points.first(), points.last()) {
             push_unique(&mut g.vertices, first);
             push_unique(&mut g.vertices, last);
@@ -569,7 +533,10 @@ fn imported_geometry(faces: &[PolygonMesh], edges: &[Vec<Point3>]) -> PartGeomet
 
 fn node_geometry(kind: &NodeKind) -> Option<PartGeometry> {
     match kind {
-        NodeKind::Box(part) => Some(solid_geometry(&part.build_solid())),
+        NodeKind::Box(part) => {
+            let (faces, edges) = tessellate_breps(&[part.build_solid().ok()?], BOX_TOL);
+            Some(imported_geometry(&faces, &edges))
+        }
         NodeKind::Imported { shape, .. } | NodeKind::StandardBody { shape, .. } => {
             Some(imported_geometry(&shape.faces, &shape.edges))
         }
@@ -1566,7 +1533,7 @@ mod tests {
 
     #[test]
     fn box_vertices_are_unit_corners_in_anchor_frame() {
-        // truck で回した箱の頂点が、アンカー座標系ではちょうど ±1 の角になる
+        // 回した箱の頂点が、アンカー座標系ではちょうど ±1 の角になる
         let (model, ids, cache) =
             box_model(&[([2.0, 1.0, 3.0], [1.0, 0.5, 0.0], [20.0, -35.0, 70.0])]);
         let geometry = cache.get(ids[0]).unwrap();
@@ -1637,20 +1604,19 @@ mod tests {
 
     #[test]
     fn box_face_order_matches_picking() {
-        // ビューのピッキングの面番号は三角形分割後の面の並び。寸法側の面番号と同じ面を指すこと
+        // ビューのピッキングの面番号は表示メッシュの面の並び。寸法側の面番号と同じ面を指すこと
         let part = BoxPart {
             size: [2.0, 1.0, 3.0],
             position: [0.5, 0.0, 0.0],
             rotation_deg: [0.0, 25.0, 0.0],
         };
-        let solid = part.build_solid();
-        let geometry = solid_geometry(&solid);
-        let meshed = solid.triangulation(0.005);
-        let faces: Vec<_> = meshed.boundaries()[0].face_iter().collect();
+        let geometry = node_geometry(&NodeKind::Box(part.clone())).unwrap();
+        let (faces, _) = tessellate_breps(&[part.build_solid().unwrap()], 0.001);
+        assert_eq!(faces.len(), 6);
         assert_eq!(faces.len(), geometry.faces.len());
-        for (face, ours) in faces.into_iter().zip(&geometry.faces) {
-            let mesh = mesh_face_geometry(&face.surface().unwrap());
-            assert!(approx(mesh.center, ours.center));
+        for (face, ours) in faces.iter().zip(&geometry.faces) {
+            assert!(approx(mesh_face_geometry(face).center, ours.center));
+            assert!(ours.planar);
         }
     }
 

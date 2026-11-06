@@ -126,7 +126,7 @@ pub enum StepFileRecord {
     Sample,
     /// プロジェクトファイルと同じフォルダ以下なら相対パス、それ以外は絶対パス
     File { path: String },
-    /// 作成メニューで作った形状。`solid` は truck の B-rep を JSON にしたもの
+    /// 作成メニューで作った形状。`solid` は B-rep を SMLib の形式で JSON に詰めたもの (以前の truck の形式も読める)
     Modeled { name: String, solid: String },
     /// 負荷テスト用のシーン (開き直すと同じものを作り直す)
     Stress { parts: usize },

@@ -5,7 +5,7 @@
 //! Bevy に依存しない計算だけを置く。
 //!
 //! - **穴**: 平面の面にある小さな内側の輪郭 (穴の縁) を見つけ、その穴の内壁・底の面を消して、
-//!   縁の輪郭を外した平面を張り直す (B-rep のトポロジーを書き換えてからテッセレーションし直す)。
+//!   縁の輪郭を外した平面を張り直す (縁を外した輪郭で平面を三角形に分け直す)。
 //!   内壁の法線が穴の軸を向いているもの (凹) だけを穴とみなし、ボスやピン (凸) は残す。
 //! - **フィレット**: 2つの平面の間をなめらかにつなぐ細い曲面を見つけ、消す。両側の平面の縁を
 //!   2平面の交線まで延ばすので、角が尖った形になる (メッシュの頂点を動かす)。
@@ -17,12 +17,10 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use bevy::math::DVec3;
-use truck_meshalgo::prelude::*;
-use truck_topology::compress::{CompressedEdgeIndex, CompressedShell};
 
-use plantwright_core::formats::step::Brep;
-use plantwright_core::formats::step::brep_tolerance;
+use plantwright_core::kernel::{Brep, FaceMesh, MeshedBrep, MeshedFace, triangulate_planar};
 use plantwright_core::part_mesh::PartMesh;
+use plantwright_core::shape::{TESSELLATION_ANGLE_DEG, brep_tolerance};
 
 /// どこまで小さいものを消すか (モデルの単位)
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -50,16 +48,16 @@ impl std::ops::AddAssign for DefeatureStats {
 /// 簡略化した表示用メッシュ
 pub struct DefeaturedMesh {
     /// (簡略化していない表示での面番号, 面のメッシュ)。消した面は入らない。
-    pub faces: Vec<(u32, PolygonMesh)>,
+    pub faces: Vec<(u32, FaceMesh)>,
     /// 稜線のポリライン
-    pub edges: Vec<Vec<Point3>>,
+    pub edges: Vec<Vec<DVec3>>,
     pub stats: DefeatureStats,
     /// 簡略化していない表示での面の数 (テッセレーションできなかった面は数えない)
     pub face_count: usize,
 }
 
 /// 部品の B-rep から簡略化した表示用メッシュを作る。消すものがなければ None。
-/// 面の番号は `step_import` が作る表示メッシュ (`ImportedShape::mesh`) と同じ並び。
+/// 面の番号は STEP の読み込みが作る表示メッシュ (`ImportedShape::mesh`) と同じ並び。
 pub fn defeature_shape(
     breps: &[Brep],
     options: &DefeatureOptions,
@@ -70,7 +68,7 @@ pub fn defeature_shape(
     let mut stats = DefeatureStats::default();
     let mut offset = 0;
     for brep in breps {
-        let mesh = defeature(brep, tol, options);
+        let mesh = defeature(&brep.tessellate(tol, TESSELLATION_ANGLE_DEG), options);
         faces.extend(
             mesh.faces
                 .into_iter()
@@ -88,39 +86,21 @@ const PLANAR_TOLERANCE: f64 = 1e-6;
 /// 1つの穴とみなす面の数の上限 (これより多くつながっていたら穴ではない)
 const MAX_HOLE_FACES: usize = 64;
 
-type MeshedShell = CompressedShell<Point3, PolylineCurve<Point3>, Option<PolygonMesh>>;
-
-/// B-rep のシェルから小さな穴とフィレットを消し、表示用のメッシュを作る。
-/// `tol` はテッセレーションの許容誤差。
-pub fn defeature<C, S>(
-    shell: &CompressedShell<Point3, C, S>,
-    tol: f64,
-    options: &DefeatureOptions,
-) -> DefeaturedMesh
-where
-    C: Clone,
-    S: Clone,
-    CompressedShell<Point3, C, S>: RobustMeshableShape<MeshedShape = MeshedShell>,
-{
-    let meshed = shell.robust_triangulation(tol);
+/// メッシュにした B-rep から小さな穴とフィレットを消し、表示用のメッシュを作る
+pub fn defeature(meshed: &MeshedBrep, options: &DefeatureOptions) -> DefeaturedMesh {
     // 元の面の番号 → 表示での面の番号 (テッセレーションできなかった面は表示に入らない)
     let mut display = Vec::with_capacity(meshed.faces.len());
     let mut face_count = 0;
     for face in &meshed.faces {
-        display.push(face.surface.is_some().then_some(face_count as u32));
-        face_count += usize::from(face.surface.is_some());
+        display.push(face.mesh.is_some().then_some(face_count as u32));
+        face_count += usize::from(face.mesh.is_some());
     }
-    let (shell, kept, holes) = remove_small_holes(shell, &meshed, options.max_hole_diameter);
-    let meshed = if holes > 0 {
-        shell.robust_triangulation(tol)
-    } else {
-        meshed
-    };
-    let mut result = collapse_fillets(&shell, &meshed, options.max_fillet_radius);
+    let (filled, holes) = remove_small_holes(meshed, options.max_hole_diameter);
+    let mut result = collapse_fillets(filled.as_ref().unwrap_or(meshed), options.max_fillet_radius);
     result.faces = result
         .faces
         .into_iter()
-        .filter_map(|(face, poly)| Some((display[kept[face as usize]]?, poly)))
+        .filter_map(|(face, poly)| Some((display[face as usize]?, poly)))
         .collect();
     result.stats.holes = holes;
     result.face_count = face_count;
@@ -131,33 +111,17 @@ where
 // 共通: 面と辺のつながり・平面の判定
 // ---------------------------------------------------------------------------
 
-/// 辺 → その辺を境界に持つ面
-fn edge_faces<C, S>(shell: &CompressedShell<Point3, C, S>) -> Vec<Vec<usize>> {
-    let mut out = vec![Vec::new(); shell.edges.len()];
-    for (f, face) in shell.faces.iter().enumerate() {
-        for e in face.boundaries.iter().flatten() {
-            if !out[e.index].contains(&f) {
-                out[e.index].push(f);
+/// 辺 → その辺を輪郭に持つ面
+fn edge_faces(meshed: &MeshedBrep) -> Vec<Vec<usize>> {
+    let mut out = vec![Vec::new(); meshed.edges.len()];
+    for (f, face) in meshed.faces.iter().enumerate() {
+        for &e in face.loops.iter().flatten() {
+            if !out[e].contains(&f) {
+                out[e].push(f);
             }
         }
     }
     out
-}
-
-fn dvec(p: &Point3) -> DVec3 {
-    DVec3::new(p.x, p.y, p.z)
-}
-
-/// 面の向きを反映した三角形 (3頂点) の並び
-fn triangles(poly: &PolygonMesh, flip: bool) -> Vec<[DVec3; 3]> {
-    let positions = poly.positions();
-    poly.faces()
-        .triangle_iter()
-        .map(|t| {
-            let [a, b, c] = t.map(|v| dvec(&positions[v.pos]));
-            if flip { [a, c, b] } else { [a, b, c] }
-        })
-        .collect()
 }
 
 fn triangle_normal([a, b, c]: &[DVec3; 3]) -> DVec3 {
@@ -165,18 +129,16 @@ fn triangle_normal([a, b, c]: &[DVec3; 3]) -> DVec3 {
 }
 
 /// 面が平面なら (単位法線, 原点からの距離) を返す
-fn plane_of(poly: &PolygonMesh, flip: bool, scale: f64) -> Option<(DVec3, f64)> {
-    let tris = triangles(poly, flip);
-    let normal = tris
-        .iter()
-        .map(triangle_normal)
+fn plane_of(poly: &FaceMesh, scale: f64) -> Option<(DVec3, f64)> {
+    let normal = poly
+        .triangle_points()
+        .map(|t| triangle_normal(&t))
         .reduce(|a, b| a + b)?
         .try_normalize()?;
-    let origin = tris.first()?[0];
-    let d = normal.dot(origin);
+    let d = normal.dot(*poly.positions.first()?);
     let eps = scale * PLANAR_TOLERANCE + 1e-9;
-    tris.iter()
-        .flatten()
+    poly.positions
+        .iter()
         .all(|p| (normal.dot(*p) - d).abs() <= eps)
         .then_some((normal, d))
 }
@@ -197,16 +159,53 @@ fn extent(points: impl IntoIterator<Item = DVec3>) -> f64 {
 }
 
 /// 輪郭 (辺の並び) の点
-fn loop_points(meshed: &MeshedShell, edges: &[CompressedEdgeIndex]) -> Vec<DVec3> {
+fn loop_points(meshed: &MeshedBrep, edges: &[usize]) -> Vec<DVec3> {
     edges
         .iter()
-        .flat_map(|e| meshed.edges[e.index].curve.iter().map(dvec))
+        .flat_map(|&e| meshed.edges[e].iter().copied())
         .collect()
 }
 
+/// 輪郭を1周する点の列 (辺のポリラインを向きをそろえてつなぐ)
+fn loop_polygon(meshed: &MeshedBrep, edges: &[usize]) -> Vec<DVec3> {
+    let lines: Vec<&Vec<DVec3>> = edges
+        .iter()
+        .map(|&e| &meshed.edges[e])
+        .filter(|l| !l.is_empty())
+        .collect();
+    let mut out: Vec<DVec3> = Vec::new();
+    for (i, line) in lines.iter().enumerate() {
+        let (first, last) = (line[0], line[line.len() - 1]);
+        // 前の辺の終わりにつながる向きにする。最初の辺は次の辺につながる向き
+        let reversed = match out.last() {
+            Some(&end) => end.distance_squared(last) < end.distance_squared(first),
+            None => lines.get(i + 1).is_some_and(|next| {
+                let ends = [next[0], next[next.len() - 1]];
+                let d = |p: DVec3| {
+                    ends.iter()
+                        .map(|q| p.distance_squared(*q))
+                        .fold(f64::MAX, f64::min)
+                };
+                d(first) < d(last)
+            }),
+        };
+        let points: Vec<DVec3> = if reversed {
+            line.iter().rev().copied().collect()
+        } else {
+            line.to_vec()
+        };
+        let skip = usize::from(out.last() == points.first());
+        out.extend(points.into_iter().skip(skip));
+    }
+    if out.len() > 1 && out.first() == out.last() {
+        out.pop();
+    }
+    out
+}
+
 /// メッシュ全体の大きさ (平面判定の許容差に使う)
-fn shell_scale(meshed: &MeshedShell) -> f64 {
-    extent(meshed.vertices.iter().map(dvec)).max(1e-9)
+fn shell_scale(meshed: &MeshedBrep) -> f64 {
+    extent(meshed.edges.iter().flatten().copied()).max(1e-9)
 }
 
 // ---------------------------------------------------------------------------
@@ -220,34 +219,30 @@ struct Rim {
     boundary: usize,
 }
 
-/// 小さな穴を消したシェルと、新しい面 → 元の面の番号の表、消した穴の数を返す
-fn remove_small_holes<C: Clone, S: Clone>(
-    shell: &CompressedShell<Point3, C, S>,
-    meshed: &MeshedShell,
-    max_diameter: f64,
-) -> (CompressedShell<Point3, C, S>, Vec<usize>, usize) {
-    let identity: Vec<usize> = (0..shell.faces.len()).collect();
+/// 小さな穴を消したメッシュ (面の番号は元のまま、消した面はメッシュなし) と、消した穴の数を返す。
+/// 消すものが無ければ None
+fn remove_small_holes(meshed: &MeshedBrep, max_diameter: f64) -> (Option<MeshedBrep>, usize) {
     if max_diameter <= 0.0 {
-        return (shell.clone(), identity, 0);
+        return (None, 0);
     }
     let scale = shell_scale(meshed);
-    let edge_faces = edge_faces(shell);
+    let edge_faces = edge_faces(meshed);
 
     // 平面の面にある、小さな内側の輪郭をすべて集める (いちばん大きい輪郭が外周)
     let mut rims: HashMap<usize, Rim> = HashMap::new(); // 辺 → 縁
     let mut rim_list = Vec::new();
-    for (f, face) in shell.faces.iter().enumerate() {
-        if face.boundaries.len() < 2 {
+    for (f, face) in meshed.faces.iter().enumerate() {
+        if face.loops.len() < 2 {
             continue;
         }
-        let Some(poly) = meshed.faces[f].surface.as_ref() else {
+        let Some(poly) = face.mesh.as_ref() else {
             continue;
         };
-        if plane_of(poly, !face.orientation, scale).is_none() {
+        if plane_of(poly, scale).is_none() {
             continue;
         }
         let sizes: Vec<f64> = face
-            .boundaries
+            .loops
             .iter()
             .map(|b| extent(loop_points(meshed, b)))
             .collect();
@@ -261,15 +256,15 @@ fn remove_small_holes<C: Clone, S: Clone>(
                     boundary: b,
                 };
                 rim_list.push(rim);
-                for e in &face.boundaries[b] {
-                    rims.insert(e.index, rim);
+                for &e in &face.loops[b] {
+                    rims.insert(e, rim);
                 }
             }
         }
     }
 
     let rim_faces: HashSet<usize> = rim_list.iter().map(|r| r.face).collect();
-    let outward = outward_sign(shell, meshed);
+    let outward = outward_sign(meshed);
     let mut removed_faces: HashSet<usize> = HashSet::new();
     let mut removed_rims: HashSet<Rim> = HashSet::new();
     let mut holes = 0;
@@ -277,12 +272,12 @@ fn remove_small_holes<C: Clone, S: Clone>(
         if removed_rims.contains(&rim) {
             continue; // 貫通穴の反対側の縁としてもう消した
         }
-        let Some((region, reached)) = hole_region(shell, &edge_faces, &rims, &rim_faces, rim)
+        let Some((region, reached)) = hole_region(meshed, &edge_faces, &rims, &rim_faces, rim)
         else {
             continue;
         };
         if region.iter().any(|f| removed_faces.contains(f))
-            || !is_small_hole(shell, meshed, rim, &region, max_diameter, outward)
+            || !is_small_hole(meshed, rim, &region, max_diameter, outward)
         {
             continue;
         }
@@ -291,39 +286,58 @@ fn remove_small_holes<C: Clone, S: Clone>(
         holes += 1;
     }
     if holes == 0 {
-        return (shell.clone(), identity, 0);
+        return (None, 0);
     }
 
-    let mut out = CompressedShell {
-        vertices: shell.vertices.clone(),
-        edges: shell.edges.clone(),
-        faces: Vec::new(),
+    let mut out = MeshedBrep {
+        faces: Vec::with_capacity(meshed.faces.len()),
+        edges: meshed.edges.clone(),
     };
-    let mut kept = Vec::new();
-    for (f, face) in shell.faces.iter().enumerate() {
+    for (f, face) in meshed.faces.iter().enumerate() {
         if removed_faces.contains(&f) {
+            out.faces.push(MeshedFace::default());
             continue;
         }
-        let mut face = face.clone();
-        let mut b = 0;
-        face.boundaries.retain(|_| {
-            let keep = !removed_rims.contains(&Rim {
-                face: f,
-                boundary: b,
-            });
-            b += 1;
-            keep
-        });
-        out.faces.push(face);
-        kept.push(f);
+        let loops: Vec<Vec<usize>> = face
+            .loops
+            .iter()
+            .enumerate()
+            .filter(|&(b, _)| {
+                !removed_rims.contains(&Rim {
+                    face: f,
+                    boundary: b,
+                })
+            })
+            .map(|(_, l)| l.clone())
+            .collect();
+        let mesh = if loops.len() == face.loops.len() {
+            face.mesh.clone()
+        } else {
+            refill_plane(meshed, face, &loops)
+        };
+        out.faces.push(MeshedFace { mesh, loops });
     }
-    (out, kept, holes)
+    (Some(out), holes)
+}
+
+/// 縁を外した輪郭で平面を三角形に分け直す。向きは元の面に合わせる
+fn refill_plane(meshed: &MeshedBrep, face: &MeshedFace, loops: &[Vec<usize>]) -> Option<FaceMesh> {
+    let polygons: Vec<Vec<DVec3>> = loops.iter().map(|l| loop_polygon(meshed, l)).collect();
+    let mut mesh = triangulate_planar(&polygons)?;
+    let (want, _) = plane_of(face.mesh.as_ref()?, shell_scale(meshed))?;
+    let have: DVec3 = mesh.triangle_points().map(|t| triangle_normal(&t)).sum();
+    if have.dot(want) < 0.0 {
+        mesh.invert();
+    }
+    // 平面の正確な法線
+    mesh.normals = vec![want; mesh.positions.len()];
+    Some(mesh)
 }
 
 /// 縁から穴の内側の面をたどる。ほかの縁 (貫通穴の反対側) でも止まる。
 /// 穴の面の集まりと、たどり着いた縁を返す。穴らしくなければ None。
-fn hole_region<C, S>(
-    shell: &CompressedShell<Point3, C, S>,
+fn hole_region(
+    meshed: &MeshedBrep,
     edge_faces: &[Vec<usize>],
     rims: &HashMap<usize, Rim>,
     rim_faces: &HashSet<usize>,
@@ -333,8 +347,8 @@ fn hole_region<C, S>(
     let mut seen = HashSet::new();
     let mut reached = vec![start];
     let mut queue = VecDeque::new();
-    for e in &shell.faces[start.face].boundaries[start.boundary] {
-        for &f in &edge_faces[e.index] {
+    for &e in &meshed.faces[start.face].loops[start.boundary] {
+        for &f in &edge_faces[e] {
             if f != start.face && seen.insert(f) {
                 queue.push_back(f);
             }
@@ -345,8 +359,8 @@ fn hole_region<C, S>(
         if region.len() > MAX_HOLE_FACES {
             return None;
         }
-        for e in shell.faces[f].boundaries.iter().flatten() {
-            if let Some(&rim) = rims.get(&e.index)
+        for &e in meshed.faces[f].loops.iter().flatten() {
+            if let Some(&rim) = rims.get(&e)
                 && rim.face != f
             {
                 // ほかの平面の縁に着いた: そこが穴の出口 (その平面は残す)
@@ -355,7 +369,7 @@ fn hole_region<C, S>(
                 }
                 continue;
             }
-            for &g in &edge_faces[e.index] {
+            for &g in &edge_faces[e] {
                 // 縁を通らずに縁のある平面 (消してはいけない面) に着いた: 穴ではない
                 if rim_faces.contains(&g) {
                     return None;
@@ -371,9 +385,8 @@ fn hole_region<C, S>(
 
 /// 縁から続く面が、縁の太さに収まる穴か。内壁の法線が穴の軸の方を向いている (凹) ものだけを
 /// 穴とし、ボスやピン (凸) は残す。面が軸から離れて広がっていたら穴ではない。
-fn is_small_hole<C, S>(
-    shell: &CompressedShell<Point3, C, S>,
-    meshed: &MeshedShell,
+fn is_small_hole(
+    meshed: &MeshedBrep,
     rim: Rim,
     region: &[usize],
     max_diameter: f64,
@@ -381,23 +394,23 @@ fn is_small_hole<C, S>(
 ) -> bool {
     let scale = shell_scale(meshed);
     let Some((axis, _)) = meshed.faces[rim.face]
-        .surface
+        .mesh
         .as_ref()
-        .and_then(|poly| plane_of(poly, !shell.faces[rim.face].orientation, scale))
+        .and_then(|poly| plane_of(poly, scale))
     else {
         return false;
     };
-    let points = loop_points(meshed, &shell.faces[rim.face].boundaries[rim.boundary]);
+    let points = loop_points(meshed, &meshed.faces[rim.face].loops[rim.boundary]);
     if points.is_empty() {
         return false;
     }
     let center = points.iter().sum::<DVec3>() / points.len() as f64;
     let mut score = 0.0;
     for &f in region {
-        let Some(poly) = meshed.faces[f].surface.as_ref() else {
+        let Some(poly) = meshed.faces[f].mesh.as_ref() else {
             continue;
         };
-        for tri in triangles(poly, !shell.faces[f].orientation) {
+        for tri in poly.triangle_points() {
             let p = (tri[0] + tri[1] + tri[2]) / 3.0;
             // 軸に垂直な方向で、三角形から軸へ向かうベクトル
             let to_axis = center - p;
@@ -411,18 +424,15 @@ fn is_small_hole<C, S>(
     score * outward > 0.0
 }
 
-/// `triangles` の向きが外向きなら 1、内向きなら -1。truck のメッシュが面の向きを
-/// 反映済みかどうかに左右されないよう、シェル全体の符号付き体積で確かめる。
-fn outward_sign<C, S>(shell: &CompressedShell<Point3, C, S>, meshed: &MeshedShell) -> f64 {
-    let mut volume = 0.0;
-    for (face, m) in shell.faces.iter().zip(&meshed.faces) {
-        let Some(poly) = m.surface.as_ref() else {
-            continue;
-        };
-        for [a, b, c] in triangles(poly, !face.orientation) {
-            volume += a.dot(b.cross(c));
-        }
-    }
+/// 面のメッシュの向きが外向きなら 1、内向きなら -1。全体の符号付き体積で確かめる
+fn outward_sign(meshed: &MeshedBrep) -> f64 {
+    let volume: f64 = meshed
+        .faces
+        .iter()
+        .filter_map(|f| f.mesh.as_ref())
+        .flat_map(|m| m.triangle_points())
+        .map(|[a, b, c]| a.dot(b.cross(c)))
+        .sum();
     if volume < 0.0 { -1.0 } else { 1.0 }
 }
 
@@ -433,21 +443,30 @@ fn outward_sign<C, S>(shell: &CompressedShell<Point3, C, S>, meshed: &MeshedShel
 /// 曲面と平面が接しているとみなす法線の向きの差 (cos)
 const TANGENT_COS: f64 = 0.999;
 
-/// 曲面の法線 (面の向きを反映した単位ベクトル)。truck が付けた頂点の法線は曲面の正確な法線
+/// 曲面の法線 (面の外向きの単位ベクトル)。カーネルが付けた頂点の法線は曲面の正確な法線
 /// なので、粗いテッセレーションでも接する平面の法線と一致する。無ければ三角形の法線を使う。
-fn surface_normals(poly: &PolygonMesh, flip: bool) -> Vec<DVec3> {
-    let sign = if flip { -1.0 } else { 1.0 };
+fn surface_normals(poly: &FaceMesh) -> Vec<DVec3> {
     let vertex: Vec<DVec3> = poly
-        .normals()
+        .normals
         .iter()
-        .filter_map(|n| (DVec3::new(n.x, n.y, n.z) * sign).try_normalize())
+        .filter_map(|n| n.try_normalize())
         .collect();
-    if !vertex.is_empty() {
-        return vertex;
+    if vertex.len() == poly.positions.len() && !vertex.is_empty() {
+        // 念のため三角形の向きと比べ、逆なら反転する
+        let agree: f64 = poly
+            .triangles
+            .iter()
+            .map(|t| {
+                let tri = t.map(|i| poly.positions[i as usize]);
+                let n: DVec3 = t.iter().map(|&i| vertex[i as usize]).sum();
+                triangle_normal(&tri).dot(n)
+            })
+            .sum();
+        let sign = if agree < 0.0 { -1.0 } else { 1.0 };
+        return vertex.into_iter().map(|n| n * sign).collect();
     }
-    triangles(poly, flip)
-        .iter()
-        .filter_map(|t| triangle_normal(t).try_normalize())
+    poly.triangle_points()
+        .filter_map(|t| triangle_normal(&t).try_normalize())
         .collect()
 }
 
@@ -483,25 +502,20 @@ impl Line {
 }
 
 /// 面のメッシュからフィレットを消し、両側の平面を交線まで延ばす
-fn collapse_fillets<C, S>(
-    shell: &CompressedShell<Point3, C, S>,
-    meshed: &MeshedShell,
-    max_radius: f64,
-) -> DefeaturedMesh {
+fn collapse_fillets(meshed: &MeshedBrep, max_radius: f64) -> DefeaturedMesh {
     let scale = shell_scale(meshed);
-    let edge_faces = edge_faces(shell);
-    let planes: Vec<Option<(DVec3, f64)>> = shell
+    let edge_faces = edge_faces(meshed);
+    let planes: Vec<Option<(DVec3, f64)>> = meshed
         .faces
         .iter()
-        .zip(&meshed.faces)
-        .map(|(face, m)| plane_of(m.surface.as_ref()?, !face.orientation, scale))
+        .map(|face| plane_of(face.mesh.as_ref()?, scale))
         .collect();
     let neighbors = |f: usize| -> Vec<usize> {
-        let mut out: Vec<usize> = shell.faces[f]
-            .boundaries
+        let mut out: Vec<usize> = meshed.faces[f]
+            .loops
             .iter()
             .flatten()
-            .flat_map(|e| edge_faces[e.index].iter().copied())
+            .flat_map(|&e| edge_faces[e].iter().copied())
             .filter(|&g| g != f)
             .collect();
         out.sort_unstable();
@@ -512,14 +526,14 @@ fn collapse_fillets<C, S>(
     // フィレット: 曲面で、接する平面がちょうど2つあり、その交線から近いもの
     let mut fillet_lines: HashMap<usize, Line> = HashMap::new();
     if max_radius > 0.0 {
-        for (f, face) in shell.faces.iter().enumerate() {
+        for (f, face) in meshed.faces.iter().enumerate() {
             if planes[f].is_some() {
                 continue;
             }
-            let Some(poly) = meshed.faces[f].surface.as_ref() else {
+            let Some(poly) = face.mesh.as_ref() else {
                 continue;
             };
-            let normals = surface_normals(poly, !face.orientation);
+            let normals = surface_normals(poly);
             // 曲面の法線と同じ向きの法線を持つ平面 = この曲面が接している平面
             let tangent: Vec<(DVec3, f64)> = neighbors(f)
                 .into_iter()
@@ -535,9 +549,9 @@ fn collapse_fillets<C, S>(
             // 接点は交線から r·tan(α/2) の位置にある (α は2平面の法線のなす角)。
             // いちばん遠い点を接点とみなして半径を見積もる。
             let farthest = poly
-                .positions()
+                .positions
                 .iter()
-                .map(|p| line.distance(dvec(p)))
+                .map(|p| line.distance(*p))
                 .fold(0.0, f64::max);
             let half_angle = a.0.dot(b.0).clamp(-1.0, 1.0).acos() / 2.0;
             let radius = farthest / half_angle.tan().max(1e-9);
@@ -549,11 +563,11 @@ fn collapse_fillets<C, S>(
 
     // フィレットが集まる角の小さな曲面 (まわりが消すフィレットか平面だけのもの) も消す
     let mut corners: HashSet<usize> = HashSet::new();
-    for (f, m) in meshed.faces.iter().enumerate() {
+    for (f, face) in meshed.faces.iter().enumerate() {
         if planes[f].is_some() || fillet_lines.contains_key(&f) {
             continue;
         }
-        let Some(poly) = m.surface.as_ref() else {
+        let Some(poly) = face.mesh.as_ref() else {
             continue;
         };
         let around = neighbors(f);
@@ -561,7 +575,7 @@ fn collapse_fillets<C, S>(
         let all_simple = around
             .iter()
             .all(|g| fillet_lines.contains_key(g) || planes[*g].is_some());
-        let small = extent(poly.positions().iter().map(dvec)) <= max_radius * 2.0;
+        let small = extent(poly.positions.iter().copied()) <= max_radius * 2.0;
         if touches_fillet && all_simple && small {
             corners.insert(f);
         }
@@ -578,37 +592,28 @@ fn collapse_fillets<C, S>(
     };
     let mut moves: HashMap<(i64, i64, i64), DVec3> = HashMap::new();
     for (&f, line) in &fillet_lines {
-        for e in shell.faces[f].boundaries.iter().flatten() {
-            for p in meshed.edges[e.index].curve.iter() {
-                let p = dvec(p);
+        for &e in meshed.faces[f].loops.iter().flatten() {
+            for &p in &meshed.edges[e] {
                 moves.entry(key(p)).or_insert_with(|| line.closest(p));
             }
         }
     }
-    let moved = |p: &Point3| -> Point3 {
-        match moves.get(&key(dvec(p))) {
-            Some(q) => Point3::new(q.x, q.y, q.z),
-            None => *p,
-        }
-    };
+    let moved = |p: DVec3| -> DVec3 { moves.get(&key(p)).copied().unwrap_or(p) };
 
     let removed = |f: usize| fillet_lines.contains_key(&f) || corners.contains(&f);
     let mut faces = Vec::new();
-    for (f, (face, m)) in shell.faces.iter().zip(&meshed.faces).enumerate() {
+    for (f, face) in meshed.faces.iter().enumerate() {
         if removed(f) {
             continue;
         }
-        let Some(poly) = m.surface.as_ref() else {
+        let Some(poly) = face.mesh.as_ref() else {
             continue;
         };
         let mut poly = poly.clone();
         if !moves.is_empty() {
-            for p in poly.positions_mut() {
-                *p = moved(p);
+            for p in &mut poly.positions {
+                *p = moved(*p);
             }
-        }
-        if !face.orientation {
-            poly.invert();
         }
         faces.push((f as u32, poly));
     }
@@ -617,14 +622,14 @@ fn collapse_fillets<C, S>(
     // 残りは点を移す。つぶれて点になった線も捨てる。
     let mut edges = Vec::new();
     for (e, faces_of_edge) in edge_faces.iter().enumerate() {
-        if faces_of_edge.iter().all(|&f| removed(f)) {
+        if faces_of_edge
+            .iter()
+            .all(|&f| removed(f) || meshed.faces[f].mesh.is_none())
+        {
             continue;
         }
-        let line: Vec<Point3> = meshed.edges[e].curve.iter().map(moved).collect();
-        let length: f64 = line
-            .windows(2)
-            .map(|w| dvec(&w[0]).distance(dvec(&w[1])))
-            .sum();
+        let line: Vec<DVec3> = meshed.edges[e].iter().map(|&p| moved(p)).collect();
+        let length: f64 = line.windows(2).map(|w| w[0].distance(w[1])).sum();
         if length > scale * 1e-9 {
             edges.push(line);
         }
@@ -643,61 +648,74 @@ fn collapse_fillets<C, S>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use plantwright_core::formats::step::mesh_stats;
-    use std::f64::consts::{FRAC_PI_4, TAU};
-    use truck_modeling::{Solid, builder};
-
-    fn shell_of(
-        solid: &Solid,
-    ) -> CompressedShell<Point3, truck_modeling::Curve, truck_modeling::Surface> {
-        solid.compress().boundaries.remove(0)
-    }
+    use bevy::math::{DMat4, Vec3};
+    use plantwright_core::kernel::BooleanKind;
+    use plantwright_core::shape::{ImportedShape, mesh_stats, tessellate_breps};
 
     fn triangle_count(mesh: &DefeaturedMesh) -> usize {
-        mesh.faces
-            .iter()
-            .map(|(_, p)| p.faces().triangle_iter().count())
-            .sum()
+        mesh.faces.iter().map(|(_, p)| p.triangles.len()).sum()
     }
 
     fn volume(mesh: &DefeaturedMesh) -> f64 {
-        let polys: Vec<PolygonMesh> = mesh.faces.iter().map(|(_, p)| p.clone()).collect();
+        let polys: Vec<FaceMesh> = mesh.faces.iter().map(|(_, p)| p.clone()).collect();
         mesh_stats(&polys).volume
     }
 
-    /// 100 x 10 x 60 の板に、直径 `d` の貫通穴を2つあける
-    fn plate_with_holes(d: f64) -> Solid {
-        let v = builder::vertex(Point3::new(0.0, 0.0, 0.0));
-        let e = builder::tsweep(&v, Vector3::new(100.0, 0.0, 0.0));
-        let f = builder::tsweep(&e, Vector3::new(0.0, 0.0, 60.0));
-        let outer = f.boundaries()[0].clone();
-        let circle = |x: f64, z: f64| {
-            let v = builder::vertex(Point3::new(x + d / 2.0, 0.0, z));
-            // +Y まわりの回転は XZ 平面で外周と逆回りなので、そのまま穴になる
-            builder::rsweep(&v, Point3::new(x, 0.0, z), Vector3::unit_y(), Rad(TAU))
-        };
-        let face = builder::try_attach_plane(&[outer, circle(25.0, 30.0), circle(75.0, 30.0)])
-            .expect("穴あきの平面");
-        builder::tsweep(&face, Vector3::new(0.0, 10.0, 0.0))
+    fn defeature_at(solid: &Brep, tol: f64, options: &DefeatureOptions) -> DefeaturedMesh {
+        defeature(&solid.tessellate(tol, TESSELLATION_ANGLE_DEG), options)
     }
+
+    fn cuboid(min: DVec3, max: DVec3) -> Brep {
+        Brep::cuboid(max - min)
+            .unwrap()
+            .transformed(DMat4::from_translation(min))
+            .unwrap()
+    }
+
+    /// `center` を通り Y 方向に伸びる円柱 (y0..y1)
+    fn y_cylinder(x: f64, z: f64, radius: f64, y0: f64, y1: f64) -> Brep {
+        let m = DMat4::from_translation(DVec3::new(x, y0, z)) * DMat4::from_rotation_x(-FRAC_PI_2);
+        Brep::cylinder_z(radius, y1 - y0)
+            .unwrap()
+            .transformed(m)
+            .unwrap()
+    }
+
+    /// Z 方向に伸びる円柱 (z0..z1)
+    fn z_cylinder(x: f64, y: f64, radius: f64, z0: f64, z1: f64) -> Brep {
+        Brep::cylinder_z(radius, z1 - z0)
+            .unwrap()
+            .transformed(DMat4::from_translation(DVec3::new(x, y, z0)))
+            .unwrap()
+    }
+
+    fn minus(a: Brep, b: &Brep) -> Brep {
+        a.boolean(b, BooleanKind::Difference).unwrap()
+    }
+
+    use std::f64::consts::FRAC_PI_2;
+
+    /// 100 x 10 x 60 の板に、直径 `d` の貫通穴を2つあける
+    fn plate_with_holes(d: f64) -> Brep {
+        let plate = cuboid(DVec3::ZERO, DVec3::new(100.0, 10.0, 60.0));
+        let plate = minus(plate, &y_cylinder(25.0, 30.0, d / 2.0, -1.0, 11.0));
+        minus(plate, &y_cylinder(75.0, 30.0, d / 2.0, -1.0, 11.0))
+    }
+
+    const OFF: DefeatureOptions = DefeatureOptions {
+        max_hole_diameter: 0.0,
+        max_fillet_radius: 0.0,
+    };
 
     #[test]
     fn small_through_holes_are_filled() {
         let solid = plate_with_holes(12.0);
-        let shell = shell_of(&solid);
         let options = DefeatureOptions {
             max_hole_diameter: 20.0,
             max_fillet_radius: 0.0,
         };
-        let original = defeature(
-            &shell,
-            0.05,
-            &DefeatureOptions {
-                max_hole_diameter: 0.0,
-                max_fillet_radius: 0.0,
-            },
-        );
-        let simplified = defeature(&shell, 0.05, &options);
+        let original = defeature_at(&solid, 0.05, &OFF);
+        let simplified = defeature_at(&solid, 0.05, &options);
         assert_eq!(simplified.stats.holes, 2);
         assert!(triangle_count(&simplified) * 4 < triangle_count(&original));
         // 穴が埋まって、ただの直方体の体積になる
@@ -715,54 +733,44 @@ mod tests {
 
     #[test]
     fn large_holes_are_kept() {
-        let shell = shell_of(&plate_with_holes(30.0));
         let options = DefeatureOptions {
             max_hole_diameter: 20.0,
             max_fillet_radius: 0.0,
         };
-        assert_eq!(defeature(&shell, 0.05, &options).stats.holes, 0);
+        assert_eq!(
+            defeature_at(&plate_with_holes(30.0), 0.05, &options)
+                .stats
+                .holes,
+            0
+        );
+    }
+
+    /// 角 (x = w, y = 0 の辺) を半径 `r` で丸めるために削る部分 (z0..z1)
+    fn round_off(corner_x: f64, corner_y: f64, sx: f64, sy: f64, r: f64, z0: f64, z1: f64) -> Brep {
+        // 角の r x r の正方形から、丸みの円柱を引いたもの
+        let (x0, y0) = (corner_x - sx * r, corner_y - sy * r);
+        let square = cuboid(
+            DVec3::new(x0.min(corner_x), y0.min(corner_y), z0 - 1.0),
+            DVec3::new(x0.max(corner_x), y0.max(corner_y), z1 + 1.0),
+        );
+        minus(square, &z_cylinder(x0, y0, r, z0 - 2.0, z1 + 2.0))
     }
 
     /// 断面が 40 x 30 で、1つの角を半径 `r` で丸めた長さ 100 の棒
-    fn rounded_bar(r: f64) -> Solid {
-        let p = |x: f64, y: f64| builder::vertex(Point3::new(x, y, 0.0));
-        let (w, h) = (40.0, 30.0);
-        let v0 = p(0.0, 0.0);
-        let v1 = p(w - r, 0.0);
-        let v2 = p(w, r);
-        let v3 = p(w, h);
-        let v4 = p(0.0, h);
-        // 中心 (w - r, r) の 1/4 円。途中の点は 45° の位置。
-        let arc = builder::circle_arc(
-            &v1,
-            &v2,
-            Point3::new(w - r + r * FRAC_PI_4.sin(), r - r * FRAC_PI_4.cos(), 0.0),
-        );
-        let wire: truck_modeling::Wire = vec![
-            builder::line(&v0, &v1),
-            arc,
-            builder::line(&v2, &v3),
-            builder::line(&v3, &v4),
-            builder::line(&v4, &v0),
-        ]
-        .into();
-        let face = builder::try_attach_plane(&[wire]).expect("断面");
-        builder::tsweep(&face, Vector3::new(0.0, 0.0, 100.0))
+    fn rounded_bar(r: f64) -> Brep {
+        let bar = cuboid(DVec3::ZERO, DVec3::new(40.0, 30.0, 100.0));
+        minus(bar, &round_off(40.0, 0.0, 1.0, -1.0, r, 0.0, 100.0))
     }
 
     #[test]
     fn fillet_is_collapsed_to_sharp_corner() {
-        let shell = shell_of(&rounded_bar(5.0));
-        let off = DefeatureOptions {
-            max_hole_diameter: 0.0,
-            max_fillet_radius: 0.0,
-        };
+        let solid = rounded_bar(5.0);
         let on = DefeatureOptions {
             max_hole_diameter: 0.0,
             max_fillet_radius: 10.0,
         };
-        let original = defeature(&shell, 0.01, &off);
-        let simplified = defeature(&shell, 0.01, &on);
+        let original = defeature_at(&solid, 0.01, &OFF);
+        let simplified = defeature_at(&solid, 0.01, &on);
         assert_eq!(simplified.stats.fillets, 1);
         assert_eq!(simplified.faces.len(), original.faces.len() - 1);
         assert!(triangle_count(&simplified) < triangle_count(&original));
@@ -780,67 +788,54 @@ mod tests {
 
     #[test]
     fn large_fillet_is_kept() {
-        let shell = shell_of(&rounded_bar(15.0));
         let options = DefeatureOptions {
             max_hole_diameter: 0.0,
             max_fillet_radius: 10.0,
         };
-        assert_eq!(defeature(&shell, 0.01, &options).stats.fillets, 0);
+        assert_eq!(
+            defeature_at(&rounded_bar(15.0), 0.01, &options)
+                .stats
+                .fillets,
+            0
+        );
     }
 
-    /// 角を丸めた (半径 10) 200 x 15 x 120 の板に、直径 12 の穴を4つと直径 50 の穴を1つあけた部品
-    fn bracket() -> Solid {
-        let (w, d, r) = (200.0, 120.0, 10.0);
-        let corners = [(w - r, r), (w - r, d - r), (r, d - r), (r, r)];
-        let points = [
-            (r, 0.0),
-            (w - r, 0.0),
-            (w, r),
-            (w, d - r),
-            (w - r, d),
-            (r, d),
-            (0.0, d - r),
-            (0.0, r),
-        ];
-        let vertices: Vec<_> = points
-            .iter()
-            .map(|&(x, z)| builder::vertex(Point3::new(x, 0.0, z)))
-            .collect();
-        let mut edges = Vec::new();
-        for (i, (cx, cz)) in corners.into_iter().enumerate() {
-            let (a, b) = (&vertices[2 * i], &vertices[2 * i + 1]);
-            let c = &vertices[(2 * i + 2) % 8];
-            edges.push(builder::line(a, b));
-            // 角の 1/4 円の途中の点は、中心から2つの端点の中点の向きに半径ぶん
-            let mid = (b.point().to_vec() + c.point().to_vec()) / 2.0 - Vector3::new(cx, 0.0, cz);
-            let mid = Point3::new(cx, 0.0, cz) + mid.normalize() * r;
-            edges.push(builder::circle_arc(b, c, mid));
+    /// 角を丸めた (半径 10) 200 x 15 x 120 の板 (XZ 平面、厚みは Y) に、
+    /// 直径 12 の穴を4つと直径 50 の穴を1つあけた部品
+    fn bracket() -> Brep {
+        let (w, t, d, r) = (200.0, 15.0, 120.0, 10.0);
+        // XY 平面に置き、Z を厚みにして作ってから回す
+        let mut plate = cuboid(DVec3::ZERO, DVec3::new(w, d, t));
+        for (cx, cy, sx, sy) in [
+            (0.0, 0.0, -1.0, -1.0),
+            (w, 0.0, 1.0, -1.0),
+            (w, d, 1.0, 1.0),
+            (0.0, d, -1.0, 1.0),
+        ] {
+            plate = minus(plate, &round_off(cx, cy, sx, sy, r, 0.0, t));
         }
-        let mut wires = vec![truck_modeling::Wire::from(edges)];
-        for (x, z, dia) in [
+        for (x, y, dia) in [
             (30.0, 30.0, 12.0),
             (170.0, 30.0, 12.0),
             (30.0, 90.0, 12.0),
             (170.0, 90.0, 12.0),
             (100.0, 60.0, 50.0),
         ] {
-            let v = builder::vertex(Point3::new(x + dia / 2.0, 0.0, z));
-            let circle = builder::rsweep(&v, Point3::new(x, 0.0, z), Vector3::unit_y(), Rad(TAU));
-            wires.push(circle);
+            plate = minus(plate, &z_cylinder(x, y, dia / 2.0, -1.0, t + 1.0));
         }
-        let face = builder::try_attach_plane(&wires).expect("穴あきの板");
-        builder::tsweep(&face, Vector3::new(0.0, 15.0, 0.0))
+        // X 軸まわりに 90° 回すと (x, y, z) → (x, -z, y)。厚みを 0..t の Y にする
+        let m =
+            DMat4::from_translation(DVec3::new(0.0, t, 0.0)) * DMat4::from_rotation_x(FRAC_PI_2);
+        plate.transformed(m).unwrap()
     }
 
-    /// STEP に書き出して読み込んだ部品 (表示と同じ経路) でも簡略化でき、面の番号が表示と合う
+    /// 表示と同じ経路 (部品の形状の表示メッシュ) でも簡略化でき、面の番号が表示と合う
     #[test]
-    fn imported_step_part_is_defeatured() {
-        use truck_stepio::out::{CompleteStepDisplay, StepModel};
-        let solid = bracket().compress();
-        let text =
-            CompleteStepDisplay::new(StepModel::from(&solid), Default::default()).to_string();
-        let file = plantwright_core::formats::step::import_step(&text, "bracket.step").unwrap();
-        let shape = find_shape(&file.root).expect("形状がある");
+    fn part_shape_is_defeatured() {
+        let solid = bracket();
+        let breps = vec![solid];
+        let (faces, edges) = tessellate_breps(&breps, brep_tolerance(&breps));
+        let shape = ImportedShape::new(breps, faces, edges, None);
 
         let options = DefeatureOptions {
             max_hole_diameter: 20.0,
@@ -856,34 +851,16 @@ mod tests {
         );
         assert!(mesh.triangle_count() < shape.mesh.triangle_count() / 2);
         // 残った面 (上面) の番号は元の表示と同じで、同じ面の三角形を指す
-        let top = shape
-            .mesh
-            .ray_cast(
-                bevy::math::Vec3::new(60.0, 50.0, 60.0),
-                bevy::math::Vec3::NEG_Y,
-            )
-            .unwrap();
-        let simplified_top = mesh
-            .ray_cast(
-                bevy::math::Vec3::new(60.0, 50.0, 60.0),
-                bevy::math::Vec3::NEG_Y,
-            )
-            .unwrap();
+        let above = Vec3::new(60.0, 50.0, 60.0);
+        let top = shape.mesh.ray_cast(above, Vec3::NEG_Y).unwrap();
+        let simplified_top = mesh.ray_cast(above, Vec3::NEG_Y).unwrap();
         assert_eq!(top.0, simplified_top.0);
         // 小さな穴があった場所にも当たるようになる (大きな穴は残る)
-        let at_hole = bevy::math::Vec3::new(30.0, 50.0, 30.0);
-        assert!(
-            shape
-                .mesh
-                .ray_cast(at_hole, bevy::math::Vec3::NEG_Y)
-                .is_none()
-        );
-        assert!(mesh.ray_cast(at_hole, bevy::math::Vec3::NEG_Y).is_some());
-        let at_big_hole = bevy::math::Vec3::new(100.0, 50.0, 60.0);
-        assert!(
-            mesh.ray_cast(at_big_hole, bevy::math::Vec3::NEG_Y)
-                .is_none()
-        );
+        let at_hole = Vec3::new(30.0, 50.0, 30.0);
+        assert!(shape.mesh.ray_cast(at_hole, Vec3::NEG_Y).is_none());
+        assert!(mesh.ray_cast(at_hole, Vec3::NEG_Y).is_some());
+        let at_big_hole = Vec3::new(100.0, 50.0, 60.0);
+        assert!(mesh.ray_cast(at_big_hole, Vec3::NEG_Y).is_none());
 
         // 消すものが無い条件なら None
         let nothing = DefeatureOptions {
@@ -891,13 +868,5 @@ mod tests {
             max_fillet_radius: 1.0,
         };
         assert!(defeature_shape(&shape.breps, &nothing).is_none());
-    }
-
-    fn find_shape(
-        node: &plantwright_core::formats::step::ImportNode,
-    ) -> Option<std::sync::Arc<plantwright_core::formats::step::ImportedShape>> {
-        node.shape
-            .clone()
-            .or_else(|| node.children.iter().find_map(find_shape))
     }
 }

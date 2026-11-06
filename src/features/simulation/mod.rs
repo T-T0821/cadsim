@@ -28,7 +28,7 @@ use bevy::{
 use bevy_egui::EguiPrimaryContextPass;
 
 use crate::viewport::camera::{keyboard_free, pointer_in_3d_view};
-use truck_meshalgo::prelude::*;
+use plantwright_core::kernel::FaceMesh;
 
 use plantwright_core::simulation::{geometry, interference};
 use plantwright_core::simulation::{mesh, overlap};
@@ -248,18 +248,11 @@ fn receive_overlaps(mut check: ResMut<InterferenceCheck>, mut job: ResMut<Overla
     check.report.revision += 1;
 }
 
-/// truck のテッセレーション結果 (面ごとの PolygonMesh) から干渉チェック用メッシュを作る。
-/// 面の向きはそろえてから渡すこと (外向きが表)。
-pub fn trimesh_from_polygons<'a>(polygons: impl IntoIterator<Item = &'a PolygonMesh>) -> TriMesh {
-    let mut triangles = Vec::new();
-    for polygon in polygons {
-        let positions = polygon.positions();
-        for tri in polygon.faces().triangle_iter() {
-            triangles.push(tri.map(|v| {
-                let p = positions[v.pos];
-                bevy::math::DVec3::new(p.x, p.y, p.z)
-            }));
-        }
-    }
+/// 面ごとのメッシュから干渉チェック用メッシュを作る。面の向きは外向きが表
+pub fn trimesh_from_faces<'a>(faces: impl IntoIterator<Item = &'a FaceMesh>) -> TriMesh {
+    let triangles = faces
+        .into_iter()
+        .flat_map(|f| f.triangle_points())
+        .collect();
     TriMesh::new(triangles)
 }
