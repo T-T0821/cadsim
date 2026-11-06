@@ -15,12 +15,15 @@ use bevy_egui::EguiPrimaryContextPass;
 use glam::DVec3;
 use plantwright_core::kernel::Brep;
 
+use plantwright_core::modeling::extrude_tool::ExtrudeTool;
 use plantwright_core::modeling::hole_tool::HoleTool;
 use plantwright_core::modeling::record::JsonSolids;
 use plantwright_core::modeling::*;
+use plantwright_core::pointer::PointerLock;
 
 use crate::document::history::History;
 use crate::document::import::ImportJobs;
+use crate::document::selection::Selection;
 use crate::ui::font::install_japanese_font;
 use crate::viewport::camera::keyboard_free;
 use crate::viewport::gizmo::transform_gizmo_system;
@@ -32,6 +35,7 @@ pub struct ModelingPlugin;
 impl Plugin for ModelingPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<HoleTool>()
+            .init_resource::<ExtrudeTool>()
             .init_resource::<panel::ModelingUi>()
             .init_gizmo_group::<view::HoleGizmos>()
             .add_systems(Startup, view::configure_gizmos)
@@ -41,6 +45,10 @@ impl Plugin for ModelingPlugin {
                     systems::hole_keys.run_if(keyboard_free),
                     systems::hole_input,
                     view::draw_preview,
+                    extrude_lock,
+                    systems::extrude_keys.run_if(keyboard_free),
+                    systems::extrude_input,
+                    view::draw_extrude_preview,
                 )
                     .chain(),
             )
@@ -57,6 +65,46 @@ impl Plugin for ModelingPlugin {
 /// 穴あけの道具を使っていない (クリックで部品を選ぶ・ギズモを出す条件)
 pub fn hole_tool_off(tool: Res<HoleTool>) -> bool {
     !tool.active
+}
+
+/// 押し出しの道具を使っている間は、クリックを道具のものにする (選択・ギズモ・右クリックメニューを止める)
+fn extrude_lock(tool: Res<ExtrudeTool>, mut lock: ResMut<PointerLock>) {
+    if tool.active {
+        if lock.held_by() != Some("extrude") {
+            lock.hold("extrude");
+        }
+    } else if lock.held_by() == Some("extrude") {
+        lock.release("extrude");
+    }
+}
+
+/// 描いた形を押し出して部品にする (Enter かパネルのボタン)。うまくいけば道具をやめて選び、
+/// 失敗したら形はそのまま残してエラーを出す
+pub fn confirm_extrude(
+    tool: &mut ExtrudeTool,
+    model: &mut Model,
+    history: &mut History,
+    selection: &mut Selection,
+    jobs: &mut ImportJobs,
+) {
+    if !tool.closed {
+        return;
+    }
+    let (outline, position) = tool.outline();
+    let name = format!("押し出し {}", model.roots.len() + 1);
+    let result =
+        extrude(&outline, tool.height).and_then(|solid| add_solid(model, name, &solid, position));
+    match result {
+        Ok(id) => {
+            let label = format!("{} を追加", model.path_label(id));
+            history.record_added(model, id, label);
+            selection.select(id);
+            selection.reveal_in_tree = true;
+            tool.finish();
+            jobs.messages.push("押し出しの形を作りました".into());
+        }
+        Err(e) => tool.error = Some(e),
+    }
 }
 
 /// 部品の形状を、部品の座標系の B-rep で取り出す (箱とモデリングで作った部品だけ)

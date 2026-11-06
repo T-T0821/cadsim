@@ -6,7 +6,9 @@
 use bevy::math::DVec3;
 use bevy_egui::egui;
 
-use crate::features::modeling::{add_solid, apply_boolean, confirm_hole, node_solid};
+use crate::features::modeling::{
+    add_solid, apply_boolean, confirm_extrude, confirm_hole, node_solid,
+};
 use crate::ui::UiState;
 use plantwright_core::model::NodeId;
 use plantwright_core::modeling::BooleanOp;
@@ -159,7 +161,25 @@ fn cylinder_tab(ui: &mut egui::Ui, state: &mut UiState) {
 
 fn extrude_tab(ui: &mut egui::Ui, state: &mut UiState) {
     let unit = state.model.unit.clone();
-    ui.label("上から見た形の頂点 (x, y) を「;」か改行で区切って入れ、上に押し出します");
+    if state.extrude_tool.active {
+        extrude_tool_section(ui, state, &unit);
+        return;
+    }
+    ui.label("3D ビューの床をクリックして形を描き、上に押し出します");
+    if ui
+        .button("床に描いて押し出す")
+        .on_hover_text(
+            "床をクリックして頂点を置き、最初の点をクリックで閉じ、上の点をドラッグで高さ",
+        )
+        .clicked()
+    {
+        start_extrude_tool(state);
+        return;
+    }
+    ui.separator();
+    ui.label(
+        "数値で入れる: 上から見た形の頂点 (x, y) を「;」か改行で区切って入れ、上に押し出します",
+    );
     ui.weak("y は上面図で上向き (奥, -Z) です");
     ui.add(
         egui::TextEdit::multiline(&mut state.modeling.outline)
@@ -182,6 +202,68 @@ fn extrude_tab(ui: &mut egui::Ui, state: &mut UiState) {
         });
         finish_add(state, result, "押し出しの形");
     }
+}
+
+/// 押し出しの道具を使っている間のパネル: 案内、高さの数値、確定・やめる
+fn extrude_tool_section(ui: &mut egui::Ui, state: &mut UiState, unit: &str) {
+    ui.weak(state.extrude_tool.hint());
+    ui.label(state.extrude_tool.summary());
+    if state.extrude_tool.closed {
+        ui.horizontal(|ui| {
+            ui.label("高さ");
+            let mut height = state.extrude_tool.height;
+            if ui
+                .add(
+                    egui::DragValue::new(&mut height)
+                        .speed(0.5)
+                        .range(0.001..=f64::MAX)
+                        .max_decimals(3),
+                )
+                .changed()
+            {
+                state.extrude_tool.set_height(height);
+            }
+            ui.label(unit);
+        });
+    }
+    ui.horizontal(|ui| {
+        if state.extrude_tool.closed {
+            if ui.button("✔ 押し出す").on_hover_text("Enter").clicked() {
+                confirm_extrude(
+                    &mut state.extrude_tool,
+                    &mut state.model,
+                    &mut state.history,
+                    &mut state.selection,
+                    &mut state.jobs,
+                );
+            }
+        } else if ui
+            .add_enabled(
+                state.extrude_tool.points.len() >= 3,
+                egui::Button::new("形を閉じる"),
+            )
+            .on_hover_text("Enter か、最初の点をクリック")
+            .clicked()
+        {
+            state.extrude_tool.close();
+        }
+        if ui.button("やめる").on_hover_text("Esc").clicked() {
+            state.extrude_tool.stop();
+        }
+    });
+    if let Some(e) = &state.extrude_tool.error {
+        ui.colored_label(egui::Color32::from_rgb(240, 90, 90), e);
+    }
+}
+
+/// 押し出しの道具を始める (床の高さは 0)
+pub fn start_extrude_tool(state: &mut UiState) {
+    state.extrude_tool.start(0.0);
+    state.hole_tool.stop();
+    state.selection.clear();
+    state.gizmo.focused = false;
+    state.modeling.open_tab(Tab::Extrude);
+    state.dock.set_open(Tool::Modeling, true);
 }
 
 fn selected_part(state: &UiState) -> Option<NodeId> {
