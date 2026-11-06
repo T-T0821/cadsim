@@ -19,6 +19,8 @@ pub struct CommandLine {
     /// `--ui-check-run 手順書 --out 出力 --baseline 基準画像 [--update]`:
     /// 手順書どおりに操作して画面を撮り、基準画像と比べて終了する (ui_check が使う)
     pub ui_check: Option<UiCheckRun>,
+    /// `--mcp`: 標準入力・標準出力の MCP で、AI のツール呼び出しから画面を操作できるようにする (ui_check が使う)
+    pub mcp: bool,
 }
 
 /// 画面の自動確認を1つ流すときの指定
@@ -43,6 +45,7 @@ impl CommandLine {
                 Some("--stress") => out.stress = Some(parse_next(args.next()).unwrap_or(5000)),
                 Some("--bench") => out.bench_secs = Some(parse_next(args.next()).unwrap_or(10.0)),
                 Some("--physics") => out.physics = true,
+                Some("--mcp") => out.mcp = true,
                 Some("--ui-check-run") => {
                     out.ui_check.get_or_insert_default().scenario = args.next().unwrap_or_default();
                 }
@@ -77,6 +80,9 @@ mod tests {
         assert_eq!(bench.stress, Some(2000));
         assert_eq!(bench.bench_secs, Some(5.0));
         assert!(parse(&["--physics", "--bench", "20"]).physics);
+        let mcp = parse(&["--mcp", "line.plantwright"]);
+        assert!(mcp.mcp);
+        assert_eq!(mcp.file, Some(PathBuf::from("line.plantwright")));
         let check = parse(&[
             "--ui-check-run",
             "a.scenario",

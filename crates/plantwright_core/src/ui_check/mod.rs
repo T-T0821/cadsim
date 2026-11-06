@@ -8,12 +8,14 @@
 //! - [`widget`]   画面上の部品 (ボタンなど) を表示名で探す
 //! - [`compare`]  2枚の画像を見比べ、違う画素に印を付けた差分画像を作る
 //! - [`report`]   写真ごとの判定 (同じ・違う・基準なし) と手順書ごとの結果
+//! - [`mcp`]      MCP の操作口 (`--mcp`)。AI からのツール呼び出しを手順に直して同じ runner で流す
 //!
 //! アプリ側 (`src/ui_check/`) は、返された入力を Bevy のメッセージにして流し、
 //! 画面を撮り、`crate::ui_check::files` で PNG と報告書を書くだけにする。
 
 pub mod compare;
 pub mod files;
+pub mod mcp;
 pub mod report;
 pub mod runner;
 pub mod scenario;

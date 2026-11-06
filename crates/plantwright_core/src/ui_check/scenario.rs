@@ -156,7 +156,8 @@ impl Key {
 }
 
 impl KeyChord {
-    fn parse(text: &str) -> Option<KeyChord> {
+    /// `ctrl+shift+z` のような書き方を読む
+    pub fn parse(text: &str) -> Option<KeyChord> {
         let mut chord = KeyChord {
             ctrl: false,
             shift: false,

@@ -11,7 +11,10 @@
 //! 入力は本物のマウス・キーボードと同じ Bevy のメッセージとして流すので、
 //! egui の画面もショートカットも 3D ビューのクリックも、手で触ったときと同じ経路を通る。
 //! ボタンは egui のアクセシビリティ情報 (AccessKit) の表示名と位置で探す。
+//!
+//! `--mcp` で起動したときは、同じ仕組みで AI からのツール呼び出しを流す (mcp.rs)。
 
+mod mcp;
 pub mod suite;
 
 use std::path::{Path, PathBuf};
@@ -81,7 +84,11 @@ pub fn measured(value: f64, digits: usize) -> String {
 
 impl Plugin for UiCheckPlugin {
     fn build(&self, app: &mut App) {
-        let Some(run) = CommandLine::parse().ui_check else {
+        let command_line = CommandLine::parse();
+        if command_line.mcp {
+            mcp::build(app);
+        }
+        let Some(run) = command_line.ui_check else {
             return;
         };
         RUNNING.store(true, Ordering::Relaxed);
@@ -146,7 +153,7 @@ const FAILURE_SHOT: &str = "(失敗)";
 struct PendingShot {
     name: String,
     masks: Vec<CheckRect>,
-    slot: Arc<Mutex<Option<bevy::image::Image>>>,
+    slot: ShotSlot,
 }
 
 /// egui の時計 (ツールチップの遅れ・たたむ動き・通知・紙吹雪) も、実時間ではなく
@@ -170,9 +177,14 @@ fn collect_widgets(
     let Ok(output) = outputs.single() else {
         return;
     };
-    let Some(update) = &output.platform_output.accesskit_update else {
-        return;
-    };
+    if let Some(widgets) = widgets_from(output) {
+        check.widgets = widgets;
+    }
+}
+
+/// egui のアクセシビリティ情報から部品の一覧を作る。このフレームに情報がなければ None
+fn widgets_from(output: &EguiOutput) -> Option<Vec<Widget>> {
+    let update = output.platform_output.accesskit_update.as_ref()?;
     let raw = update
         .nodes
         .iter()
@@ -191,7 +203,7 @@ fn collect_widgets(
             })
         })
         .collect();
-    check.widgets = widget::normalize(raw);
+    Some(widget::normalize(raw))
 }
 
 /// 別スレッドで進む計算や書き出し (読み込みと開く・保存は drive が直接見る)
@@ -296,6 +308,15 @@ fn drive(
 
 /// 画面の写真を頼む。届くと receive_capture が受け取る
 fn capture(commands: &mut Commands, name: String, masks: Vec<CheckRect>) -> PendingShot {
+    PendingShot {
+        name,
+        masks,
+        slot: request_screenshot(commands),
+    }
+}
+
+/// 画面の写真を頼む。届くと返した入れ物に入る
+fn request_screenshot(commands: &mut Commands) -> ShotSlot {
     let slot = Arc::new(Mutex::new(None));
     let sender = slot.clone();
     commands.spawn(Screenshot::primary_window()).observe(
@@ -305,8 +326,11 @@ fn capture(commands: &mut Commands, name: String, masks: Vec<CheckRect>) -> Pend
             }
         },
     );
-    PendingShot { name, masks, slot }
+    slot
 }
+
+/// 撮影を頼んだ写真が届く入れ物
+type ShotSlot = Arc<Mutex<Option<bevy::image::Image>>>;
 
 /// 写真が届いたら基準画像と比べて保存する
 fn receive_capture(mut check: ResMut<UiCheck>) {
