@@ -8,16 +8,22 @@
 //!
 //! 標準出力は MCP の返事だけに使う (Bevy のログは標準エラーに出る)。
 //! 標準入力が閉じたら (AI のアプリが終わったら) アプリも終わる。
+//!
+//! 時計は実時間のまま動かすので、描画が遅い (1 FPS 前後の) 環境では、押してから離すまでが
+//! 1 秒を超える。egui はそれをクリックと見なさない (長押し扱い) ので、クリックとダブルクリックの
+//! 時間の上限を、毎フレームその時のフレームの長さに合わせて延ばす (`click_timing`)。手順はフレーム数で待つため遅い環境では長くかかるので、
+//! 1つの呼び出しが `CALL_DEADLINE` を超えたら、押したままにならない所で止めて返事をする。
 
 use std::collections::VecDeque;
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::sync::mpsc::{Receiver, channel};
+use std::time::Instant;
 
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use bevy_egui::{EguiOutput, EguiPrimaryContextPass, PrimaryEguiContext};
+use bevy_egui::{EguiContexts, EguiOutput, EguiPrimaryContextPass, PrimaryEguiContext};
 use plantwright_core::ui_check::mcp::{self, Content, Incoming};
 use plantwright_core::ui_check::runner::{Command, Observation, Runner};
 use plantwright_core::ui_check::scenario::Line;
@@ -61,6 +67,11 @@ struct Running {
     shot: Option<ShotSlot>,
     /// 失敗したときの画面を撮った
     failure_shot: bool,
+    started: Instant,
+    /// 始めてから描いたフレーム数
+    frames: u32,
+    /// 時間切れで止めたときの理由
+    timed_out: Option<String>,
 }
 
 pub(super) fn build(app: &mut App) {
@@ -88,7 +99,10 @@ pub(super) fn build(app: &mut App) {
         current: None,
         widgets: Vec::new(),
     })
-    .add_systems(EguiPrimaryContextPass, enable_accesskit)
+    .add_systems(
+        EguiPrimaryContextPass,
+        (enable_accesskit, allow_slow_clicks),
+    )
     .add_systems(First, drive)
     .add_systems(Last, (collect_widgets, receive_capture));
 }
@@ -98,6 +112,16 @@ fn write_line(text: &str) {
     let mut out = std::io::stdout().lock();
     let _ = writeln!(out, "{text}");
     let _ = out.flush();
+}
+
+/// 描画が遅くても、押す → 離す (1 フレーム) をクリックと、2 回のクリック (2 フレーム) をダブルクリックと見なす
+fn allow_slow_clicks(mut contexts: EguiContexts, time: Res<Time<Real>>) -> Result {
+    let (click, double_click) = mcp::click_timing(time.delta_secs_f64());
+    contexts.ctx_mut()?.options_mut(|options| {
+        options.input_options.max_click_duration = click;
+        options.input_options.max_double_click_delay = double_click;
+    });
+    Ok(())
 }
 
 fn collect_widgets(
@@ -147,6 +171,9 @@ fn drive(
             contents: Vec::new(),
             shot: None,
             failure_shot: false,
+            started: Instant::now(),
+            frames: 0,
+            timed_out: None,
         });
     }
     let Some(running) = &mut server.current else {
@@ -155,6 +182,19 @@ fn drive(
     let Ok((window_entity, mut window)) = windows.single_mut() else {
         return;
     };
+    running.frames += 1;
+    let elapsed = running.started.elapsed();
+    if running.timed_out.is_none()
+        && elapsed > mcp::CALL_DEADLINE
+        && running.shot.is_none()
+        && running.runner.interruptible()
+    {
+        running.timed_out = Some(mcp::deadline_message(elapsed, running.frames));
+    }
+    if running.timed_out.is_some() {
+        finish(&mut commands, server);
+        return;
+    }
     let observation = Observation {
         busy: !jobs.loading.is_empty() || project.is_busy() || busy.any(),
         capturing: running.shot.is_some(),
@@ -181,31 +221,39 @@ fn drive(
                 format!("種類 x y 幅 高さ 表示名\n{text}")
             }))
         }
-        Command::Finished => {
-            if running.shot.is_some() {
-                return;
-            }
-            let failure = running.runner.failure().map(|f| {
-                if running.script {
-                    format!("{} 行目: {}", f.line, f.message)
-                } else {
-                    f.message.clone()
-                }
-            });
-            // 失敗したら、そのときの画面も返す (AI が様子を見て次の手を考えられるように)
-            if failure.is_some() && !running.failure_shot {
-                running.failure_shot = true;
-                running.shot = Some(request_screenshot(&mut commands));
-                return;
-            }
-            write_line(&mcp::call_result(
-                &running.id,
-                &running.contents,
-                failure.as_deref(),
-            ));
-            server.current = None;
-        }
+        Command::Finished => finish(&mut commands, server),
     }
+}
+
+/// 手順が終わった (か時間切れで止めた) ので返事をする。失敗なら、先にそのときの画面を撮る
+fn finish(commands: &mut Commands, server: &mut McpServer) {
+    let Some(running) = &mut server.current else {
+        return;
+    };
+    if running.shot.is_some() {
+        return;
+    }
+    let failure = running.timed_out.clone().or_else(|| {
+        running.runner.failure().map(|f| {
+            if running.script {
+                format!("{} 行目: {}", f.line, f.message)
+            } else {
+                f.message.clone()
+            }
+        })
+    });
+    // 失敗したら、そのときの画面も返す (AI が様子を見て次の手を考えられるように)
+    if failure.is_some() && !running.failure_shot {
+        running.failure_shot = true;
+        running.shot = Some(request_screenshot(commands));
+        return;
+    }
+    write_line(&mcp::call_result(
+        &running.id,
+        &running.contents,
+        failure.as_deref(),
+    ));
+    server.current = None;
 }
 
 /// 写真が届いたら、クリックの座標と同じ大きさの PNG にして返事に足す
