@@ -3,13 +3,19 @@
 //! 置きかけの穴は、入口と底の円・それをつなぐ線・軸の線で描く (青)。
 //! 直径の点と底の中心は小さな球で、カーソルが乗ると明るくなる。
 //! 部品の中に隠れないよう、線も点も形状より手前に描く ([`HoleGizmos`])。
+//!
+//! 断面の道具は、平面の枠 (部品に隠れる)・切り口の線 (手前に太く、[`SectionGizmos`])・
+//! 平面から出る矢印で描く。部品を選んでいる間は、重心に小さな球を出す。
 
 use bevy::{math::DVec3, prelude::*};
 use bevy_egui::{EguiContexts, egui};
 
+use crate::document::selection::Selection;
 use crate::viewport::camera::ViewportRect;
 use plantwright_core::modeling::extrude_tool::{self, ExtrudeTool};
 use plantwright_core::modeling::hole_tool::{Handle, HoleTool};
+use plantwright_core::modeling::mass::MassCache;
+use plantwright_core::modeling::section_tool::SectionTool;
 
 const HOLE_COLOR: Color = Color::srgb(0.25, 0.65, 1.0);
 const HANDLE_COLOR: Color = Color::srgb(1.0, 0.85, 0.25);
@@ -20,10 +26,17 @@ const CIRCLE_SEGMENTS: usize = 48;
 #[derive(Default, Reflect, GizmoConfigGroup)]
 pub struct HoleGizmos;
 
+/// 断面の切り口の線と重心の球。部品に隠れないよう手前に、太めに描く
+#[derive(Default, Reflect, GizmoConfigGroup)]
+pub struct SectionGizmos;
+
 pub fn configure_gizmos(mut store: ResMut<GizmoConfigStore>) {
     let (config, _) = store.config_mut::<HoleGizmos>();
     config.depth_bias = -1.0;
     config.line.width = 2.0;
+    let (config, _) = store.config_mut::<SectionGizmos>();
+    config.depth_bias = -1.0;
+    config.line.width = 3.0;
 }
 
 pub fn draw_preview(
@@ -479,5 +492,125 @@ pub fn draw_shape_labels(
             },
         );
     }
+    Ok(())
+}
+
+const SECTION_PLANE_COLOR: Color = Color::srgba(0.95, 0.45, 0.2, 0.8);
+const SECTION_CUT_COLOR: Color = Color::srgb(1.0, 0.3, 0.15);
+const CENTROID_COLOR: Color = Color::srgb(0.9, 0.2, 0.75);
+
+/// 断面の平面・切り口・矢印
+pub fn draw_section(
+    mut gizmos: Gizmos,
+    mut front: Gizmos<SectionGizmos>,
+    mut handles: Gizmos<HoleGizmos>,
+    tool: Res<SectionTool>,
+    camera: Single<&GlobalTransform, With<Camera3d>>,
+) {
+    if !tool.active {
+        return;
+    }
+    // 平面の枠と、中の細かい格子 (薄く)
+    let c = tool.plane_corners();
+    let corners: Vec<Vec3> = c.iter().map(|p| p.as_vec3()).collect();
+    gizmos.linestrip(
+        corners.iter().copied().chain([corners[0]]),
+        SECTION_PLANE_COLOR,
+    );
+    for i in 1..8 {
+        let t = i as f64 / 8.0;
+        gizmos.line(
+            c[0].lerp(c[1], t).as_vec3(),
+            c[3].lerp(c[2], t).as_vec3(),
+            SECTION_PLANE_COLOR.with_alpha(0.25),
+        );
+        gizmos.line(
+            c[0].lerp(c[3], t).as_vec3(),
+            c[1].lerp(c[2], t).as_vec3(),
+            SECTION_PLANE_COLOR.with_alpha(0.25),
+        );
+    }
+    // 切り口
+    for line in &tool.lines {
+        front.linestrip(line.iter().map(|p| p.as_vec3()), SECTION_CUT_COLOR);
+    }
+    // 平面から出る矢印と、その先のつまみ
+    let tip = tool.handle_position().as_vec3();
+    handles.arrow(tool.point().as_vec3(), tip, SECTION_PLANE_COLOR);
+    let radius = camera.translation().distance(tip) * 0.008;
+    let color = if tool.hovered || tool.dragging {
+        HANDLE_HOVER_COLOR
+    } else {
+        HANDLE_COLOR
+    };
+    handles.sphere(Isometry3d::from_translation(tip), radius, color);
+}
+
+/// 選んでいる部品の重心に小さな球と十字を出す (プロパティの質量の欄が計算したもの)
+pub fn draw_centroid(
+    mut gizmos: Gizmos<SectionGizmos>,
+    mass: Res<MassCache>,
+    selection: Res<Selection>,
+    camera: Single<&GlobalTransform, With<Camera3d>>,
+) {
+    let Some((node, centroid)) = mass.centroid else {
+        return;
+    };
+    if selection.node != Some(node) {
+        return;
+    }
+    let p = centroid.as_vec3();
+    let r = camera.translation().distance(p) * 0.01;
+    gizmos.sphere(Isometry3d::from_translation(p), r, CENTROID_COLOR);
+    for axis in [Vec3::X, Vec3::Y, Vec3::Z] {
+        gizmos.line(p - axis * r * 2.0, p + axis * r * 2.0, CENTROID_COLOR);
+    }
+}
+
+/// 断面の位置の文字 (矢印の先の横)
+pub fn draw_section_labels(
+    mut contexts: EguiContexts,
+    tool: Res<SectionTool>,
+    viewport: Res<ViewportRect>,
+    camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
+) -> Result {
+    if !tool.active {
+        return Ok(());
+    }
+    let ctx = contexts.ctx_mut()?;
+    let Some(view) = viewport.rect.map(|r| {
+        egui::Rect::from_min_max(egui::pos2(r.min.x, r.min.y), egui::pos2(r.max.x, r.max.y))
+    }) else {
+        return Ok(());
+    };
+    let painter = ctx
+        .layer_painter(egui::LayerId::new(
+            egui::Order::Background,
+            egui::Id::new("section_tool_labels"),
+        ))
+        .with_clip_rect(view);
+    let (camera, camera_transform) = *camera;
+    if let Ok(screen) = camera.world_to_viewport(camera_transform, tool.handle_position().as_vec3())
+    {
+        let p = tool.point();
+        let n = tool.normal;
+        // 軸にそろっていればその座標、斜めなら中心からの距離
+        let text = match [n.x, n.y, n.z].iter().position(|v| v.abs() > 1.0 - 1e-9) {
+            Some(i) => format!("{} = {}", ["X", "Y", "Z"][i], round3(p[i])),
+            None => format!("中心から {}", round3(tool.offset)),
+        };
+        let strong = tool.hovered || tool.dragging;
+        label(
+            &painter,
+            egui::pos2(screen.x + 12.0, screen.y - 10.0),
+            &text,
+            if strong {
+                egui::Color32::from_rgb(60, 60, 20)
+            } else {
+                egui::Color32::from_rgba_unmultiplied(110, 50, 20, 220)
+            },
+        );
+    }
+    // 案内はビュー共通の案内バー (ui/view_hints.rs) に出す
     Ok(())
 }

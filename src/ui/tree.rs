@@ -158,6 +158,8 @@ fn row_contents(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
     };
     let visible = node.visible;
     let shown = model.is_shown(id);
+    // STEP の読み込みで形状を直した部品には印を付ける
+    let repair = plantwright_core::modeling::repair::part_repair(model, id);
     let icon = match &node.kind {
         NodeKind::Assembly { .. } => "📁",
         NodeKind::Box(_) => "⬛",
@@ -191,8 +193,24 @@ fn row_contents(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
         node.visible = !visible;
     }
 
+    let hover = match repair {
+        Some(r) => format!(
+            "{hover}\n{}",
+            plantwright_core::modeling::repair::describe(r)
+        ),
+        None => hover,
+    };
     let selected = state.selection.node == Some(id);
     let label = ui.selectable_label(selected, text).on_hover_text(hover);
+    if let Some(r) = repair {
+        if r.open > 0 {
+            ui.colored_label(ui.visuals().warn_fg_color, "⚠")
+                .on_hover_text("閉じていない形があります");
+        } else {
+            ui.weak("🔧")
+                .on_hover_text("読み込みで形状のすき間を閉じました");
+        }
+    }
     if label.clicked() {
         state.selection.select(id);
     }

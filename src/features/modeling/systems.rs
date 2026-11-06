@@ -1,4 +1,4 @@
-//! 穴あけ・押し出しの道具のマウスとキーの読み方
+//! 穴あけ・押し出し・丸め・断面の道具のマウスとキーの読み方
 //!
 //! 穴あけ:
 //! - 部品の面にカーソルを乗せると面が光り、クリックするとそこが穴の入口になる
@@ -15,8 +15,13 @@
 //!
 //! 寸法の計算は `plantwright_core::modeling::{hole_tool, extrude_tool, shape_tool}`。
 //! ここはカーソルの位置をレイにして渡すだけ。
+//!
+//! 断面の道具 (`section_*`) も同じ作り: 矢印の先をドラッグで平面を動かし、面のクリックで向きをそろえる。
+//! 平面の計算と切り口の線は `plantwright_core::modeling::section_tool`。
 
-use bevy::{math::DVec3, prelude::*, window::PrimaryWindow};
+use bevy::{
+    ecs::change_detection::DetectChangesMut, math::DVec3, prelude::*, window::PrimaryWindow,
+};
 
 use super::{confirm_extrude, confirm_hole, confirm_shape};
 use crate::document::history::History;
@@ -29,7 +34,11 @@ use crate::viewport::picking::PartUnderPointer;
 use plantwright_core::model::Model;
 use plantwright_core::modeling::extrude_tool::{self, ExtrudeTool};
 use plantwright_core::modeling::hole_tool::{Handle, HoleDraft, HoleTool};
+use plantwright_core::modeling::record::JsonSolids;
+use plantwright_core::modeling::repair::RepairNotice;
+use plantwright_core::modeling::section_tool::SectionTool;
 use plantwright_core::modeling::shape_tool::{Hover, PartGeometry, ShapeTool};
+use plantwright_core::pointer::PointerLock;
 
 /// つまみをつかめる範囲 (画面上のピクセル)
 const HANDLE_PIXELS: f32 = 14.0;
@@ -433,6 +442,117 @@ pub fn shape_input(
     if let Some(hover) = tool.hovered {
         let geometry = &*geometry;
         tool.click(hover, shift, geometry);
+    }
+}
+
+/// レイと平面 (点 `p`、法線 `n`) の交点。平行なら None
+/// 断面の道具: Esc か Enter で閉じる
+pub fn section_keys(keys: Res<ButtonInput<KeyCode>>, mut tool: ResMut<SectionTool>) {
+    if tool.active && keys.any_just_pressed([KeyCode::Escape, KeyCode::Enter, KeyCode::NumpadEnter])
+    {
+        tool.stop();
+    }
+}
+
+/// 断面の道具: 矢印の先のホバーとドラッグ、面のクリックで向きをそろえる
+#[allow(clippy::too_many_arguments)]
+pub fn section_input(
+    buttons: Res<ButtonInput<MouseButton>>,
+    keys: Res<ButtonInput<KeyCode>>,
+    window: Single<&Window, With<PrimaryWindow>>,
+    camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
+    viewport: Res<ViewportRect>,
+    under_pointer: PartUnderPointer,
+    model: Res<Model>,
+    gizmo: Res<GizmoTool>,
+    mut tool: ResMut<SectionTool>,
+    mut lock: ResMut<PointerLock>,
+) {
+    // 使っている間はクリックを道具のものにする (クリック選択・ギズモ・右クリックメニューを止める)
+    if !tool.active {
+        if lock.held_by() == Some("section") {
+            lock.release("section");
+        }
+        return;
+    }
+    if lock.held_by() != Some("section") {
+        lock.hold("section");
+    }
+    // 切っていた部品が消えたら道具もやめる
+    if tool.target.is_some_and(|id| model.get(id).is_none()) {
+        tool.stop();
+        return;
+    }
+    let (camera, camera_transform) = *camera;
+    let cursor = window.cursor_position();
+    let ctrl = keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]);
+    let step = (gizmo.snap.always || ctrl).then_some(gizmo.snap.size_step);
+    let cursor_ray = |cursor: Vec2| {
+        camera
+            .viewport_to_world(camera_transform, cursor)
+            .ok()
+            .map(|ray| (ray.origin.as_dvec3(), ray.direction.as_dvec3()))
+    };
+
+    if tool.dragging {
+        if !buttons.pressed(MouseButton::Left) {
+            tool.dragging = false;
+            return;
+        }
+        if let Some(cursor) = cursor
+            && let Some((origin, dir)) = cursor_ray(cursor)
+            && let Some(p) = closest_on_line(origin, dir, tool.point(), tool.normal)
+        {
+            tool.set_offset_from_point(p, step);
+        }
+        return;
+    }
+
+    let on_view = cursor.is_some() && !viewport.pointer_on_ui;
+    let hovered = match cursor {
+        Some(cursor) if on_view => camera
+            .world_to_viewport(camera_transform, tool.handle_position().as_vec3())
+            .is_ok_and(|screen| screen.distance(cursor) <= HANDLE_PIXELS),
+        _ => false,
+    };
+    if tool.hovered != hovered {
+        tool.hovered = hovered;
+    }
+
+    if !buttons.just_pressed(MouseButton::Left) || alt_pressed(&keys) || !on_view {
+        return;
+    }
+    if hovered {
+        tool.dragging = true;
+        return;
+    }
+    // 切っている部品の面をクリックすると、その面に平行な断面にする
+    if let Some(hit) = under_pointer.hit().filter(|hit| {
+        tool.target
+            .is_none_or(|t| model.ancestors(hit.node).contains(&t))
+    }) {
+        tool.align_to_face(hit.point.as_dvec3(), hit.normal.as_dvec3());
+    }
+}
+
+/// 断面の平面か部品が変わったら、切り口の線を作り直す
+pub fn section_refresh(model: Res<Model>, mut tool: ResMut<SectionTool>) {
+    if tool.active {
+        tool.bypass_change_detection().refresh(&model, &JsonSolids);
+    }
+}
+
+/// 読み込んだばかりの木で形状を直した部品があれば、ステータスバーに案内を出す
+pub fn repair_notice(
+    mut jobs: ResMut<ImportJobs>,
+    model: Res<Model>,
+    mut notice: ResMut<RepairNotice>,
+) {
+    if jobs.imported.is_empty() {
+        return;
+    }
+    for root in std::mem::take(&mut jobs.imported) {
+        notice.show(&model, root);
     }
 }
 

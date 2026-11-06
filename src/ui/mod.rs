@@ -126,6 +126,12 @@ pub struct UiState<'w> {
     pub shape_tool: ResMut<'w, plantwright_core::modeling::shape_tool::ShapeTool>,
     /// 3D ビューの床に形を描いて押し出す道具
     pub extrude_tool: ResMut<'w, plantwright_core::modeling::extrude_tool::ExtrudeTool>,
+    /// 平面で切って中を見る道具
+    pub section_tool: ResMut<'w, plantwright_core::modeling::section_tool::SectionTool>,
+    /// プロパティの質量の欄が計算した値 (と 3D に出す重心)
+    pub mass: ResMut<'w, plantwright_core::modeling::mass::MassCache>,
+    /// STEP を読み込んだときの形状の修復の案内 (ステータスバー)
+    pub repair: ResMut<'w, plantwright_core::modeling::repair::RepairNotice>,
     /// 部品の役割 (シリンダ・コンベアなど) を 3D で決める道具
     pub role_tool: ResMut<'w, plantwright_core::part_role::RoleTool>,
     pub flow: FlowUi<'w>,

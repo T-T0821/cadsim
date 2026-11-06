@@ -51,7 +51,10 @@ pub fn show(root: &mut egui::Ui, state: &mut UiState) {
 }
 
 fn nothing_selected(ui: &mut egui::Ui, state: &mut UiState) {
+    state.mass.centroid = None;
     ui.label("ツリーかビューで部品を選んでください。");
+    ui.add_space(4.0);
+    crate::features::modeling::panel::inspect_actions(ui, state, None);
     ui.add_space(8.0);
     egui::CollapsingHeader::new("新しい箱")
         .default_open(true)
@@ -72,6 +75,8 @@ fn selected_node(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
     ui.add_space(4.0);
     actions(ui, state, id);
     modeling_actions(ui, state);
+    crate::features::modeling::panel::inspect_actions(ui, state, Some(id));
+    crate::features::modeling::panel::repair_section(ui, state, id);
     ui.separator();
 
     if matches!(
@@ -90,6 +95,15 @@ fn selected_node(ui: &mut egui::Ui, state: &mut UiState, id: NodeId) {
             .show(ui, |ui| shape_history_section(ui, state, id, &history));
     }
     crate::features::part_role::panel::properties_section(ui, state, id);
+    let mass = egui::CollapsingHeader::new("質量・重心")
+        .default_open(true)
+        .show(ui, |ui| {
+            crate::features::modeling::panel::mass_section(ui, state, id)
+        });
+    if mass.body_returned.is_none() {
+        // 閉じている間は重心の球も出さない
+        state.mass.centroid = None;
+    }
     let is_box = matches!(state.model.get(id).map(|n| &n.kind), Some(NodeKind::Box(_)));
     egui::CollapsingHeader::new(if is_box {
         "形状と配置"

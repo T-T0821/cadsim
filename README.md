@@ -116,6 +116,9 @@ cargo run -- path/to/line.plantwright  # 保存したプロジェクトを開い
 | 動きを付けた部品を自作部品として保存し、何個でも置く | プロパティの「自作部品」 | [部品ライブラリと自作部品](docs/src/parts-library.md) |
 | 箱・円柱を作る、床に形を描いて押し出す、面をクリックして穴をあける、辺をクリックして角を丸める・面取りする、面を開けて肉抜きする、ブーリアンをかける | 作成メニュー / プロパティの「形を編集」/ 🔨 モデル | [箱](docs/src/boxes.md)・[モデリング](docs/src/modeling.md) |
 | あけた穴やフィレットを、あとから直す・消す | プロパティの「形の編集履歴」 | [モデリング](docs/src/modeling.md) |
+| 部品の質量・重心・慣性モーメントを見る(材質を選ぶと質量が変わる) | 部品を選ぶとプロパティの「質量・重心」に出る。重心は 3D に紫の球 | [質量と重心](docs/src/modeling.md#質量と重心を見る) |
+| 平面で切って中を見る | プロパティの「調べる: 断面」→ 矢印の先をドラッグ、X軸 / Y軸 / Z軸 で向き、面をクリックでその面に平行 | [断面](docs/src/modeling.md#断面で中を見る) |
+| STEP のすき間を自動で閉じ、直した部品を知らせる | 読み込むと自動。ステータスバーの案内を押すと直した部品へ寄る(ツリーに 🔧 / ⚠) | [形状の修復](docs/src/modeling.md#step-を読み込んだときの形状の修復) |
 | 設計変更後の形状に差し替える(動きの設定はそのまま) | 編集 → 形状を差し替え… | [形状の差し替え](docs/src/replace-geometry.md) |
 | 工場の平面図(DXF / PDF / 画像)を床に敷く、点群を読み込んで干渉を調べる | ファイル → 開く / 🗺 平面図 | [平面図](docs/src/floor-plan.md)・[点群](docs/src/point-cloud.md) |
 | 1 万部品のアセンブリを軽く扱う、小さな穴とフィレットを省略する | 表示メニュー | [大きなアセンブリ](docs/src/large-assembly.md) |
@@ -247,7 +250,7 @@ README とマニュアルの画面写真は `docs/screenshots/scenarios/` の手
 | [docs/performance.md](docs/performance.md) | 大規模アセンブリを軽くするしくみと、負荷テスト・FPS の測り方 |
 | [docs/defeature.md](docs/defeature.md) | 小さな穴とフィレットを省略する形状の簡略化のしくみ |
 | [docs/part-role.md](docs/part-role.md) | 部品の役割(プロパティのボタン、既定値の決め方、3D でのドラッグの計算、「!」の出し方) |
-| [docs/modeling.md](docs/modeling.md) | 円柱・押し出し・穴あけ・丸め・肉抜き・ブーリアンのしくみと保存のしかた |
+| [docs/modeling.md](docs/modeling.md) | 円柱・押し出し・穴あけ・丸め・肉抜き・ブーリアン・断面・質量・STEP の修復のしくみと保存のしかた |
 | [docs/library.md](docs/library.md) | 標準部品ライブラリの設計と、ほかの機能からの使い方 |
 | [docs/custom-parts.md](docs/custom-parts.md) | 自作部品ライブラリ(保存するもの、`part.cadpart` の形式、置くときの名前と id の付け替え) |
 | [docs/site.md](docs/site.md) | 平面図の下敷きと点群(間引き・LOD・干渉)のしくみ |
