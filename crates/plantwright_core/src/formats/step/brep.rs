@@ -65,7 +65,14 @@ impl<'a, 'e> Converter<'a, 'e> {
             return Err(errors.first().cloned().unwrap_or("面がありません".into()));
         }
         let tol = (loop_size(&faces) * 1e-5).max(1e-6);
-        let (brep, failed) = Brep::from_faces(&faces, tol)?;
+        let (mut brep, failed) = Brep::from_faces(&faces, tol)?;
+        // 閉じなかったシェルは、すき間を直してみる (直って閉じたときだけ使う)
+        if !brep.is_solid() {
+            let mut healed = brep.clone();
+            if healed.heal().is_ok() && healed.is_solid() {
+                brep = healed;
+            }
+        }
         let skipped = errors.len() + failed;
         let warning = (skipped > 0).then(|| {
             let reason = errors

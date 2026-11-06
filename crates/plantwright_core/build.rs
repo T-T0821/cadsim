@@ -60,7 +60,7 @@ fn main() {
     build(
         "plantwright_kernel",
         &[&api_inc, &smlib_inc],
-        &[root.join("cpp/kernel.cpp")],
+        &[root.join("cpp/kernel.cpp"), root.join("cpp/ops.cpp")],
     );
     build(
         "smlib_api",

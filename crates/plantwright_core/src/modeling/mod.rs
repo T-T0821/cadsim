@@ -1,4 +1,5 @@
-//! モデリング操作 (ドメイン + ユースケース): 円柱・押し出し・穴あけ・ブーリアン
+//! モデリング操作 (ドメイン + ユースケース): 円柱・押し出し・穴あけ・ブーリアン。
+//! フィレット・面取り・シェル・回転体・パイプ・スイープ・質量特性・断面は [`ops`]
 //!
 //! 形状は形状カーネル (SMLib) の B-rep ([`Brep`], f64) で作り、ブーリアン (和・差・積) もカーネルで行う。
 //! 作った形状はモデルの「部品」として加え、出どころに B-rep を詰めておく
@@ -10,6 +11,7 @@
 //! 元のファイルとのつながりを保つため対象外 (エラーで知らせる)。
 //! 穴あけ・ブーリアンは、元に戻すための [`ModelChange`] を返す。
 
+pub mod ops;
 pub mod record;
 
 use std::sync::Arc;
@@ -366,7 +368,7 @@ mod tests {
 
     /// テスト用: B-rep をそのまま覚えておく
     #[derive(Default)]
-    struct MemoryStore(std::sync::Mutex<Vec<Brep>>);
+    pub(super) struct MemoryStore(std::sync::Mutex<Vec<Brep>>);
 
     impl SolidStore for MemoryStore {
         fn save(&self, name: String, solid: &Brep) -> Result<ModeledSource, String> {

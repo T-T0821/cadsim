@@ -26,7 +26,7 @@ crates/
 └── plantwright_core/      Bevy・egui を使わないもの全部
     ├── build.rs           形状カーネル SMLib (C++) をビルドしてリンクする
     ├── vendor/smlib/      SMLib のソース (NVIDIA usd-brep。手を加えない)
-    ├── cpp/kernel.cpp     SMLib を Rust から呼ぶための C の関数
+    ├── cpp/               SMLib を Rust から呼ぶための C の関数 (kernel.cpp: 作成・ブーリアン・テッセレーションなど、ops.cpp: フィレット・シェル・スイープ・質量特性など)
     └── src/
         ├── model.rs  shape.rs  math.rs  bvh.rs  part_mesh.rs   設計データ・形状・表示用メッシュ (機能をまたぐもの)
         ├── kernel/        形状カーネル: B-rep の作成・変形・ブーリアン・テッセレーション・保存 (`Brep`)

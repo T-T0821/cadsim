@@ -14,7 +14,7 @@ use super::ffi::{self, BrepPtr, MeshPtr, PwCurve, PwSurface, SUCCESS};
 use super::model::{EdgeCurve, FaceMesh, FaceSpec, MeshedBrep, MeshedFace, Surface};
 
 /// SMLib を呼ぶ前に取るロック。初めて取るときに SMLib の状態を作る
-fn lock() -> MutexGuard<'static, ()> {
+pub(super) fn lock() -> MutexGuard<'static, ()> {
     static KERNEL: OnceLock<Mutex<()>> = OnceLock::new();
     let mutex = KERNEL.get_or_init(|| {
         // SAFETY: 引数なし。OnceLock の中なので一度だけ呼ばれる
@@ -25,7 +25,7 @@ fn lock() -> MutexGuard<'static, ()> {
     mutex.lock().unwrap_or_else(|e| e.into_inner())
 }
 
-fn check(status: i32, what: &str) -> Result<(), String> {
+pub(super) fn check(status: i32, what: &str) -> Result<(), String> {
     if status == SUCCESS {
         Ok(())
     } else {
@@ -35,7 +35,7 @@ fn check(status: i32, what: &str) -> Result<(), String> {
 
 /// SMLib の B-rep (f64)。複製すると形の中身ごと写す
 pub struct Brep {
-    ptr: BrepPtr,
+    pub(super) ptr: BrepPtr,
 }
 
 // SAFETY: SMLib の呼び出しはすべてロックの中で行うので、どのスレッドから持っても使ってもよい
@@ -83,7 +83,7 @@ pub struct Bounds {
 
 impl Brep {
     /// ロックの中で SmBrep* を返す関数を呼び、結果を受け取る
-    fn create(what: &str, f: impl FnOnce(*mut BrepPtr) -> i32) -> Result<Brep, String> {
+    pub(super) fn create(what: &str, f: impl FnOnce(*mut BrepPtr) -> i32) -> Result<Brep, String> {
         let _guard = lock();
         let mut out: BrepPtr = ptr::null_mut();
         let status = f(&mut out);

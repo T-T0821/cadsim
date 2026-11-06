@@ -3,18 +3,22 @@
 //! SMLib の C++ のソースは `vendor/smlib/` にあり、`build.rs` がビルドして静的にリンクする。
 //! Rust から呼ぶための薄い層が `cpp/kernel.cpp`、その C の関数が [`ffi`]。
 //! 形の作成・変形・ブーリアン・テッセレーション・保存・面からの組み立ては [`Brep`] のメソッド。
+//! フィレット・面取り・シェル・オフセット・回転・パイプ・スイープ・修復・質量特性・断面は `ops.rs`
+//! (C++ 側は `cpp/ops.cpp`)。
 //!
 //! SMLib は同時に複数のスレッドから呼べないので、呼び出しは1つのロックで順番にする。
 
 mod brep;
 mod ffi;
 pub mod model;
+mod ops;
 
 pub use brep::{BooleanKind, Bounds, Brep, triangulate_planar};
 pub use model::{
     BSplineCurve, BSplineSurface, EdgeCurve, FaceMesh, FaceSpec, Frame, MeshedBrep, MeshedFace,
     Surface,
 };
+pub use ops::MassProperties;
 
 #[cfg(test)]
 mod tests {
