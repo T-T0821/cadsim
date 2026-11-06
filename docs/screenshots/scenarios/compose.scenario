@@ -5,11 +5,15 @@ wait_loaded
 wait 30
 click "★ Lv."                  # ミッションカードを隠す
 click "言葉で"
-click "コンベア1本、センサー1個、ストッパで外観検査"
+click "コンベア2本とロボット1台で箱詰め"
 click "下書きを作る"
 wait_loaded
+scroll 560 500 -10                # 下書きの下の「置く」ボタンまで送る
+wait 10
 click "モデルとチャートに置く"
 wait_loaded
+click "言葉で"                    # 欄を閉じて 3D ビューを広くする
+wait 10
 click "⛶ 全体"
-wait 900                         # ミッション達成の表示が消えるのを待つ
+wait 1500                        # ミッション達成とレベルアップの表示が消えるのを待つ
 screenshot placed

@@ -4,3 +4,7 @@ wait 30
 click "▶ チュートリアルを始める"
 wait 90
 screenshot card
+click "▶ 一覧"
+wait 60
+screenshot mission_list
+key esc

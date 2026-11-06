@@ -30,6 +30,7 @@
 - [平面図を床に敷く](floor-plan.md)
 - [点群を読み込む](point-cloud.md)
 - [大きなアセンブリを軽く扱う](large-assembly.md)
+- [画質と工場の背景](display.md)
 
 # ラインを検討する
 
@@ -37,7 +38,9 @@
 - [センサーとインターロック](sensors.md)
 - [コンベアでワークを流し、チャックで掴んで運ぶ](conveyor.md)
 - [関節とロボットの動き](robot.md)
+- [ロボット機種と本物の装置の CAD](robot-models.md)
 - [工程シミュレーションでスループットを見る](flow.md)
+- [工場・生産計画・案の比較](factory-plan.md)
 - [安全機器を置いて止まり方を確かめる](safety.md)
 - [作業者と AGV を動かす](operator-agv.md)
 - [工程・AGV・安全機器をつないでラインとして動かす](line.md)
@@ -46,6 +49,13 @@
 - [部品スクリプト](scripting.md)
 - [シミュレーション結果の CSV 出力](csv-export.md)
 - [動きを動画にする](video-export.md)
+- [設備の音と状態のエフェクト](sound-effects.md)
+
+# AI と共有
+
+- [生成 AI を使う](ai.md)
+- [Claude に画面を操作させる(MCP)](mcp.md)
+- [離れた人と同じ工場をレビューする](review.md)
 
 # 一覧
 

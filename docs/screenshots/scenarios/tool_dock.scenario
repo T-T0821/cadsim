@@ -1,0 +1,10 @@
+# ツールレールから部品・安全・PLC を開き、部品ライブラリを欄に出したところ
+wait_loaded
+click "自由にさわる"
+wait 30
+click "★ Lv."                  # ミッションカードを隠す
+click "安全"
+click "PLC"
+click "部品"
+wait 120
+screenshot tabs

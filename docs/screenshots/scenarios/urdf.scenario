@@ -1,0 +1,12 @@
+# URDF で読み込んだ UR5e
+wait_loaded
+click "空のプロジェクトから"
+wait_loaded
+wait 30
+click "★ Lv."                  # ミッションカードを隠す
+click "ファイル"
+hover "サンプルを開く"
+click "ロボット機種 UR5e (URDF)"
+wait_loaded
+wait 600                         # ミッション達成の表示が消えるのを待つ
+screenshot ur5e

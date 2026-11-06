@@ -18,6 +18,8 @@
 
 やめるときは、ダウンロードしたファイル(Mac は `.app`)を削除するだけです。見た目などの設定は小さなファイルとして残ります。
 
+以前の名前 (cadsim) の版を使っていた場合も、`.cadsim` のプロジェクトファイルはそのまま開けます。ミッションの進み具合・AI のキー・自作部品などの設定も、初めて起動したときに自動で引き継ぎます。
+
 ## ソースから実行
 
 [Rust](https://rustup.rs/)(1.97.1 以上)を入れてから、次を実行します。
@@ -25,13 +27,15 @@
 ```sh
 git clone https://github.com/T-T0821/cadsim.git
 cd cadsim
-cargo run --release                      # サンプルのアセンブリを開いて起動
+cargo run --release                      # デモラインを開き、動かした状態で起動
 cargo run --release -- path/to/part.step # 指定した STEP を開いて起動
 cargo run --release -- path/to/line.plantwright # 保存したプロジェクトを開いて起動
 ```
 
-初回はビルドに数分かかります。Linux では先に `libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev` を入れてください。
+初回はビルドに数分かかります。形状カーネルなどの C++ のソースも一緒にビルドするので、C++ のコンパイラ(Windows は Visual Studio の C++ ビルドツール、Mac は Xcode のコマンドラインツール、Linux は g++)が要ります。Linux では先に `g++ libasound2-dev libudev-dev libwayland-dev libxkbcommon-dev` を入れてください。
+
+ほかに、`--stress 5000`(部品 5000 個ほどの負荷テスト用シーン)、`--physics`(物理演算のサンプルライン)、`--mcp`([Claude に画面を操作させる](mcp.md))を付けて起動できます。
 
 Rust を入れずに Docker だけでビルドすることもできます。`make docker-build` で開発コンテナの中でビルドし、`make help` でほかの目標が見られます(詳しくは `docs/dev-environment.md`)。
 
-起動すると、サンプルのアセンブリ(万力風の小さな組立品)が開いた画面になります。
+起動すると、ロボットセル・コンベア・安全柵・AGV・作業者を並べたデモラインが動いた状態で開き、はじめての起動ではようこそ画面が出ます。続きは [ミッション](missions.md) を見てください。
