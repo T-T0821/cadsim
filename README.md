@@ -7,7 +7,7 @@ STEP などの CAD データを読み込んで設備を並べ、ぶつかり・�
 
 ![デモラインを開いたところ](docs/screenshots/start/overview.png)
 
-**[▶ デモ動画を見る(約 2 分半)](docs/media/plantwright_demo.mp4)** ・ **[📘 操作マニュアル(画像付き)](docs/src/introduction.md)** ・ **[⬇ ダウンロード](https://github.com/T-T0821/cadsim/releases)**
+**[▶ デモ動画を見る(約 3 分)](docs/media/plantwright_demo.mp4)** ・ **[📘 操作マニュアル(画像付き)](docs/src/introduction.md)** ・ **[⬇ ダウンロード](https://github.com/T-T0821/cadsim/releases)**
 
 ## 画面の様子
 
