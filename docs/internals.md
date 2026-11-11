@@ -67,7 +67,7 @@ src/                                アプリ (Bevy + egui)
 
 形状の B-rep・ブーリアン・テッセレーションは NVIDIA の SMLib(usd-brep、Apache-2.0)を使う。
 
-1. C++ のソースは `crates/plantwright_core/vendor/smlib/` に手を加えずに置き、`build.rs` が `cc` で静的ライブラリにしてリンクする(C++17 のコンパイラが要る。TBB は使わない)。
+1. C++ のソースは `crates/plantwright_core/vendor/smlib/` に手を加えずに置き、`build.rs` が `cc` で静的ライブラリにしてリンクする(C++17 のコンパイラが要る。TBB は使わない)。SMLib はもともと Windows では DLL として作る前提で、SM_API のヘッダは何も指定しないと関数を `dllimport` で宣言し、MSVC が定義の側で止まる(C2491)。静的にリンクするので、`build.rs` で `SM_API_EXPORTS` を定義して中身を持つ側として扱わせている。
 2. Rust から呼ぶための薄い C の層が `cpp/kernel.cpp`、その宣言が `kernel/ffi.rs`。Rust 側は `Brep`(`kernel/brep.rs`)のメソッドだけを使う: 直方体・円柱・押し出し、移動・回転・拡大、和・差・積、テッセレーション、テキスト形式での保存と読み込み、面からの組み立て(`Brep::from_faces`)。
 3. SMLib は1つの共有の状態で動き、同時に複数のスレッドから呼べないので、呼び出しはすべて1つのロックで順番にする。
 4. テッセレーションは面ごとのメッシュ(頂点・曲面の正確な法線・三角形)と、辺ごとのポリラインを返す(`MeshedBrep`)。面の縁の頂点と辺のポリラインの点は同じ座標になる。

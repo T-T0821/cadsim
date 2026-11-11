@@ -25,6 +25,10 @@ fn build(name: &str, include: &[&Path], files: &[std::path::PathBuf]) {
         .files(files)
         .define("NDEBUG", None)
         .define("NOMINMAX", None)
+        // SM_API のヘッダは Windows では、これが無いと関数を DLL から読み込むもの (dllimport) として
+        // 宣言する。ここでは DLL にせず静的にリンクするので、中身を持つ側 (dllexport) として扱わせる。
+        // 無いと MSVC が「dllimport の関数は定義できない」(C2491) で止まり、Windows でビルドできない
+        .define("SM_API_EXPORTS", None)
         // 開発ビルドでも最適化する (しないと形状の演算がとても遅い)
         .opt_level(2)
         .debug(false)

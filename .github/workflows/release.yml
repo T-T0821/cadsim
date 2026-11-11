@@ -23,6 +23,10 @@ on:
       - "Cargo.lock"
       - "build.rs"
       - "assets/icon/**"
+      # 形状カーネル (C++) は OS ごとのコンパイラで通るかが変わるので、変えたら Windows / macOS でもビルドする
+      - "crates/plantwright_core/build.rs"
+      - "crates/plantwright_core/cpp/**"
+      - "crates/plantwright_core/vendor/**"
 
 permissions:
   contents: write
