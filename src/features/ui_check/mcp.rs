@@ -23,7 +23,9 @@ use std::time::Instant;
 
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use bevy_egui::{EguiContexts, EguiOutput, EguiPrimaryContextPass, PrimaryEguiContext};
+use bevy_egui::{
+    EguiContext, EguiContexts, EguiOutput, EguiPrimaryContextPass, PrimaryEguiContext,
+};
 use plantwright_core::ui_check::mcp::{self, Content, Incoming};
 use plantwright_core::ui_check::runner::{Command, Observation, Runner};
 use plantwright_core::ui_check::scenario::Line;
@@ -126,9 +128,12 @@ fn allow_slow_clicks(mut contexts: EguiContexts, time: Res<Time<Real>>) -> Resul
 
 fn collect_widgets(
     mut server: ResMut<McpServer>,
-    outputs: Query<&EguiOutput, With<PrimaryEguiContext>>,
+    mut outputs: Query<(&EguiOutput, &mut EguiContext), With<PrimaryEguiContext>>,
 ) {
-    if let Some(widgets) = outputs.single().ok().and_then(widgets_from) {
+    let Ok((output, mut ctx)) = outputs.single_mut() else {
+        return;
+    };
+    if let Some(widgets) = widgets_from(ctx.get_mut(), output) {
         server.widgets = widgets;
     }
 }

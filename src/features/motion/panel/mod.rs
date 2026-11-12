@@ -1648,6 +1648,41 @@ fn actuator_editor(
     };
 
     ui.strong("アクチュエータ");
+    // 動かす部品: ツリーやビューで選んだノードを追加する。アセンブリを追加すると子孫がまとめて動く。
+    // 作ったらまず部品を割り当てるので、設定欄の下に隠れないよう名前や寸法より先に出す。
+    ui.label("動かす部品:");
+    let mut remove: Option<NodeId> = None;
+    for &node in &actuator.parts {
+        ui.horizontal(|ui| {
+            if ui.small_button("✖").on_hover_text("外す").clicked() {
+                remove = Some(node);
+            }
+            match model.get(node) {
+                Some(_) => ui.label(model.path_label(node)),
+                None => ui.weak(format!("(削除された部品 #{node})")),
+            };
+        });
+    }
+    if let Some(node) = remove {
+        actuator.parts.retain(|p| *p != node);
+    }
+    let selected = selection.node.filter(|n| model.get(*n).is_some());
+    let can_add = selected.is_some_and(|n| !actuator.parts.contains(&n));
+    let add_label = match selected {
+        Some(n) => format!(
+            "+ 選択中の「{}」を追加",
+            model.get(n).map_or("", |n| n.name.as_str())
+        ),
+        None => "+ 選択中の部品を追加 (ツリーかビューで選択)".to_string(),
+    };
+    if ui
+        .add_enabled(can_add, egui::Button::new(add_label))
+        .clicked()
+        && let Some(node) = selected
+    {
+        actuator.parts.push(node);
+    }
+    ui.add_space(4.0);
     egui::Grid::new("actuator_editor")
         .num_columns(2)
         .show(ui, |ui| {
@@ -1798,40 +1833,6 @@ fn actuator_editor(
                 ui.end_row();
             }
         });
-
-    // 動かす部品: ツリーやビューで選んだノードを追加する。アセンブリを追加すると子孫がまとめて動く。
-    ui.label("動かす部品:");
-    let mut remove: Option<NodeId> = None;
-    for &node in &actuator.parts {
-        ui.horizontal(|ui| {
-            if ui.small_button("✖").on_hover_text("外す").clicked() {
-                remove = Some(node);
-            }
-            match model.get(node) {
-                Some(_) => ui.label(model.path_label(node)),
-                None => ui.weak(format!("(削除された部品 #{node})")),
-            };
-        });
-    }
-    if let Some(node) = remove {
-        actuator.parts.retain(|p| *p != node);
-    }
-    let selected = selection.node.filter(|n| model.get(*n).is_some());
-    let can_add = selected.is_some_and(|n| !actuator.parts.contains(&n));
-    let add_label = match selected {
-        Some(n) => format!(
-            "+ 選択中の「{}」を追加",
-            model.get(n).map_or("", |n| n.name.as_str())
-        ),
-        None => "+ 選択中の部品を追加 (ツリーかビューで選択)".to_string(),
-    };
-    if ui
-        .add_enabled(can_add, egui::Button::new(add_label))
-        .clicked()
-        && let Some(node) = selected
-    {
-        actuator.parts.push(node);
-    }
 
     ui.horizontal(|ui| {
         let index = chart.actuators.iter().position(|a| a.id == id).unwrap_or(0);

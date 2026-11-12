@@ -457,6 +457,7 @@ mod tests {
             label: label.into(),
             role: "Button".into(),
             rect: Rect::new(x, y, 20.0, 10.0),
+            popup: false,
         }
     }
 

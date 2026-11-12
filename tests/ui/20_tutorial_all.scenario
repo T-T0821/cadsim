@@ -1,0 +1,205 @@
+# チュートリアル: 22 個のミッションを、カードの手順どおりにおすすめ順で全部クリアする
+# 各ミッションのあとで、ツールバー右のレベル表示「★ Lv.N  クリア数/22」が 1 つ増えたことを確かめる
+wait_loaded
+click "▶ チュートリアルを始める"
+wait_loaded
+wait 100
+# ようこそ画面のボタンから 3D ビューへカーソルが一瞬で飛ぶと、最初のクリックが egui に取られる。
+# 人の手ではカーソルが途中を通るので起きない。先に 3D ビューの何もないところを 1 回押しておく
+click_at 1000 600
+wait 20
+
+# --- 第1章 動くラインを見てみよう ---
+# 部品をえらぼう: 3D ビューの部品をクリック
+click_at 835 410
+wait 20
+expect "  1/22"
+# ぐるっと見まわそう: 右ドラッグ。Home で全体が入る位置に戻す
+drag 900 200 1100 260 right
+wait 20
+expect "  2/22"
+key home
+wait 90
+# 設備を止めて、また動かそう
+click "⏸ 一時停止"
+wait 10
+click "▶ 再生"
+wait 20
+expect "  3/22"
+# 図面モードに切り替えよう: 3D ビューを押してから 5
+click_at 1000 600
+key 5
+wait 20
+expect "  4/22"
+key 5
+wait 20
+
+# --- 第2章 部品にさわってみよう ---
+# 部品を動かそう: 先頭へで止め、部品を選んで W、赤い矢印をドラッグ
+click "⏮ 先頭へ"
+wait 20
+click "排出箱"
+wait 10
+key w
+wait 30
+drag 885 373 960 380 left
+wait 20
+expect "  5/22"
+# 時間を巻き戻そう
+key ctrl+z
+wait 20
+expect "  6/22"
+# 距離をはかろう: M を押して部品の表面を 2 か所
+click_at 1000 600
+key m
+wait 10
+click_at 830 375
+wait 10
+click_at 893 488
+wait 20
+expect "  7/22"
+key esc
+wait 10
+# ぶつかりを見つけよう: 部品をとなりの部品に重なるまで動かす
+click "排出箱"
+key w
+wait 20
+drag 885 373 800 373 left
+wait 30
+expect "  8/22"
+
+# --- 第3章 ラインを組んでみよう ---
+# 標準部品を置こう: 部品ライブラリの + で注視点に置く
+click "部品"
+wait 20
+click "+" 1
+wait_loaded
+wait 30
+expect "  9/22"
+# ラインを早回ししよう (デモラインには工程があるので、そのまま実行)
+click "工程"
+wait 20
+click "▶ 実行"
+wait 60
+expect "  10/22"
+
+# --- 第4章 仕上げて残そう ---
+# 寸法を書きこもう: 点間距離で部品の表面を 2 か所
+click "寸法"
+wait 20
+click "点間距離"
+wait 20
+click_at 764 361
+wait 10
+click_at 774 452
+wait 20
+expect "  11/22"
+# セーブしよう
+key ctrl+s
+wait_loaded
+wait 20
+expect "  12/22"
+
+# --- 第5章 設備に動きを付けよう ---
+# 部品に動きを付けよう: 部品を選び、+ アクチュエータ → シリンダ → + 選択中の「…」を追加
+click "⬛ 検査台"
+wait 10
+click "+ アクチュエータ"
+wait 20
+expect "シリンダ"
+screenshot 01_glow_actuator_menu  # 案内はプロパティの「シリンダ」でなく、開いたメニューの「シリンダ」を光らせる
+click "シリンダ" 2                 # 1 つ目はプロパティの役割のボタン
+wait 20
+screenshot 02_glow_add_part       # 設定欄の上に「+ 選択中の「検査台」を追加」が出て、そこが光る
+click "+ 選択中の「検査台」を追加"
+wait 20
+expect "  13/22"
+# 動きの順番を足そう
+click "+ ステップ"
+wait 20
+expect "  14/22"
+# センサーで待たせよう: + センサー → 光電センサー
+click "+ センサー"
+wait 20
+click "光電センサー"               # プロパティの同じ名前のボタンはスクロールで隠れているので数えない
+wait 20
+expect "  15/22"
+
+# --- 第6章 ラインとして動かそう ---
+# 非常停止を押してみよう: 安全パネルを下へスクロールして、非常停止の「押す」
+click "安全"
+wait 20
+scroll 480 400 -5
+wait 20
+click "押す"
+wait 30
+expect "  16/22"
+click "戻す"
+wait 10
+scroll 480 400 5
+wait 20
+click "リセット"
+wait 10
+# PLC で動かそう
+click "PLC"
+wait 20
+click "内蔵の模擬PLC"
+wait 20
+click "▶ 運転"
+wait 60
+expect "  17/22"
+click "■ 停止"
+wait 10
+# ライン全体を同じ時計で動かそう (デモラインには工程があるので、そのまま再生)
+click "連携"
+wait 20
+click "▶ 再生" 1                  # 2 つ目はタイミングチャートの再生
+wait 60
+expect "  18/22"
+click "⏸ 一時停止" 1
+wait 10
+
+# --- 第7章 もっと使いこなそう ---
+# 言葉でラインを組もう: 下書きを作り、パネルを下へスクロールして「モデルとチャートに置く」
+click "言葉で"
+wait 20
+click "コンベア1本、センサー1個、ストッパで外観検査"
+click "下書きを作る"
+wait_loaded
+wait 10
+scroll 550 500 -10
+wait 20
+click "モデルとチャートに置く"
+wait_loaded
+wait 60
+expect "  19/22"
+# ラダーを書き出そう
+click "ラダー"
+wait 20
+click "ラダーを書き出す"
+wait 20
+click "I/O 表をコピー"
+wait 20
+expect "  20/22"
+# 工場の中を歩こう
+click "🎥 ビュー"
+wait 10
+click "一人称で歩く"
+wait 30
+expect "  21/22"
+hold w 30
+key esc
+wait 30
+# 動画にして見せよう (自動確認では保存ダイアログを出さず saved/ に書く)
+click "ファイル"
+hover "書き出し"
+click "シミュレーションを動画で書き出し…"
+wait 10
+click "MP4 (H.264)"
+click "GIF"
+click "1/2"
+click "● 書き出し開始…"
+wait_loaded
+wait 30
+expect "  22/22"
+expect "全ミッション達成"
