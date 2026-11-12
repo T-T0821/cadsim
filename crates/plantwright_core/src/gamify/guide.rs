@@ -5,6 +5,8 @@
 //! (メニューを開けばその中の項目、道具のパネルを開けばその中のボタンへ、案内が先へ進む)。
 
 use super::MissionId;
+use crate::ui_check::Rect;
+use crate::ui_check::widget::Widget;
 
 /// いつそのボタンを案内するか
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -26,6 +28,8 @@ pub struct GuideTarget {
     /// ボタンの表示名。末尾が `*` なら、その前までで始まる表示名に合う
     pub label: &'static str,
     pub when: When,
+    /// 開いたメニューの中の項目だけに合う (プロパティなど、ほかの画面に同じ表示名のボタンがあるため)
+    pub in_menu: bool,
 }
 
 impl GuideTarget {
@@ -36,6 +40,18 @@ impl GuideTarget {
             Some(prefix) => shown.starts_with(prefix),
             None => shown == self.label,
         }
+    }
+
+    /// 画面に出ている部品のうち、このボタンの位置。スクロールで隠れたものは除き、
+    /// 同じ表示名が複数あれば上にあるもの (タイミングチャートは画面の下にあるので、上に浮かぶ道具のボタンを選ぶ)
+    pub fn locate(&self, shown: &[Widget]) -> Option<Rect> {
+        shown
+            .iter()
+            .filter(|w| w.rect.w > 0.0 && w.rect.h > 0.0)
+            .filter(|w| w.popup || !self.in_menu)
+            .filter(|w| self.matches(&w.label))
+            .map(|w| w.rect)
+            .min_by(|a, b| a.y.total_cmp(&b.y).then(a.x.total_cmp(&b.x)))
     }
 
     fn allowed(&self, tool_open: bool) -> bool {
@@ -52,6 +68,17 @@ const fn at(step: usize, label: &'static str) -> GuideTarget {
         step,
         label,
         when: When::Always,
+        in_menu: false,
+    }
+}
+
+/// 開いたメニューの中の項目
+const fn menu(step: usize, label: &'static str) -> GuideTarget {
+    GuideTarget {
+        step,
+        label,
+        when: When::Always,
+        in_menu: true,
     }
 }
 
@@ -60,6 +87,7 @@ const fn open(label: &'static str) -> GuideTarget {
         step: 0,
         label,
         when: When::ToolClosed,
+        in_menu: false,
     }
 }
 
@@ -68,6 +96,7 @@ const fn inside(step: usize, label: &'static str) -> GuideTarget {
         step,
         label,
         when: When::ToolOpen,
+        in_menu: false,
     }
 }
 
@@ -89,13 +118,13 @@ pub fn guide_for(id: MissionId) -> &'static [GuideTarget] {
             const {
                 &[
                     at(1, "+ アクチュエータ"),
-                    at(1, "シリンダ"),
+                    menu(1, "シリンダ"),
                     at(2, "+ 選択中の「*"),
                 ]
             }
         }
         AddStep => const { &[at(0, "+ ステップ")] },
-        AddSensor => const { &[at(0, "+ センサー"), at(0, "光電センサー")] },
+        AddSensor => const { &[at(0, "+ センサー"), menu(0, "光電センサー")] },
         EmergencyStop => {
             const {
                 &[
@@ -198,6 +227,37 @@ mod tests {
         // 何も出ていなければ案内しない
         assert!(next_target(MissionId::RunPlc, true, shown(&["PLC"])).is_none());
         assert!(next_target(MissionId::SelectPart, false, |_| true).is_none());
+    }
+
+    fn widget(label: &str, y: f32, h: f32, popup: bool) -> Widget {
+        Widget {
+            label: label.into(),
+            role: "Button".into(),
+            rect: Rect::new(10.0, y, 60.0, h),
+            popup,
+        }
+    }
+
+    #[test]
+    fn locate_skips_hidden_and_other_panels() {
+        let cylinder = guide_for(MissionId::AddActuator)[1];
+        // プロパティの役割のボタン「シリンダ」は、メニューの項目ではないので光らせない
+        let shown = [widget("シリンダ", 100.0, 20.0, false)];
+        assert_eq!(cylinder.locate(&shown), None);
+        let shown = [
+            widget("シリンダ", 100.0, 20.0, false),
+            widget("シリンダ", 700.0, 20.0, true),
+        ];
+        assert_eq!(cylinder.locate(&shown).map(|r| r.y), Some(700.0));
+        // スクロールで隠れた (見えている大きさが 0 の) ボタンは光らせない
+        let press = at(2, "押す");
+        let shown = [widget("押す", 550.0, 0.0, false)];
+        assert_eq!(press.locate(&shown), None);
+        let shown = [
+            widget("押す", 550.0, 0.0, false),
+            widget("押す", 600.0, 20.0, false),
+        ];
+        assert_eq!(press.locate(&shown).map(|r| r.y), Some(600.0));
     }
 
     #[test]

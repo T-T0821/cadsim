@@ -12,7 +12,7 @@ screenshot 02_tutorial
 # ミッション一覧: 基本編・応用編の章が並ぶ。「挑戦」で順番をとばしてカードに出せる
 click "▶ 一覧"
 wait 10
-expect "■ 応用編"
+expect "■ 基本編"                 # 応用編は一覧を下へスクロールすると出る
 screenshot 03_mission_list
 
 click "挑戦"                      # 一番上の「挑戦」(ぐるっと見まわそう)

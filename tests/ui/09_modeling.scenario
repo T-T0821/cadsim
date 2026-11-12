@@ -18,7 +18,6 @@ click "モデル"                     # モデリングパネルを開く (穴�
 wait 10
 click "🔍 拡大"                    # 箱を画面いっぱいに
 wait 90
-drag 600 300 900 500 right        # 少し回して上の面を見やすく
 screenshot 02_hole_tool
 click_at 740 280                  # 上の面をクリック → 貫通の穴が置かれる
 wait 30

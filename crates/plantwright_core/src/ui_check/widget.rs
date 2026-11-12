@@ -10,7 +10,10 @@ pub struct Widget {
     pub label: String,
     /// 種類 (Button, Label, TextInput など。報告や一覧で見せるだけ)
     pub role: String,
+    /// 見えている範囲 (スクロールで隠れた部分は除く。まったく見えなければ大きさ 0)
     pub rect: Rect,
+    /// ポップアップ (開いたメニューなど) の中にある。ほかの画面の同じ表示名のボタンと見分けるのに使う
+    pub popup: bool,
 }
 
 /// アクセシビリティ情報から集めたままの一覧を、探しやすい形に整える。
@@ -34,6 +37,7 @@ pub fn normalize(raw: Vec<Widget>) -> Vec<Widget> {
                 label: window.label.clone(),
                 role: "WindowTitle".into(),
                 rect: toggle.rect,
+                popup: window.popup,
             })
         })
         .collect();
@@ -147,6 +151,7 @@ mod tests {
             label: label.into(),
             role: "Button".into(),
             rect: Rect::new(x, y, 50.0, 20.0),
+            popup: false,
         }
     }
 
@@ -193,6 +198,7 @@ mod tests {
                 label: "部品ライブラリ".into(),
                 role: "Window".into(),
                 rect: Rect::new(100.0, 100.0, 300.0, 400.0),
+                popup: false,
             },
             w("Hide", 10.0, 10.0),
             w("Show", 110.0, 108.0),
@@ -200,6 +206,7 @@ mod tests {
                 label: "部品".into(),
                 role: "TextRun".into(),
                 rect: Rect::new(0.0, 0.0, 1.0, 1.0),
+                popup: false,
             },
         ];
         let out = normalize(raw);

@@ -24,14 +24,14 @@ use std::time::Duration;
 
 use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key as LogicalKey, KeyboardInput};
-use bevy::input::mouse::{MouseButtonInput, MouseScrollUnit, MouseWheel};
+use bevy::input::mouse::{MouseButtonInput, MouseMotion, MouseScrollUnit, MouseWheel};
 use bevy::prelude::*;
 use bevy::render::view::window::screenshot::{Screenshot, ScreenshotCaptured};
 use bevy::time::TimeUpdateStrategy;
 use bevy::window::{PrimaryWindow, WindowEvent};
 use bevy_egui::input::EguiInputEvent;
 use bevy_egui::{
-    EguiContexts, EguiInput, EguiOutput, EguiPreUpdateSet, EguiPrimaryContextPass,
+    EguiContext, EguiContexts, EguiInput, EguiOutput, EguiPreUpdateSet, EguiPrimaryContextPass,
     PrimaryEguiContext, egui,
 };
 use plantwright_core::ui_check::Rect as CheckRect;
@@ -172,38 +172,69 @@ fn enable_accesskit(mut contexts: EguiContexts) -> Result {
 /// egui が出したアクセシビリティ情報から、表示名と位置のある部品を集める
 fn collect_widgets(
     mut check: ResMut<UiCheck>,
-    outputs: Query<&EguiOutput, With<PrimaryEguiContext>>,
+    mut outputs: Query<(&EguiOutput, &mut EguiContext), With<PrimaryEguiContext>>,
 ) {
-    let Ok(output) = outputs.single() else {
+    let Ok((output, mut ctx)) = outputs.single_mut() else {
         return;
     };
-    if let Some(widgets) = widgets_from(output) {
+    if let Some(widgets) = widgets_from(ctx.get_mut(), output) {
         check.widgets = widgets;
     }
 }
 
-/// egui のアクセシビリティ情報から部品の一覧を作る。このフレームに情報がなければ None
-fn widgets_from(output: &EguiOutput) -> Option<Vec<Widget>> {
+/// egui のアクセシビリティ情報から部品の一覧を作る。このフレームに情報がなければ None。
+///
+/// 位置は見えている範囲にする (スクロールで隠れた部分を除く。まったく隠れていれば大きさ 0)。
+/// アクセシビリティ情報の位置は隠れていても元の場所のままなので、そこを押すと別の部品に当たってしまう。
+/// チュートリアルの「次に押すボタン」の案内 (ui/guide.rs) も同じ一覧を使う。
+pub fn widgets_from(ctx: &egui::Context, output: &EguiOutput) -> Option<Vec<Widget>> {
     let update = output.platform_output.accesskit_update.as_ref()?;
     let raw = update
         .nodes
         .iter()
-        .filter_map(|(_, node)| {
+        .filter_map(|(id, node)| {
             let label = node.label().or(node.value())?.trim().to_string();
             let b = node.bounds()?;
+            let mut rect = egui::Rect::from_min_max(
+                egui::pos2(b.x0 as f32, b.y0 as f32),
+                egui::pos2(b.x1 as f32, b.y1 as f32),
+            );
+            let mut popup = false;
+            if let Some(response) = widget_response(ctx, id.0) {
+                // interact_rect は部品の枠を、描ける範囲 (スクロールの窓など) で切り取ったもの
+                rect = rect.intersect(response.interact_rect);
+                popup = matches!(
+                    response.layer_id.order,
+                    egui::Order::Foreground | egui::Order::Tooltip | egui::Order::Debug
+                );
+            }
+            let (w, h) = if rect.is_positive() {
+                (rect.width(), rect.height())
+            } else {
+                (0.0, 0.0)
+            };
             Some(Widget {
                 label,
                 role: format!("{:?}", node.role()),
-                rect: CheckRect::new(
-                    b.x0 as f32,
-                    b.y0 as f32,
-                    (b.x1 - b.x0) as f32,
-                    (b.y1 - b.y0) as f32,
-                ),
+                rect: CheckRect::new(rect.min.x, rect.min.y, w, h),
+                popup,
             })
         })
         .collect();
     Some(widget::normalize(raw))
+}
+
+/// アクセシビリティ情報の部品の番号から、egui の部品の応答 (位置・描ける範囲・層) を引く。
+/// 窓や文字の断片のように egui の部品でないものは None
+fn widget_response(ctx: &egui::Context, node: u64) -> Option<egui::Response> {
+    if node == 0 {
+        return None;
+    }
+    // AccessKit の番号は egui の Id の値そのもの (Id::accesskit_id)。そこから Id に戻す
+    // (`from_high_entropy_bits` はメモリ安全性の意味での unsafe ではない)
+    #[allow(unsafe_code)]
+    let id = unsafe { egui::Id::from_high_entropy_bits(node) };
+    ctx.read_response(id)
 }
 
 /// 別スレッドで進む計算や書き出し (読み込みと開く・保存は drive が直接見る)
@@ -447,6 +478,7 @@ fn finish(run: &UiCheckRun, result: &ScenarioResult) -> bool {
 struct InputWriters<'w> {
     window_events: MessageWriter<'w, WindowEvent>,
     cursor: MessageWriter<'w, CursorMoved>,
+    motion: MessageWriter<'w, MouseMotion>,
     buttons: MessageWriter<'w, MouseButtonInput>,
     wheel: MessageWriter<'w, MouseWheel>,
     keys: MessageWriter<'w, KeyboardInput>,
@@ -472,6 +504,10 @@ impl InputWriters<'_> {
                     delta,
                 };
                 self.cursor.write(message.clone());
+                // 本物のマウスは位置といっしょに動いた量 (MouseMotion) も出す。視点を回す・動かす操作はこちらを読む
+                if let Some(delta) = delta.filter(|d| *d != Vec2::ZERO) {
+                    self.motion.write(MouseMotion { delta });
+                }
                 // egui はウィンドウのイベントからマウスの位置とボタンを読む
                 self.window_events.write(WindowEvent::CursorMoved(message));
             }

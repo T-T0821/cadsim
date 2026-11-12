@@ -15,7 +15,6 @@ click "三菱 (SLMP)"
 wait 10
 expect "デバイスの割り当て"
 expect "出力ビット (PLC → 設備)"
-expect "M100"                     # I/O モニタの番号がデバイスで出る
 screenshot 01_slmp_settings
 
 click "UDP"
@@ -23,3 +22,8 @@ click "4E"
 click "ASCII"
 wait 10
 screenshot 02_udp_4e_ascii
+
+# I/O モニタの番号がデバイスで出る (I/O モニタはパネルの下のほうなので、スクロールして見る)
+scroll 490 400 -40
+wait 10
+expect "D0"                       # 出力ワードの先頭 (X軸 指令位置)

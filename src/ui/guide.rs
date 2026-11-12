@@ -6,15 +6,15 @@
 
 use bevy::prelude::*;
 use bevy_egui::{
-    EguiOutput, PrimaryEguiContext,
+    EguiContext, EguiOutput, PrimaryEguiContext,
     egui::{self, Align2, Color32, CornerRadius, Stroke, pos2, vec2},
 };
 
 use super::theme::palette;
 use super::tutorial::TutorialUi;
+use crate::features::ui_check::widgets_from;
 use plantwright_core::gamify::{Mission, next_target};
-use plantwright_core::ui_check::Rect as WidgetRect;
-use plantwright_core::ui_check::widget::{self, Widget};
+use plantwright_core::ui_check::widget::Widget;
 
 /// 案内に使う、前のフレームの画面の部品 (`TutorialUi` の中に持つ)
 #[derive(Default)]
@@ -44,52 +44,23 @@ impl GuideUi {
             self.current_step = None;
         }
     }
-
-    /// 表示名に合う、画面に出ている部品のうちいちばん上のもの
-    /// (タイミングチャートは画面の下にあるので、同じ名前なら上に浮かぶ道具のボタンを選ぶ)
-    fn find(&self, matches: impl Fn(&str) -> bool) -> Option<WidgetRect> {
-        self.shown
-            .iter()
-            .filter(|w| w.rect.w > 0.0 && w.rect.h > 0.0 && matches(&w.label))
-            .map(|w| w.rect)
-            .min_by(|a, b| a.y.total_cmp(&b.y).then(a.x.total_cmp(&b.x)))
-    }
 }
 
-/// egui が出したアクセシビリティ情報から、表示名と位置のある部品を集める
+/// egui が出したアクセシビリティ情報から、表示名と見えている位置のある部品を集める
 pub fn collect_shown(
     mut tutorial: ResMut<TutorialUi>,
-    outputs: Query<&EguiOutput, With<PrimaryEguiContext>>,
+    mut outputs: Query<(&EguiOutput, &mut EguiContext), With<PrimaryEguiContext>>,
 ) {
     let guide = &mut tutorial.guide;
     if !guide.wanted {
         return;
     }
-    let Ok(output) = outputs.single() else {
+    let Ok((output, mut ctx)) = outputs.single_mut() else {
         return;
     };
-    let Some(update) = &output.platform_output.accesskit_update else {
-        return;
-    };
-    let raw = update
-        .nodes
-        .iter()
-        .filter_map(|(_, node)| {
-            let label = node.label().or(node.value())?.trim().to_string();
-            let b = node.bounds()?;
-            Some(Widget {
-                label,
-                role: format!("{:?}", node.role()),
-                rect: WidgetRect::new(
-                    b.x0 as f32,
-                    b.y0 as f32,
-                    (b.x1 - b.x0) as f32,
-                    (b.y1 - b.y0) as f32,
-                ),
-            })
-        })
-        .collect();
-    guide.shown = widget::normalize(raw);
+    if let Some(shown) = widgets_from(ctx.get_mut(), output) {
+        guide.shown = shown;
+    }
 }
 
 /// 今のミッションで次に押すボタンを光らせる。光らせたボタンの手順を `current_step` に覚える
@@ -100,14 +71,9 @@ pub fn glow_next_button(
     tool_open: bool,
     guide: &mut GuideUi,
 ) {
-    let target = next_target(next.id, tool_open, |t| {
-        guide.find(|label| t.matches(label)).is_some()
-    });
+    let target = next_target(next.id, tool_open, |t| t.locate(&guide.shown).is_some());
     guide.current_step = target.map(|t| t.step);
-    let Some(target) = target else {
-        return;
-    };
-    let Some(r) = guide.find(|label| target.matches(label)) else {
+    let Some((target, r)) = target.and_then(|t| Some((t, t.locate(&guide.shown)?))) else {
         return;
     };
     let rect = egui::Rect::from_min_size(pos2(r.x, r.y), vec2(r.w, r.h));
