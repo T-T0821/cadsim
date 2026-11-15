@@ -46,3 +46,11 @@ WebXR は安全なコンテキストでしか使えません。`file://` で開�
 - `cargo test write_samples -- --ignored` で、サンプル装置(タイミングチャート付き)を `target/samples/line_demo.html` に書き出せる。README のスクリーンショットはこれを開いて撮った。
 - `cargo test web_viewer` で、HTML に埋め込んだ GLB を取り出して読み直せることと、タイトルのエスケープを確かめる。
 - ビューアの見た目と操作は、書き出した .html を Chromium(Playwright)で開いて確かめた。VR は `navigator.xr` と `XRWebGLLayer` を差し替えた疑似セッションで、左右の目の描画とスティックでの移動を確かめた(実機のヘッドセットでは未確認)。
+
+## GitHub Pages のデモ
+
+サンプル装置を書き出したビューアを <https://t-t0821.github.io/cadsim/> に置いている。インストールなしで、ブラウザ・スマホ・VR ヘッドセットから触れる(https なので WebXR も使える)。
+
+- `.github/workflows/pages.yml` が、main への push(ビューアや書き出しに関わるファイルが変わったとき)と手動実行で、`cargo test --locked write_samples -- --ignored` を流して `target/samples/line_demo.html` を作り、`index.html` として公開する。
+- PR でこのワークフローを変えたときは、書き出しまで行い公開はしない。
+- 公開先はリポジトリの Settings → Pages → Build and deployment の Source を「GitHub Actions」にしておく必要がある(初回だけ)。

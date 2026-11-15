@@ -1,0 +1,84 @@
+# Web ビューアのデモ (サンプル装置を動き付きで書き出した .html) を GitHub Pages に置く。
+# 公開先: https://t-t0821.github.io/cadsim/
+#
+# - main に push して、ビューアや書き出しに関わるファイルが変わったときと、
+#   Actions タブの「Pages」→「Run workflow」で手動実行したときに作り直して公開する。
+# - PR でこのファイルを変えたときは、作るところまで行い公開はしない。
+# - 初回だけ、リポジトリの Settings → Pages → Build and deployment の Source を「GitHub Actions」にする。
+# しくみは docs/web-viewer.md の「GitHub Pages のデモ」
+name: Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/pages.yml"
+      - "assets/web_viewer/**"
+      - "src/**"
+      - "crates/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+  pull_request:
+    paths:
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# 公開は1つずつ。途中の公開は止めない
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  build:
+    name: デモを書き出す
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bevy が Linux で要るライブラリ
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config cmake nasm clang \
+            libasound2-dev libudev-dev \
+            libx11-dev libxcursor-dev libxi-dev libxrandr-dev libxkbcommon-dev libwayland-dev
+      - uses: dtolnay/rust-toolchain@stable
+      # 保存は main でのビルドのときだけ行う
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: pages
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      # サンプル装置 (タイミングチャートの1サイクルの動き付き) を target/samples/line_demo.html に書き出す
+      - name: Export sample viewer
+        run: cargo test --locked write_samples -- --ignored
+
+      - name: Assemble site
+        run: |
+          mkdir -p _site
+          cp target/samples/line_demo.html _site/index.html
+          touch _site/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: 公開する
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
