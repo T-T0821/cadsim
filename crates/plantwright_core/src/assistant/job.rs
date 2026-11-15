@@ -5,7 +5,8 @@
 
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+// std の Instant はブラウザ (wasm32) で panic するので、どこでも動くものを使う
+use bevy_platform::time::Instant;
 
 use crate::assistant::llm::{LlmClient, LlmError};
 
@@ -23,7 +24,7 @@ impl<T: Send + 'static> LlmJob<T> {
         work: impl FnOnce(&dyn LlmClient) -> Result<T, LlmError> + Send + 'static,
     ) -> Self {
         let (sender, receiver) = mpsc::channel();
-        std::thread::spawn(move || {
+        crate::background::spawn(move || {
             let _ = sender.send(work(client.as_ref()));
         });
         Self {

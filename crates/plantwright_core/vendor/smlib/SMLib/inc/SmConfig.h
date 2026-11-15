@@ -61,7 +61,8 @@
 
 // The following define determines if we use exception handling
 // to notify of memory errors
-#ifndef _DEBUG
+// plantwright: WebAssembly (wasi-sdk) builds have no C++ exceptions, so build.rs defines SM_NO_EXCEPTIONS there
+#if !defined(_DEBUG) && !defined(SM_NO_EXCEPTIONS)
 #define SM_USE_EXCEPTIONS 1
 #endif
 

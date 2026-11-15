@@ -8,6 +8,9 @@
 //! 送る JSON の組み立て ([`request_body`]) と返事の読み取り ([`parse_response`]) は
 //! 通信と切り離してあるので、ネットワークなしでテストできる。
 
+// ブラウザ版 (wasm32) では問い合わせをしないので、送り先の設定は使わない
+#![cfg_attr(target_arch = "wasm32", allow(dead_code))]
+
 use std::time::Duration;
 
 use crate::assistant::llm::{Effort, LlmClient, LlmError, LlmRequest, Role};
@@ -59,25 +62,36 @@ impl LlmClient for ClaudeClient {
             return Err(LlmError::MissingApiKey);
         }
         let body = request_body(request, &self.model)?;
-        let agent: ureq::Agent = ureq::Agent::config_builder()
-            .timeout_global(Some(TIMEOUT))
-            .http_status_as_error(false)
-            .build()
-            .into();
-        let mut response = agent
-            .post(&self.url)
-            .header("x-api-key", self.api_key.trim())
-            .header("anthropic-version", API_VERSION)
-            .header("anthropic-beta", FALLBACK_BETA)
-            .header("content-type", "application/json")
-            .send(body.to_string())
-            .map_err(|e| LlmError::Network(e.to_string()))?;
-        let status = response.status().as_u16();
-        let text = response
-            .body_mut()
-            .read_to_string()
-            .map_err(|e| LlmError::Network(e.to_string()))?;
-        parse_response(status, &text)
+        // ブラウザ版 (wasm32) では HTTPS の問い合わせ (ureq) を入れていない
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = body;
+            Err(LlmError::Network(
+                "ブラウザ版のデモでは生成 AI を使えません。デスクトップ版を使ってください".into(),
+            ))
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let agent: ureq::Agent = ureq::Agent::config_builder()
+                .timeout_global(Some(TIMEOUT))
+                .http_status_as_error(false)
+                .build()
+                .into();
+            let mut response = agent
+                .post(&self.url)
+                .header("x-api-key", self.api_key.trim())
+                .header("anthropic-version", API_VERSION)
+                .header("anthropic-beta", FALLBACK_BETA)
+                .header("content-type", "application/json")
+                .send(body.to_string())
+                .map_err(|e| LlmError::Network(e.to_string()))?;
+            let status = response.status().as_u16();
+            let text = response
+                .body_mut()
+                .read_to_string()
+                .map_err(|e| LlmError::Network(e.to_string()))?;
+            parse_response(status, &text)
+        }
     }
 }
 

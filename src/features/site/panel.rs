@@ -42,8 +42,7 @@ pub fn site_panel(
     window.open(&mut open).show(contexts.ctx_mut()?, |ui| {
         let mut remove = None;
         let count = model.site.underlays.len();
-        for index in 0..count {
-            let underlay = &mut model.site.underlays[index];
+        for (index, underlay) in model.site.underlays.iter_mut().enumerate() {
             ui.push_id(index, |ui| {
                 ui.horizontal(|ui| {
                     ui.checkbox(&mut underlay.visible, "")

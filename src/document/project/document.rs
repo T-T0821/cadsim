@@ -52,7 +52,9 @@ pub struct LoadedProject {
 impl LoadedProject {
     /// ファイルを読み、参照している STEP もすべて読み込む。重いので別スレッドで呼ぶ。
     pub fn load(path: &Path) -> Result<Self, ProjectError> {
-        let text = std::fs::read_to_string(path).map_err(ProjectError::Io)?;
+        // 埋め込みのサンプル (ブラウザ版) も読めるよう memory_files を通す
+        let text = plantwright_core::formats::memory_files::read_to_string(path)
+            .map_err(ProjectError::Io)?;
         let file = ProjectFile::from_json(&text)?;
         let base_dir = path.parent().unwrap_or(Path::new("."));
         Ok(Self::fetch_shapes(file, base_dir))
@@ -357,7 +359,14 @@ pub fn load_real_robot_sample(
     dir: &Path,
     sample: RealSample,
 ) -> Result<LoadedProject, ProjectError> {
+    // ブラウザ版 (wasm32) にはファイルシステムが無いので、書き出さずに memory_files に置いて読む
+    #[cfg(target_arch = "wasm32")]
+    for (name, bytes) in REAL_ROBOT_FILES {
+        plantwright_core::formats::memory_files::insert(dir.join(name), bytes);
+    }
+    #[cfg(not(target_arch = "wasm32"))]
     std::fs::create_dir_all(dir).map_err(ProjectError::Io)?;
+    #[cfg(not(target_arch = "wasm32"))]
     for (name, bytes) in REAL_ROBOT_FILES {
         let path = dir.join(name);
         if std::fs::read(&path).ok().as_deref() != Some(bytes) {
@@ -369,6 +378,10 @@ pub fn load_real_robot_sample(
 
 /// 本物の装置のサンプルを書き出すフォルダ。設定ファイルと同じ場所の `samples/real_robot`
 pub fn real_robot_sample_dir() -> PathBuf {
+    // ブラウザ版 (wasm32) は memory_files の中の名前だけ。std::env::temp_dir は使えない
+    if cfg!(target_arch = "wasm32") {
+        return PathBuf::from("/samples/real_robot");
+    }
     plantwright_core::preferences::default_path()
         .and_then(|p| p.parent().map(|dir| dir.join("samples").join("real_robot")))
         .unwrap_or_else(|| std::env::temp_dir().join("plantwright").join("real_robot"))

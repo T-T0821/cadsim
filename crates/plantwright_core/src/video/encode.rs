@@ -9,13 +9,17 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 use std::thread::{self, JoinHandle};
 
+#[cfg(not(target_arch = "wasm32"))]
 use openh264::OpenH264API;
+#[cfg(not(target_arch = "wasm32"))]
 use openh264::encoder::{
     BitRate, Encoder, EncoderConfig, FrameRate, IntraFramePeriod, RateControlMode, UsageType,
     VuiConfig,
 };
+#[cfg(not(target_arch = "wasm32"))]
 use openh264::formats::{RgbaSliceU8, YUVBuffer};
 
+#[cfg(not(target_arch = "wasm32"))]
 use super::mp4::Mp4Writer;
 use crate::video::{Format, Frame, VideoSink};
 
@@ -80,7 +84,11 @@ impl VideoSink for EncoderThread {
 
 fn encode_all(settings: &EncodeSettings, frames: Receiver<Frame>) -> io::Result<PathBuf> {
     let mut sink: Box<dyn FileSink> = match settings.format {
+        #[cfg(not(target_arch = "wasm32"))]
         Format::Mp4 => Box::new(Mp4Sink::new(&settings.path, settings.fps)),
+        // ブラウザ版 (wasm32) には H.264 のエンコーダー (C++) を入れていない
+        #[cfg(target_arch = "wasm32")]
+        Format::Mp4 => return Err(io::Error::other("ブラウザ版では MP4 に書き出せません")),
         Format::Gif => Box::new(GifSink::new(&settings.path, settings.fps)),
         Format::PngSequence => Box::new(PngSink::new(&settings.path)?),
     };
@@ -106,6 +114,7 @@ trait FileSink {
 // MP4 (OpenH264 + 自前の MP4 ライター)
 // ---------------------------------------------------------------------------
 
+#[cfg(not(target_arch = "wasm32"))]
 struct Mp4Sink {
     path: PathBuf,
     fps: u32,
@@ -113,12 +122,14 @@ struct Mp4Sink {
     state: Option<Mp4State>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 struct Mp4State {
     encoder: Encoder,
     writer: Mp4Writer<BufWriter<File>>,
     size: (u32, u32),
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Mp4Sink {
     fn new(path: &Path, fps: u32) -> Self {
         Self {
@@ -130,11 +141,13 @@ impl Mp4Sink {
 }
 
 /// 解像度とフレームレートに見合うビットレート (CAD 画面は平坦なので控えめでも十分きれい)
+#[cfg(not(target_arch = "wasm32"))]
 fn bitrate_for(width: u32, height: u32, fps: u32) -> u32 {
     let bps = f64::from(width) * f64::from(height) * f64::from(fps) * 0.12;
     bps.clamp(1_000_000.0, 40_000_000.0) as u32
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl FileSink for Mp4Sink {
     fn push(&mut self, frame: Frame) -> io::Result<()> {
         let frame = frame.crop_to_even();

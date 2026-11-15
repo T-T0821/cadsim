@@ -76,7 +76,7 @@ pub fn plan_tab(
 
 /// 表のファイルを選んで注文を読み込む。選ばなければ何もしない。
 fn pick_and_read(flow: &mut FlowModel) -> Vec<(bool, String)> {
-    let Some(path) = rfd::FileDialog::new()
+    let Some(path) = crate::document::dialog::FileDialog::new()
         .set_title("生産計画の表")
         .add_filter(
             "Excel / CSV",

@@ -915,7 +915,7 @@ pub fn export_melfa(
     let Some(robot) = chart.robot(id) else {
         return;
     };
-    let Some(mut path) = rfd::FileDialog::new()
+    let Some(mut path) = crate::document::dialog::FileDialog::new()
         .set_title("ロボットのプログラムを書き出す (MELFA-BASIC VI)")
         .add_filter("MELFA-BASIC VI", &["prg"])
         .set_file_name(format!("{}.prg", robot.name))

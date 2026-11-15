@@ -409,7 +409,7 @@ fn run_project_actions(
                 _ if crate::features::ui_check::running() => {
                     crate::features::ui_check::save_path(&format!("project.{FILE_EXTENSION}"))
                 }
-                _ => rfd::FileDialog::new()
+                _ => crate::document::dialog::FileDialog::new()
                     .set_title("名前を付けて保存")
                     .add_filter("プロジェクト", &[FILE_EXTENSION])
                     .set_file_name(match &state.path {

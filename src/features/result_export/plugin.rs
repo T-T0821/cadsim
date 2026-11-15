@@ -125,7 +125,7 @@ fn start_export(
     if export.task.is_some() {
         return;
     }
-    let Some(mut path) = rfd::FileDialog::new()
+    let Some(mut path) = crate::document::dialog::FileDialog::new()
         .set_title("シミュレーション結果を CSV に出力")
         .add_filter("CSV", &["csv"])
         .set_file_name(kind.file_name())

@@ -185,7 +185,7 @@ fn io_grid(ui: &mut egui::Ui, ladder: &ladder::Ladder, id: &str) {
 }
 
 fn save_dialog(name: &str, ext: &str, label: &str) -> Option<std::path::PathBuf> {
-    rfd::FileDialog::new()
+    crate::document::dialog::FileDialog::new()
         .add_filter(label, &[ext])
         .set_file_name(name)
         .save_file()
@@ -302,7 +302,7 @@ fn explain_tab(
         SourceKind::Ladder => {
             ui.horizontal(|ui| {
                 if ui.button("ファイルを開く…").clicked()
-                    && let Some(path) = rfd::FileDialog::new()
+                    && let Some(path) = crate::document::dialog::FileDialog::new()
                         .add_filter("ラダー", &["txt", "csv", "il"])
                         .pick_file()
                 {
@@ -335,7 +335,7 @@ fn explain_tab(
         }
         SourceKind::Log => {
             if ui.button("ログ CSV を開く…").clicked()
-                && let Some(path) = rfd::FileDialog::new()
+                && let Some(path) = crate::document::dialog::FileDialog::new()
                     .add_filter("CSV", &["csv", "txt"])
                     .pick_file()
             {

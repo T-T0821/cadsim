@@ -134,7 +134,7 @@ fn start_loading(mut jobs: ResMut<ImportJobs>, site_jobs: Res<SiteJobs>, model: 
             settings.unit_mm = jobs.units.meters_per_unit * 1000.0;
             settings.z_up = jobs.units.z_up;
         }
-        std::thread::spawn(move || {
+        plantwright_core::background::spawn(move || {
             let result = if is_cloud_file(&path) {
                 read_cloud(&path, &settings, model_mm).map(|c| SiteLoaded::Cloud(c, settings))
             } else {

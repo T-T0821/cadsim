@@ -94,7 +94,7 @@ impl CustomLibrary {
         let name = entry.name.clone();
         let sender = self.sender.clone();
         jobs.loading.push(name.clone());
-        std::thread::spawn(move || {
+        plantwright_core::background::spawn(move || {
             let part = std::fs::read_to_string(&path)
                 .map_err(|e| format!("{} を読めません: {e}", path.display()))
                 .and_then(|json| CustomPart::from_json(&json))

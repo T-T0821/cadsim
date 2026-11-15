@@ -177,7 +177,7 @@ fn log_controls(
         .button("ログ CSV を読み込み…")
         .on_hover_text("列見出しは I/O 表の「ログ列名」(空なら信号名) と突き合わせます")
         .clicked()
-        && let Some(path) = rfd::FileDialog::new()
+        && let Some(path) = crate::document::dialog::FileDialog::new()
             .add_filter("CSV", &["csv", "txt"])
             .pick_file()
     {
@@ -471,7 +471,7 @@ fn io_csv_buttons(
             .button("I/O 表を CSV に書き出し…")
             .on_hover_text("Excel で番号・スケール・OPC UA ノードを編集して読み戻せます")
             .clicked()
-            && let Some(path) = rfd::FileDialog::new()
+            && let Some(path) = crate::document::dialog::FileDialog::new()
                 .add_filter("CSV", &["csv"])
                 .set_file_name("io_table.csv")
                 .save_file()
@@ -487,7 +487,7 @@ fn io_csv_buttons(
             );
         }
         if ui.button("CSV を読み込み…").clicked()
-            && let Some(path) = rfd::FileDialog::new()
+            && let Some(path) = crate::document::dialog::FileDialog::new()
                 .add_filter("CSV", &["csv"])
                 .pick_file()
         {

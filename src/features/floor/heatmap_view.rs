@@ -230,7 +230,7 @@ pub fn export_if_requested(
             .push("動線ヒートマップ: まだ記録がありません。再生してから書き出してください".into());
         return;
     };
-    let Some(path) = rfd::FileDialog::new()
+    let Some(path) = crate::document::dialog::FileDialog::new()
         .set_title("動線ヒートマップを書き出し")
         .add_filter("PNG 画像", &["png"])
         .set_file_name("動線ヒートマップ.png")

@@ -24,7 +24,9 @@ use super::{
 // ---------------------------------------------------------------------------
 
 pub fn import(path: &Path, _units: &UnitOptions) -> ExchangeResult<Scene> {
-    let gltf = Gltf::open(path).map_err(|e| io_error(path, e))?;
+    // 埋め込みのサンプル (ブラウザ版) も読めるよう、ファイルは memory_files を通して読む
+    let bytes = super::memory_files::read(path).map_err(|e| io_error(path, e))?;
+    let gltf = Gltf::from_slice(&bytes).map_err(|e| io_error(path, e))?;
     // テクスチャ画像は使わないので、バッファだけ読む
     let buffers = gltf::import_buffers(&gltf.document, path.parent(), gltf.blob.clone())
         .map_err(|e| io_error(path, e))?;

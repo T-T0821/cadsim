@@ -10,6 +10,9 @@
 //! パケットは「長さ (u16, ヘッダー込み) + 種類 (u8) + 中身」で、数値はすべてビッグエンディアン。
 //! 通信は別スレッドで行い、切れたら 1 秒ごとにつなぎ直す。
 
+// ブラウザ版 (wasm32) では通信のスレッドを立てず、通信の中身は使わない
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
+
 use std::io::{ErrorKind, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -186,15 +189,25 @@ impl RtdeClient {
     pub fn start(settings: RtdeSettings) -> Self {
         let shared = Arc::new(Mutex::new(Shared::default()));
         let stop = Arc::new(AtomicBool::new(false));
+        #[cfg(not(target_arch = "wasm32"))]
         let thread = {
             let (settings, shared, stop) = (settings.clone(), shared.clone(), stop.clone());
-            thread::spawn(move || run(&settings, &shared, &stop))
+            Some(thread::spawn(move || run(&settings, &shared, &stop)))
+        };
+        // ブラウザ版 (wasm32) では通信のスレッドもソケットも使えないので、つながずに理由を出す
+        #[cfg(target_arch = "wasm32")]
+        let thread = {
+            shared.lock().unwrap_or_else(|e| e.into_inner()).status = RtdeStatus::Failed(
+                "ブラウザ版のデモでは実機のロボットとはつなげません。デスクトップ版を使ってください"
+                    .into(),
+            );
+            None
         };
         Self {
             settings,
             shared,
             stop,
-            thread: Some(thread),
+            thread,
         }
     }
 

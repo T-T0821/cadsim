@@ -189,6 +189,8 @@ cargo run -- path/to/line.plantwright  # 保存したプロジェクトを開い
 
 「ファイル → サンプルを開く」から、機能を試せるサンプルを開けます。
 
+インストールせずに試すなら、[ブラウザ版のデモ](https://t-t0821.github.io/cadsim/) を開きます。同じアプリが機能を絞ってブラウザで動き、本物のロボット (UR5e + Robotiq 2F-85) のピック & プレースが始まります。カメラを回す・部品を選んで動かす・タイミングチャートを再生する・形を作る・ほかのサンプルを開くといった操作ができます。ファイルを開く・保存する・書き出す、PLC や実機ロボットとつなぐ、生成 AI に聞くことはできません(できないことはページの上に出ています)。ページを閉じると作業は消えます。
+
 | サンプル | 試せること |
 | --- | --- |
 | デモライン | ロボットの移載・コンベア・AGV・安全機器・作業者・工程シミュレーションをまとめて |
@@ -256,6 +258,7 @@ README とマニュアルの画面写真は `docs/screenshots/scenarios/` の手
 | [docs/site.md](docs/site.md) | 平面図の下敷きと点群(間引き・LOD・干渉)のしくみ |
 | [docs/drawing.md](docs/drawing.md) | 2D 図面(投影・かくれ線・寸法・PDF / DXF)と部品表(Excel / CSV)のしくみ |
 | [docs/web-viewer.md](docs/web-viewer.md) | Web ビューア(.html)と VR / AR 表示のしくみ |
+| [docs/web-demo.md](docs/web-demo.md) | ブラウザ版のデモ(アプリを WebAssembly にしたもの)の作り方と、ブラウザで外した機能 |
 | [docs/video-export.md](docs/video-export.md) | 動画書き出しのしくみ(カメラワークのつなぎ方も) |
 | [docs/conveyor.md](docs/conveyor.md) | コンベアのワーク搬送とグリッパの把持・解放のしくみ |
 | [docs/physics.md](docs/physics.md) | 物理演算・ベルトコンベア・ケーブルの紐モデルの設計 |

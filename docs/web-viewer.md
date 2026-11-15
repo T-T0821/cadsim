@@ -49,8 +49,8 @@ WebXR は安全なコンテキストでしか使えません。`file://` で開�
 
 ## GitHub Pages のデモ
 
-サンプル装置を書き出したビューアを <https://t-t0821.github.io/cadsim/> に置いている。インストールなしで、ブラウザ・スマホ・VR ヘッドセットから触れる(https なので WebXR も使える)。
+サンプル装置を書き出したビューアを <https://t-t0821.github.io/cadsim/viewer/> に置いている。インストールなしで、ブラウザ・スマホ・VR ヘッドセットから触れる(https なので WebXR も使える)。サイトのトップは、アプリそのものを WebAssembly にしたブラウザ版のデモ ([web-demo.md](web-demo.md))。
 
-- `.github/workflows/pages.yml` が、main への push(ビューアや書き出しに関わるファイルが変わったとき)と手動実行で、`cargo test --locked write_samples -- --ignored` を流して `target/samples/line_demo.html` を作り、`index.html` として公開する。
-- PR でこのワークフローを変えたときは、書き出しまで行い公開はしない。
+- `.github/workflows/pages.yml` の「ビューアを書き出す」ジョブが `cargo test --locked write_samples -- --ignored` を流して `target/samples/line_demo.html` を作り、`viewer/index.html` として公開する。
+- main への push(アプリやページに関わるファイルが変わったとき)と手動実行で公開する。PR でワークフローを変えたときは、作るところまで行い公開はしない。
 - 公開先はリポジトリの Settings → Pages → Build and deployment の Source を「GitHub Actions」にしておく必要がある(初回だけ)。

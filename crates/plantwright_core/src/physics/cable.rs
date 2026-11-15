@@ -198,13 +198,13 @@ impl CableState {
                 self.points[i + 2] -= correction * wc;
             }
             // 部品に食い込んだ点を外へ出す。端の近くは、端を埋め込んだ部品の中にあってよい。
-            for i in 1..n {
+            for (i, point) in self.points.iter_mut().enumerate().take(n).skip(1) {
                 for obstacle in obstacles {
                     if anchored_near(cable, obstacle, start, end, i, n) {
                         continue;
                     }
-                    if let Some(out) = obstacle.push_out(self.points[i], radius) {
-                        self.points[i] = out;
+                    if let Some(out) = obstacle.push_out(*point, radius) {
+                        *point = out;
                     }
                 }
             }
