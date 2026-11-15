@@ -152,6 +152,16 @@
     throw new Error("WebGL2 がありません");
   }
 
+  // 高解像度の画面 (devicePixelRatio が 1 でない、スマホや Retina など) で、winit が
+  // ResizeObserver の devicePixelContentBoxSize から読むキャンバスの画素数が CSS の大きさのまま届き、
+  // 倍率だけが掛かって画面の左上だけが拡大して出ることがある。これを消して、CSS の大きさ ×
+  // devicePixelRatio で数える道 (Safari と同じ) を使わせる
+  try {
+    delete ResizeObserverEntry.prototype.devicePixelContentBoxSize;
+  } catch (e) {
+    consoleError(e);
+  }
+
   try {
     await init({ module_or_path: fetchWithProgress("plantwright_bg.wasm") });
     started();
