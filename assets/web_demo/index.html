@@ -42,7 +42,8 @@
     align-items: center; justify-content: center; gap: 12px; text-align: center;
     padding: 16px; color: var(--muted); font-size: 14px; pointer-events: none; }
   #loading progress { width: min(320px, 80vw); accent-color: var(--accent); }
-  #loading.error { color: #f08a80; pointer-events: auto; }
+  #loading.error { color: #f08a80; pointer-events: auto; white-space: pre-wrap;
+    background: rgba(31, 33, 37, 0.92); user-select: text; }
 </style>
 </head>
 <body>
@@ -84,9 +85,11 @@
   async function fetchWithProgress(url) {
     const response = await fetch(url);
     if (!response.ok) throw new Error(`${url}: ${response.status}`);
-    const total = Number(response.headers.get("content-length")) || 0;
-    if (!response.body || !total) return response;
-    bar.max = total;
+    // gzip で届くときの content-length は圧縮後の大きさで、読んだ量 (展開後) と比べられない
+    const compressed = response.headers.get("content-encoding");
+    const total = compressed ? 0 : Number(response.headers.get("content-length")) || 0;
+    if (!response.body) return response;
+    if (total) bar.max = total;
     let loaded = 0;
     const reader = response.body.getReader();
     const stream = new ReadableStream({
@@ -99,8 +102,10 @@
           return;
         }
         loaded += value.length;
-        bar.value = loaded;
-        text.textContent = `アプリを読み込んでいます… ${(loaded / 1e6).toFixed(0)} / ${(total / 1e6).toFixed(0)} MB`;
+        if (total) bar.value = loaded;
+        text.textContent = total
+          ? `アプリを読み込んでいます… ${(loaded / 1e6).toFixed(0)} / ${(total / 1e6).toFixed(0)} MB`
+          : `アプリを読み込んでいます… ${(loaded / 1e6).toFixed(0)} MB`;
         controller.enqueue(value);
       },
     });
@@ -109,8 +114,42 @@
 
   const canvas = document.getElementById("plantwright");
   function started() {
+    if (overlay.classList.contains("error")) return;
     overlay.style.display = "none";
     canvas.focus();
+  }
+
+  // 起動できないとき・途中で止まったときは、理由をページに出す (コンソールを開かなくてもわかるように)
+  function showError(message) {
+    if (overlay.classList.contains("error")) return;
+    overlay.classList.add("error");
+    overlay.style.display = "";
+    bar.remove();
+    text.textContent = `${message}\n\nWebGL2 が使える新しいブラウザ (PC の Chrome・Edge・Firefox・Safari) で開き直してください。直らないときは、この文を GitHub の Issue で知らせてください。`;
+  }
+  const consoleError = console.error.bind(console);
+  console.error = (...args) => {
+    consoleError(...args);
+    const message = args.map(String).join(" ");
+    // Rust の panic は「panicked at」で始まる文でコンソールに出る
+    if (message.includes("panicked at")) showError(`アプリが止まりました: ${message.slice(0, 600)}`);
+  };
+  const isControlFlow = (e) => String(e).includes("Using exceptions for control flow");
+  window.addEventListener("error", (e) => {
+    if (!isControlFlow(e.error ?? e.message)) showError(`エラー: ${e.message}`);
+  });
+  window.addEventListener("unhandledrejection", (e) => {
+    if (!isControlFlow(e.reason)) showError(`エラー: ${e.reason}`);
+  });
+
+  // 狭い画面では、できること・できないことの一覧をたたんでアプリの場所を空ける
+  if (window.innerHeight < 800 || window.innerWidth < 700) {
+    document.querySelector("details").open = false;
+  }
+
+  if (!document.createElement("canvas").getContext("webgl2")) {
+    showError("このブラウザでは WebGL2 が使えないため、アプリを起動できません。");
+    throw new Error("WebGL2 がありません");
   }
 
   try {
@@ -118,13 +157,11 @@
     started();
   } catch (e) {
     // winit はイベントループを始めるとき、わざと例外を投げて JS に制御を返す (= 起動できた)
-    if (String(e).includes("Using exceptions for control flow")) {
+    if (isControlFlow(e)) {
       started();
     } else {
-      console.error(e);
-      overlay.classList.add("error");
-      bar.remove();
-      text.textContent = `起動できませんでした: ${e}。WebGL2 が使える新しいブラウザ (Chrome・Edge・Firefox・Safari) で開いてください。`;
+      consoleError(e);
+      showError(`起動できませんでした: ${e}`);
     }
   }
 </script>
