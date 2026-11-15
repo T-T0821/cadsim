@@ -6,6 +6,7 @@
 
 pub mod animation;
 pub mod assistant;
+pub mod background;
 pub mod bom;
 pub mod bvh;
 pub mod camera_path;

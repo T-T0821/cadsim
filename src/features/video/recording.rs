@@ -232,7 +232,7 @@ fn pick_output(format: Format) -> Option<PathBuf> {
     if let Some(path) = crate::features::ui_check::save_path(&default_name) {
         return Some(path);
     }
-    let dialog = rfd::FileDialog::new().set_title("動画の書き出し");
+    let dialog = crate::document::dialog::FileDialog::new().set_title("動画の書き出し");
     match format.extension() {
         Some(ext) => {
             let path = dialog

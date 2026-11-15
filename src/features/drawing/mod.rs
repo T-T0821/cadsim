@@ -111,7 +111,7 @@ fn save_if_requested(
         .map_or_else(|| "無題".to_owned(), |s| s.to_string_lossy().into_owned());
     let result = match request {
         Request::Drawing => {
-            let Some(path) = rfd::FileDialog::new()
+            let Some(path) = crate::document::dialog::FileDialog::new()
                 .set_title("図面を書き出し")
                 .set_file_name(format!("{title}_図面.pdf"))
                 .add_filter("PDF", &["pdf"])
@@ -123,7 +123,7 @@ fn save_if_requested(
             save_drawing(&model, &title, &export.options, &path).map(|()| path)
         }
         Request::Bom => {
-            let Some(path) = rfd::FileDialog::new()
+            let Some(path) = crate::document::dialog::FileDialog::new()
                 .set_title("部品表を書き出し")
                 .set_file_name(format!("{title}_部品表.xlsx"))
                 .add_filter("Excel", &["xlsx"])
@@ -154,9 +154,13 @@ fn extension(path: &Path) -> String {
 
 fn today() -> String {
     // 外部のクレートを足さずに、UNIX 時刻から UTC の日付を求める
+    #[cfg(not(target_arch = "wasm32"))]
     let days = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs() / 86_400) as i64;
+    // ブラウザ版 (wasm32) では std の時計が panic するので、ブラウザの時計を使う
+    #[cfg(target_arch = "wasm32")]
+    let days = (js_sys::Date::now() / 86_400_000.0) as i64;
     let (y, m, d) = civil_from_days(days);
     format!("{y:04}-{m:02}-{d:02}")
 }

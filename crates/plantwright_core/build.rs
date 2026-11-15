@@ -17,8 +17,38 @@ fn sources(dir: &Path) -> Vec<std::path::PathBuf> {
     files
 }
 
+/// ブラウザ向け (wasm32) のときに使う wasi-sdk の場所。`WASI_SDK_PATH` で渡す
+fn wasi_sdk() -> Option<std::path::PathBuf> {
+    if std::env::var("CARGO_CFG_TARGET_ARCH").as_deref() != Ok("wasm32") {
+        return None;
+    }
+    println!("cargo:rerun-if-env-changed=WASI_SDK_PATH");
+    let path = std::env::var_os("WASI_SDK_PATH").unwrap_or_else(|| {
+        panic!(
+            "ブラウザ向け (wasm32) のビルドには wasi-sdk が要ります。\
+             展開した場所を環境変数 WASI_SDK_PATH に入れてください (docs/web-demo.md)"
+        )
+    });
+    Some(path.into())
+}
+
 fn build(name: &str, include: &[&Path], files: &[std::path::PathBuf]) {
     let mut build = cc::Build::new();
+    if let Some(sdk) = wasi_sdk() {
+        // wasi-sdk の clang と C/C++ の標準ライブラリ (wasi-libc・libc++) で WebAssembly にする。
+        // リンクは Rust の wasm32-unknown-unknown に混ぜ、WASI の関数はページ側の小さな JS で埋める
+        build
+            .compiler(sdk.join("bin/clang++"))
+            .archiver(sdk.join("bin/llvm-ar"))
+            .target("wasm32-wasip1")
+            .flag(format!(
+                "--sysroot={}",
+                sdk.join("share/wasi-sysroot").display()
+            ))
+            .flag("-fno-exceptions")
+            // SMLib はメモリ不足を例外で知らせる。例外の無い環境なので使わせない
+            .define("SM_NO_EXCEPTIONS", None);
+    }
     build
         .cpp(true)
         .std("c++17")
@@ -72,4 +102,15 @@ fn main() {
         &sources(&api.join("src")),
     );
     build("smlib", &[&smlib_inc], &sources(&smlib.join("src")));
+
+    if let Some(sdk) = wasi_sdk() {
+        let lib = sdk.join("share/wasi-sysroot/lib/wasm32-wasip1");
+        println!("cargo:rustc-link-search=native={}", lib.display());
+        for name in ["c++", "c++abi", "c"] {
+            println!("cargo:rustc-link-lib=static={name}");
+        }
+        let builtins = sdk.join("lib/clang/19/lib/wasip1");
+        println!("cargo:rustc-link-search=native={}", builtins.display());
+        println!("cargo:rustc-link-lib=static=clang_rt.builtins-wasm32");
+    }
 }

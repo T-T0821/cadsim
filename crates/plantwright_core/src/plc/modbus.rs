@@ -6,6 +6,9 @@
 //!
 //! 通信は別スレッドで行い、画面の更新は止めない。切れたら1秒ごとにつなぎ直す。
 
+// ブラウザ版 (wasm32) では通信のスレッドを立てず、通信の中身は使わない
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
+
 use std::collections::HashMap;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -13,7 +16,9 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+#[cfg(not(target_arch = "wasm32"))]
 use tokio_modbus::Slave;
+#[cfg(not(target_arch = "wasm32"))]
 use tokio_modbus::client::sync::{self, Reader, Writer};
 
 use crate::plc::io::{IoTable, IoValues};
@@ -80,15 +85,25 @@ impl ModbusClient {
     pub fn start(settings: ModbusSettings) -> Self {
         let shared = Arc::new(Mutex::new(Shared::default()));
         let stop = Arc::new(AtomicBool::new(false));
+        #[cfg(not(target_arch = "wasm32"))]
         let thread = {
             let shared = Arc::clone(&shared);
             let stop = Arc::clone(&stop);
-            thread::spawn(move || communicate(&settings, &shared, &stop))
+            Some(thread::spawn(move || {
+                communicate(&settings, &shared, &stop)
+            }))
+        };
+        #[cfg(target_arch = "wasm32")]
+        let thread = {
+            let _ = settings;
+            shared.lock().unwrap_or_else(|e| e.into_inner()).status =
+                LinkStatus::Error(crate::plc::session::WEB_UNAVAILABLE.into());
+            None
         };
         Self {
             shared,
             stop,
-            thread: Some(thread),
+            thread,
         }
     }
 
@@ -140,6 +155,7 @@ impl PlcLink for ModbusClient {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 /// 通信スレッドの本体。stop が立つまで、つなぐ → 周期的に読み書き → 切れたらつなぎ直す。
 fn communicate(settings: &ModbusSettings, shared: &Mutex<Shared>, stop: &AtomicBool) {
     let set_status = |status| shared.lock().unwrap_or_else(|e| e.into_inner()).status = status;
@@ -182,6 +198,7 @@ fn communicate(settings: &ModbusSettings, shared: &Mutex<Shared>, stop: &AtomicB
     set_status(LinkStatus::Disconnected);
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn connect(settings: &ModbusSettings) -> Result<sync::Context, String> {
     let address: SocketAddr = (settings.host.as_str(), settings.port)
         .to_socket_addrs()
@@ -193,6 +210,7 @@ fn connect(settings: &ModbusSettings) -> Result<sync::Context, String> {
 }
 
 /// 1周期分の読み書き。連続した番号はまとめて1回の要求にする。
+#[cfg(not(target_arch = "wasm32"))]
 fn transfer(ctx: &mut sync::Context, request: &Request) -> Result<Readback, String> {
     let mut readback = Readback::default();
     for (start, count) in runs(&request.read_coils) {
@@ -213,6 +231,7 @@ fn transfer(ctx: &mut sync::Context, request: &Request) -> Result<Readback, Stri
 }
 
 /// tokio-modbus の「通信エラー」と「PLC からの例外応答」をまとめて文字列のエラーにする
+#[cfg(not(target_arch = "wasm32"))]
 fn flatten<T>(result: tokio_modbus::Result<T>) -> Result<T, String> {
     match result {
         Ok(Ok(value)) => Ok(value),

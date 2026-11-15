@@ -13,6 +13,10 @@ use super::plant::Plant;
 use super::sequencer::StepSequencer;
 use crate::motion::chart::TimingChart;
 
+/// ブラウザ版 (wasm32) では通信のスレッドもソケットも使えないので、外部の PLC とつなぐとこの理由で止まる
+pub const WEB_UNAVAILABLE: &str =
+    "ブラウザ版のデモでは外部の PLC とはつなげません。デスクトップ版を使ってください";
+
 /// 何がアクチュエータを動かすか
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum PlcMode {

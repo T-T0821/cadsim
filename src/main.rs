@@ -44,6 +44,9 @@ fn main() {
             primary_window: Some(Window {
                 title: "plantwright".into(),
                 resolution: (1440, 900).into(),
+                // ブラウザ版はページの <canvas id="plantwright"> に描き、ページの大きさに合わせる
+                canvas: cfg!(target_arch = "wasm32").then(|| "#plantwright".into()),
+                fit_canvas_to_parent: true,
                 ..default()
             }),
             ..default()

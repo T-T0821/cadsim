@@ -86,7 +86,7 @@ pub fn factory_tab(
 
 /// ファイルを選んで取り込む。選ばなければ何もしない。
 fn pick_and_import(flow: &mut FlowModel, with_staff: bool) -> Option<(bool, String)> {
-    let path = rfd::FileDialog::new()
+    let path = crate::document::dialog::FileDialog::new()
         .set_title("取り込むラインのプロジェクト")
         .add_filter(
             "plantwright プロジェクト",

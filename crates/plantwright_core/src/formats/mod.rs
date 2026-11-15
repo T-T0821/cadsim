@@ -17,6 +17,7 @@ use glam::{DAffine3, DVec3};
 pub mod asset_key;
 pub mod csv_text;
 pub mod gltf;
+pub mod memory_files;
 pub mod model_io;
 pub mod obj;
 pub mod samples;

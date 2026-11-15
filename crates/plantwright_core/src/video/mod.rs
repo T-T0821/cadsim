@@ -7,6 +7,7 @@
 //! シミュレーション時刻はフレーム番号だけから決まるので、描画の速さに関係なく毎回同じ動画になる。
 
 pub mod encode;
+#[cfg(not(target_arch = "wasm32"))]
 mod mp4;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -85,6 +85,10 @@ const URDF_SAMPLE: &str = "ur5e.urdf";
 
 /// 同梱の URDF を書き出すフォルダ。設定ファイルと同じ場所の `samples/ur5e_urdf`
 fn urdf_sample_dir() -> PathBuf {
+    // ブラウザ版 (wasm32) は memory_files の中の名前だけ。std::env::temp_dir は使えない
+    if cfg!(target_arch = "wasm32") {
+        return PathBuf::from("/samples/ur5e_urdf");
+    }
     plantwright_core::preferences::default_path()
         .and_then(|p| p.parent().map(|dir| dir.join("samples").join("ur5e_urdf")))
         .unwrap_or_else(|| std::env::temp_dir().join("plantwright").join("ur5e_urdf"))
@@ -92,7 +96,14 @@ fn urdf_sample_dir() -> PathBuf {
 
 /// 同梱の URDF を `dir` に書き出し、URDF のパスを返す。中身が同じファイルは書き直さない
 fn write_urdf_sample(dir: &Path) -> std::io::Result<PathBuf> {
+    // ブラウザ版 (wasm32) にはファイルシステムが無いので、書き出さずに memory_files に置く
+    #[cfg(target_arch = "wasm32")]
+    for (name, bytes) in URDF_SAMPLE_FILES {
+        plantwright_core::formats::memory_files::insert(dir.join(name), bytes);
+    }
+    #[cfg(not(target_arch = "wasm32"))]
     std::fs::create_dir_all(dir)?;
+    #[cfg(not(target_arch = "wasm32"))]
     for (name, bytes) in URDF_SAMPLE_FILES {
         let path = dir.join(name);
         if std::fs::read(&path).ok().as_deref() != Some(bytes) {
@@ -344,7 +355,7 @@ impl ImportJobs {
     pub fn spawn_thread(&self, name: String, source: StepSource, target: ImportTarget) {
         let sender = self.sender.clone();
         let units = self.units;
-        std::thread::spawn(move || {
+        plantwright_core::background::spawn(move || {
             let result = load_source(&source, &units);
             // 受け取り側がいなくなっていたら (アプリ終了時) 何もしない
             let _ = sender.send((name, source, target, result));

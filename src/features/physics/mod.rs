@@ -19,7 +19,8 @@ mod sample;
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::Instant;
+// std の Instant はブラウザ (wasm32) で使えないので、Bevy のものを使う
+use bevy::platform::time::Instant;
 
 use bevy::ecs::system::SystemState;
 use bevy::math::{DMat4, DVec3};

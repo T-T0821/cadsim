@@ -9,14 +9,22 @@
 //! 通信は別スレッドで行い、画面の更新は止めない。切れたら1秒ごとにつなぎ直す。
 //! 暗号化なし (SecurityPolicy None)・匿名ログインでつなぐ。
 
+#[cfg(not(target_arch = "wasm32"))]
 use std::collections::HashMap;
+#[cfg(not(target_arch = "wasm32"))]
 use std::str::FromStr;
+#[cfg(not(target_arch = "wasm32"))]
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(not(target_arch = "wasm32"))]
 use std::sync::{Arc, Mutex, MutexGuard};
+#[cfg(not(target_arch = "wasm32"))]
 use std::thread::{self, JoinHandle};
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
 
+#[cfg(not(target_arch = "wasm32"))]
 use opcua::client::{ClientBuilder, DataChangeCallback, IdentityToken, Session};
+#[cfg(not(target_arch = "wasm32"))]
 use opcua::types::{
     AttributeId, DataValue, EndpointDescription, MessageSecurityMode, MonitoredItemCreateRequest,
     NodeId, NumericRange, ReadValueId, StatusCode, TimestampsToReturn, UserTokenPolicy, Variant,
@@ -26,7 +34,9 @@ use opcua::types::{
 use crate::plc::io::{IoTable, IoValues};
 use crate::plc::session::{LinkStatus, PlcLink};
 
+#[cfg(not(target_arch = "wasm32"))]
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+#[cfg(not(target_arch = "wasm32"))]
 const RETRY_INTERVAL: Duration = Duration::from_secs(1);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -46,6 +56,7 @@ impl Default for OpcUaSettings {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 /// 1つの信号の値 (I/O 表の種類に合わせた形)
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Signal {
@@ -53,6 +64,7 @@ enum Signal {
     Word { value: f64, scale: f64 },
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 /// 画面側と通信スレッドで共有するもの
 #[derive(Default)]
 struct Shared {
@@ -65,6 +77,7 @@ struct Shared {
     status: LinkStatus,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 /// OPC UA クライアント。作ると通信スレッドが動き出し、捨てると止まる。
 pub struct OpcUaClient {
     shared: Arc<Mutex<Shared>>,
@@ -72,6 +85,7 @@ pub struct OpcUaClient {
     thread: Option<JoinHandle<()>>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl OpcUaClient {
     pub fn start(settings: OpcUaSettings) -> Self {
         let shared = Arc::new(Mutex::new(Shared::default()));
@@ -97,6 +111,7 @@ impl OpcUaClient {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Drop for OpcUaClient {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
@@ -106,6 +121,7 @@ impl Drop for OpcUaClient {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl PlcLink for OpcUaClient {
     fn exchange(&mut self, table: &IoTable, io: &mut IoValues) {
         let mut shared = lock(&self.shared);
@@ -143,11 +159,13 @@ impl PlcLink for OpcUaClient {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn lock(shared: &Mutex<Shared>) -> MutexGuard<'_, Shared> {
     // 通信スレッドが panic しても画面側は動き続けたいので、毒された Mutex も使う
     shared.lock().unwrap_or_else(|e| e.into_inner())
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 /// 通信スレッドの本体。stop が立つまで、つなぐ → 購読と書き込みを続ける → 切れたらつなぎ直す。
 async fn communicate(settings: OpcUaSettings, shared: Arc<Mutex<Shared>>, stop: Arc<AtomicBool>) {
     let set_status = |status| lock(&shared).status = status;
@@ -171,9 +189,11 @@ async fn communicate(settings: OpcUaSettings, shared: Arc<Mutex<Shared>>, stop: 
     set_status(LinkStatus::Disconnected);
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 /// つながったセッションと、その裏で動く通信ループ
 type Connection = (Arc<Session>, tokio::task::JoinHandle<StatusCode>);
 
+#[cfg(not(target_arch = "wasm32"))]
 async fn connect(settings: &OpcUaSettings) -> Result<Connection, String> {
     let mut client = ClientBuilder::new()
         .application_name("plantwright")
@@ -200,6 +220,7 @@ async fn connect(settings: &OpcUaSettings) -> Result<Connection, String> {
     Ok((session, event_loop.spawn()))
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 /// つながっている間、購読するノードの変化に合わせて購読を作り直し、変わった入力を書き込む
 async fn run_session(
     settings: &OpcUaSettings,
@@ -298,6 +319,7 @@ async fn run_session(
     Ok(())
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 /// PLC の出力のノードを購読し、変わった値を `shared.received` に入れる
 async fn subscribe(
     session: &Arc<Session>,
@@ -327,10 +349,12 @@ async fn subscribe(
     Ok(id)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn parse_node(node: &str) -> Result<NodeId, String> {
     NodeId::from_str(node).map_err(|_| format!("ノード ID「{node}」を読めません"))
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 /// 受け取った値を信号の値にする。整数はスケールを掛け、実数はそのまま使う。
 fn to_signal(variant: &Variant, is_word: bool, scale: f64) -> Option<Signal> {
     let number = |v: f64, integer: bool| {
@@ -360,6 +384,7 @@ fn to_signal(variant: &Variant, is_word: bool, scale: f64) -> Option<Signal> {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 /// 信号の値を、ノードの今の値 (`like`) と同じ型にする。対応しない型なら None。
 fn to_variant(signal: Signal, like: &Variant) -> Option<Variant> {
     let (raw, real) = match signal {
@@ -387,6 +412,26 @@ fn to_variant(signal: Signal, like: &Variant) -> Option<Variant> {
         Variant::Float(_) => Some(Variant::Float(real as f32)),
         Variant::Double(_) => Some(Variant::Double(real)),
         _ => None,
+    }
+}
+
+/// ブラウザ版 (wasm32) では通信のスレッドもソケットも使えないので、つながずに理由だけを返す
+#[cfg(target_arch = "wasm32")]
+pub struct OpcUaClient;
+
+#[cfg(target_arch = "wasm32")]
+impl OpcUaClient {
+    pub fn start(_settings: OpcUaSettings) -> Self {
+        Self
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl PlcLink for OpcUaClient {
+    fn exchange(&mut self, _table: &IoTable, _io: &mut IoValues) {}
+
+    fn status(&self) -> LinkStatus {
+        LinkStatus::Error(crate::plc::session::WEB_UNAVAILABLE.into())
     }
 }
 

@@ -7,6 +7,9 @@
 //! 電文と TCP / UDP の通信は `crate::plc::slmp`、信号とデバイスの対応は `domain::device_map` にある。
 //! 通信は別スレッドで行い、画面の更新は止めない。切れたら1秒ごとにつなぎ直す。
 
+// ブラウザ版 (wasm32) では通信のスレッドを立てず、通信の中身は使わない
+#![cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
+
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -87,16 +90,26 @@ impl SlmpLink {
         let shared = Arc::new(Mutex::new(Shared::default()));
         let stop = Arc::new(AtomicBool::new(false));
         let devices = settings.devices;
+        #[cfg(not(target_arch = "wasm32"))]
         let thread = {
             let shared = Arc::clone(&shared);
             let stop = Arc::clone(&stop);
-            thread::spawn(move || communicate(&settings, &shared, &stop))
+            Some(thread::spawn(move || {
+                communicate(&settings, &shared, &stop)
+            }))
+        };
+        #[cfg(target_arch = "wasm32")]
+        let thread = {
+            let _ = settings;
+            shared.lock().unwrap_or_else(|e| e.into_inner()).status =
+                LinkStatus::Error(crate::plc::session::WEB_UNAVAILABLE.into());
+            None
         };
         Self {
             devices,
             shared,
             stop,
-            thread: Some(thread),
+            thread,
         }
     }
 

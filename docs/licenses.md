@@ -15,7 +15,8 @@
 
 | ソース | ライセンス | 守ること |
 | --- | --- | --- |
-| 形状カーネル SMLib(NVIDIA の [usd-brep](https://github.com/NVIDIA-Omniverse/usd-brep) v1.0.1 の `source/SMLib` と `source/SM_API`)。`crates/plantwright_core/vendor/smlib/` | Apache-2.0(`vendor/smlib/LICENSE`) | ライセンス文と著作権表示を付けて配る(ライセンス一覧に入れている)。ソースを改変したら、改変したファイルにその旨を書く。いまは改変していない |
+| 形状カーネル SMLib(NVIDIA の [usd-brep](https://github.com/NVIDIA-Omniverse/usd-brep) v1.0.1 の `source/SMLib` と `source/SM_API`)。`crates/plantwright_core/vendor/smlib/` | Apache-2.0(`vendor/smlib/LICENSE`) | ライセンス文と著作権表示を付けて配る(ライセンス一覧に入れている)。ソースを改変したら、改変したファイルにその旨を書く。いまの改変はブラウザ版のための `SMLib/inc/SmConfig.h` の1行だけで、そこに注記している |
+| wasi-libc・libc++・libc++abi・compiler-rt(wasi-sdk に入っているもの)。ブラウザ版のデモ (`docs/web-demo.md`) だけが静的にリンクする | wasi-libc は MIT(musl 由来)・Apache-2.0 WITH LLVM-exception など、LLVM のものは Apache-2.0 WITH LLVM-exception | LLVM のものは例外により表示は要らない。musl 由来の MIT の表示のため、ブラウザ版のページから wasi-libc のライセンスへリンクしている。デスクトップ版には入らない |
 
 形状カーネルの候補だった OpenCASCADE は LGPL なので使わない。
 

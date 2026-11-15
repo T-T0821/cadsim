@@ -21,6 +21,42 @@ use plantwright_core::motion::chart::TimingChart;
 use plantwright_core::site::plan_file::PLAN_EXTENSIONS;
 use plantwright_core::site::pointcloud_read::CLOUD_EXTENSIONS;
 
+/// OS のファイル選択ダイアログ (rfd)
+#[cfg(not(target_arch = "wasm32"))]
+pub use rfd::FileDialog;
+
+/// ブラウザ版 (wasm32) にはファイルを読み書きする場所が無いので、ダイアログを出さずに
+/// いつも「選ばなかった」を返す。呼ぶ側は rfd と同じ書き方のままでよい
+#[cfg(target_arch = "wasm32")]
+pub struct FileDialog;
+
+#[cfg(target_arch = "wasm32")]
+impl FileDialog {
+    pub fn new() -> Self {
+        Self
+    }
+
+    pub fn set_title(self, _title: impl Into<String>) -> Self {
+        self
+    }
+
+    pub fn add_filter(self, _name: impl Into<String>, _extensions: &[impl ToString]) -> Self {
+        self
+    }
+
+    pub fn set_file_name(self, _name: impl Into<String>) -> Self {
+        self
+    }
+
+    pub fn pick_file(self) -> Option<std::path::PathBuf> {
+        None
+    }
+
+    pub fn save_file(self) -> Option<std::path::PathBuf> {
+        None
+    }
+}
+
 pub struct FileDialogPlugin;
 
 impl Plugin for FileDialogPlugin {
@@ -42,6 +78,13 @@ impl Plugin for FileDialogPlugin {
 /// 無ければデモラインを開いて動かす。`--stress 5000` なら負荷テスト用のシーンを開く
 /// (`--bench` は bench.rs、`--physics` は physics が読む)。
 fn open_command_line_file(mut jobs: ResMut<ImportJobs>, mut project: ResMut<ProjectState>) {
+    // ブラウザ版のデモは、本物のロボット (UR5e + 2F-85) のピック & プレースを開いて動かす
+    if cfg!(target_arch = "wasm32") {
+        project.request(ProjectAction::OpenRealRobot(
+            crate::document::project::RealSample::Cell,
+        ));
+        return;
+    }
     let args = CommandLine::parse();
     if args.physics {
         // 物理演算のサンプルラインは physics が作る
@@ -72,7 +115,7 @@ fn open_dialog_if_requested(
                 .filter(|f| f.import.is_some())
                 .flat_map(|f| f.extensions.iter().copied()),
         );
-        let picked = rfd::FileDialog::new()
+        let picked = FileDialog::new()
             .set_title("差し替える形状を選ぶ")
             .add_filter("対応しているすべての形式", &with_upper_case(&all))
             .pick_file();
@@ -81,7 +124,7 @@ fn open_dialog_if_requested(
         }
     }
     if jobs.take_urdf_dialog_request() {
-        let picked = rfd::FileDialog::new()
+        let picked = FileDialog::new()
             .set_title("ロボット機種 (URDF) を読み込む")
             .add_filter("URDF", &with_upper_case(&["urdf"]))
             .add_filter("すべてのファイル", &["*"])
@@ -103,7 +146,7 @@ fn open_dialog_if_requested(
     );
     all.extend(PLAN_EXTENSIONS);
     all.extend(CLOUD_EXTENSIONS);
-    let mut dialog = rfd::FileDialog::new()
+    let mut dialog = FileDialog::new()
         .set_title("開く")
         .add_filter("対応しているすべての形式", &with_upper_case(&all))
         .add_filter("STEP", &with_upper_case(&["step", "stp"]))
@@ -155,7 +198,7 @@ fn export_if_requested(
         .first()
         .and_then(|&r| model.get(r))
         .map_or("model".to_owned(), |n| n.name.clone());
-    let mut dialog = rfd::FileDialog::new()
+    let mut dialog = FileDialog::new()
         .set_title("書き出し")
         .set_file_name(format!("{default_name}.glb"));
     for format in FORMATS.iter().filter(|f| f.export.is_some()) {
@@ -185,6 +228,12 @@ fn open_in_browser_if_requested(
     schedule: Res<ChartSchedule>,
 ) {
     if !jobs.take_browser_request() {
+        return;
+    }
+    // ブラウザ版 (wasm32) はファイルを書いて別のアプリで開くことができない
+    if cfg!(target_arch = "wasm32") {
+        jobs.messages
+            .push("ブラウザ版のデモでは、ビューアを書き出して開くことはできません".into());
         return;
     }
     let dir = std::env::temp_dir().join("plantwright_viewer");

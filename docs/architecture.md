@@ -22,23 +22,27 @@ src/                       アプリ (Bevy・egui)。assets/ の場所を変え�
 │   ├── mod.rs             FeaturePlugins (機能のプラグインを並べるだけ)
 │   └── motion/ plc/ flow/ conveyor/ line/ floor/ safety/ physics/ annotation/ drawing/ site/ ...
 └── dev/                   開発用: 負荷テストのシーン、FPS の計測
+assets/web_demo/           ブラウザ版のデモ (WebAssembly) のページと、形状カーネルが呼ぶ WASI の関数の代わり (docs/web-demo.md)
 crates/
 └── plantwright_core/      Bevy・egui を使わないもの全部
     ├── build.rs           形状カーネル SMLib (C++) をビルドしてリンクする
-    ├── vendor/smlib/      SMLib のソース (NVIDIA usd-brep。手を加えない)
+    ├── vendor/smlib/      SMLib のソース (NVIDIA usd-brep。手を加えない。ブラウザ版のために SmConfig.h の1行だけ足した)
     ├── cpp/               SMLib を Rust から呼ぶための C の関数 (kernel.cpp: 作成・ブーリアン・テッセレーションなど、ops.cpp: フィレット・シェル・スイープ・質量特性など)
     └── src/
         ├── model.rs  shape.rs  math.rs  bvh.rs  part_mesh.rs   設計データ・形状・表示用メッシュ (機能をまたぐもの)
         ├── kernel/        形状カーネル: B-rep の作成・変形・ブーリアン・テッセレーション・保存 (`Brep`)
         ├── history/       元に戻す履歴
-        ├── formats/       機能をまたぐ 3D の形式 (STEP・glTF・OBJ・STL・USD・Web ビューア)。STEP は step/ (構成の読み込みと、形状の組み立て brep.rs)
+        ├── formats/       機能をまたぐ 3D の形式 (STEP・glTF・OBJ・STL・USD・Web ビューア)。STEP は step/ (構成の読み込みと、形状の組み立て brep.rs)。memory_files.rs は埋め込みファイルを読む (ブラウザ版)
+        ├── background.rs  重い処理を別スレッドで動かす (ブラウザ版はその場で)
         └── motion/ plc/ flow/ conveyor/ line/ ...   アプリの features/ と同じ名前
 ```
+
+ブラウザ版 (wasm32) で使えないもの (ファイル・スレッド・ソケット・時計) の扱いは [web-demo.md](web-demo.md)。
 
 ## 決まり
 
 1. **crate は「Bevy・egui を使うかどうか」だけで分ける。** 計算も JSON・Excel・Modbus も、Bevy を使わなければ `plantwright_core`。この線のおかげで、計算のテストは Bevy をビルドせずに速く回り、アプリを直したときの再コンパイルも小さく済む。
-2. **再公開で中継しない。** アプリは `use plantwright_core::flow::sim;` のように実体の場所をそのまま書く。
+2. **再公開で中継しない。** アプリは `use plantwright_core::flow::sim;` のように実体の場所をそのまま書く。例外は、ブラウザ版 (wasm32) で中身を差し替えるもの (`document/dialog.rs` の `FileDialog`) だけ。
 3. **`Resource` は core の型に直接付ける。** `plantwright_core` は `bevy_ecs`(描画を含まない ECS だけ)に依存してよい。`Resource` を付けるためだけの包み型は作らない。
 4. **トレイトは本当に入れ替えるものだけ。** PLC との接続 (Modbus・SLMP・OPC UA)、生成 AI、テストで偽物を差すものなど。実装が1つなら普通の関数・メソッドにする。
 5. **機能同士の受け渡しは Bevy の Event か core の型で。** ほかの機能の `systems.rs` を直接 `use` しない。

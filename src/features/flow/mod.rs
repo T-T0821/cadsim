@@ -272,7 +272,7 @@ fn export_xlsx(
     let Some(report) = &run.report else {
         return;
     };
-    let Some(path) = rfd::FileDialog::new()
+    let Some(path) = crate::document::dialog::FileDialog::new()
         .set_title("工程シミュレーションの結果を書き出し")
         .add_filter("Excel", &["xlsx"])
         .set_file_name("工程シミュレーション.xlsx")

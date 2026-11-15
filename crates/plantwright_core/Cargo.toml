@@ -16,6 +16,8 @@ cc = "1"
 [dependencies]
 # Bevy の Resource を設計データの型に直接付ける。描画を含まない ECS だけで、アプリの bevy と同じ版
 bevy_ecs = "0.20"
+# std の Instant の代わり (ブラウザ (wasm32) でも動く)。bevy_ecs が使っているものと同じ
+bevy_platform = "0.20"
 # Bevy 0.20 (bevy_math) と同じ版にして、ベクトル・行列の型をそのまま受け渡せるようにする
 glam = { version = "0.33", features = ["serde"] }
 serde = { version = "1.0.229", features = ["derive"] }
@@ -41,8 +43,6 @@ tobj = { version = "4", default-features = false }
 roxmltree = "0.21"
 # OpenUSD (.usda / .usdc / .usdz) の読み書き。純 Rust
 openusd = "0.8"
-# 生成 AI (Claude API) への HTTPS の問い合わせ。純 Rust (rustls)
-ureq = "3"
 # 生産計画の Excel (xlsx / xls / ods) の読み込み。純 Rust
 calamine = { version = "0.30", default-features = false }
 # 日本語の Excel が書く CSV (Shift_JIS) の読み込み
@@ -53,12 +53,23 @@ csv = "1"
 rhai = "1.23"
 # 動画の書き出し: GIF と PNG 連番は純 Rust、MP4 は同梱の OpenH264 (C++) をビルドして使う。ffmpeg は不要
 gif = "0.14"
+
+# ブラウザ (WebAssembly) の機能限定版では使わないもの: 動画の MP4・PLC との通信・生成 AI への問い合わせ。
+# 使う側のコードは `#[cfg(not(target_arch = "wasm32"))]` で外す (docs/web-demo.md)
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 openh264 = "0.9"
 # PLC との Modbus TCP 通信。純 Rust
 tokio-modbus = { version = "0.17", default-features = false, features = ["tcp-sync"] }
 # PLC との OPC UA 通信 (クライアントのみ)。純 Rust
 async-opcua = { version = "0.19", default-features = false, features = ["client"] }
 tokio = { version = "1", features = ["rt", "time"] }
+# 生成 AI (Claude API) への HTTPS の問い合わせ。純 Rust (rustls)
+ureq = "3"
+
+# ブラウザでは乱数と時刻をブラウザの機能から取る
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.3", features = ["wasm_js"] }
+rhai = { version = "1.23", features = ["wasm-bindgen"] }
 
 [dev-dependencies]
 # テストで Modbus TCP サーバー (PLC の代わり) を立てる

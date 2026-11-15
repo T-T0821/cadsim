@@ -240,7 +240,7 @@ impl Brep {
             let status = unsafe { ffi::pw_write_file(self.ptr, path.c.as_ptr()) };
             check(status, "形の書き出し")?;
         }
-        std::fs::read_to_string(&path.path).map_err(|e| format!("形を書き出せません: {e}"))
+        path.read().map_err(|e| format!("形を書き出せません: {e}"))
     }
 
     /// [`Brep::to_text`] の文字列から読む
@@ -256,7 +256,8 @@ impl Brep {
             return Err("形を読み込めません: SMLib の形式ではありません".into());
         }
         let path = TempPath::new()?;
-        std::fs::write(&path.path, text).map_err(|e| format!("形を読み込めません: {e}"))?;
+        path.write(text)
+            .map_err(|e| format!("形を読み込めません: {e}"))?;
         // SAFETY: path は NUL 終端の文字列、out は書き込める
         Self::create("形の読み込み", |out| unsafe {
             ffi::pw_read_file(path.c.as_ptr(), out)
@@ -332,6 +333,8 @@ pub fn triangulate_planar(loops: &[Vec<DVec3>]) -> Option<FaceMesh> {
 
 /// 一時ファイルのパス。消すとファイルも消す
 struct TempPath {
+    // ブラウザ版 (wasm32) は C の名前 (c) だけで読み書きする
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     path: std::path::PathBuf,
     c: CString,
 }
@@ -341,17 +344,99 @@ impl TempPath {
         use std::sync::atomic::{AtomicU64, Ordering};
         static NEXT: AtomicU64 = AtomicU64::new(0);
         let n = NEXT.fetch_add(1, Ordering::Relaxed);
+        // ブラウザ版 (wasm32) では std の一時フォルダもプロセス番号も無い。C 側 (wasi-libc) の
+        // ファイルはページの JS がメモリの中に持つので、決まったフォルダに置く
+        #[cfg(target_arch = "wasm32")]
+        let path = std::path::PathBuf::from(format!("/tmp/plantwright-brep-{n}.smb"));
+        #[cfg(not(target_arch = "wasm32"))]
         let path =
             std::env::temp_dir().join(format!("plantwright-brep-{}-{n}.smb", std::process::id()));
         let c = CString::new(path.to_string_lossy().as_bytes())
             .map_err(|_| "一時ファイルの名前に使えない文字があります".to_owned())?;
         Ok(Self { path, c })
     }
+
+    /// SMLib が書いたファイルを読む
+    #[cfg(not(target_arch = "wasm32"))]
+    fn read(&self) -> std::io::Result<String> {
+        std::fs::read_to_string(&self.path)
+    }
+
+    /// SMLib に読ませるファイルを書く
+    #[cfg(not(target_arch = "wasm32"))]
+    fn write(&self, text: &str) -> std::io::Result<()> {
+        std::fs::write(&self.path, text)
+    }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Drop for TempPath {
     fn drop(&mut self) {
         let _ = std::fs::remove_file(&self.path);
+    }
+}
+
+/// ブラウザ版 (wasm32) では Rust の std::fs が使えないので、SMLib と同じ C の標準ライブラリ
+/// (wasi-libc) の関数で読み書きする。中身はページの JS (wasi_shim.js) がメモリに持つ
+#[cfg(target_arch = "wasm32")]
+mod libc_file {
+    use std::ffi::{c_char, c_void};
+
+    unsafe extern "C" {
+        fn fopen(path: *const c_char, mode: *const c_char) -> *mut c_void;
+        fn fread(ptr: *mut c_void, size: usize, n: usize, file: *mut c_void) -> usize;
+        fn fwrite(ptr: *const c_void, size: usize, n: usize, file: *mut c_void) -> usize;
+        fn fclose(file: *mut c_void) -> i32;
+        fn remove(path: *const c_char) -> i32;
+    }
+
+    impl super::TempPath {
+        pub(super) fn read(&self) -> std::io::Result<String> {
+            // SAFETY: c は NUL 終端の文字列。開けたファイルは必ず閉じる
+            unsafe {
+                let file = fopen(self.c.as_ptr(), c"rb".as_ptr());
+                if file.is_null() {
+                    return Err(std::io::Error::other("ファイルを開けません"));
+                }
+                let mut out = Vec::new();
+                let mut buf = vec![0u8; 1 << 16];
+                loop {
+                    let n = fread(buf.as_mut_ptr().cast(), 1, buf.len(), file);
+                    if n == 0 {
+                        break;
+                    }
+                    out.extend_from_slice(&buf[..n]);
+                }
+                fclose(file);
+                String::from_utf8(out).map_err(std::io::Error::other)
+            }
+        }
+
+        pub(super) fn write(&self, text: &str) -> std::io::Result<()> {
+            // SAFETY: c は NUL 終端の文字列。開けたファイルは必ず閉じる
+            unsafe {
+                let file = fopen(self.c.as_ptr(), c"wb".as_ptr());
+                if file.is_null() {
+                    return Err(std::io::Error::other("ファイルを作れません"));
+                }
+                let n = fwrite(text.as_ptr().cast(), 1, text.len(), file);
+                fclose(file);
+                if n == text.len() {
+                    Ok(())
+                } else {
+                    Err(std::io::Error::other("ファイルに書けません"))
+                }
+            }
+        }
+    }
+
+    impl Drop for super::TempPath {
+        fn drop(&mut self) {
+            // SAFETY: c は NUL 終端の文字列
+            unsafe {
+                remove(self.c.as_ptr());
+            }
+        }
     }
 }
 

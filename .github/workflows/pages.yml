@@ -1,11 +1,13 @@
-# Web ビューアのデモ (サンプル装置を動き付きで書き出した .html) を GitHub Pages に置く。
-# 公開先: https://t-t0821.github.io/cadsim/
+# GitHub Pages に、ブラウザで動くデモを置く。公開先: https://t-t0821.github.io/cadsim/
 #
-# - main に push して、ビューアや書き出しに関わるファイルが変わったときと、
+# - トップ (/) : 機能限定版の plantwright そのもの (WebAssembly)。本物のロボットのサンプルが動く
+# - /viewer/  : サンプル装置を動き付きで書き出した軽いビューア (.html 1つ)
+#
+# - main に push して、アプリやページに関わるファイルが変わったときと、
 #   Actions タブの「Pages」→「Run workflow」で手動実行したときに作り直して公開する。
-# - PR でこのファイルを変えたときは、作るところまで行い公開はしない。
+# - PR でこのファイルやブラウザ版のページを変えたときは、作るところまで行い公開はしない。
 # - 初回だけ、リポジトリの Settings → Pages → Build and deployment の Source を「GitHub Actions」にする。
-# しくみは docs/web-viewer.md の「GitHub Pages のデモ」
+# しくみは docs/web-demo.md と docs/web-viewer.md の「GitHub Pages のデモ」
 name: Pages
 
 on:
@@ -13,14 +15,18 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/pages.yml"
-      - "assets/web_viewer/**"
+      - "assets/**"
+      - "samples/**"
       - "src/**"
       - "crates/**"
+      - "tools/web_demo.sh"
       - "Cargo.toml"
       - "Cargo.lock"
   pull_request:
     paths:
       - ".github/workflows/pages.yml"
+      - "assets/web_demo/**"
+      - "tools/web_demo.sh"
   workflow_dispatch:
 
 permissions:
@@ -34,10 +40,48 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
+  # 形状カーネル (C++) を WebAssembly にする clang と標準ライブラリ
+  WASI_SDK_VERSION: "25"
 
 jobs:
-  build:
-    name: デモを書き出す
+  web:
+    name: ブラウザ版を作る
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      # 保存は main でのビルドのときだけ行う
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: pages-web
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: wasi-sdk
+        run: |
+          curl -sSfL -o /tmp/wasi-sdk.tar.gz \
+            "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION}/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux.tar.gz"
+          mkdir -p "$RUNNER_TEMP/wasi-sdk"
+          tar xzf /tmp/wasi-sdk.tar.gz -C "$RUNNER_TEMP/wasi-sdk" --strip-components=1
+          echo "WASI_SDK_PATH=$RUNNER_TEMP/wasi-sdk" >> "$GITHUB_ENV"
+      # Cargo.lock の wasm-bindgen と同じ版の CLI を使う
+      - name: wasm-bindgen
+        run: |
+          version=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | sed -n 's/^version = "\(.*\)"/\1/p')
+          curl -sSfL -o /tmp/wasm-bindgen.tar.gz \
+            "https://github.com/wasm-bindgen/wasm-bindgen/releases/download/${version}/wasm-bindgen-${version}-x86_64-unknown-linux-musl.tar.gz"
+          mkdir -p "$RUNNER_TEMP/wasm-bindgen"
+          tar xzf /tmp/wasm-bindgen.tar.gz -C "$RUNNER_TEMP/wasm-bindgen" --strip-components=1
+          echo "WASM_BINDGEN=$RUNNER_TEMP/wasm-bindgen/wasm-bindgen" >> "$GITHUB_ENV"
+      - name: Build web demo
+        run: tools/web_demo.sh _site
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: _site
+
+  viewer:
+    name: ビューアを書き出す
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -49,21 +93,36 @@ jobs:
             libasound2-dev libudev-dev \
             libx11-dev libxcursor-dev libxi-dev libxrandr-dev libxkbcommon-dev libwayland-dev
       - uses: dtolnay/rust-toolchain@stable
-      # 保存は main でのビルドのときだけ行う
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: pages
           save-if: ${{ github.ref == 'refs/heads/main' }}
-
       # サンプル装置 (タイミングチャートの1サイクルの動き付き) を target/samples/line_demo.html に書き出す
       - name: Export sample viewer
         run: cargo test --locked write_samples -- --ignored
+      - uses: actions/upload-artifact@v4
+        with:
+          name: viewer
+          path: target/samples/line_demo.html
 
+  site:
+    name: サイトにまとめる
+    needs: [web, viewer]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: web
+          path: _site
+      - uses: actions/download-artifact@v4
+        with:
+          name: viewer
+          path: _site/viewer
       - name: Assemble site
         run: |
-          mkdir -p _site
-          cp target/samples/line_demo.html _site/index.html
+          mv _site/viewer/line_demo.html _site/viewer/index.html
           touch _site/.nojekyll
+          ls -laR _site
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
@@ -71,7 +130,7 @@ jobs:
   deploy:
     name: 公開する
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    needs: build
+    needs: site
     runs-on: ubuntu-latest
     permissions:
       pages: write

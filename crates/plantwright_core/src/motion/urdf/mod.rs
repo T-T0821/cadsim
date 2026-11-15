@@ -48,7 +48,8 @@ pub fn is_urdf_file(path: &Path) -> bool {
 
 /// URDF ファイルを読む。メッシュは URDF のあるフォルダを基準に探す
 pub fn import(path: &Path) -> Result<UrdfImport, String> {
-    let text = std::fs::read_to_string(path)
+    // 埋め込みのサンプル (ブラウザ版) も読めるよう memory_files を通す
+    let text = crate::formats::memory_files::read_to_string(path)
         .map_err(|e| format!("{} を開けませんでした: {e}", path.display()))?;
     let base = path.parent().unwrap_or(Path::new("."));
     read(&text, base)
@@ -333,7 +334,7 @@ pub fn read_mesh(path: &Path) -> Result<Vec<MeshPart>, String> {
         .unwrap_or("")
         .to_ascii_lowercase();
     if ext == "dae" {
-        let text = std::fs::read_to_string(path)
+        let text = crate::formats::memory_files::read_to_string(path)
             .map_err(|e| format!("{} を開けませんでした: {e}", path.display()))?;
         return collada::read(&text);
     }

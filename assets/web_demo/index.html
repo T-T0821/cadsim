@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>plantwright ブラウザ版デモ</title>
+<link rel="icon" href="icon.png">
+<!-- 形状カーネル (C++) が呼ぶ WASI の関数をページの JS で用意する (wasi_shim.js) -->
+<script type="importmap">
+{ "imports": { "wasi_snapshot_preview1": "./wasi_shim.js" } }
+</script>
+<style>
+  :root {
+    --bg: #1f2125;
+    --panel: #2a2d33;
+    --text: #e8e9ec;
+    --muted: #a3a8b3;
+    --accent: #f0a640;
+    --line: #3a3e46;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; }
+  body { display: flex; flex-direction: column; }
+  header { display: flex; align-items: center; gap: 12px; padding: 8px 16px;
+    background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  header img { width: 28px; height: 28px; }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  .badge { font-size: 12px; padding: 2px 8px; border-radius: 999px;
+    background: var(--accent); color: #1f2125; font-weight: 700; }
+  header nav { margin-left: auto; display: flex; gap: 16px; font-size: 13px; }
+  a { color: var(--accent); }
+  details { font-size: 13px; background: var(--panel); border-bottom: 1px solid var(--line);
+    padding: 6px 16px; }
+  details summary { cursor: pointer; color: var(--muted); }
+  details ul { margin: 6px 0 4px; padding-left: 20px; line-height: 1.7; }
+  details .ok { color: #8fd18f; }
+  details .ng { color: #f08a80; }
+  main { position: relative; flex: 1; min-height: 0; }
+  canvas#plantwright { width: 100%; height: 100%; display: block; outline: none; }
+  #loading { position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 12px; text-align: center;
+    padding: 16px; color: var(--muted); font-size: 14px; pointer-events: none; }
+  #loading progress { width: min(320px, 80vw); accent-color: var(--accent); }
+  #loading.error { color: #f08a80; pointer-events: auto; }
+</style>
+</head>
+<body>
+<header>
+  <img src="icon.png" alt="">
+  <h1>plantwright</h1>
+  <span class="badge">ブラウザ版デモ (機能限定)</span>
+  <nav>
+    <a href="viewer/">軽いビューア</a>
+    <a href="https://github.com/t-t0821/cadsim">GitHub</a>
+    <a href="https://github.com/t-t0821/cadsim/blob/main/docs/licenses.md">ライセンス</a>
+  </nav>
+</header>
+<details open>
+  <summary>このデモでできること・できないこと</summary>
+  <ul>
+    <li class="ok">できる: デスクトップ版と同じアプリで、本物のロボット (UR5e + Robotiq 2F-85) のピック &amp; プレースを動かす・カメラを回す・部品を選んで動かす・タイミングチャートの再生・干渉チェック・形状カーネル (SMLib) を使ったモデリング・メニューの「サンプル」から別のサンプルを開く</li>
+    <li class="ng">できない: ファイルを開く・保存する・取り込む・書き出す (プロジェクト、STEP・glTF、図面、Excel、動画)</li>
+    <li class="ng">できない: 外部の PLC との通信 (Modbus TCP・SLMP・OPC UA)、実機ロボットとの接続、レビューの共有、生成 AI への問い合わせ</li>
+    <li>ページを閉じると作業は消えます。すべての機能はデスクトップ版で使えます。</li>
+    <li>使っているソフトウェアのライセンスはアプリの「ヘルプ → ライセンス」にあります。ブラウザ版はこのほか <a href="https://github.com/WebAssembly/wasi-libc/blob/main/LICENSE">wasi-libc</a> と <a href="https://github.com/llvm/llvm-project/blob/main/libcxx/LICENSE.TXT">LLVM libc++</a> を含みます。</li>
+  </ul>
+</details>
+<main>
+  <canvas id="plantwright" tabindex="0"></canvas>
+  <div id="loading">
+    <div id="loading-text">アプリを読み込んでいます…</div>
+    <progress id="loading-bar"></progress>
+  </div>
+</main>
+<script type="module">
+  import init from "./plantwright.js";
+
+  const text = document.getElementById("loading-text");
+  const bar = document.getElementById("loading-bar");
+  const overlay = document.getElementById("loading");
+
+  // .wasm は大きいので、読み込みの進み具合を出す
+  async function fetchWithProgress(url) {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`${url}: ${response.status}`);
+    const total = Number(response.headers.get("content-length")) || 0;
+    if (!response.body || !total) return response;
+    bar.max = total;
+    let loaded = 0;
+    const reader = response.body.getReader();
+    const stream = new ReadableStream({
+      async pull(controller) {
+        const { done, value } = await reader.read();
+        if (done) {
+          text.textContent = "起動しています…";
+          bar.removeAttribute("value");
+          controller.close();
+          return;
+        }
+        loaded += value.length;
+        bar.value = loaded;
+        text.textContent = `アプリを読み込んでいます… ${(loaded / 1e6).toFixed(0)} / ${(total / 1e6).toFixed(0)} MB`;
+        controller.enqueue(value);
+      },
+    });
+    return new Response(stream, { headers: { "content-type": "application/wasm" } });
+  }
+
+  const canvas = document.getElementById("plantwright");
+  function started() {
+    overlay.style.display = "none";
+    canvas.focus();
+  }
+
+  try {
+    await init({ module_or_path: fetchWithProgress("plantwright_bg.wasm") });
+    started();
+  } catch (e) {
+    // winit はイベントループを始めるとき、わざと例外を投げて JS に制御を返す (= 起動できた)
+    if (String(e).includes("Using exceptions for control flow")) {
+      started();
+    } else {
+      console.error(e);
+      overlay.classList.add("error");
+      bar.remove();
+      text.textContent = `起動できませんでした: ${e}。WebGL2 が使える新しいブラウザ (Chrome・Edge・Firefox・Safari) で開いてください。`;
+    }
+  }
+</script>
+</body>
+</html>

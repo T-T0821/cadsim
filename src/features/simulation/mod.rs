@@ -18,10 +18,11 @@
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
-    time::Instant,
 };
 
 use bevy::{
+    // std の Instant はブラウザ (wasm32) で使えないので、Bevy のものを使う
+    platform::time::Instant,
     prelude::*,
     tasks::{AsyncComputeTaskPool, Task, block_on, poll_once},
 };
