@@ -142,6 +142,20 @@
     if (!isControlFlow(e.reason)) showError(`エラー: ${e.reason}`);
   });
 
+  // GPU のメモリが足りないときなどは、ブラウザが WebGL の文脈を捨ててキャンバスが描けなくなる
+  // (Android の Chrome では白い地に小さな顔の絵だけが出る)。エラーにはならないので、ここで知らせる
+  canvas.addEventListener("webglcontextlost", () => {
+    let gpu = "";
+    try {
+      const gl = document.createElement("canvas").getContext("webgl2");
+      const info = gl && gl.getExtension("WEBGL_debug_renderer_info");
+      if (info) gpu = `\n(GPU: ${gl.getParameter(info.UNMASKED_RENDERER_WEBGL)})`;
+    } catch (e) {
+      consoleError(e);
+    }
+    showError(`GPU が描画を続けられなくなりました (WebGL の文脈が失われました)。メモリの少ない端末では起こることがあります。ページを再読み込みしてください。${gpu}`);
+  });
+
   // 狭い画面では、できること・できないことの一覧をたたんでアプリの場所を空ける
   if (window.innerHeight < 800 || window.innerWidth < 700) {
     document.querySelector("details").open = false;
