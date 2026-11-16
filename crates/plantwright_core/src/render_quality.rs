@@ -7,15 +7,26 @@
 //! 長さはすべて「モデルの単位」(mm のモデルなら mm) で受け取り、返す。
 
 /// 画質の段階。遅い PC では軽いものを選ぶ
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
 pub enum RenderQuality {
     /// 影も後処理も使わない。以前の見た目に近く、いちばん軽い
     Low,
     /// 影と環境光を使う。内蔵 GPU のノート PC でも動く重さ
     Standard,
     /// 影をなめらかにし、隅の陰影 (SSAO)・光のにじみ (ブルーム) を足す
-    #[default]
     High,
+}
+
+impl Default for RenderQuality {
+    /// 初めて起動したときの段階。ブラウザ版はスマホでも開かれ、大きな影の地図や後処理で
+    /// GPU のメモリが尽きて描けなくなる (WebGL の文脈が失われる) ので、いちばん軽い段階にする
+    fn default() -> Self {
+        if cfg!(target_arch = "wasm32") {
+            Self::Low
+        } else {
+            Self::High
+        }
+    }
 }
 
 impl RenderQuality {

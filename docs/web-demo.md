@@ -51,4 +51,5 @@ python3 -m http.server -d target/web_demo 8000   # http://localhost:8000/ で開
 
 - 新しく `std::thread::spawn`・`std::time::Instant::now`・`std::fs`・`std::env::temp_dir` を足すときは、ブラウザ版で通る道かを考える。通るなら `background::spawn`・`bevy::platform::time::Instant`・`memory_files` を使うか、`#[cfg(target_arch = "wasm32")]` で分ける。
 - ブラウザの WebGL2 では、平行光源は1つ、SSAO・被写界深度などは使えない (Bevy がそう知らせて外す)。見た目はデスクトップ版より少し簡素になる。
+- ブラウザ版の画質は最初「軽い」(`RenderQuality::default` が wasm では `Low`)。スマホで「きれい」の大きな影の地図や後処理を使うと GPU のメモリが尽き、WebGL の文脈が失われて描けなくなる (Android の Chrome では小さな顔の絵だけが出る)。文脈が失われたときは `index.html` が `webglcontextlost` を受けて、理由と GPU の名前をページに出す。
 - `cargo build --target wasm32-unknown-unknown` が通るかは、`tools/web_demo.sh` か Pages のワークフローで確かめる。
